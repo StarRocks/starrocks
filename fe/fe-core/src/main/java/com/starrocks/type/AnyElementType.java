@@ -16,6 +16,8 @@
 package com.starrocks.type;
 
 public class AnyElementType extends PseudoType {
+    public static final AnyElementType ANY_ELEMENT = new AnyElementType();
+
     @Override
     public boolean equals(Object obj) {
         return obj instanceof AnyElementType;

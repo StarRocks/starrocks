@@ -39,7 +39,7 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -99,9 +99,9 @@ public class FileScanNodeTest {
             throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, true);
+        Column c1 = new Column("c1", IntegerType.BIGINT, true);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
         columns.add(c2);
         List<String> columnNames = Lists.newArrayList("c1", "c2");
 

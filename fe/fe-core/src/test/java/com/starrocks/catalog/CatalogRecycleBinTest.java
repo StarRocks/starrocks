@@ -32,7 +32,7 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -267,10 +267,10 @@ public class CatalogRecycleBinTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Replica
         Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
@@ -342,10 +342,10 @@ public class CatalogRecycleBinTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Replica
         Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);

@@ -105,7 +105,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.type.Type;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -422,7 +424,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
             return new CallOperator(
                     FunctionSet.JSON_QUERY,
-                    Type.JSON,
+                    JsonType.JSON,
                     arguments,
                     func);
         }
@@ -442,7 +444,7 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping, null);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
+            return new LambdaFunctionOperator(refs, lambda, FunctionType.FUNCTION);
         }
 
         @Override
@@ -833,7 +835,7 @@ public final class SqlToScalarOperatorTranslator {
                 LogicalApplyOperator applyOperator = LogicalApplyOperator.builder()
                         .setUseSemiAnti(false)
                         .build();
-                return new SubqueryOperator(Type.INVALID, queryStatement, applyOperator, null);
+                return new SubqueryOperator(InvalidType.INVALID, queryStatement, applyOperator, null);
             }
 
             LogicalPlan subqueryPlan = SubqueryUtils.getLogicalPlan(session, cteContext,

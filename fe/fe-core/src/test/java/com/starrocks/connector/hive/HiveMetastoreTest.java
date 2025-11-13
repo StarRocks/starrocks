@@ -24,7 +24,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -94,8 +94,8 @@ public class HiveMetastoreTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(Type.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(Type.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 
@@ -138,7 +138,7 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         HivePartition hivePartition = HivePartition.builder()
-                .setColumns(Lists.newArrayList(new Column("c1", Type.INT)))
+                .setColumns(Lists.newArrayList(new Column("c1", IntegerType.INT)))
                 .setStorageFormat(HiveStorageFormat.PARQUET)
                 .setDatabaseName("db")
                 .setTableName("table")

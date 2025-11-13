@@ -43,6 +43,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.io.DataInput;
@@ -176,13 +177,13 @@ public class IntLiteral extends LiteralExpr {
     private void init(long value) {
         this.value = value;
         if (this.value <= TINY_INT_MAX && this.value >= TINY_INT_MIN) {
-            type = Type.TINYINT;
+            type = IntegerType.TINYINT;
         } else if (this.value <= SMALL_INT_MAX && this.value >= SMALL_INT_MIN) {
-            type = Type.SMALLINT;
+            type = IntegerType.SMALLINT;
         } else if (this.value <= INT_MAX && this.value >= INT_MIN) {
-            type = Type.INT;
+            type = IntegerType.INT;
         } else {
-            type = Type.BIGINT;
+            type = IntegerType.BIGINT;
         }
     }
 

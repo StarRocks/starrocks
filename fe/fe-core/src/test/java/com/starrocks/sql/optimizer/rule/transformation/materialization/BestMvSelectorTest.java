@@ -33,7 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -438,9 +438,9 @@ public class BestMvSelectorTest extends MVTestBase {
         LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(testTable);
         OptExpression scanExpr = OptExpression.create(scanOperator);
         
-        ColumnRefOperator colRef = new ColumnRefOperator(1, Type.BIGINT, "k1", false);
+        ColumnRefOperator colRef = new ColumnRefOperator(1, IntegerType.BIGINT, "k1", false);
         Map<ColumnRefOperator, CallOperator> aggregations = Map.of(
-                colRef, new CallOperator("SUM", Type.BIGINT, List.of(colRef), null)
+                colRef, new CallOperator("SUM", IntegerType.BIGINT, List.of(colRef), null)
         );
         LogicalAggregationOperator aggOperator = new LogicalAggregationOperator(
                 AggType.GLOBAL, Lists.newArrayList(colRef), aggregations);

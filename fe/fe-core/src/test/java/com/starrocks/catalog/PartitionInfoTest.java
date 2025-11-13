@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +46,7 @@ public class PartitionInfoTest {
     public void testAddDropPartitionPartitionInfo() throws AnalysisException {
         { // ListPartitionInfo
             ListPartitionInfo info =
-                    new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", Type.BIGINT)));
+                    new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
             info.addPartition(null, partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo, null, null);
             validatePartitionInfo(info, partitionId);
         }
@@ -56,7 +56,7 @@ public class PartitionInfoTest {
             validatePartitionInfo(info, partitionId);
         }
         { // RangePartitionInfo
-            RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+            RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
             PartitionKey partitionKey = new PartitionKey();
             Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
             info.addPartition(partitionId, false, range, dataProperty, replicationNum, inMemory, dataCacheInfo);
@@ -66,7 +66,7 @@ public class PartitionInfoTest {
 
     @Test
     public void testCleanupStaledIdToDataCacheInfo() throws IOException {
-        RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+        RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
         PartitionKey partitionKey = new PartitionKey();
         Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
         info.addPartition(partitionId, false, range, dataProperty, replicationNum, inMemory, dataCacheInfo);

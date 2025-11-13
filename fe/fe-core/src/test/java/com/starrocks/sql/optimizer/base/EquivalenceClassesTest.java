@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.base;
 
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -29,10 +29,10 @@ public class EquivalenceClassesTest {
     public void test() {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         EquivalenceClasses ec = new EquivalenceClasses();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("column1", Type.INT, true);
-        ColumnRefOperator columnRef2 = columnRefFactory.create("column2", Type.INT, true);
-        ColumnRefOperator columnRef3 = columnRefFactory.create("column3", Type.INT, true);
-        ColumnRefOperator columnRef4 = columnRefFactory.create("column4", Type.INT, true);
+        ColumnRefOperator columnRef1 = columnRefFactory.create("column1", IntegerType.INT, true);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("column2", IntegerType.INT, true);
+        ColumnRefOperator columnRef3 = columnRefFactory.create("column3", IntegerType.INT, true);
+        ColumnRefOperator columnRef4 = columnRefFactory.create("column4", IntegerType.INT, true);
         ec.addEquivalence(columnRef1, columnRef2);
         ec.addEquivalence(columnRef1, columnRef3);
         ec.addEquivalence(columnRef4, columnRef3);
@@ -44,9 +44,9 @@ public class EquivalenceClassesTest {
         Set<ColumnRefOperator> columnSet2 = Sets.newHashSet(columnSetList.get(0));
         Assertions.assertEquals(columnSet, columnSet2);
 
-        ColumnRefOperator columnRef5 = columnRefFactory.create("column5", Type.INT, true);
-        ColumnRefOperator columnRef6 = columnRefFactory.create("column6", Type.INT, true);
-        ColumnRefOperator columnRef7 = columnRefFactory.create("column7", Type.INT, true);
+        ColumnRefOperator columnRef5 = columnRefFactory.create("column5", IntegerType.INT, true);
+        ColumnRefOperator columnRef6 = columnRefFactory.create("column6", IntegerType.INT, true);
+        ColumnRefOperator columnRef7 = columnRefFactory.create("column7", IntegerType.INT, true);
         ec.addEquivalence(columnRef5, columnRef6);
         ec.addEquivalence(columnRef5, columnRef7);
         Assertions.assertEquals(ec.getEquivalenceClass(columnRef6), ec.getEquivalenceClass(columnRef7));

@@ -31,7 +31,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.Lists;
@@ -422,7 +422,7 @@ public class MaterializedViewAnalyzerTest {
     private void checkQueryOutputIndices(List<Integer> inputs, String expect, boolean isChanged) {
         List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
         for (Integer i : inputs) {
-            mvColumnPairs.add(Pair.create(new Column("k1", Type.INT), i));
+            mvColumnPairs.add(Pair.create(new Column("k1", IntegerType.INT), i));
         }
         List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
         Assertions.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());

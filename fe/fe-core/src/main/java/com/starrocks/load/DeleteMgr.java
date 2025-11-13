@@ -103,8 +103,8 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -581,9 +581,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String value = ((LiteralExpr) predicate.getChild(childNo)).getStringValue();
         if (column.getPrimitiveType() == PrimitiveType.BOOLEAN) {
             if (value.equalsIgnoreCase("true")) {
-                predicate.setChild(childNo, LiteralExpr.create("1", Type.TINYINT));
+                predicate.setChild(childNo, LiteralExpr.create("1", IntegerType.TINYINT));
             } else if (value.equalsIgnoreCase("false")) {
-                predicate.setChild(childNo, LiteralExpr.create("0", Type.TINYINT));
+                predicate.setChild(childNo, LiteralExpr.create("0", IntegerType.TINYINT));
             }
         } else if (column.getType().isStringType()) {
             byte[] bytes = value.getBytes(StandardCharsets.UTF_8);

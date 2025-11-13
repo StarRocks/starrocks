@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TResultBatch;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -87,12 +87,13 @@ public class MetaFunctionsTest extends MVTestBase {
 
     @Test
     public void testInspectMemory() {
-        MetaFunctions.inspectMemory(new ConstantOperator("report", Type.VARCHAR));
+        MetaFunctions.inspectMemory(new ConstantOperator("report", VarcharType.VARCHAR));
     }
 
     @Test
     public void testInspectMemoryFailed() {
-        assertThrows(SemanticException.class, () -> MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR)));
+        assertThrows(SemanticException.class,
+                () -> MetaFunctions.inspectMemory(new ConstantOperator("abc", VarcharType.VARCHAR)));
     }
 
     @Test
@@ -100,31 +101,31 @@ public class MetaFunctionsTest extends MVTestBase {
         MemoryUsageTracker.registerMemoryTracker("Report", new ReportHandler());
         try {
             MetaFunctions.inspectMemoryDetail(
-                    new ConstantOperator("abc", Type.VARCHAR),
-                    new ConstantOperator("def", Type.VARCHAR));
+                    new ConstantOperator("abc", VarcharType.VARCHAR),
+                    new ConstantOperator("def", VarcharType.VARCHAR));
             Assertions.fail();
         } catch (Exception ex) {
         }
         try {
             MetaFunctions.inspectMemoryDetail(
-                    new ConstantOperator("report", Type.VARCHAR),
-                    new ConstantOperator("def", Type.VARCHAR));
+                    new ConstantOperator("report", VarcharType.VARCHAR),
+                    new ConstantOperator("def", VarcharType.VARCHAR));
             Assertions.fail();
         } catch (Exception ex) {
         }
         try {
             MetaFunctions.inspectMemoryDetail(
-                    new ConstantOperator("report", Type.VARCHAR),
-                    new ConstantOperator("reportHandler.abc", Type.VARCHAR));
+                    new ConstantOperator("report", VarcharType.VARCHAR),
+                    new ConstantOperator("reportHandler.abc", VarcharType.VARCHAR));
             Assertions.fail();
         } catch (Exception ex) {
         }
         MetaFunctions.inspectMemoryDetail(
-                new ConstantOperator("report", Type.VARCHAR),
-                new ConstantOperator("reportHandler", Type.VARCHAR));
+                new ConstantOperator("report", VarcharType.VARCHAR),
+                new ConstantOperator("reportHandler", VarcharType.VARCHAR));
         MetaFunctions.inspectMemoryDetail(
-                new ConstantOperator("report", Type.VARCHAR),
-                new ConstantOperator("reportHandler.reportQueue", Type.VARCHAR));
+                new ConstantOperator("report", VarcharType.VARCHAR),
+                new ConstantOperator("reportHandler.reportQueue", VarcharType.VARCHAR));
     }
 
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");

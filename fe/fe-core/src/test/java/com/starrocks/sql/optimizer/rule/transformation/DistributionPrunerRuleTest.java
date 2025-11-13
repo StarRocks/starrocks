@@ -40,7 +40,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
@@ -65,11 +66,11 @@ public class DistributionPrunerRuleTest {
         }
 
         List<Column> columns = Lists.newArrayList(
-                new Column("dealDate", Type.DATE, false),
-                new Column("main_brand_id", Type.CHAR, false),
-                new Column("item_third_cate_id", Type.CHAR, false),
-                new Column("channel", Type.CHAR, false),
-                new Column("shop_type", Type.CHAR, false)
+                new Column("dealDate", DateType.DATE, false),
+                new Column("main_brand_id", CharType.CHAR, false),
+                new Column("item_third_cate_id", CharType.CHAR, false),
+                new Column("channel", CharType.CHAR, false),
+                new Column("shop_type", CharType.CHAR, false)
         );
         List<ColumnId> columnNames = columns.stream()
                 .map(column -> ColumnId.create(column.getName()))
@@ -120,16 +121,16 @@ public class DistributionPrunerRuleTest {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
 
-        ColumnRefOperator column1 = columnRefFactory.create("dealDate", Type.DATE, false);
-        scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
-        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", Type.CHAR, false);
-        scanColumnMap.put(column2, new Column("main_brand_id", Type.CHAR, false));
-        ColumnRefOperator column3 = columnRefFactory.create("item_third_cate_id", Type.CHAR, false);
-        scanColumnMap.put(column3, new Column("item_third_cate_id", Type.CHAR, false));
-        ColumnRefOperator column4 = columnRefFactory.create("channel", Type.CHAR, false);
-        scanColumnMap.put(column4, new Column("channel", Type.CHAR, false));
-        ColumnRefOperator column5 = columnRefFactory.create("shop_type", Type.CHAR, false);
-        scanColumnMap.put(column5, new Column("shop_type", Type.CHAR, false));
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", DateType.DATE, false);
+        scanColumnMap.put(column1, new Column("dealDate", DateType.DATE, false));
+        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", CharType.CHAR, false);
+        scanColumnMap.put(column2, new Column("main_brand_id", CharType.CHAR, false));
+        ColumnRefOperator column3 = columnRefFactory.create("item_third_cate_id", CharType.CHAR, false);
+        scanColumnMap.put(column3, new Column("item_third_cate_id", CharType.CHAR, false));
+        ColumnRefOperator column4 = columnRefFactory.create("channel", CharType.CHAR, false);
+        scanColumnMap.put(column4, new Column("channel", CharType.CHAR, false));
+        ColumnRefOperator column5 = columnRefFactory.create("shop_type", CharType.CHAR, false);
+        scanColumnMap.put(column5, new Column("shop_type", CharType.CHAR, false));
 
         BinaryPredicateOperator binaryPredicateOperator1 =
                 new BinaryPredicateOperator(BinaryType.GE, column1,

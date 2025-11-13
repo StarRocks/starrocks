@@ -29,9 +29,14 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
 
@@ -45,19 +50,19 @@ public class FoldConstantsRuleTest {
 
     private static final ConstantOperator OB_TRUE = ConstantOperator.createBoolean(true);
     private static final ConstantOperator OB_FALSE = ConstantOperator.createBoolean(false);
-    private static final ConstantOperator OB_NULL = ConstantOperator.createNull(Type.BOOLEAN);
+    private static final ConstantOperator OB_NULL = ConstantOperator.createNull(BooleanType.BOOLEAN);
 
     @Test
     public void applyCall() {
 
-        CallOperator root = new CallOperator(FunctionSet.CONCAT, Type.VARCHAR, Lists.newArrayList(
+        CallOperator root = new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, Lists.newArrayList(
                 ConstantOperator.createVarchar("1"),
                 ConstantOperator.createVarchar("2"),
                 ConstantOperator.createVarchar("3")
         ));
 
-        Function fn =
-                new Function(new FunctionName(FunctionSet.CONCAT), new Type[] {Type.VARCHAR}, Type.VARCHAR, false);
+        Function fn = new Function(new FunctionName(FunctionSet.CONCAT),
+                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
 
         new Expectations(root) {
             {
@@ -74,10 +79,10 @@ public class FoldConstantsRuleTest {
 
     @Test
     public void applyIn() {
-        InPredicateOperator ipo1 = new InPredicateOperator(ConstantOperator.createNull(Type.BOOLEAN));
+        InPredicateOperator ipo1 = new InPredicateOperator(ConstantOperator.createNull(BooleanType.BOOLEAN));
         assertEquals(OB_NULL, rule.apply(ipo1, null));
 
-        InPredicateOperator ipo2 = new InPredicateOperator(new ColumnRefOperator(1, Type.VARCHAR, "name", true),
+        InPredicateOperator ipo2 = new InPredicateOperator(new ColumnRefOperator(1, VarcharType.VARCHAR, "name", true),
                 ConstantOperator.createVarchar("test"));
         assertEquals(ipo2, rule.apply(ipo2, null));
 
@@ -99,53 +104,55 @@ public class FoldConstantsRuleTest {
                 ConstantOperator.createVarchar("test2"),
                 ConstantOperator.createVarchar("test3"),
                 ConstantOperator.createVarchar("test4"),
-                ConstantOperator.createNull(Type.BOOLEAN));
+                ConstantOperator.createNull(BooleanType.BOOLEAN));
 
         assertEquals(OB_NULL, rule.apply(ipo5, null));
 
         InPredicateOperator ipo6 = new InPredicateOperator(true, ConstantOperator.createTime(-1077590.0),
-                ConstantOperator.createNull(Type.TIME));
+                ConstantOperator.createNull(DateType.TIME));
         assertEquals(OB_NULL, rule.apply(ipo6, null));
     }
 
     @Test
     public void applyInNull() {
         InPredicateOperator ipo2 = new InPredicateOperator(ConstantOperator.createInt(0),
-                ConstantOperator.createNull(Type.INT));
-        assertEquals(ConstantOperator.createNull(Type.BOOLEAN), rule.apply(ipo2, null));
+                ConstantOperator.createNull(IntegerType.INT));
+        assertEquals(ConstantOperator.createNull(BooleanType.BOOLEAN), rule.apply(ipo2, null));
     }
 
     @Test
     public void applyIsNull() {
         IsNullPredicateOperator inpo1 =
-                new IsNullPredicateOperator(new ColumnRefOperator(1, Type.BOOLEAN, "name", true));
+                new IsNullPredicateOperator(new ColumnRefOperator(1, BooleanType.BOOLEAN, "name", true));
         assertEquals(inpo1, rule.apply(inpo1, null));
 
-        IsNullPredicateOperator inpo2 = new IsNullPredicateOperator(ConstantOperator.createNull(Type.BOOLEAN));
+        IsNullPredicateOperator inpo2 = new IsNullPredicateOperator(ConstantOperator.createNull(BooleanType.BOOLEAN));
         assertEquals(OB_TRUE, rule.apply(inpo2, null));
 
-        IsNullPredicateOperator inpo3 = new IsNullPredicateOperator(true, ConstantOperator.createNull(Type.BOOLEAN));
+        IsNullPredicateOperator inpo3 = new IsNullPredicateOperator(true, ConstantOperator.createNull(BooleanType.BOOLEAN));
         assertEquals(OB_FALSE, rule.apply(inpo3, null));
     }
 
     @Test
     public void applyCast() {
-        CastOperator cast1 = new CastOperator(Type.BOOLEAN, ConstantOperator.createNull(Type.NULL));
+        CastOperator cast1 = new CastOperator(BooleanType.BOOLEAN, ConstantOperator.createNull(NullType.NULL));
         assertEquals(OB_NULL, rule.apply(cast1, null));
 
-        CastOperator cast2 = new CastOperator(Type.BOOLEAN, new ColumnRefOperator(1, Type.VARCHAR, "test", true));
+        CastOperator cast2 = new CastOperator(BooleanType.BOOLEAN,
+                new ColumnRefOperator(1, VarcharType.VARCHAR, "test", true));
         assertEquals(cast2, rule.apply(cast2, null));
 
-        CastOperator cast3 = new CastOperator(Type.BOOLEAN, ConstantOperator.createChar("true"));
+        CastOperator cast3 = new CastOperator(BooleanType.BOOLEAN, ConstantOperator.createChar("true"));
         assertEquals(ConstantOperator.createBoolean(true), rule.apply(cast3, null));
 
-        CastOperator cast4 = new CastOperator(Type.VARCHAR, ConstantOperator.createBigint(123));
+        CastOperator cast4 = new CastOperator(VarcharType.VARCHAR, ConstantOperator.createBigint(123));
         assertEquals(ConstantOperator.createVarchar("123"), rule.apply(cast4, null));
 
-        CastOperator cast5 = new CastOperator(Type.DATE, ConstantOperator.createVarchar("2020-02-12 12:23:00"));
+        CastOperator cast5 = new CastOperator(DateType.DATE, ConstantOperator.createVarchar("2020-02-12 12:23:00"));
         assertEquals(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 12, 0, 0, 0)), rule.apply(cast5, null));
 
-        CastOperator cast6 = new CastOperator(Type.BIGINT, ConstantOperator.createDate(LocalDateTime.of(2020, 2, 12, 0, 0, 0)));
+        CastOperator cast6 = new CastOperator(
+                IntegerType.BIGINT, ConstantOperator.createDate(LocalDateTime.of(2020, 2, 12, 0, 0, 0)));
         assertEquals(ConstantOperator.createBigint(20200212), rule.apply(cast6, null));
 
         CastOperator cast7 = new CastOperator(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1),
@@ -155,18 +162,18 @@ public class FoldConstantsRuleTest {
         assertEquals("0.0", rule.apply(cast7, null).toString());
 
         // cast(96.1 as int)-> 96
-        CastOperator cast8 = new CastOperator(Type.INT, ConstantOperator.createDouble(96.1));
+        CastOperator cast8 = new CastOperator(IntegerType.INT, ConstantOperator.createDouble(96.1));
         assertEquals(ConstantOperator.createInt(96), rule.apply(cast8, null));
     }
 
     @Test
     public void applyBinary() {
         BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
-                ConstantOperator.createNull(Type.INT), ConstantOperator.createInt(1));
+                ConstantOperator.createNull(IntegerType.INT), ConstantOperator.createInt(1));
         assertEquals(OB_NULL, rule.apply(bpo1, null));
 
         BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, Type.INT, "name", true), ConstantOperator.createInt(1));
+                new ColumnRefOperator(1, IntegerType.INT, "name", true), ConstantOperator.createInt(1));
         assertEquals(bpo2, rule.apply(bpo2, null));
 
         BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryType.EQ,
@@ -179,11 +186,11 @@ public class FoldConstantsRuleTest {
         assertEquals(OB_FALSE, rule.apply(bpo4, null));
 
         BinaryPredicateOperator bpo5 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                ConstantOperator.createNull(Type.BOOLEAN), ConstantOperator.createNull(Type.BOOLEAN));
+                ConstantOperator.createNull(BooleanType.BOOLEAN), ConstantOperator.createNull(BooleanType.BOOLEAN));
         assertEquals(OB_TRUE, rule.apply(bpo5, null));
 
         BinaryPredicateOperator bpo6 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                ConstantOperator.createNull(Type.BOOLEAN), ConstantOperator.createInt(1));
+                ConstantOperator.createNull(BooleanType.BOOLEAN), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo6, null));
 
         BinaryPredicateOperator bpo7 = new BinaryPredicateOperator(BinaryType.GE,

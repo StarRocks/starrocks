@@ -17,7 +17,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
@@ -40,7 +41,7 @@ public class TriggersSystemTable {
                         .column("EVENT_OBJECT_CATALOG", TypeFactory.createVarchar(512))
                         .column("EVENT_OBJECT_SCHEMA", TypeFactory.createVarchar(64))
                         .column("EVENT_OBJECT_TABLE", TypeFactory.createVarchar(64))
-                        .column("ACTION_ORDER", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ACTION_ORDER", IntegerType.BIGINT)
                         // TODO: Type for ACTION_CONDITION && ACTION_STATEMENT should be `longtext`, but `varchar(65535)` was set at this stage.
                         .column("ACTION_CONDITION",
                                 TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
@@ -52,7 +53,7 @@ public class TriggersSystemTable {
                         .column("ACTION_REFERENCE_NEW_TABLE", TypeFactory.createVarchar(64))
                         .column("ACTION_REFERENCE_OLD_ROW", TypeFactory.createVarchar(3))
                         .column("ACTION_REFERENCE_NEW_ROW", TypeFactory.createVarchar(3))
-                        .column("CREATED", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CREATED", DateType.DATETIME)
                         .column("SQL_MODE", TypeFactory.createVarchar(8192))
                         .column("DEFINER", TypeFactory.createVarchar(77))
                         .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(32))

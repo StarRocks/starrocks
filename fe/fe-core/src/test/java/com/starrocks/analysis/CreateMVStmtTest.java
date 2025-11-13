@@ -23,7 +23,8 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.MVColumnItem;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -208,7 +209,7 @@ public class CreateMVStmtTest {
             String sql = "create materialized view star_view as select k1, sum(v1) from agg_tbl group by k1;";
             CreateMaterializedViewStmt stmt =
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Assertions.assertEquals(Type.BIGINT, stmt.getMVColumnItemList().get(1).getType());
+            Assertions.assertEquals(IntegerType.BIGINT, stmt.getMVColumnItemList().get(1).getType());
         }
 
         {
@@ -221,7 +222,7 @@ public class CreateMVStmtTest {
             String sql = "create materialized view star_view as select k1, sum(v3) from agg_tbl group by k1;";
             CreateMaterializedViewStmt stmt =
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-            Assertions.assertEquals(Type.DOUBLE, stmt.getMVColumnItemList().get(1).getType());
+            Assertions.assertEquals(FloatType.DOUBLE, stmt.getMVColumnItemList().get(1).getType());
         }
     }
 

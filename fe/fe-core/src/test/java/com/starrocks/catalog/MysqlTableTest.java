@@ -40,7 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,7 +63,7 @@ public class MysqlTableTest {
     @BeforeEach
     public void setUp() {
         columns = Lists.newArrayList();
-        Column column = new Column("col1", Type.BIGINT);
+        Column column = new Column("col1", IntegerType.BIGINT);
         column.setIsKey(true);
         columns.add(column);
 

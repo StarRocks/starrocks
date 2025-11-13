@@ -35,7 +35,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -162,7 +162,7 @@ public class ShowAlterStmtAnalyzer {
                                     + "\"2019-12-02|2019-12-02 14:54:00\"");
                 }
                 try {
-                    subExpr.setChild(1, ((StringLiteral) subExpr.getChild(1)).castTo(Type.DATETIME));
+                    subExpr.setChild(1, ((StringLiteral) subExpr.getChild(1)).castTo(DateType.DATETIME));
                 } catch (AnalysisException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                 }

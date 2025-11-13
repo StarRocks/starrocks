@@ -49,7 +49,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -204,9 +206,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
                         countRowsLEOneRowPredicate);
         Function assertTrueFn =
-                ExprUtils.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN, Type.VARCHAR},
+                ExprUtils.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {BooleanType.BOOLEAN, VarcharType.VARCHAR},
                         Function.CompareMode.IS_IDENTICAL);
-        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
+        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, BooleanType.BOOLEAN,
                 Lists.newArrayList(countRowsPredicate,
                         ConstantOperator.createVarchar("correlate scalar subquery result must 1 row")), assertTrueFn);
         ColumnRefOperator assertion =

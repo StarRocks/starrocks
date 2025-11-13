@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.BottomUpScalarOperatorRewriteR
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -396,7 +397,7 @@ public class JsonPathRewriteRule extends TransformationRule {
         private boolean isSupportedJsonFunction(CallOperator call) {
             return SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName())
                     && call.getArguments().size() == 2
-                    && call.getChild(0).getType().equals(Type.JSON);
+                    && call.getChild(0).getType().equals(JsonType.JSON);
         }
 
         private ScalarOperator rewriteJsonFunction(CallOperator call, ScalarOperatorRewriteContext rewriteContext) {

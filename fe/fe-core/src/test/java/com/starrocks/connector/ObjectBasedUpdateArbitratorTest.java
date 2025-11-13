@@ -42,7 +42,8 @@ import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -178,11 +179,11 @@ public class ObjectBasedUpdateArbitratorTest {
 
     private HiveTable createHiveTable(String location) {
         List<Column> fullSchema = new ArrayList<>();
-        Column columnId = new Column("id", Type.INT, true);
+        Column columnId = new Column("id", IntegerType.INT, true);
         columnId.setComment("id");
-        Column columnName = new Column("name", Type.VARCHAR);
-        Column columnYear = new Column("year", Type.INT);
-        Column columnDt = new Column("dt", Type.INT);
+        Column columnName = new Column("name", VarcharType.VARCHAR);
+        Column columnYear = new Column("year", IntegerType.INT);
+        Column columnDt = new Column("dt", IntegerType.INT);
         fullSchema.add(columnId);
         fullSchema.add(columnName);
         fullSchema.add(columnYear);

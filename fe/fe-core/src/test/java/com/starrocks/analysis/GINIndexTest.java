@@ -33,7 +33,9 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
-import com.starrocks.type.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.StringType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -67,7 +69,7 @@ public class GINIndexTest extends PlanTestBase {
 
     @Test
     public void testCheckInvertedIndex() {
-        Column c1 = new Column("f1", Type.ARRAY_FLOAT, true);
+        Column c1 = new Column("f1", ArrayType.ARRAY_FLOAT, true);
 
         Assertions.assertThrows(
                 SemanticException.class,
@@ -79,7 +81,7 @@ public class GINIndexTest extends PlanTestBase {
                 () -> IndexAnalyzer.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
                 "The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
 
-        Column c2 = new Column("f2", Type.STRING, true);
+        Column c2 = new Column("f2", StringType.STRING, true);
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
@@ -94,7 +96,7 @@ public class GINIndexTest extends PlanTestBase {
                     put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY, "french");
                 }}, KeysType.DUP_KEYS));
 
-        Column c3 = new Column("f3", Type.FLOAT, true);
+        Column c3 = new Column("f3", FloatType.FLOAT, true);
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> IndexAnalyzer.checkInvertedIndexValid(c3, new HashMap<String, String>() {{

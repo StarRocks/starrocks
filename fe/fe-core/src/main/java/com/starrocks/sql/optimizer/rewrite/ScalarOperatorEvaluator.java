@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -114,13 +115,13 @@ public enum ScalarOperatorEvaluator {
     public Function getMetaFunction(FunctionName name, Type[] args) {
         String nameStr = name.getFunction().toUpperCase();
         // NOTE: only support VARCHAR as return type
-        FunctionSignature signature = new FunctionSignature(nameStr, Lists.newArrayList(args), Type.VARCHAR);
+        FunctionSignature signature = new FunctionSignature(nameStr, Lists.newArrayList(args), VarcharType.VARCHAR);
         FunctionInvoker invoker = functions.get(signature);
         if (invoker == null || !invoker.isMetaFunction) {
             return null;
         }
 
-        Function function = new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+        Function function = new Function(name, Lists.newArrayList(args), VarcharType.VARCHAR, false);
         function.setMetaFunction(true);
         return function;
     }

@@ -34,7 +34,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -144,7 +144,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
     private SlotRef makeMvSlotRef(String tableName, String columnName) {
         SlotRef slotRef = new SlotRef(new TableName("test", tableName), columnName, columnName);
         slotRef.getTblNameWithoutAnalyzed().normalization(connectContext);
-        slotRef.setType(Type.DATE);
+        slotRef.setType(DateType.DATE);
         return slotRef;
     }
 

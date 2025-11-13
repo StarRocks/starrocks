@@ -57,6 +57,8 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -160,7 +162,8 @@ public class SimpleQueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoGroupingFunctions(joinEqual, "JOIN");
 
-                if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
+                if (!joinEqual.getType().matchesType(BooleanType.BOOLEAN)
+                        && !joinEqual.getType().matchesType(NullType.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }

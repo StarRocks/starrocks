@@ -17,7 +17,7 @@ package com.starrocks.connector;
 import com.starrocks.catalog.Column;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TBucketProperty;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -25,26 +25,26 @@ public class BucketPropertyTest {
 
     @Test
     public void testSatisfy() {
-        BucketProperty bp1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c1", Type.INT));
-        BucketProperty bp2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c2", Type.INT));
+        BucketProperty bp1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c1", IntegerType.INT));
+        BucketProperty bp2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c2", IntegerType.INT));
         Assertions.assertTrue(bp1.satisfy(bp2));
 
-        BucketProperty bp3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 20, new Column("c1", Type.INT));
+        BucketProperty bp3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 20, new Column("c1", IntegerType.INT));
         Assertions.assertFalse(bp1.satisfy(bp3));
 
-        BucketProperty bp4 = new BucketProperty(TBucketFunction.NATIVE, 10, new Column("c1", Type.INT));
+        BucketProperty bp4 = new BucketProperty(TBucketFunction.NATIVE, 10, new Column("c1", IntegerType.INT));
         Assertions.assertFalse(bp1.satisfy(bp4));
     }
 
     @Test
     public void testToString() {
-        BucketProperty bp = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c1", Type.INT));
+        BucketProperty bp = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, new Column("c1", IntegerType.INT));
         Assertions.assertEquals("MURMUR3_X86_32, 10", bp.toString());
     }
 
     @Test
     public void testGetters() {
-        Column c = new Column("c1", Type.INT);
+        Column c = new Column("c1", IntegerType.INT);
         BucketProperty bp = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c);
         Assertions.assertEquals(TBucketFunction.MURMUR3_X86_32, bp.getBucketFunction());
         Assertions.assertEquals(10, bp.getBucketNum());
@@ -53,11 +53,11 @@ public class BucketPropertyTest {
 
     @Test
     public void testEquals() {
-        Column c1 = new Column("c1", Type.INT);
+        Column c1 = new Column("c1", IntegerType.INT);
         BucketProperty bp1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c1);
         BucketProperty bp2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c1);
         BucketProperty bp3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 20, c1);
-        Column c2 = new Column("c2", Type.INT);
+        Column c2 = new Column("c2", IntegerType.INT);
         BucketProperty bp4 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c2);
 
         Assertions.assertEquals(bp1, bp1);
@@ -70,7 +70,7 @@ public class BucketPropertyTest {
 
     @Test
     public void testToThrift() {
-        Column c = new Column("c1", Type.INT);
+        Column c = new Column("c1", IntegerType.INT);
         BucketProperty bp = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, c);
         TBucketProperty tbp = bp.toThrift();
         Assertions.assertEquals(TBucketFunction.MURMUR3_X86_32, tbp.getBucket_func());

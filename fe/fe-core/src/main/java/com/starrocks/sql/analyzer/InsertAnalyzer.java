@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.SnapshotRef;
@@ -567,7 +568,7 @@ public class InsertAnalyzer {
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;
             Column column = table.getColumn(actualName);
             try {
-                Type type = literalExpr.isConstantNull() ? Type.NULL : column.getType();
+                Type type = literalExpr.isConstantNull() ? NullType.NULL : column.getType();
                 Expr expr = LiteralExpr.create(literalExpr.getStringValue(), type);
                 insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
             } catch (AnalysisException e) {

@@ -22,7 +22,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -64,13 +65,13 @@ public class AddFilesProcedureTest {
 
         // Check argument names and types
         boolean hasSourceTable = procedure.getArguments().stream()
-                .anyMatch(arg -> "source_table".equals(arg.getName()) && arg.getType() == Type.VARCHAR);
+                .anyMatch(arg -> "source_table".equals(arg.getName()) && arg.getType() == VarcharType.VARCHAR);
         boolean hasLocation = procedure.getArguments().stream()
-                .anyMatch(arg -> "location".equals(arg.getName()) && arg.getType() == Type.VARCHAR);
+                .anyMatch(arg -> "location".equals(arg.getName()) && arg.getType() == VarcharType.VARCHAR);
         boolean hasFileFormat = procedure.getArguments().stream()
-                .anyMatch(arg -> "file_format".equals(arg.getName()) && arg.getType() == Type.VARCHAR);
+                .anyMatch(arg -> "file_format".equals(arg.getName()) && arg.getType() == VarcharType.VARCHAR);
         boolean hasRecursive = procedure.getArguments().stream()
-                .anyMatch(arg -> "recursive".equals(arg.getName()) && arg.getType() == Type.BOOLEAN);
+                .anyMatch(arg -> "recursive".equals(arg.getName()) && arg.getType() == BooleanType.BOOLEAN);
 
         assertTrue(hasSourceTable);
         assertTrue(hasLocation);

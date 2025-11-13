@@ -39,6 +39,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 
@@ -128,7 +129,7 @@ public class FloatLiteral extends LiteralExpr {
         // Figure out if this will fit in a FLOAT without loosing precision.
         float fvalue;
         fvalue = value.floatValue();
-        type = Float.toString(fvalue).equals(Double.toString(value)) ? Type.FLOAT : Type.DOUBLE;
+        type = Float.toString(fvalue).equals(Double.toString(value)) ? FloatType.FLOAT : FloatType.DOUBLE;
     }
 
     private void checkValue(Double value) throws AnalysisException {
