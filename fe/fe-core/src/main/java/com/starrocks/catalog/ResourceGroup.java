@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
@@ -88,7 +87,7 @@ public class ResourceGroup {
 
     private static final List<ColumnMeta> COLUMN_METAS = ImmutableList.of(
             new ColumnMeta(
-                    new Column("name", TypeFactory.createVarchar(100)),
+                    new Column("name", ScalarType.createVarchar(100)),
                     (rg, classifier) -> rg.getName()),
             new ColumnMeta(
                     new Column("id", ScalarType.createVarchar(200)),
@@ -128,7 +127,7 @@ public class ResourceGroup {
                     new Column("classifiers", ScalarType.createVarchar(1024)),
                     (rg, classifier) -> classifier.toString()),
             new ColumnMeta(
-                    new Column(MEM_POOL, TypeFactory.createVarchar(200)),
+                    new Column(MEM_POOL, ScalarType.createVarchar(200)),
                     (rg, classifier) -> rg.getMemPool(), false)
     );
 
