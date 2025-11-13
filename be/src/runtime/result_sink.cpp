@@ -75,6 +75,10 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
 #endif
 
     _is_binary_format = sink.is_binary_row;
+
+    if (sink.__isset.output_column_names) {
+        _output_column_names = sink.output_column_names;
+    }
 }
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {

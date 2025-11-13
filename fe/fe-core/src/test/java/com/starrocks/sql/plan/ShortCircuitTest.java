@@ -109,7 +109,7 @@ public class ShortCircuitTest extends PlanTestBase {
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
         coord.exec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
@@ -149,7 +149,7 @@ public class ShortCircuitTest extends PlanTestBase {
                 WarehouseManager.DEFAULT_RESOURCE);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
         coord.exec();
         Assertions.assertTrue(coord.getNext().isEos());
     }

@@ -76,7 +76,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         try {
             coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
-                    new TDescriptorTable());
+                    new TDescriptorTable(), null);
             coordinatorPreprocessor = coordinator.getPrepareInfo();
         } catch (StarRocksException e) {
             System.out.println(e.getMessage());

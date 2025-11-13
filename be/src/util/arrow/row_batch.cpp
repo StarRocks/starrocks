@@ -151,9 +151,12 @@ Status convert_to_arrow_field(const TypeDescriptor& desc, const string& col_name
 Status convert_to_arrow_schema(const RowDescriptor& row_desc,
                                const std::unordered_map<int64_t, std::string>& id_to_col_name,
                                std::shared_ptr<arrow::Schema>* result,
-                               const std::vector<ExprContext*>& output_expr_ctxs) {
+                               const std::vector<ExprContext*>& output_expr_ctxs,
+                               const std::vector<std::string>* output_column_names) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    for (const auto& expr_context : output_expr_ctxs) {
+    for (size_t i = 0; i < output_expr_ctxs.size(); ++i) {
+        const auto& expr_context = output_expr_ctxs[i];
+
         Expr* expr = expr_context->root();
         std::shared_ptr<arrow::Field> field;
         string col_name;
@@ -162,11 +165,13 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
         int64_t slot_id = col_ref->slot_id();
         int64_t tuple_id = col_ref->tuple_id();
         int64_t id = tuple_id << 32 | slot_id;
-        auto it = id_to_col_name.find(id);
-        if (it == id_to_col_name.end()) {
-            LOG(WARNING) << "Can't find the RefSlot in the row_desc.";
-        } else {
+
+        if (output_column_names != nullptr) {
+            col_name = (*output_column_names)[i];
+        } else if (auto it = id_to_col_name.find(id); it != id_to_col_name.end()) {
             col_name = it->second;
+        } else {
+            LOG(WARNING) << "Can't find the RefSlot in the row_desc.";
         }
 
         RETURN_IF_ERROR(convert_to_arrow_field(expr->type(), col_name, expr->is_nullable(), &field));

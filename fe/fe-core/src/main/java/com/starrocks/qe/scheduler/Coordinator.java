@@ -56,25 +56,20 @@ public abstract class Coordinator {
         Coordinator createQueryScheduler(ConnectContext context,
                                          List<PlanFragment> fragments,
                                          List<ScanNode> scanNodes,
-                                         TDescriptorTable descTable) throws StarRocksException;
+                                         TDescriptorTable descTable,
+                                         ExecPlan execPlan) throws StarRocksException;
 
         Coordinator createInsertScheduler(ConnectContext context,
                                           List<PlanFragment> fragments,
                                           List<ScanNode> scanNodes,
-                                          TDescriptorTable descTable) throws StarRocksException;
+                                          TDescriptorTable descTable,
+                                          ExecPlan execPlan) throws StarRocksException;
 
         Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner) throws StarRocksException;
 
         Coordinator createStreamLoadScheduler(LoadPlanner loadPlanner) throws StarRocksException;
 
         Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address);
-
-        Coordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                                                         List<PlanFragment> fragments,
-                                                         List<ScanNode> scanNodes, String timezone, long startTime,
-                                                         Map<String, String> sessionVariables,
-                                                         ConnectContext context, long execMemLimit,
-                                                         long warehouseId);
 
         Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
                                                 List<PlanFragment> fragments,
@@ -85,7 +80,7 @@ public abstract class Coordinator {
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
                                                           DescriptorTable descTable, List<PlanFragment> fragments,
-                                                          List<ScanNode> scanNodes);
+                                                          List<ScanNode> scanNodes, ExecPlan execPlan);
     }
 
     // ------------------------------------------------------------------------------------
