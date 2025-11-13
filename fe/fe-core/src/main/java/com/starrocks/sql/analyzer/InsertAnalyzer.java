@@ -38,7 +38,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -175,11 +174,6 @@ public class InsertAnalyzer {
         }
 
         if (table.isIcebergTable() || table.isHiveTable()) {
-            if (table.isHiveTable() && table.isUnPartitioned() &&
-                    HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite()) {
-                throw new SemanticException("Unsupported insert overwrite hive unpartitioned table with s3 location");
-            }
-
             if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE &&
                     !session.getSessionVariable().enableWriteHiveExternalTable()) {
                 throw new SemanticException("Only support to write hive managed table, tableType: " +
