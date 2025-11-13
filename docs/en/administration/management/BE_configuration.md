@@ -1530,6 +1530,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: When enable_pk_parallel_execution is set to true, the Primary Key table parallel execution strategy will be enabled if the data generated during import or compaction exceeds this threshold.
 - Introduced in: -
 
+##### enable_strict_delvec_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
+- Introduced in: -
+
 ##### size_tiered_min_level_size
 
 - Default: 131072

@@ -1518,6 +1518,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
 - 導入バージョン: -
 
+##### enable_strict_delvec_crc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
+- 導入バージョン: -
+
 ##### size_tiered_min_level_size
 
 - デフォルト: 131072
