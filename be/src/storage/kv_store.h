@@ -74,6 +74,13 @@ public:
                    std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
                    int64_t timeout_sec = -1);
 
+    // Iterates through rocksdb with timeout. If the iteration times out,
+    // it triggers a compaction of rocksdb and retries the iteration
+    // from the last processed key without timeout.
+    Status iterate_with_compact_on_timeout(
+            ColumnFamilyIndex column_family_index, const std::string& prefix,
+            std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func, int64_t timeout_sec = -1);
+
     Status iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                          const std::string& upper_bound,
                          std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func);
@@ -100,6 +107,11 @@ public:
     // 2. and then generate write batch with batch delete.
     Status OptDeleteRange(ColumnFamilyIndex column_family_index, const std::string& begin_key,
                           const std::string& end_key, WriteBatch* batch);
+
+private:
+    Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix, const std::string& start_key,
+                   std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                   int64_t timeout_sec = -1);
 
 private:
     std::string _root_path;
