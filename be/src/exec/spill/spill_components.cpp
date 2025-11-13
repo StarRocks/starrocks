@@ -33,11 +33,8 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
-<<<<<<< HEAD
-=======
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
->>>>>>> 98a6e260f7 ([BugFix] Fix crash when spill large string encode (#61495))
 #include "util/bit_util.h"
 #include "util/runtime_profile.h"
 
