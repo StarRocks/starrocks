@@ -663,8 +663,10 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
                         "crc32c {}",
                         metadata.id(), delvec_name, iter->second.offset(), iter->second.size(),
                         crc32c::Unmask(iter->second.crc32c()), crc32c);
-                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                                      crc32c::Unmask(iter->second.crc32c()), crc32c));
+                if (config::enable_strict_delvec_crc_check) {
+                    return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                          crc32c::Unmask(iter->second.crc32c()), crc32c));
+                }
             }
         }
         // parse delvec
