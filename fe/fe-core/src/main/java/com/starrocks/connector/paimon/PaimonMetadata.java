@@ -301,7 +301,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
-        final long fromSnapshotIdExclusive = fromSnapshotExclusive.from.getVersion();
+        final long fromSnapshotIdExclusive = fromSnapshotExclusive.getSnapshotId();
         final long toSnapshotIdInclusive =
                 toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
                         "toSnapshotInclusive must have a valid snapshot ID"));
@@ -345,7 +345,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     } else {
                         // ensure this snapshot id is equal to from
                         if (currentSnapshot.id() != fromSnapshotIdExclusive) {
-                            throw new SemanticException(String.format("Expect from snapshot id:{}, but got:{}",
+                            throw new SemanticException(String.format("Expect from snapshot id:%s, but got:%s",
                                     fromSnapshotIdExclusive, currentSnapshot.id()));
                         }
                     }
@@ -369,7 +369,6 @@ public class PaimonMetadata implements ConnectorMetadata {
             long endSnapshotId = tableDelta.end().get();
             dynamicOptions.put("incremental-between", startSnapshotId + "," + endSnapshotId);
             dynamicOptions.put("incremental-between-scan-mode", "auto");
-            dynamicOptions.put("ignore-delete", "true");
         }
         return nativeTable.copy(dynamicOptions);
     }
