@@ -31,7 +31,7 @@ public class FeThreadsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("FE_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("FE_ADDRESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("THREAD_ID", TypeFactory.createType(PrimitiveType.BIGINT))
                         .column("THREAD_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("THREAD_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))

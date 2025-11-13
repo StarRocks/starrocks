@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 | **字段**       | **描述**                                                     |
 | -------------- | ------------------------------------------------------------ |
-| FE_ID          | FE 节点的 ID（格式：`host:port`）。                          |
+| FE_ADDRESS     | FE 节点的地址（格式：`host:port`）。                         |
 | THREAD_ID      | Java 线程 ID。                                                |
 | THREAD_NAME    | 线程名称。                                                    |
 | THREAD_STATE   | 线程状态。可能的值：`NEW`、`RUNNABLE`、`BLOCKED`、`WAITING`、`TIMED_WAITING`、`TERMINATED`。 |

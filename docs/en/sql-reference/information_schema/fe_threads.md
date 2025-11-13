@@ -10,7 +10,7 @@ The following fields are provided in `fe_threads`:
 
 | **Field**      | **Description**                                              |
 | -------------- | ------------------------------------------------------------ |
-| FE_ID          | ID of the FE node (format: `host:port`).                    |
+| FE_ADDRESS     | Address of the FE node (format: `host:port`).               |
 | THREAD_ID      | Java thread ID.                                              |
 | THREAD_NAME    | Name of the thread.                                          |
 | THREAD_STATE   | State of the thread. Possible values: `NEW`, `RUNNABLE`, `BLOCKED`, `WAITING`, `TIMED_WAITING`, `TERMINATED`. |
