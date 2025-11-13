@@ -706,18 +706,6 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_tablet_metadata(_tablet_manager->tablet_metadata_location(4, 1)).ok());
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
-    auto metadata = std::make_shared<TabletMetadata>();
-    auto tablet_id = next_id();
-    metadata->set_id(tablet_id);
-    metadata->set_version(2);
-    ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
-    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
-    ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
-}
-
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
@@ -740,9 +728,6 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
 }
 
-TEST_F(LakeTabletManagerTest, get_tablet_metadata) {}
-
->>>>>>> ae1ae426a0 ([Enhancement] Introduce CacheOptions for granular tablet metadata caching (#65222))
 namespace {
 class PartitionedLocationProvider : public lake::LocationProvider {
 public:

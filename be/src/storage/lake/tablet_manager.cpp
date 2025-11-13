@@ -341,27 +341,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     return Status::OK();
 }
 
-<<<<<<< HEAD
-StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache,
-=======
-Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location) {
-    if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
-        auto drop_status = drop_local_cache(metadata_location);
-        TEST_SYNC_POINT_CALLBACK("TabletManager::corrupted_tablet_meta_handler", &drop_status);
-        if (!drop_status.ok()) {
-            LOG(WARNING) << "clear corrupted cache for " << metadata_location << " failed, "
-                         << "error: " << drop_status;
-            return s; // return error so load tablet meta can be retried
-        }
-        LOG(INFO) << "clear corrupted cache for " << metadata_location;
-        return Status::OK();
-    } else {
-        return s;
-    }
-}
-
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_data_cache,
->>>>>>> ae1ae426a0 ([Enhancement] Introduce CacheOptions for granular tablet metadata caching (#65222))
                                                                 int64_t expected_gtid,
                                                                 const std::shared_ptr<FileSystem>& fs) {
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
@@ -370,7 +350,6 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     ProtobufFile file(metadata_location, fs);
     auto s = file.load(metadata.get(), fill_data_cache);
     if (!s.ok()) {
-<<<<<<< HEAD
         if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
             auto drop_status = drop_local_cache(metadata_location);
             if (!drop_status.ok()) {
@@ -386,13 +365,6 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
         } else {
             return s;
         }
-=======
-        RETURN_IF_ERROR(corrupted_tablet_meta_handler(s, metadata_location));
-        // reset metadata
-        metadata = std::make_shared<TabletMetadataPB>();
-        // read again
-        RETURN_IF_ERROR(file.load(metadata.get(), fill_data_cache));
->>>>>>> ae1ae426a0 ([Enhancement] Introduce CacheOptions for granular tablet metadata caching (#65222))
     }
 
     if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
@@ -417,20 +389,6 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-<<<<<<< HEAD
-    StatusOr<TabletMetadataPtr> tablet_metadata_or =
-            get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache, expected_gtid, fs);
-    if (!tablet_metadata_or.status().is_not_found()) {
-        return tablet_metadata_or;
-    }
-    if (version == kInitialVersion) {
-        // Handle tablet initial metadata
-        tablet_metadata_or =
-                get_tablet_metadata(tablet_initial_metadata_location(tablet_id), fill_cache, expected_gtid, fs);
-    } else {
-        // get single tablet metadata
-        tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-=======
     CacheOptions cache_opts{.fill_meta_cache = fill_cache, .fill_data_cache = fill_cache};
     return get_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
 }
@@ -438,18 +396,18 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
-    StatusOr<TabletMetadataPtr> tablet_metadata_or;
-    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
-    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
-        tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
-        if (tablet_metadata_or.status().is_not_found()) {
-            tablet_metadata_or =
-                    get_tablet_metadata(tablet_metadata_location(tablet_id, version), cache_opts, expected_gtid, fs);
-        }
-    } else {
+    StatusOr<TabletMetadataPtr> tablet_metadata_or =
+            get_tablet_metadata(tablet_metadata_location(tablet_id, version), cache_opts, expected_gtid, fs);
+    if (!tablet_metadata_or.status().is_not_found()) {
+        return tablet_metadata_or;
+    }
+    if (version == kInitialVersion) {
+        // Handle tablet initial metadata
         tablet_metadata_or =
-                get_tablet_metadata(tablet_metadata_location(tablet_id, version), cache_opts, expected_gtid, fs);
->>>>>>> ae1ae426a0 ([Enhancement] Introduce CacheOptions for granular tablet metadata caching (#65222))
+                get_tablet_metadata(tablet_initial_metadata_location(tablet_id), cache_opts, expected_gtid, fs);
+    } else {
+        // get single tablet metadata
+        tablet_metadata_or = get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
     }
 
     if (!tablet_metadata_or.ok()) {
@@ -476,23 +434,9 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         return ptr;
     }
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
-<<<<<<< HEAD
-    StatusOr<TabletMetadataPtr> metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
+    StatusOr<TabletMetadataPtr> metadata_or = load_tablet_metadata(path, cache_opts.fill_data_cache, expected_gtid, fs);
     if (metadata_or.status().is_not_found()) {
-        metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
-=======
-    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
-    if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
         metadata_or = get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
-        if (metadata_or.status().is_not_found()) {
-            metadata_or = load_tablet_metadata(path, cache_opts.fill_data_cache, expected_gtid, fs);
-        }
-    } else {
-        metadata_or = load_tablet_metadata(path, cache_opts.fill_data_cache, expected_gtid, fs);
-        if (metadata_or.status().is_not_found()) {
-            metadata_or = get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
-        }
->>>>>>> ae1ae426a0 ([Enhancement] Introduce CacheOptions for granular tablet metadata caching (#65222))
     }
 
     if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion) {
@@ -512,74 +456,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     return metadata_or.value();
 }
 
-<<<<<<< HEAD
 DEFINE_FAIL_POINT(tablet_schema_not_found_in_bundle_metadata);
-=======
-StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(const std::string& path,
-                                                                              const std::string& serialized_string) {
-    auto file_size = serialized_string.size();
-    auto footer_size = sizeof(uint64_t);
-    auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    RETURN_IF(file_size < footer_size + bundle_metadata_size,
-              Status::Corruption(strings::Substitute(
-                      "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)", path,
-                      file_size, bundle_metadata_size + footer_size)));
-
-    auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
-    std::string_view bundle_metadata_str =
-            std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
-    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
-              Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
-#ifdef BE_TEST
-    bool inject_error = false;
-    TEST_SYNC_POINT_CALLBACK("TabletManager::parse_bundle_tablet_metadata::corruption", &inject_error);
-    if (inject_error) {
-        return Status::Corruption("injected error");
-    }
-#endif
-    return bundle_metadata;
-}
-
-StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadata(const std::string& location,
-                                                                                  FileSystem* input_fs) {
-    std::unique_ptr<RandomAccessFile> input_file;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    if (input_fs == nullptr) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
-        ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
-    } else {
-        ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
-    }
-    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
-
-    auto file_size = serialized_string.size();
-    ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
-    TabletMetadataPtrs metadatas;
-    metadatas.reserve(bundle_metadata->tablet_meta_pages().size());
-    for (const auto& tablet_page : bundle_metadata->tablet_meta_pages()) {
-        const PagePointerPB& page_pointer = tablet_page.second;
-        auto offset = page_pointer.offset();
-        auto size = page_pointer.size();
-        RETURN_IF(offset + size > file_size,
-                  Status::InternalError(
-                          fmt::format("Invalid page pointer for tablet {}, offset: {}, size: {}, file size: {}",
-                                      tablet_page.first, offset, size, file_size)));
-
-        auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
-        std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
-        RETURN_IF(
-                !metadata->ParseFromArray(metadata_str.data(), size),
-                Status::InternalError(fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
-                                                  tablet_page.first, offset, size)));
-        RETURN_IF(metadata->id() != tablet_page.first,
-                  Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
-                                                    tablet_page.first, metadata->id())));
-        metadatas.push_back(std::move(metadata));
-    }
-    return metadatas;
-}
-
->>>>>>> ae1ae426a0 ([Enhancement] Introduce CacheOptions for granular tablet metadata caching (#65222))
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       bool fill_cache, int64_t expected_gtid,
                                                                       const std::shared_ptr<FileSystem>& fs) {
@@ -587,7 +464,6 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     return get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
 }
 
-DEFINE_FAIL_POINT(tablet_schema_not_found_in_bundle_metadata);
 StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                       const CacheOptions& cache_opts,
                                                                       int64_t expected_gtid,
