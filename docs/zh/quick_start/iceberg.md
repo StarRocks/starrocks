@@ -4,7 +4,6 @@ sidebar_position: 3
 description: "湖仓分析"
 toc_max_heading_level: 2
 keywords: ['iceberg']
-description: Apache Iceberg 数据湖仓
 ---
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
