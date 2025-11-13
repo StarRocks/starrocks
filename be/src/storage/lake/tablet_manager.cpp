@@ -361,7 +361,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
             // reset metadata
             metadata = std::make_shared<TabletMetadataPB>();
             // read again
-            RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
+            RETURN_IF_ERROR(file.load(metadata.get(), fill_data_cache));
         } else {
             return s;
         }
