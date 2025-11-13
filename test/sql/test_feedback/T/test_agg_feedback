@@ -1,4 +1,4 @@
--- name: test_agg_feedback
+-- name: test_agg_feedback @slow
 CREATE TABLE `pre_agg_case` (
   `c0` int(11) NULL COMMENT "",
   `c1` char(50) NULL COMMENT "",

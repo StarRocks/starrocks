@@ -34,16 +34,14 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TLargeIntLiteral;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -71,7 +69,7 @@ public class LargeIntLiteral extends LiteralExpr {
 
     public LargeIntLiteral(boolean isMax) throws AnalysisException {
         super();
-        type = Type.LARGEINT;
+        type = IntegerType.LARGEINT;
         value = isMax ? LARGE_INT_MAX : LARGE_INT_MIN;
         analysisDone();
     }
@@ -94,7 +92,7 @@ public class LargeIntLiteral extends LiteralExpr {
             throw new AnalysisException("Invalid integer literal: " + value, e);
         }
         this.value = bigInt;
-        type = Type.LARGEINT;
+        type = IntegerType.LARGEINT;
         analysisDone();
     }
 
@@ -114,14 +112,14 @@ public class LargeIntLiteral extends LiteralExpr {
 
     public static LargeIntLiteral createMinValue() {
         LargeIntLiteral largeIntLiteral = new LargeIntLiteral();
-        largeIntLiteral.type = Type.LARGEINT;
+        largeIntLiteral.type = IntegerType.LARGEINT;
         largeIntLiteral.value = LARGE_INT_MIN;
         return largeIntLiteral;
     }
 
     public static LargeIntLiteral createMaxValue() {
         LargeIntLiteral largeIntLiteral = new LargeIntLiteral();
-        largeIntLiteral.type = Type.LARGEINT;
+        largeIntLiteral.type = IntegerType.LARGEINT;
         largeIntLiteral.value = LARGE_INT_MAX;
         return largeIntLiteral;
     }
@@ -202,11 +200,6 @@ public class LargeIntLiteral extends LiteralExpr {
         return value.doubleValue();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.LARGE_INT_LITERAL;
-        msg.large_int_literal = new TLargeIntLiteral(value.toString());
-    }
 
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {

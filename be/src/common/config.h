@@ -62,6 +62,16 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
+// Whether to resolve backend hostnames to IP addresses in generated error URLs.
+// - true: StarRocks will attempt to resolve hostnames to IPs.
+//  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)
+//  are not resolvable from the client’s network, so you can curl or open the
+//   error URL directly.
+// - false (default) : Keep the original hostname in the error URL.
+//  Recommended if your DNS setup already allows resolving backend hostnames
+//  across your network, or if IP-based access is unstable (e.g., NAT environments).
+CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
+
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
 // this is a list in semicolon-delimited format, in CIDR notation, e.g. 10.10.10.0/24
@@ -412,7 +422,7 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // Enable parallel execution within tablet for primary key tables.
-CONF_mBool(enable_pk_parallel_execution, "false");
+CONF_mBool(enable_pk_parallel_execution, "true");
 // The minimum threshold of data size for enabling pk parallel execution.
 // Default is 300MB.
 CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
@@ -579,6 +589,8 @@ CONF_Bool(use_mmap_allocate_chunk, "false");
 
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
+// The directory of the flamegraph tool, which should contains pprof, stackcollapse-go.pl, and flamegraph.pl.
+CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
@@ -779,8 +791,14 @@ CONF_mBool(brpc_load_ignore_overcrowded, "true");
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // The tablet map shard size, the value must be power of two.
-// this is an enhancement for better performance to manage tablet.
-CONF_Int32(tablet_map_shard_size, "32");
+//
+// It is the total number of slots pre-allocated by TabletManager in shared-nothing mode.
+// All the tablets hosted on the backend will be hashed and put into the corresponding slots.
+// Tablets in the same slots shares the single mutex for R/W ops from TabletManager.
+// Increasing this number would greatly reduce the lock contention between tablets in the same slot.
+// Recommended setting:
+//   tablet_map_shard_size = total_num_of_tablets_in_BE / 512
+CONF_Int32(tablet_map_shard_size, "1024");
 // The value must be power of two.
 CONF_Int32(pk_index_map_shard_size, "4096");
 
@@ -875,10 +893,19 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// pipeline poller timeout guard
+// pipeline poller timeout guard. Suggested Value: 500
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
-// pipeline fragment prepare timeout guard
+// pipeline fragment prepare timeout guard. Suggested Value: 1000
 CONF_mInt64(pipeline_prepare_timeout_guard_ms, "-1");
+// pipeline process timeout guard. Suggested Value: 5000
+CONF_mInt64(pipeline_process_timeout_guard_ms, "-1");
+// pipeline scan timeout guard. Suggested Value: 10000
+CONF_mInt64(pipeline_scan_timeout_guard_ms, "-1");
+// pipeline runtime filter worker timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
+// pipeline datastream timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
+
 // whether to enable large column detection in the pipeline execution framework.
 CONF_mBool(pipeline_enable_large_column_checker, "false");
 
@@ -1014,7 +1041,7 @@ CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_Bool(parquet_late_materialization_enable, "true");
+CONF_mBool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
@@ -1184,10 +1211,14 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
+CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
-CONF_mBool(lake_clear_corrupted_cache, "true");
+// clear *.meta cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_meta, "true");
+// clear *.data cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -1321,8 +1352,8 @@ CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
 // The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
 // cache quota will be reset to zero to avoid overly frequent population and eviction.
-// Default: 100G
-CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
+// Default: 10G
+CONF_mInt64(datacache_min_disk_quota_for_adjustment, "10737418240");
 // The maximum inline cache item count in datacache.
 // When a cache item has a tiny data size, we will try to cache it inline with its metadata
 // to optimize the io performance and reduce disk waste.
@@ -1554,7 +1585,7 @@ CONF_mDouble(json_flat_complex_type_factor, "0.3");
 CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
-CONF_mDouble(json_flat_sparsity_factor, "0.9");
+CONF_mDouble(json_flat_sparsity_factor, "0.3");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
@@ -1716,6 +1747,10 @@ CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 CONF_mInt64(load_spill_merge_max_thread, "16");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
+// Batch size for column mode partial update when processing insert rows.
+// If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
+// Default is 4096.
+CONF_mInt32(column_mode_partial_update_insert_batch_size, "4096");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "true");
@@ -1743,9 +1778,18 @@ CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
 
+// modules that code segments need to be mlocked, separated by commas
+// locked pages will not be swapped out
+CONF_Strings(sys_mlock_modules, "main,linux-vdso.so.1,libjemalloc.so.2,libc.so.6,libm.so.6,ld-linux-x86-64.so.2");
+
 CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
 
+CONF_Int32(llm_max_queue_size, "4096");
+
+CONF_Int32(llm_max_concurrent_queries, "8");
+
+CONF_Int32(llm_cache_size, "131072");
 } // namespace starrocks::config

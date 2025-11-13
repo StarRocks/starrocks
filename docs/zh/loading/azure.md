@@ -6,7 +6,7 @@ keywords: ['Broker Load']
 
 # 从 Microsoft Azure Storage 导入
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks 支持通过以下方式从 Azure 导入数据：
 

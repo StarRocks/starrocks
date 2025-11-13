@@ -18,6 +18,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -35,6 +36,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.sql.SQLException;
 
@@ -160,9 +162,56 @@ public class InsertOverwriteJobRunnerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t1 partitions(t1) select * from t2";
         cluster.runSql("insert_overwrite_test", sql);
-        
+
         Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit(false));
         insertOverwriteJob.setSourcePartitionNames(Lists.newArrayList("t1"));
         Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit(false));
+    }
+
+    @Test
+    public void testEnsureTempPartitionsVisibleThrowsWhenPartitionMissing() {
+        InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return false;
+            }
+        };
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Assertions.assertThrows(DmlException.class,
+                () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
+    }
+
+    @Test
+    public void testEnsureTempPartitionsVisibleThrowsWhenNotVisible() {
+        InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return partitionId == 10L;
+            }
+        };
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Partition partition = Mockito.mock(Partition.class);
+        Mockito.when(partition.getName()).thenReturn("tmp_part");
+        Mockito.when(table.getPartition(10L)).thenReturn(partition);
+        Assertions.assertThrows(DmlException.class,
+                () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
+    }
+
+    @Test
+    public void testEnsureTempPartitionsVisiblePassesWhenVisible() {
+        InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return false;
+            }
+        };
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Partition partition = Mockito.mock(Partition.class);
+        Mockito.when(table.getPartition(10L)).thenReturn(partition);
+        Assertions.assertDoesNotThrow(
+                () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
     }
 }

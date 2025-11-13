@@ -4,10 +4,10 @@ displayed_sidebar: docs
 
 # 基于 MinIO 部署
 
-import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
-import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.md'
-import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
+import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.mdx'
+import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.mdx'
+import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.mdx'
+import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.mdx'
 
 <SharedDataIntro />
 

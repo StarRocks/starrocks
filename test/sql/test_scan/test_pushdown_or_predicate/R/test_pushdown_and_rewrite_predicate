@@ -1,4 +1,4 @@
--- name: test_pushdown_and_rewrite_predicate
+-- name: test_pushdown_and_rewrite_predicate @mac
 CREATE TABLE `t1` (
   `c_1_0` decimal(14, 11) NULL COMMENT "",
   `c_1_1` decimal(34, 32) NULL COMMENT "",

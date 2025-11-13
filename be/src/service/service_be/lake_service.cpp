@@ -32,8 +32,10 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "testutil/sync_point.h"
@@ -932,7 +934,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         return;
                     }
 
-                    auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
+                    // Don't fill meta cache to avoid polluting the cache
+                    lake::CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = true};
+                    auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, cache_opts);
                     if (!tablet_metadata.ok()) {
                         LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id
                                      << ", version: " << version << ", error: " << tablet_metadata.status();
@@ -942,7 +946,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     int64_t num_rows = 0;
                     int64_t data_size = 0;
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
-                        num_rows += rowset.num_rows();
+                        size_t num_deletes =
+                                _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset);
+                        num_rows += rowset.num_rows() - num_deletes;
                         data_size += rowset.data_size();
                     }
                     for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {

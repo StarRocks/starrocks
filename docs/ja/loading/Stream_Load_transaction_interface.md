@@ -5,9 +5,11 @@ keywords: ['Stream Load']
 
 # Stream Load トランザクションインターフェースを使用したデータのロード
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 バージョン 2.4 以降、StarRocks は Stream Load トランザクションインターフェースを提供し、Apache Flink® や Apache Kafka® などの外部システムからデータをロードするために実行されるトランザクションに対して、2 フェーズコミット (2PC) を実装します。Stream Load トランザクションインターフェースは、高度に並行したストリームロードのパフォーマンスを向上させます。
+
+バージョン 4.0 以降、Stream Load トランザクションインターフェースは複数テーブルトランザクションをサポートします。つまり、同一データベース内の複数のテーブルにデータをロードすることが可能です。
 
 このトピックでは、Stream Load トランザクションインターフェースと、このインターフェースを使用して StarRocks にデータをロードする方法について説明します。
 
@@ -51,6 +53,8 @@ stateDiagram-v2
 
 Stream Load トランザクションインターフェースは、データを書き込むための `/api/transaction/load` 操作を提供します。この操作は、1 つのトランザクション内で複数回呼び出すことができます。
 
+バージョン 4.0 以降、異なるテーブルに対して `/api/transaction/load` 操作を呼び出すことで、同一データベース内の複数テーブルにデータをロードできます。
+
 ### トランザクションの重複排除
 
 Stream Load トランザクションインターフェースは、StarRocks のラベリングメカニズムを引き継いでいます。各トランザクションに一意のラベルをバインドすることで、トランザクションに対して最大 1 回の保証を実現できます。
@@ -79,11 +83,11 @@ Stream Load トランザクションインターフェースは、次の利点�
 
 Stream Load トランザクションインターフェースには、次の制限があります。
 
-- **単一データベース単一テーブル** トランザクションのみがサポートされています。**複数データベース複数テーブル** トランザクションのサポートは開発中です。
+- **単一データベース複数テーブル**トランザクションは v4.0 以降でサポートされています。**複数データベース複数テーブル**トランザクションのサポートは開発中です。
 
 - **1 クライアントからの並行データ書き込み** のみがサポートされています。**複数クライアントからの並行データ書き込み** のサポートは開発中です。
 
-- `/api/transaction/load` 操作は、1 つのトランザクション内で複数回呼び出すことができます。この場合、呼び出されたすべての `/api/transaction/load` 操作に指定されたパラメータ設定は同じでなければなりません。
+- `/api/transaction/load` 操作は、1 つのトランザクション内で複数回呼び出すことができます。この場合、呼び出されたすべての `/api/transaction/load` 操作に指定されたパラメータ設定（`table` を除く）は同じでなければなりません。
 
 - Stream Load トランザクションインターフェースを使用して CSV 形式のデータをロードする場合、データファイル内の各データレコードが行区切り文字で終わるようにしてください。
 
@@ -91,7 +95,8 @@ Stream Load トランザクションインターフェースには、次の制�
 
 - 呼び出した `/api/transaction/begin`、`/api/transaction/load`、または `/api/transaction/prepare` 操作がエラーを返した場合、トランザクションは失敗し、自動的にロールバックされます。
 - 新しいトランザクションを開始するために `/api/transaction/begin` 操作を呼び出す際、ラベルを指定する必要があります。なお、後続の `/api/transaction/load`、`/api/transaction/prepare`、および `/api/transaction/commit` 操作は、`/api/transaction/begin` 操作と同じラベルを使用する必要があります。
-- 以前のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出して新しいトランザクションを開始すると、以前のトランザクションは失敗し、ロールバックされます。
+- 進行中のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出し新しいトランザクションを開始すると、以前のトランザクションは失敗しロールバックされます。
+- 複数のテーブルにデータをロードするためにマルチテーブルトランザクションを使用する場合、トランザクションに関連するすべての操作に対してパラメータ `-H "transaction_type:multi"` を指定する必要があります。
 - StarRocks が CSV 形式のデータに対してサポートするデフォルトのカラムセパレータと行区切り文字は `\t` と `\n` です。データファイルがデフォルトのカラムセパレータまたは行区切り文字を使用していない場合、`/api/transaction/load` 操作を呼び出す際に、データファイルで実際に使用されているカラムセパレータまたは行区切り文字を `"column_separator: <column_separator>"` または `"row_delimiter: <row_delimiter>"` を使用して指定する必要があります。
 
 ## 始める前に
@@ -140,9 +145,14 @@ Stream Load トランザクションインターフェースには、次の制�
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルのトランザクションを開始します。
     -H "db:<database_name>" -H "table:<table_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
+
+> **NOTE**
+>
+> トランザクション内で異なるテーブルにデータをロードしたい場合は、コマンドに `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 
@@ -197,6 +207,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。マルチテーブルトランザクションを介してデータをロードします。
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -204,7 +215,8 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 > **NOTE**
 >
-> `/api/transaction/load` 操作を呼び出す際、`<file_path>` を使用してロードしたいデータファイルの保存パスを指定する必要があります。
+> - `/api/transaction/load` 操作を呼び出す際、`<file_path>` を使用してロードしたいデータファイルの保存パスを指定する必要があります。
+> - `/api/transaction/load` 操作を異なる `table` パラメータ値で呼び出すことで、同じデータベース内の異なるテーブルにデータをロードできます。この場合、コマンドで `-H "transaction_type:multi"` を指定する必要があります。
 
 #### 例
 
@@ -283,10 +295,15 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルトランザクションを事前コミットします。
     -H "db:<database_name>" \
     [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> 事前コミットしたいトランザクションがマルチテーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 
@@ -365,9 +382,14 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルのトランザクションをコミットします。
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
+
+> **NOTE**
+>
+> コミットしたいトランザクションが複数テーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 
@@ -464,9 +486,14 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # Optional. Rolls back a multi-table transaction.
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
+
+> **NOTE**
+>
+> ロールバックしたいトランザクションが複数テーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 

@@ -492,7 +492,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
-    SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
+    SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
+    DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
@@ -747,7 +748,9 @@ template <typename T>
 void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
                                                  google::protobuf::Closure* done, int timeout_ms) {
     ClosureGuard closure_guard(done);
-
+#ifdef __APPLE__
+    Status::NotSupported("get_info is not supported on MacOS").to_protobuf(response->mutable_status());
+#else
     // If we use timeout specified by user directly, there will be an issue that librakafka connect to kafka broker
     // time out, but the BE did not have the opportunity to send the error message back to the FE , and the timer on
     // the FE side has already timed out. This mean that the FE cannot retrieve the event message from librdkafka.
@@ -815,6 +818,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
         LOG(WARNING) << "group id " << group_id << " get kafka info timeout. used time(ms) "
                      << watch.elapsed_time() / 1000 / 1000 << ". error: " << st.to_string();
     }
+#endif
 }
 
 template <typename T>
@@ -845,7 +849,9 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
                                                         PPulsarProxyResult* response, google::protobuf::Closure* done,
                                                         int timeout_ms) {
     ClosureGuard closure_guard(done);
-
+#ifdef __APPLE__
+    Status::NotSupported("get_pulsar_info is not supported on MacOS").to_protobuf(response->mutable_status());
+#else
     if (timeout_ms <= 0) {
         Status::TimedOut("get pulsar info timeout").to_protobuf(response->mutable_status());
         return;
@@ -897,6 +903,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
         }
     }
     Status::OK().to_protobuf(response->mutable_status());
+#endif
 }
 
 template <typename T>

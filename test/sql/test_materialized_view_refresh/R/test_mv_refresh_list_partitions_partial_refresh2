@@ -148,7 +148,7 @@ distributed by hash(dt, province) buckets 10
 PROPERTIES (
       'partition_refresh_number' = '-1',
       "replication_num" = "1",
-      "partition_retention_condition" = "dt > '2024-01-01'"
+      "partition_retention_condition" = "dt > '2024-01-01' or dt is null"
 ) 
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:

@@ -15,9 +15,9 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.type.Type;
 import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.StringType;

@@ -1534,11 +1534,11 @@ void test_agg_state_combine_convert_format(FunctionContext* ctx, const Aggregate
 
     // Test convert_to_serialize_format
     Columns input_columns = {input_column};
-    ColumnPtr output_column;
+    ColumnPtr output_column = ColumnHelper::create_column(intermediate_type, is_nullable);
     combine_func.convert_to_serialize_format(ctx, input_columns, input_column->size(), &output_column);
 
-    // Should return the same column (pass-through behavior)
-    ASSERT_EQ(output_column.get(), input_column.get());
+    // The output column should be populated with converted data
+    ASSERT_EQ(output_column->size(), input_column->size());
 }
 
 template <typename T>

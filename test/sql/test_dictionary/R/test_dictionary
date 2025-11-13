@@ -1510,27 +1510,27 @@ E: (1064, "Getting analyzing error. Detail message: Column 'xxxx' cannot be reso
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "true") FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, "Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 'true'.")
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "false") FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, "Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 'false'.")
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 1) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 1.')
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 0) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 0.')
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, -1) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: -1.')
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: SlotRef{id=null, type=BIGINT, sel=-1.0, #distinct=-1, scale=-1}.')
+[REGEX].*invalid parameter.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:

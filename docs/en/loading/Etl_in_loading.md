@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Transform data at loading
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks supports data transformation at loading.
 

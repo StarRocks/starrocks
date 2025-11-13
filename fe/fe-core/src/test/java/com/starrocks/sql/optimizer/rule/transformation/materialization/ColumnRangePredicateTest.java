@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -26,6 +25,9 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -37,8 +39,8 @@ public class ColumnRangePredicateTest {
     @Test
     public void testCastDate() {
         {
-            ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.VARCHAR, "dt", true);
-            CastOperator dateOp = new CastOperator(Type.DATE, columnRef);
+            ColumnRefOperator columnRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "dt", true);
+            CastOperator dateOp = new CastOperator(DateType.DATE, columnRef);
             LocalDateTime lowerDt = LocalDateTime.of(2023, 1, 1, 0, 0);
             ConstantOperator lowerConstant = ConstantOperator.createDate(lowerDt);
             LocalDateTime upperDt = LocalDateTime.of(2023, 10, 1, 0, 0);
@@ -68,8 +70,8 @@ public class ColumnRangePredicateTest {
         }
 
         {
-            ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.VARCHAR, "dt", true);
-            CastOperator dateOp = new CastOperator(Type.DATE, columnRef);
+            ColumnRefOperator columnRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "dt", true);
+            CastOperator dateOp = new CastOperator(DateType.DATE, columnRef);
             LocalDateTime upperDt = LocalDateTime.of(2023, 10, 1, 0, 0);
             ConstantOperator upperConstant = ConstantOperator.createDate(upperDt);
             Range<ConstantOperator> range = Range.atMost(upperConstant);
@@ -94,8 +96,8 @@ public class ColumnRangePredicateTest {
         }
 
         {
-            ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.VARCHAR, "dt", true);
-            CastOperator dateOp = new CastOperator(Type.DATE, columnRef);
+            ColumnRefOperator columnRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "dt", true);
+            CastOperator dateOp = new CastOperator(DateType.DATE, columnRef);
             LocalDateTime lowerDt = LocalDateTime.of(2023, 1, 1, 0, 0);
             ConstantOperator lowerConstant = ConstantOperator.createDate(lowerDt);
             Range<ConstantOperator> range = Range.atLeast(lowerConstant);
@@ -123,10 +125,10 @@ public class ColumnRangePredicateTest {
     @Test
     public void testStr2Date() {
         {
-            ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.VARCHAR, "dt", true);
+            ColumnRefOperator columnRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "dt", true);
             ConstantOperator format = ConstantOperator.createVarchar("%Y-%m-%d");
             List<ScalarOperator> args = Lists.newArrayList(columnRef, format);
-            CallOperator call = new CallOperator(FunctionSet.STR2DATE, Type.DATE, args);
+            CallOperator call = new CallOperator(FunctionSet.STR2DATE, DateType.DATE, args);
             LocalDateTime lowerDt = LocalDateTime.of(2023, 1, 1, 0, 0);
             ConstantOperator lowerConstant = ConstantOperator.createDate(lowerDt);
             LocalDateTime upperDt = LocalDateTime.of(2023, 10, 1, 0, 0);
@@ -156,10 +158,10 @@ public class ColumnRangePredicateTest {
         }
 
         {
-            ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.VARCHAR, "dt", true);
+            ColumnRefOperator columnRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "dt", true);
             ConstantOperator format = ConstantOperator.createVarchar("%Y-%m-%d");
             List<ScalarOperator> args = Lists.newArrayList(columnRef, format);
-            CallOperator call = new CallOperator(FunctionSet.STR2DATE, Type.DATE, args);
+            CallOperator call = new CallOperator(FunctionSet.STR2DATE, DateType.DATE, args);
             LocalDateTime upperDt = LocalDateTime.of(2023, 10, 1, 0, 0);
             ConstantOperator upperConstant = ConstantOperator.createDate(upperDt);
             Range<ConstantOperator> range = Range.atMost(upperConstant);
@@ -184,10 +186,10 @@ public class ColumnRangePredicateTest {
         }
 
         {
-            ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.VARCHAR, "dt", true);
+            ColumnRefOperator columnRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "dt", true);
             ConstantOperator format = ConstantOperator.createVarchar("%Y-%m-%d");
             List<ScalarOperator> args = Lists.newArrayList(columnRef, format);
-            CallOperator call = new CallOperator(FunctionSet.STR2DATE, Type.DATE, args);
+            CallOperator call = new CallOperator(FunctionSet.STR2DATE, DateType.DATE, args);
             LocalDateTime lowerDt = LocalDateTime.of(2023, 1, 1, 0, 0);
             ConstantOperator lowerConstant = ConstantOperator.createDate(lowerDt);
             Range<ConstantOperator> range = Range.atLeast(lowerConstant);
@@ -214,7 +216,7 @@ public class ColumnRangePredicateTest {
 
     @Test
     public void testNonCanonicalBigintRangePredicate() {
-        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.BIGINT, "col", true);
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, IntegerType.BIGINT, "col", true);
         ConstantOperator maxValue = ConstantOperator.createBigint(9223372036854775807L);
         BinaryPredicateOperator pred = new BinaryPredicateOperator(BinaryType.GT, columnRef, maxValue);
         PredicateExtractor extractor = new PredicateExtractor();

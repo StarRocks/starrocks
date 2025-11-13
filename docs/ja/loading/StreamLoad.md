@@ -5,7 +5,7 @@ keywords: ['Stream Load']
 
 # ローカルファイルシステムからデータをロードする
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks はローカルファイルシステムからデータをロードするための2つの方法を提供しています。
 

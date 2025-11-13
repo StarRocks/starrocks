@@ -485,6 +485,7 @@ bool KafkaDataConsumer::match(StreamLoadContext* ctx) {
 }
 
 // init pulsar consumer will only set common configs
+#ifndef __APPLE__
 Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
     std::unique_lock<std::mutex> l(_lock);
     if (_init) {
@@ -702,5 +703,6 @@ bool PulsarDataConsumer::match(StreamLoadContext* ctx) {
 
     return true;
 }
+#endif
 
 } // end namespace starrocks

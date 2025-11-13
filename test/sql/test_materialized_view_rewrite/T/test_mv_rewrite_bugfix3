@@ -1,0 +1,55 @@
+-- name: test_mv_rewrite_bugfix3
+
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE supplier_char(
+ s_suppkey     INTEGER NOT NULL,
+ s_name        CHAR(25) NOT NULL,
+ s_address     CHAR(40), 
+ s_nationkey   INTEGER NOT NULL,
+ s_phone       CHAR(15) NOT NULL,
+ s_acctbal     double NOT NULL,
+ s_comment     CHAR(101) NOT NULL,
+ pad char(1) NOT NULL)
+DUPLICATE KEY(`s_suppkey`)
+DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+INSERT INTO supplier_char VALUES (1, 'name1', 'address1', 1, 'phone1', 1.0, 'comment1', 'p'),
+(2, 'name2', 'address2', 2, 'phone2', 2.0, 'comment2', 'p'),
+(3, 'name3', 'address3', 3, 'phone3', 3.0, 'comment3', 'p'),
+(4, 'name4', 'address4', 4, 'phone4', 4.0, 'comment4', 'p'),
+(5, 'name5', 'address5', 5, 'phone5', 5.0, 'comment5', 'p'),
+(6, 'name6', 'address6', 6, 'phone6', 6.0, 'comment6', 'p'),
+(7, 'name7', 'address7', 7, 'phone7', 7.0, 'comment7', 'p'),
+(8, 'name8', 'address8', 8, 'phone8', 8.0, 'comment8', 'p'),
+(9, 'name9', 'address9', 9, 'phone9', 9.0, 'comment9', 'p'),
+(10, 'name10', 'address10', 10, 'phone10', 10.0, 'comment10', 'p');
+
+
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1"
+)
+AS select s_nationkey, s_name, bitmap_agg(s_suppkey), sum(s_nationkey) from supplier_char group by 
+s_nationkey, s_name;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+[UC] analyze full table supplier_char;
+[UC] analyze full table test_mv1;
+function: wait_global_dict_ready('s_name', 'supplier_char')
+function: wait_global_dict_ready('s_name', 'test_mv1')
+
+select s_nationkey, s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_nationkey, s_name order by 1,2;
+select s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_name order by 1,2;
+select s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_name having sum(s_nationkey) > 10 order by 1,2;
+
+function: print_hit_materialized_views("select s_nationkey, s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_nationkey, s_name order by 1,2;")
+function: print_hit_materialized_views("select s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_name order by 1,2;")
+function: print_hit_materialized_views("select s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_name having sum(s_nationkey) > 10 order by 1,2;")
+
+drop materialized view test_mv1;
+drop database db_${uuid0};

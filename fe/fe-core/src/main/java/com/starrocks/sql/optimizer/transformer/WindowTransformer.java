@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -29,6 +28,8 @@ import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -38,6 +39,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.math.BigDecimal;
@@ -47,6 +50,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -104,7 +108,7 @@ public class WindowTransformer {
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
 
             try {
-                callExpr.uncheckedCastChild(Type.BIGINT, 0);
+                callExpr.uncheckedCastChild(IntegerType.BIGINT, 0);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -123,7 +127,7 @@ public class WindowTransformer {
                 }
 
                 if (callExpr.getChildren().size() == 1) {
-                    callExpr.addChild(new IntLiteral("1", Type.BIGINT));
+                    callExpr.addChild(new IntLiteral("1", IntegerType.BIGINT));
                     callExpr.addChild(NullLiteral.create(firstType));
                 } else if (callExpr.getChildren().size() == 2) {
                     callExpr.addChild(NullLiteral.create(firstType));
@@ -131,7 +135,7 @@ public class WindowTransformer {
 
                 AnalyticExpr.checkDefaultValue(callExpr);
                 // check the value whether out of range
-                callExpr.uncheckedCastChild(Type.BIGINT, 1);
+                callExpr.uncheckedCastChild(IntegerType.BIGINT, 1);
 
                 AnalyticWindow.BoundaryType rightBoundaryType = AnalyticWindow.BoundaryType.FOLLOWING;
                 if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {
@@ -144,7 +148,7 @@ public class WindowTransformer {
                 } else {
                     rightBoundary = new DecimalLiteral(BigDecimal.valueOf(1));
                 }
-                BigDecimal offsetValue = BigDecimal.valueOf(Expr.getConstFromExpr(rightBoundary));
+                BigDecimal offsetValue = BigDecimal.valueOf(ExprUtils.getConstFromExpr(rightBoundary));
 
                 windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
                         new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
@@ -179,7 +183,7 @@ public class WindowTransformer {
 
             if (reversedFnName != null) {
                 callExpr.resetFnName("", reversedFnName);
-                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                Function reversedFn = ExprUtils.getBuiltinFunction(reversedFnName,
                         callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
                 callExpr.setFn(reversedFn);
             }
@@ -534,6 +538,7 @@ public class WindowTransformer {
     public static class WindowOperator {
         private final List<AnalyticExpr> windowFunctions = Lists.newArrayList();
         private final List<Expr> partitionExprs;
+        private final List<Expr> orderedPartitionExprs;
         private List<OrderByElement> orderByElements;
         private final AnalyticWindow window;
         private final boolean useHashBasedPartition;
@@ -546,6 +551,13 @@ public class WindowTransformer {
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
             this.windowFunctions.add(analyticExpr);
             this.partitionExprs = partitionExprs;
+            // AnalyticExpr with the iso-window can merged into one WindowOperator;
+            // partition exprs are unordered, the same partition exprs may have
+            // different permutations, so we sort them for normalization and it used for equals
+            // and hashCode methods.
+            this.orderedPartitionExprs = Optional.ofNullable(partitionExprs)
+                    .map(partitions -> partitions.stream().sorted(Comparator.comparing(ExprToSql::toSql)).toList())
+                    .orElse(List.of());
             this.orderByElements = orderByElements;
             this.window = window;
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
@@ -614,7 +626,7 @@ public class WindowTransformer {
                 return false;
             }
             WindowOperator that = (WindowOperator) o;
-            return Objects.equals(partitionExprs, that.partitionExprs) &&
+            return Objects.equals(orderedPartitionExprs, that.orderedPartitionExprs) &&
                     Objects.equals(orderByElements, that.orderByElements) &&
                     Objects.equals(window, that.window) &&
                     Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
@@ -622,7 +634,7 @@ public class WindowTransformer {
 
         @Override
         public int hashCode() {
-            return Objects.hash(partitionExprs, orderByElements, window, useHashBasedPartition);
+            return Objects.hash(orderedPartitionExprs, orderByElements, window, useHashBasedPartition);
         }
     }
 }

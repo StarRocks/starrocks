@@ -20,9 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -56,6 +54,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -156,7 +160,6 @@ public class PaimonMetadataTest {
         writer.writeInt(0, 3000);
         writer.writeInt(1, 5555);
         writer.complete();
-
         List<DataFileMeta> meta1 = new ArrayList<>();
         meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
                 1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
@@ -215,12 +218,12 @@ public class PaimonMetadataTest {
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(paimonTable));
         assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-        assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());
+        assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(0).isAllowNull());
-        assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
+        assertEquals(FloatType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.db1.tbl1.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.null", paimonTable.getUUID());
     }
 
     @Test
@@ -256,7 +259,7 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
                 result = paimonSystemTable;
-                paimonSystemTable.latestSnapshotId();
+                paimonSystemTable.latestSnapshot();
                 result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
                 paimonSystemTable.newReadBuilder();
                 result = readBuilder;
@@ -282,9 +285,9 @@ public class PaimonMetadataTest {
                 ));
         Identifier tblIdentifier = new Identifier("db1", "tbl1");
         org.apache.paimon.partition.Partition partition1 = new Partition(Map.of("year", "2020", "month", "1"),
-                100L, 1L, 1L, 1741327322000L);
+                100L, 1L, 1L, 1741327322000L, true);
         org.apache.paimon.partition.Partition partition2 = new Partition(Map.of("year", "2020", "month", "2"),
-                100L, 1L, 1L, 1741327322000L);
+                100L, 1L, 1L, 1741327322000L, true);
 
         new Expectations() {
             {
@@ -445,7 +448,7 @@ public class PaimonMetadataTest {
         assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
                 .getPaimonSplitsInfo().getPaimonSplits().size());
 
-        ColumnRefOperator createDateColumn = new ColumnRefOperator(1, Type.STRING, "create_date", false);
+        ColumnRefOperator createDateColumn = new ColumnRefOperator(1, StringType.STRING, "create_date", false);
         ScalarOperator createDateEqualPredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateColumn,
                 ConstantOperator.createVarchar(dateFormatter.format(now)));
 
@@ -469,7 +472,7 @@ public class PaimonMetadataTest {
         assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
                 .getPaimonSplitsInfo().getPaimonSplits().size());
 
-        ColumnRefOperator userColumn = new ColumnRefOperator(2, Type.STRING, "user", false);
+        ColumnRefOperator userColumn = new ColumnRefOperator(2, StringType.STRING, "user", false);
         ScalarOperator userEqualPredicate = new BinaryPredicateOperator(BinaryType.EQ, userColumn,
                 ConstantOperator.createVarchar("user_1"));
 
@@ -498,11 +501,12 @@ public class PaimonMetadataTest {
                 .getPaimonSplitsInfo().getPaimonSplits().size());
 
         Function coalesce = GlobalStateMgr.getCurrentState().getFunction(
-                new Function(new FunctionName(FunctionSet.COALESCE), Lists.newArrayList(Type.VARCHAR, Type.VARCHAR),
-                        Type.VARCHAR, false),
+                new Function(new FunctionName(FunctionSet.COALESCE),
+                        Lists.newArrayList(VarcharType.VARCHAR, VarcharType.VARCHAR),
+                        VarcharType.VARCHAR, false),
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
-        CallOperator createDateCoalesce = new CallOperator("coalesce", Type.VARCHAR,
+        CallOperator createDateCoalesce = new CallOperator("coalesce", VarcharType.VARCHAR,
                 List.of(createDateColumn, ConstantOperator.createVarchar("unknown")), coalesce);
 
         ScalarOperator createDateCoalescePredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateCoalesce,
@@ -599,10 +603,10 @@ public class PaimonMetadataTest {
 
         ExternalScanPartitionPruneRule rule0 = new ExternalScanPartitionPruneRule();
 
-        ColumnRefOperator colRef1 = new ColumnRefOperator(1, Type.INT, "f2", true);
-        Column col1 = new Column("f2", Type.INT, true);
-        ColumnRefOperator colRef2 = new ColumnRefOperator(2, Type.STRING, "dt", true);
-        Column col2 = new Column("dt", Type.STRING, true);
+        ColumnRefOperator colRef1 = new ColumnRefOperator(1, IntegerType.INT, "f2", true);
+        Column col1 = new Column("f2", IntegerType.INT, true);
+        ColumnRefOperator colRef2 = new ColumnRefOperator(2, StringType.STRING, "dt", true);
+        Column col2 = new Column("dt", StringType.STRING, true);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
@@ -725,21 +729,21 @@ public class PaimonMetadataTest {
         optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "user_id", true);
-        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "behavior", true);
-        ColumnRefOperator columnRefOperator3 = new ColumnRefOperator(5, Type.DOUBLE, "acount", true);
-        ColumnRefOperator columnRefOperator4 = new ColumnRefOperator(6, Type.BOOLEAN, "flag", true);
-        ColumnRefOperator columnRefOperator5 = new ColumnRefOperator(7, Type.STRING, "dt", true);
-        ColumnRefOperator columnRefOperator6 = new ColumnRefOperator(8, Type.DATETIME, "create_time", true);
-        ColumnRefOperator columnRefOperator7 = new ColumnRefOperator(9, Type.ARRAY_BIGINT, "list", true);
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "user_id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, StringType.STRING, "behavior", true);
+        ColumnRefOperator columnRefOperator3 = new ColumnRefOperator(5, FloatType.DOUBLE, "acount", true);
+        ColumnRefOperator columnRefOperator4 = new ColumnRefOperator(6, com.starrocks.type.BooleanType.BOOLEAN, "flag", true);
+        ColumnRefOperator columnRefOperator5 = new ColumnRefOperator(7, StringType.STRING, "dt", true);
+        ColumnRefOperator columnRefOperator6 = new ColumnRefOperator(8, DateType.DATETIME, "create_time", true);
+        ColumnRefOperator columnRefOperator7 = new ColumnRefOperator(9, ArrayType.ARRAY_BIGINT, "list", true);
 
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("user_id", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("behavior", Type.STRING));
-        colRefToColumnMetaMap.put(columnRefOperator3, new Column("acount", Type.DOUBLE));
-        colRefToColumnMetaMap.put(columnRefOperator4, new Column("flag", Type.BOOLEAN));
-        colRefToColumnMetaMap.put(columnRefOperator5, new Column("dt", Type.STRING));
-        colRefToColumnMetaMap.put(columnRefOperator6, new Column("create_time", Type.DATETIME));
-        colRefToColumnMetaMap.put(columnRefOperator7, new Column("list", Type.ARRAY_BIGINT));
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("user_id", IntegerType.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("behavior", StringType.STRING));
+        colRefToColumnMetaMap.put(columnRefOperator3, new Column("acount", FloatType.DOUBLE));
+        colRefToColumnMetaMap.put(columnRefOperator4, new Column("flag", com.starrocks.type.BooleanType.BOOLEAN));
+        colRefToColumnMetaMap.put(columnRefOperator5, new Column("dt", StringType.STRING));
+        colRefToColumnMetaMap.put(columnRefOperator6, new Column("create_time", DateType.DATETIME));
+        colRefToColumnMetaMap.put(columnRefOperator7, new Column("list", ArrayType.ARRAY_BIGINT));
 
         com.starrocks.sql.optimizer.statistics.Statistics tableStatistics =
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,

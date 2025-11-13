@@ -40,7 +40,7 @@
 #include <vector>
 
 #include "exec/pipeline/pipeline_metrics.h"
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
 #include "util/jvm_metrics.h"
 #endif
 #include "util/metrics.h"
@@ -71,15 +71,6 @@ private:
     StarRocksMetrics::instance()->metrics()->register_metric(#name, &StarRocksMetrics::instance()->name); \
     StarRocksMetrics::instance()->metrics()->register_hook(                                               \
             #name, [&]() { StarRocksMetrics::instance()->name.set_value(func()); });
-
-#define METRICS_DEFINE_THREAD_POOL(threadpool_name)                                             \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_threadpool_size, MetricUnit::NOUNIT);            \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_executed_tasks_total, MetricUnit::NOUNIT);       \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_pending_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_execute_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT);                \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_running_threads, MetricUnit::NOUNIT);            \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_active_threads, MetricUnit::NOUNIT)
 
 #define REGISTER_THREAD_POOL_METRICS(name, threadpool)                                                            \
     do {                                                                                                          \
@@ -404,6 +395,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(remote_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
 
+    METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
+
     // short circuit executor
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
@@ -439,7 +432,7 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
     JVMMetrics _jvm_metrics;
 #endif
     TableMetricsManager _table_metrics_mgr;

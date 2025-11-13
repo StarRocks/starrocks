@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.10.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -84,6 +84,7 @@ set(EXEC_FILES
     spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
+    raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
     arrow_to_starrocks_converter.cpp
@@ -207,8 +208,6 @@ set(EXEC_FILES
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
-    pipeline/result_sink_operator.cpp
-    pipeline/olap_table_sink_operator.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -228,6 +227,8 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/connector_sink_operator.cpp
+    pipeline/sink/olap_table_sink_operator.cpp
+    pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
@@ -273,6 +274,7 @@ set(EXEC_FILES
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
+    pipeline/set/raw_values_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
@@ -310,6 +312,7 @@ set(EXEC_FILES
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
+    workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
     query_cache/multilane_operator.cpp
@@ -340,6 +343,6 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)
 
-add_library(Exec STATIC
+ADD_BE_LIB(Exec
     ${EXEC_FILES}
 )

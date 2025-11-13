@@ -23,7 +23,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
@@ -41,7 +40,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
@@ -53,6 +52,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.IntegerType;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -321,7 +321,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         THdfsPartition tPartition = new THdfsPartition();
         tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(Expr::treeToThrift)
+                .map(ExprToThriftVisitor::treeToThrift)
                 .collect(Collectors.toList()));
 
         hdfsScanRange.setPartition_value(tPartition);
@@ -335,12 +335,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID)) {
                 LiteralExpr value;
                 if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
-                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), Type.BIGINT);
+                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
                 } else {
-                    value = LiteralExpr.create(String.valueOf(file.specId()), Type.INT);
+                    value = LiteralExpr.create(String.valueOf(file.specId()), IntegerType.INT);
                 }
 
-                extendedColumns.put(slot.getId().asInt(), value.treeToThrift());
+                extendedColumns.put(slot.getId().asInt(), ExprToThriftVisitor.treeToThrift(value));
                 if (!extendedColumnSlotIds.contains(slot.getId().asInt())) {
                     extendedColumnSlotIds.add(slot.getId().asInt());
                 }
@@ -362,6 +362,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                     file.nullValueCounts(), file.valueCounts(), slots);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
+
+        if (task.file() != null && task.file().firstRowId() != null) {
+            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+        }
+
         return hdfsScanRange;
     }
 

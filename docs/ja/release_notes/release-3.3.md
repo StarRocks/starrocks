@@ -11,6 +11,30 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.19
+
+リリース日: 2025年10月14日
+
+### バグ修正
+
+以下の問題が修正されました:
+
+- `UserProperty` がセッション変数よりも優先度が低かった問題。 [#63173](https://github.com/StarRocks/starrocks/pull/63173)
+- Hive の基盤テーブルが削除され再作成された際に発生する可能性があったマテリアライズドビューのリフレッシュ失敗。 [#63072](https://github.com/StarRocks/starrocks/pull/63072)
+- 集約プッシュダウンの書き換えルールに関する問題。 [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- JSON の Boolean 抽出関数で null 列とデータ列の不整合が発生する問題。 [#63054](https://github.com/StarRocks/starrocks/pull/63054)
+- Delta Lake フォーマットテーブルでパーティション列を取得する際の問題。 [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- 共有データクラスタにおけるマテリアライズドビューのコロケーション未対応。 [#62941](https://github.com/StarRocks/starrocks/pull/62941)
+- ビューに基づくマテリアライズドビュー書き換えでの射影マッピングエラー。 [#62918](https://github.com/StarRocks/starrocks/pull/62918)
+- Most Common Values (MCV) にシングルクォートが含まれる場合のヒストグラム統計で SQL 構文エラーが発生する問題。 [#62853](https://github.com/StarRocks/starrocks/pull/62853)
+- `KILL ANALYZE` が機能しない問題。 [#62842](https://github.com/StarRocks/starrocks/pull/62842)
+- CVE-2025-58056 の脆弱性。 [#62801](https://github.com/StarRocks/starrocks/pull/62801)
+- データベースを指定せずに `SHOW CREATE ROUTINE LOAD` を実行すると誤った結果が返る問題。 [#62745](https://github.com/StarRocks/starrocks/pull/62745)
+- `files()` で CSV ヘッダーを誤ってスキップしたことによるデータ損失。 [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- レプリケーションとコンパクションのトランザクションが同時にコミットされた際のバージョンチェック失敗。 [#62663](https://github.com/StarRocks/starrocks/pull/62663)
+- リストアジョブの失敗後にマテリアライズドビューのバージョンマップがクリアされず、リフレッシュがスキップされる問題。 [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- マテリアライズドビュー解析でパーティション列の大文字小文字区別による問題。 [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+
 ## 3.3.18
 
 リリース日： 2025年8月28日

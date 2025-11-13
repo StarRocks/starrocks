@@ -4,7 +4,7 @@ sidebar_position: 4
 description: Data Lakehouse with Apache Hudi
 toc_max_heading_level: 3
 ---
-import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.md'
+import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';

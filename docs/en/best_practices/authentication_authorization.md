@@ -1,9 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import AuthCompare from '../_assets/best_practices/_auth_comparison.mdx'
-import GroupProviderExample from '../_assets/best_practices/_auth_group_provider_example.mdx'
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # Authentication and Authorization
 
@@ -115,7 +112,12 @@ From the feature's perspective:
 
 Comparison of supported authentication modes:
 
-<AuthCompare />
+| Method                 | CREATE USER (Native user)                              | CREATE SECURITY INTEGRATION (Session-based dummy user)       |
+| ---------------------- | ------------------------------------------------------ | ------------------------------------------------------------ |
+| Description            | Manually creates users in the cluster. You can associate them with external authentication systems. The user exists explicitly in the cluster. | Defines an external authentication integration. The cluster does not store any user information. You can optionally combine it with a Group Provider to define allowed users. |
+| Login Process          | Users must be pre-created in the cluster. During login, the user is authenticated via StarRocks or via the configured external authentication system (for example, LDAP, JWT). Only pre-created users can log in. | Upon login, StarRocks authenticates the user using external identity systems. If succeeds, it creates a temporary, session-scoped "dummy user" internally. This user is discarded after the session ends. |
+| Authorization Process  | Since users exist in the cluster, permissions can be assigned in advance using either the native authorization system or Apache Ranger. | Although users do not persist, you can predefine role-to-group mappings. When a user logs in, the system assigns roles based on their group, enabling RBAC. Apache Ranger can also be used in parallel. |
+| Pros & Cons, Use Cases | <ul><li>**Pros**: Full flexibility—supports both native and external authorization systems.</li><li>**Cons**: Requires manual effort for creating users, which can be cumbersome.</li><li>**Recommended for**: Small user bases or cases where the cluster handles access control.</li></ul> | <ul><li>**Pros**: Easy to set up; only requires external authentication configuration and allowed group definitions.</li><li>**Recommended for**: Ideal for large user bases with role-group mappings.</li></ul> |
 
 These authentication modes can coexist. When a user attempts to log in:
 
@@ -243,9 +245,19 @@ The following example is based on LDAP.
    )
    ```
 
-3. Integrate the group provider with the authorization system.
+3. Integrate the group provider with the authorization system. You can use either the native authorization or Apache Ranger.
 
-   <GroupProviderExample />
+   - Native authorization:
+
+     Roles can be assigned to groups. On login, users are automatically assigned roles based on group membership.
+
+     ```sql
+     GRANT role TO EXTERNAL GROUP <group_name>
+     ```
+
+   - Apache Ranger:
+
+     Once a user logs in, StarRocks passes group information to Ranger for policy evaluation.
 
 ### Authorization
 
@@ -310,7 +322,19 @@ While manually created users can still be integrated with a **group provider** a
 
 :::
 
-<Solution3 />
+### Solution 3: External Authentication (External Identity) + Internal Authorization
+
+If you prefer to use **StarRocks' built-in authorization system** while still relying on **external authentication**, you can follow this approach:
+
+1. Use a **security integration** to establish a connection with the external authentication system.
+2. Configure the necessary group information for authentication and authorization within the **group provider**.
+3. Define the group(s) allowed to log in to the StarRocks cluster in the **security integration**. Users who belong to these groups will be granted login access.
+4. **Create the necessary roles** within StarRocks and **grant them to external groups**.
+5. When a user attempts to log in, they must both pass authentication and belong to an authorized group. Upon successful login, StarRocks will automatically assign the appropriate roles based on group membership.
+6. During query execution, StarRocks will enforce **internal RBAC-based authorization** as usual.
+7. Additionally, you can combine **Ranger** with this solution. For example, use **StarRocks' native RBAC** for internal table authorization, and use **Ranger** for external table authorization. When performing authorization via Ranger, StarRocks will still pass the **user ID and corresponding group information** to Ranger for access control.
+
+![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
 ## See also
 

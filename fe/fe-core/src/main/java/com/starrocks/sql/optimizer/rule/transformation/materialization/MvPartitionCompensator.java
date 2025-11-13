@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
@@ -32,6 +31,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.OptCompensator;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,7 +62,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -147,9 +148,9 @@ public class MvPartitionCompensator {
                                                    MaterializationContext mvContext) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
         MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
-        Set<String> mvPartitionNameToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet mvPartitionNameToRefresh = mvUpdateInfo.getMVToRefreshPCells();
         // If mv contains no partitions to refresh, no need compensate
-        if (Objects.isNull(mvPartitionNameToRefresh) || mvPartitionNameToRefresh.isEmpty()) {
+        if (PCellUtils.isEmpty(mvPartitionNameToRefresh)) {
             logMVRewrite(mvContext, "MV has no partitions to refresh, no need compensate");
             return MVCompensation.noCompensate(sessionVariable);
         }

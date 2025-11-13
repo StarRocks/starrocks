@@ -35,18 +35,17 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.thrift.TDateLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -119,7 +118,7 @@ public class DateLiteral extends LiteralExpr {
         this.minute = 0;
         this.second = 0;
         this.microsecond = 0;
-        this.type = Type.DATE;
+        this.type = DateType.DATE;
     }
 
     public DateLiteral(long year, long month, long day, long hour, long minute, long second, long microsecond) {
@@ -130,7 +129,7 @@ public class DateLiteral extends LiteralExpr {
         this.minute = minute;
         this.second = second;
         this.microsecond = microsecond;
-        this.type = Type.DATETIME;
+        this.type = DateType.DATETIME;
     }
 
     public DateLiteral(LocalDateTime dateTime, Type type) throws AnalysisException {
@@ -289,11 +288,6 @@ public class DateLiteral extends LiteralExpr {
         }
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.DATE_LITERAL;
-        msg.date_literal = new TDateLiteral(getStringValue());
-    }
 
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
@@ -311,7 +305,7 @@ public class DateLiteral extends LiteralExpr {
             }
         } else if (targetType.isStringType()) {
             return new StringLiteral(getStringValue());
-        } else if (Type.isImplicitlyCastable(this.type, targetType, true)) {
+        } else if (TypeManager.isImplicitlyCastable(this.type, targetType, true)) {
             return new CastExpr(targetType, this);
         }
         Preconditions.checkState(false);
@@ -319,7 +313,7 @@ public class DateLiteral extends LiteralExpr {
     }
 
     public void castToDate() {
-        this.type = Type.DATE;
+        this.type = DateType.DATE;
         hour = 0;
         minute = 0;
         second = 0;
@@ -367,7 +361,7 @@ public class DateLiteral extends LiteralExpr {
         hour = (hms >> 12);
         // set default date literal type to DATETIME
         // date literal read from meta will set type by flag bit;
-        this.type = Type.DATETIME;
+        this.type = DateType.DATETIME;
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -375,9 +369,9 @@ public class DateLiteral extends LiteralExpr {
         short dateLiteralType = in.readShort();
         fromPackedDatetime(in.readLong());
         if (dateLiteralType == DateLiteralType.DATETIME.value()) {
-            this.type = Type.DATETIME;
+            this.type = DateType.DATETIME;
         } else if (dateLiteralType == DateLiteralType.DATE.value()) {
-            this.type = Type.DATE;
+            this.type = DateType.DATE;
         } else {
             throw new IOException("Error date literal type : " + type);
         }
@@ -486,7 +480,7 @@ public class DateLiteral extends LiteralExpr {
                 if (len > 7) {
                     microsecond = data.getInt();
                     // choose the highest scale to keep microsecond value
-                    type = ScalarType.createDecimalV2Type(6);
+                    type = TypeFactory.createDecimalV2Type(6);
                 }
             } else {
                 copy(MIN_DATETIME);

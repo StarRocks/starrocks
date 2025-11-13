@@ -15,7 +15,6 @@
 package com.starrocks.connector.parser.trino;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -23,6 +22,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.type.DateType;
 import io.trino.sql.tree.CreateTableAsSelect;
 import io.trino.sql.tree.DropTable;
 import io.trino.sql.tree.Explain;
@@ -61,7 +61,7 @@ public class TrinoParserUtils {
      */
     public static Expr alignWithInputDatetimeType(TimestampArithmeticExpr expr) {
         if (isDateType(expr.getChild(0))) {
-            return new CastExpr(Type.DATE, expr);
+            return new CastExpr(DateType.DATE, expr);
         }
         return expr;
     }

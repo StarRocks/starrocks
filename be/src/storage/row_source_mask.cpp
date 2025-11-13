@@ -73,7 +73,7 @@ StatusOr<bool> RowSourceMaskBuffer::has_remaining() {
 }
 
 bool RowSourceMaskBuffer::has_same_source(uint16_t source, size_t count) const {
-    if (_mask_column->size() - _current_index < count) {
+    if (static_cast<size_t>(_mask_column->size() - _current_index) < count) {
         return false;
     }
 
@@ -87,7 +87,7 @@ bool RowSourceMaskBuffer::has_same_source(uint16_t source, size_t count) const {
 }
 
 size_t RowSourceMaskBuffer::max_same_source_count(uint16_t source, size_t limit_num) const {
-    size_t upper_bound = std::min(limit_num, _mask_column->size() - _current_index);
+    size_t upper_bound = std::min(limit_num, static_cast<size_t>(_mask_column->size() - _current_index));
     size_t max_same_source_count = upper_bound;
 
     for (int i = 1; i < upper_bound; ++i) {

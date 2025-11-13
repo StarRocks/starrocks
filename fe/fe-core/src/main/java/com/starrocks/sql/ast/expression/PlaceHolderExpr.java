@@ -15,14 +15,9 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
-import com.starrocks.planner.FragmentNormalizer;
-import com.starrocks.planner.SlotId;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TPlaceHolder;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,20 +37,8 @@ public class PlaceHolderExpr extends Expr {
         this.type = type;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.PLACEHOLDER_EXPR);
-        msg.setVslot_ref(new TPlaceHolder());
-        msg.vslot_ref.setNullable(nullable);
-        msg.vslot_ref.setSlot_id(slotId);
-    }
-
-    @Override
-    public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {
-        msg.setNode_type(TExprNodeType.PLACEHOLDER_EXPR);
-        msg.setVslot_ref(new TPlaceHolder());
-        msg.vslot_ref.setNullable(nullable);
-        msg.vslot_ref.setSlot_id(normalizer.remapSlotId(new SlotId(slotId)).asInt());
+    public int getSlotId() {
+        return slotId;
     }
 
     @Override

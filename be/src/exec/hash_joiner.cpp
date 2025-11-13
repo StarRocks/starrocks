@@ -302,6 +302,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::PROBE || !_hash_join_prober->probe_chunk_empty()) {
         ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state))
+        RETURN_IF_ERROR(chunk->capacity_limit_reached());
         return chunk;
     }
 
@@ -556,7 +557,13 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
     size_t ht_row_count = get_ht_row_count();
 
-    if (ht_row_count > config::max_pushdown_conditions_per_column) {
+    // Use FE session variable if set, otherwise fall back to BE config
+    size_t max_conditions = config::max_pushdown_conditions_per_column;
+    if (state->query_options().__isset.max_pushdown_conditions_per_column) {
+        max_conditions = state->query_options().max_pushdown_conditions_per_column;
+    }
+
+    if (ht_row_count > max_conditions) {
         return Status::OK();
     }
 

@@ -324,6 +324,8 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 }
 
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
+    pipeline::ExecStateReporterMetrics exec_metrics;
+    exec_metrics.register_all_metrics();
     auto instance = StarRocksMetrics::instance()->metrics();
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));

@@ -46,8 +46,8 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
-    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
-                            int64_t output_rowset_schema_id);
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
+                              int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
 
     // batch processing functions for merging multiple opwrites into one rowset
@@ -71,6 +71,9 @@ public:
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
+
+    // Number of segments already assigned (accumulated) in current pending batch rowset build.
+    uint32_t assigned_segment_id() const { return _pending_rowset_data.assigned_segment_id; }
 
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
@@ -105,6 +108,7 @@ private:
         std::vector<FileMetaPB> orphan_files;
         std::vector<std::string> dels;
         std::vector<std::string> del_encryption_metas;
+        uint32_t assigned_segment_id = 0;
     };
 
     Tablet _tablet;

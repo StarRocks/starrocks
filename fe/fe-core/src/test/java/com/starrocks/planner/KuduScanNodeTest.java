@@ -49,7 +49,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.starrocks.catalog.Type.INT;
+import static com.starrocks.type.IntegerType.INT;
 
 public class KuduScanNodeTest {
     @Mocked

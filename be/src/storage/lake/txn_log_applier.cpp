@@ -225,8 +225,6 @@ public:
                                                                                      &_tablet, _index_entry, &_builder,
                                                                                      _base_version, true));
                 }
-                _metadata->set_next_rowset_id(_metadata->next_rowset_id() +
-                                              std::max(1, op_write.rowset().segments_size()));
             }
         }
         _builder.set_final_rowset();

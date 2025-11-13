@@ -5,7 +5,7 @@ keywords: ['Stream Load']
 
 # Load data from a local file system
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks provides two methods of loading data from a local file system:
 

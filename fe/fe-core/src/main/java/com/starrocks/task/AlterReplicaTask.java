@@ -52,6 +52,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TAlterJobType;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
@@ -249,7 +250,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                     entry.getValue().collect(SlotRef.class, slots);
                     TAlterMaterializedViewParam mvParam = new TAlterMaterializedViewParam(entry.getKey());
                     mvParam.setOrigin_column_name(slots.get(0).getColumnName());
-                    mvParam.setMv_expr(entry.getValue().treeToThrift());
+                    mvParam.setMv_expr(ExprToThriftVisitor.treeToThrift(entry.getValue()));
                     req.addToMaterialized_view_params(mvParam);
                 }
 
@@ -264,7 +265,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 req.setQuery_options(queryOptions);
             }
             if (whereExpr != null) {
-                req.setWhere_expr(whereExpr.treeToThrift());
+                req.setWhere_expr(ExprToThriftVisitor.treeToThrift(whereExpr));
             }
             if (tDescTable != null) {
                 req.setDesc_tbl(tDescTable);

@@ -61,10 +61,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -147,7 +148,9 @@ public class TabletChecker extends FrontendDaemon {
         this.stat = stat;
     }
 
-    private void addToUrgentTable(RepairTabletInfo repairTabletInfo, long timeoutMs) {
+    private void addToUrgentTable(RepairTabletInfo repairTabletInfo) {
+        long timeoutMs = 4 * 3600L; // TODO: may be can set in Config
+
         Preconditions.checkArgument(!repairTabletInfo.partIds.isEmpty());
         long currentTime = System.currentTimeMillis();
         synchronized (urgentTable) {
@@ -178,7 +181,7 @@ public class TabletChecker extends FrontendDaemon {
      */
     public void setTabletForUrgentRepair(long dbId, long tableId, long partitionId) {
         RepairTabletInfo repairTabletInfo = new RepairTabletInfo(dbId, tableId, Collections.singletonList(partitionId));
-        addToUrgentTable(repairTabletInfo, AdminStmtAnalyzer.DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC);
+        addToUrgentTable(repairTabletInfo);
     }
 
     public void removeFromUrgentTable(RepairTabletInfo repairTabletInfo) {
@@ -548,36 +551,34 @@ public class TabletChecker extends FrontendDaemon {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
+            if (db == null || dbEntry.getValue().isEmpty()) {
                 iter.remove();
                 continue;
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
-                    long tblId = tblEntry.getKey();
-                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
+            for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
+                long tblId = tblEntry.getKey();
+                locker.lockTableWithIntensiveDbLock(db.getId(), tblId, LockType.READ);
+                try {
+                    Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
                     if (tbl == null) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                         continue;
                     }
 
-                    Set<PrioPart> parts = tblEntry.getValue();
-                    parts = parts.stream().filter(p -> (tbl.getPhysicalPartition(p.partId) != null && !p.isTimeout())).collect(
-                            Collectors.toSet());
-                    if (parts.isEmpty()) {
+                    boolean hasAny = tblEntry.getValue().stream()
+                            .anyMatch(p -> (tbl.getPhysicalPartition(p.partId) != null && !p.isTimeout()));
+                    if (!hasAny) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                     }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tblId, LockType.READ);
                 }
-
-                if (dbEntry.getValue().isEmpty()) {
-                    iter.remove();
-                }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
             }
+            // NOTE: One-cycle delay in cleanup
+            // If all the tables in this db are added into `deletedUrgentTable`, the dbEntry will be empty
+            // after the tables are removed from copiedUrgentTable and will be removed in next cycle.
         }
         for (Pair<Long, Long> prio : deletedUrgentTable) {
             copiedUrgentTable.remove(prio.first, prio.second);
@@ -590,10 +591,21 @@ public class TabletChecker extends FrontendDaemon {
      * This operation will add specified tables into 'urgentTable', and tablets of this table will be set VERY_HIGH
      * when being scheduled.
      */
-    public void repairTable(AdminRepairTableStmt stmt) throws DdlException {
-        RepairTabletInfo repairTabletInfo =
-                getRepairTabletInfo(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions());
-        addToUrgentTable(repairTabletInfo, stmt.getTimeoutS());
+    public void repairTable(ConnectContext context, AdminRepairTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        if (dbName == null) {
+            dbName = context.getDatabase();
+        }
+
+        // Get partition names from PartitionRef
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        RepairTabletInfo repairTabletInfo = getRepairTabletInfo(dbName, stmt.getTblName(), partitions);
+        addToUrgentTable(repairTabletInfo);
         LOG.info("repair database: {}, table: {}, partition: {}", repairTabletInfo.dbId, repairTabletInfo.tblId,
                 repairTabletInfo.partIds);
     }
@@ -611,9 +623,20 @@ public class TabletChecker extends FrontendDaemon {
      * handle ADMIN CANCEL REPAIR TABLE stmt send by user.
      * This operation will remove the specified partitions from 'urgentTable'
      */
-    public void cancelRepairTable(AdminCancelRepairTableStmt stmt) throws DdlException {
-        RepairTabletInfo repairTabletInfo =
-                getRepairTabletInfo(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions());
+    public void cancelRepairTable(ConnectContext context, AdminCancelRepairTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        if (dbName == null) {
+            dbName = context.getDatabase();
+        }
+
+        // Get partition names from PartitionRef
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        RepairTabletInfo repairTabletInfo = getRepairTabletInfo(dbName, stmt.getTblName(), partitions);
         removeFromUrgentTable(repairTabletInfo);
         LOG.info("cancel repair database: {}, table: {}, partition: {}", repairTabletInfo.dbId, repairTabletInfo.tblId,
                 repairTabletInfo.partIds);
@@ -646,6 +669,19 @@ public class TabletChecker extends FrontendDaemon {
         return infos;
     }
 
+    /**
+     * Get repair tablet information for the specified table.
+     *
+     * @param dbName database name
+     * @param tblName table name
+     * @param partitions partition names (null for all partitions)
+     * @return repair tablet info containing tablet IDs to repair
+     * @throws DdlException if:
+     *   - database does not exist
+     *   - table does not exist or is not OLAP table
+     *   - table was dropped and recreated between initial lookup and lock acquisition (retry recommended)
+     *   - partition does not exist
+     */
     public static RepairTabletInfo getRepairTabletInfo(String dbName, String tblName, List<String> partitions)
             throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -653,19 +689,24 @@ public class TabletChecker extends FrontendDaemon {
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
+        Table table = db.getTable(tblName);
+        if (table == null) {
+            throw new DdlException("Table " + tblName + " does not exist");
+        }
 
         long dbId = db.getId();
-        long tblId;
+        long tblId = table.getId();
         List<Long> partIds = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        locker.lockTableWithIntensiveDbLock(dbId, tblId, LockType.READ);
         try {
             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
-
-            tblId = tbl.getId();
+            if (tbl.getId() != tblId) {
+                throw new DdlException("Table " + tblName + " was recreated during the operation, please retry");
+            }
             OlapTable olapTable = (OlapTable) tbl;
 
             if (partitions == null || partitions.isEmpty()) {
@@ -681,7 +722,7 @@ public class TabletChecker extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(dbId, tblId, LockType.READ);
         }
 
         Preconditions.checkState(tblId != -1);
@@ -1142,8 +1183,8 @@ public class TabletChecker extends FrontendDaemon {
      * @return true if high availability should be enforced based on the location configuration; false otherwise
      */
     public static boolean shouldEnsureReplicaHA(int replicationNum,
-                                                 Multimap<String, String> requiredLocation,
-                                                 SystemInfoService systemInfoService) {
+                                                Multimap<String, String> requiredLocation,
+                                                SystemInfoService systemInfoService) {
         if (requiredLocation == null || requiredLocation.isEmpty()) {
             return false;
         }

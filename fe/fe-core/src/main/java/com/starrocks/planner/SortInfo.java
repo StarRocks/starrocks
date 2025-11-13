@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 
 import java.util.List;
 
@@ -55,7 +56,7 @@ public class SortInfo {
     // operations unmaterialized, for example 'SlotRef + SlotRef' should have a cost below
     // this threshold.
     // TODO: rethink this when we have a better cost model.
-    private static final float SORT_MATERIALIZATION_COST_THRESHOLD = Expr.FUNCTION_CALL_COST;
+    private static final float SORT_MATERIALIZATION_COST_THRESHOLD = ExprUtils.FUNCTION_CALL_COST;
 
     // Only used in local partition topn
     private List<Expr> partitionExprs_;
@@ -92,15 +93,15 @@ public class SortInfo {
      * C'tor for cloning.
      */
     private SortInfo(SortInfo other) {
-        partitionExprs_ = Expr.cloneList(other.partitionExprs_);
+        partitionExprs_ = ExprUtils.cloneList(other.partitionExprs_);
         partitionLimit_ = other.partitionLimit_;
-        orderingExprs_ = Expr.cloneList(other.orderingExprs_);
+        orderingExprs_ = ExprUtils.cloneList(other.orderingExprs_);
         isAscOrder_ = Lists.newArrayList(other.isAscOrder_);
         nullsFirstParams_ = Lists.newArrayList(other.nullsFirstParams_);
-        materializedOrderingExprs_ = Expr.cloneList(other.materializedOrderingExprs_);
+        materializedOrderingExprs_ = ExprUtils.cloneList(other.materializedOrderingExprs_);
         sortTupleDesc_ = other.sortTupleDesc_;
         if (other.sortTupleSlotExprs_ != null) {
-            sortTupleSlotExprs_ = Expr.cloneList(other.sortTupleSlotExprs_);
+            sortTupleSlotExprs_ = ExprUtils.cloneList(other.sortTupleSlotExprs_);
         }
     }
 

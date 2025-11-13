@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -47,6 +46,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -95,6 +96,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -103,6 +105,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -419,7 +424,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
             return new CallOperator(
                     FunctionSet.JSON_QUERY,
-                    Type.JSON,
+                    JsonType.JSON,
                     arguments,
                     func);
         }
@@ -439,7 +444,7 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping, null);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
+            return new LambdaFunctionOperator(refs, lambda, FunctionType.FUNCTION);
         }
 
         @Override
@@ -608,6 +613,20 @@ public final class SqlToScalarOperatorTranslator {
             return outputPredicateRef;
         }
 
+        public ScalarOperator visitLargeInPredicate(LargeInPredicate node, Context context) {
+            List<ScalarOperator> children = node.getChildren().stream()
+                    .map(child -> visit(child, context))
+                    .collect(Collectors.toList());
+            
+            return new LargeInPredicateOperator(
+                    node.getRawText(),
+                    node.getRawConstantList(), 
+                    node.getConstantCount(),
+                    node.isNotIn(), 
+                    node.getConstantType(),
+                    children);
+        }
+
         @Override
         public ScalarOperator visitInPredicate(InPredicate node, Context context)
                 throws SemanticException {
@@ -616,6 +635,7 @@ public final class SqlToScalarOperatorTranslator {
             if (!lhsSubQueries.isEmpty()) {
                 throw new SemanticException("Subquery in left-side child of in-predicate is not supported");
             }
+
             if (!(node.getChild(1) instanceof Subquery)) {
                 return new InPredicateOperator(node.isNotIn(),
                         node.getChildren().stream()
@@ -815,7 +835,7 @@ public final class SqlToScalarOperatorTranslator {
                 LogicalApplyOperator applyOperator = LogicalApplyOperator.builder()
                         .setUseSemiAnti(false)
                         .build();
-                return new SubqueryOperator(Type.INVALID, queryStatement, applyOperator, null);
+                return new SubqueryOperator(InvalidType.INVALID, queryStatement, applyOperator, null);
             }
 
             LogicalPlan subqueryPlan = SubqueryUtils.getLogicalPlan(session, cteContext,
@@ -904,7 +924,7 @@ public final class SqlToScalarOperatorTranslator {
                     return ref;
                 }
             }
-            throw unsupportedException("unknown slot: " + node.toSql());
+            throw unsupportedException("unknown slot: " + ExprToSql.toSql(node));
         }
     }
 
@@ -922,7 +942,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
-                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
+                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + ExprToSql.toSql(node));
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
             String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();
@@ -960,4 +980,5 @@ public final class SqlToScalarOperatorTranslator {
             return node.getTransformed();
         }
     }
+
 }
