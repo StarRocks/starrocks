@@ -76,7 +76,8 @@ public class IVMAnalyzer {
 
     // table tables that supports IVM
     public static final Set<Table.TableType> SUPPORTED_TABLE_TYPES = Set.of(
-            Table.TableType.ICEBERG
+            Table.TableType.ICEBERG,
+            Table.TableType.PAIMON
     );
 
     // join operators that supports IVM
