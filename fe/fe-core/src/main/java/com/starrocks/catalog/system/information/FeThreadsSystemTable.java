@@ -34,7 +34,9 @@ import org.apache.thrift.TException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -70,6 +72,9 @@ public class FeThreadsSystemTable {
             long[] threadIds = threadMXBean.getAllThreadIds();
             ThreadInfo[] threadInfos = threadMXBean.getThreadInfo(threadIds);
 
+            // Build a map of thread ID to Thread object once for efficient lookups
+            Map<Long, Thread> threadMap = buildThreadMap();
+
             List<TFeThreadInfo> threads = Lists.newArrayList();
             Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
             String feAddress = selfNode.first + ":" + selfNode.second;
@@ -83,8 +88,8 @@ public class FeThreadsSystemTable {
                 threadData.setThread_id(threadInfo.getThreadId());
                 threadData.setThread_name(threadInfo.getThreadName());
                 
-                // Get thread object to check daemon status and get thread group name
-                Thread thread = findThreadById(threadInfo.getThreadId());
+                // Get thread object from map to check daemon status and get thread group name
+                Thread thread = threadMap.get(threadInfo.getThreadId());
                 String groupName = "";
                 if (thread != null && thread.getThreadGroup() != null) {
                     groupName = thread.getThreadGroup().getName();
@@ -127,7 +132,12 @@ public class FeThreadsSystemTable {
         return response;
     }
 
-    private static Thread findThreadById(long threadId) {
+    /**
+     * Builds a map of thread ID to Thread object by enumerating all threads once.
+     * This is more efficient than looking up threads individually.
+     */
+    private static Map<Long, Thread> buildThreadMap() {
+        Map<Long, Thread> threadMap = new HashMap<>();
         ThreadGroup rootGroup = Thread.currentThread().getThreadGroup();
         while (rootGroup.getParent() != null) {
             rootGroup = rootGroup.getParent();
@@ -135,10 +145,8 @@ public class FeThreadsSystemTable {
         Thread[] threads = new Thread[rootGroup.activeCount() * 2];
         int count = rootGroup.enumerate(threads, true);
         for (int i = 0; i < count; i++) {
-            if (threads[i].getId() == threadId) {
-                return threads[i];
-            }
+            threadMap.put(threads[i].getId(), threads[i]);
         }
-        return null;
+        return threadMap;
     }
 }
