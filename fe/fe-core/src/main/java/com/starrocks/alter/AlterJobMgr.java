@@ -232,7 +232,7 @@ public class AlterJobMgr {
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (Exception e) {
-                LOG.warn("alter mv {} to active failed:", e);
+                LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
                         "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());

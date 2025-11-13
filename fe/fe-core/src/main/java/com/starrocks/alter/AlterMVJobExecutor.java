@@ -642,7 +642,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv == null || !GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
-        if (visited.contains(mv.getId())) {
+        if (visited.contains(mv.getMvId())) {
             return;
         }
         // inactive this mv first
@@ -651,7 +651,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         visited.add(mv.getMvId());
 
         // reset inactive reason
-        reason = MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName());
+        reason = MaterializedViewExceptions.inactiveReasonForBaseTableInActive(mv.getName());
         // recursive inactive
         for (MvId mvId : mv.getRelatedMaterializedViews()) {
             if (visited.contains(mvId)) {
