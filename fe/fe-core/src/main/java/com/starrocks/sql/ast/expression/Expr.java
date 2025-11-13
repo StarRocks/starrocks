@@ -44,7 +44,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
-import com.starrocks.common.io.Writable;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleId;
 import com.starrocks.sql.ast.AstVisitor;
@@ -67,7 +66,7 @@ import java.util.stream.Collectors;
 /**
  * Root of the expr node hierarchy.
  */
-public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
+public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneable {
 
     protected Type type;  // result of analysis
 
