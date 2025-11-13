@@ -161,9 +161,19 @@ public class HiveMetastoreApiConverter {
         validateHiveTableType(table.getTableType());
 
         Map<String, String> properties = toHiveProperties(table);
-        HiveStorageFormat storageFormat = HiveStorageFormat.get(
-                properties.getOrDefault(HIVE_TABLE_INPUT_FORMAT, HiveStorageFormat.UNSUPPORTED.getInputFormat()),
-                properties.getOrDefault(HIVE_TABLE_SERDE_LIB, HiveStorageFormat.UNSUPPORTED.getSerde()));
+
+        String inputFormat = properties.get(HIVE_TABLE_INPUT_FORMAT);
+        String serdeFormat = properties.get(HIVE_TABLE_SERDE_LIB);
+
+        if (inputFormat == null || serdeFormat == null) {
+            throw new StarRocksConnectorException("Hive table [%s] doesn't have input format or serde format",
+                    table.getTableName());
+        }
+        HiveStorageFormat storageFormat = HiveStorageFormat.get(inputFormat, serdeFormat);
+        if (storageFormat == HiveStorageFormat.UNSUPPORTED) {
+            throw new StarRocksConnectorException("Unsupported table format: %s=%s, %s=%s",
+                    HIVE_TABLE_INPUT_FORMAT, inputFormat, HIVE_TABLE_SERDE_LIB, serdeFormat);
+        }
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
