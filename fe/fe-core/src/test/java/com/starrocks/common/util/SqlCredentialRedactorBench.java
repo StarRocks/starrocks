@@ -42,7 +42,8 @@ public class SqlCredentialRedactorBench {
     private String sqlWithManyKeys;
     private String sqlWithFewKeys;
     private String sqlWithoutCredentials;
-    private String sqlLong;
+    private String sqlLong1;
+    private String sqlLong2;
     private Pattern oldPattern;
 
     public static void main(String[] args) throws Exception {
@@ -115,8 +116,10 @@ public class SqlCredentialRedactorBench {
         sqlWithoutCredentials = "SELECT * FROM table WHERE id = 1";
 
         // long string
-        String longString = "abcdefdhi".repeat(104857);
-        sqlLong = "INSERT INTO t1 VALUES(\"" + longString + "\",)";
+        String longString1 = "abcdefdhi".repeat(104857);
+        sqlLong1 = "INSERT INTO t1 VALUES(\"" + longString1 + "\",)";
+        String longString2 = "a".repeat(104857);
+        sqlLong2 = "ALTER TABLE t1 SET PROPERTIES('key1' = '" + longString2 + "')";
     }
 
     @Benchmark
@@ -125,13 +128,23 @@ public class SqlCredentialRedactorBench {
     }
 
     @Benchmark
-    public void benchmarkLongString() {
-        SqlCredentialRedactor.redact(sqlLong);
+    public void benchmarkLongString1() {
+        SqlCredentialRedactor.redact(sqlLong1);
     }
 
     @Benchmark
-    public void benchmarkOldVersionLongString() {
-        redactOldVersion(sqlLong);
+    public void benchmarkLongString2() {
+        SqlCredentialRedactor.redact(sqlLong2);
+    }
+
+    @Benchmark
+    public void benchmarkOldVersionLongString1() {
+        redactOldVersion(sqlLong1);
+    }
+
+    @Benchmark
+    public void benchmarkOldVersionLongString2() {
+        redactOldVersion(sqlLong2);
     }
 
     @Benchmark
