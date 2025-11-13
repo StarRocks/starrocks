@@ -40,10 +40,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
-import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
-import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.metastore.api.*;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -56,6 +53,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.PARQUET_HIVE_SERDE_CLASS;
 import static com.starrocks.connector.metadata.MetadataTableType.LOGICAL_ICEBERG_METADATA;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -165,6 +163,9 @@ public class MetadataMgrTest {
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
         sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
+        SerDeInfo serDeInfo = new SerDeInfo();
+        serDeInfo.setSerializationLib(PARQUET_HIVE_SERDE_CLASS);
+        sd.setSerdeInfo(serDeInfo);
         Table msTable1 = new Table();
         msTable1.setDbName("hive_db");
         msTable1.setTableName("hive_table");
@@ -299,9 +300,12 @@ public class MetadataMgrTest {
                 List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
                 String hdfsPath = "hdfs://127.0.0.1:10000/hive";
                 StorageDescriptor sd = new StorageDescriptor();
+                SerDeInfo serDeInfo = new SerDeInfo();
+                serDeInfo.setSerializationLib(PARQUET_HIVE_SERDE_CLASS);
                 sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
                 sd.setCols(unPartKeys);
                 sd.setLocation(hdfsPath);
+                sd.setSerdeInfo(serDeInfo);
                 Table msTable = new Table();
                 msTable.setPartitionKeys(partKeys);
                 msTable.setSd(sd);

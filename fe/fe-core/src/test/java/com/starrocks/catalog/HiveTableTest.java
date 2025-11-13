@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.PARQUET_HIVE_SERDE_CLASS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -99,10 +100,13 @@ public class HiveTableTest {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hive";
+        SerDeInfo serDeInfo = new SerDeInfo();
+        serDeInfo.setSerializationLib(PARQUET_HIVE_SERDE_CLASS);
         StorageDescriptor sd = new StorageDescriptor();
         sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
+        sd.setSerdeInfo(serDeInfo);
         Table msTable = new Table();
         msTable.setPartitionKeys(partKeys);
         msTable.setSd(sd);

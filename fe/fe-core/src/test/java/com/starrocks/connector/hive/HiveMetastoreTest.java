@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.connector.hive.HiveClassNames.ORC_SERDE_CLASS;
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
@@ -332,7 +333,7 @@ public class HiveMetastoreTest {
             sd.setInputFormat(HiveClassNames.ORC_INPUT_FORMAT_CLASS);
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
-            serDeInfo.setSerializationLib(HiveClassNames.ORC_SERDE_CLASS);
+            serDeInfo.setSerializationLib(ORC_SERDE_CLASS);
             sd.setSerdeInfo(serDeInfo);
             Table msTable1 = new Table();
             msTable1.setDbName(dbName);
@@ -365,6 +366,7 @@ public class HiveMetastoreTest {
             sd.setLocation(hdfsPath);
             sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
             SerDeInfo serDeInfo = new SerDeInfo();
+            serDeInfo.setSerializationLib(ORC_SERDE_CLASS);
             serDeInfo.setParameters(ImmutableMap.of());
             sd.setSerdeInfo(serDeInfo);
             Table msTable1 = new Table();
