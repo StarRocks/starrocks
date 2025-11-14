@@ -186,5 +186,128 @@ public class DatabaseEditLogTest {
         Function retrievedFunction = exceptionDatabase.getFunction(function, Function.CompareMode.IS_IDENTICAL);
         Assertions.assertNotNull(retrievedFunction);
     }
+
+    // ==================== Add Function with Different Parameters Tests ====================
+
+    @Test
+    public void testAddFunctionWithAllowExistsTrue() throws Exception {
+        // Test allowExists=true, createIfNotExists=false
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_allow_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        // First add
+        masterDatabase.addFunction(function, true, false);
+        Assertions.assertEquals(1, masterDatabase.getFunctions().size());
+
+        // Add again with allowExists=true should succeed (replace)
+        masterDatabase.addFunction(function, true, false);
+        Assertions.assertEquals(1, masterDatabase.getFunctions().size());
+        Function retrievedFunction = masterDatabase.getFunction(function, Function.CompareMode.IS_IDENTICAL);
+        Assertions.assertNotNull(retrievedFunction);
+    }
+
+    @Test
+    public void testAddFunctionWithCreateIfNotExistsTrue() throws Exception {
+        // Test allowExists=false, createIfNotExists=true
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_if_not_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        // First add
+        masterDatabase.addFunction(function, false, true);
+        Assertions.assertEquals(1, masterDatabase.getFunctions().size());
+
+        // Add again with createIfNotExists=true should not add (no-op)
+        masterDatabase.addFunction(function, false, true);
+        Assertions.assertEquals(1, masterDatabase.getFunctions().size());
+        Function retrievedFunction = masterDatabase.getFunction(function, Function.CompareMode.IS_IDENTICAL);
+        Assertions.assertNotNull(retrievedFunction);
+    }
+
+    @Test
+    public void testAddFunctionWithBothAllowExistsAndCreateIfNotExists() throws Exception {
+        // Test allowExists=true, createIfNotExists=true should throw exception
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_both");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
+            masterDatabase.addFunction(function, true, true);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together"));
+    }
+
+    @Test
+    public void testAddFunctionWithAllowExistsFalseAndCreateIfNotExistsFalse() throws Exception {
+        // Test allowExists=false, createIfNotExists=false - should throw exception if exists
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_no_allow");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        // First add should succeed
+        masterDatabase.addFunction(function, false, false);
+        Assertions.assertEquals(1, masterDatabase.getFunctions().size());
+
+        // Add again should throw exception
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
+            masterDatabase.addFunction(function, false, false);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("function already exists"));
+    }
+
+    // ==================== Drop Function with Different Parameters Tests ====================
+
+    @Test
+    public void testDropFunctionWithDropIfExistsTrue() throws Exception {
+        // Test dropIfExists=true when function exists
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_drop_if_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        masterDatabase.addFunction(function, false, false);
+        Assertions.assertEquals(1, masterDatabase.getFunctions().size());
+
+        // Drop with dropIfExists=true should succeed
+        FunctionSearchDesc functionSearchDesc = new FunctionSearchDesc(functionName, argTypes, false);
+        masterDatabase.dropFunction(functionSearchDesc, true);
+        Assertions.assertEquals(0, masterDatabase.getFunctions().size());
+    }
+
+    @Test
+    public void testDropFunctionWithDropIfExistsTrueWhenNotExists() throws Exception {
+        // Test dropIfExists=true when function does not exist
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_not_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        FunctionSearchDesc functionSearchDesc = new FunctionSearchDesc(functionName, argTypes, false);
+
+        // Drop with dropIfExists=true should not throw exception
+        masterDatabase.dropFunction(functionSearchDesc, true);
+        Assertions.assertEquals(0, masterDatabase.getFunctions().size());
+    }
+
+    @Test
+    public void testDropFunctionWithDropIfExistsFalseWhenNotExists() throws Exception {
+        // Test dropIfExists=false when function does not exist should throw exception
+        FunctionName functionName = new FunctionName(TEST_DB_NAME, "test_func_drop_fail");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        FunctionSearchDesc functionSearchDesc = new FunctionSearchDesc(functionName, argTypes, false);
+
+        // Drop with dropIfExists=false should throw exception
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
+            masterDatabase.dropFunction(functionSearchDesc, false);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("Unknown function"));
+    }
 }
     

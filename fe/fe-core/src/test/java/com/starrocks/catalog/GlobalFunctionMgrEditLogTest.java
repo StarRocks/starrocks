@@ -182,5 +182,137 @@ public class GlobalFunctionMgrEditLogTest {
         Function retrievedFunction = exceptionGlobalFunctionMgr.getFunction(function, Function.CompareMode.IS_IDENTICAL);
         Assertions.assertNotNull(retrievedFunction);
     }
+
+    // ==================== User Add Function with Different Parameters Tests ====================
+
+    @Test
+    public void testUserAddFunctionWithAllowExistsTrue() throws Exception {
+        // Test allowExists=true, createIfNotExists=false
+        FunctionName functionName = new FunctionName("", "test_func_allow_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        int initialCount = masterGlobalFunctionMgr.getFunctions().size();
+
+        // First add
+        masterGlobalFunctionMgr.userAddFunction(function, true, false);
+        Assertions.assertEquals(initialCount + 1, masterGlobalFunctionMgr.getFunctions().size());
+
+        // Add again with allowExists=true should succeed (replace)
+        masterGlobalFunctionMgr.userAddFunction(function, true, false);
+        Assertions.assertEquals(initialCount + 1, masterGlobalFunctionMgr.getFunctions().size());
+        Function retrievedFunction = masterGlobalFunctionMgr.getFunction(function, Function.CompareMode.IS_IDENTICAL);
+        Assertions.assertNotNull(retrievedFunction);
+    }
+
+    @Test
+    public void testUserAddFunctionWithCreateIfNotExistsTrue() throws Exception {
+        // Test allowExists=false, createIfNotExists=true
+        FunctionName functionName = new FunctionName("", "test_func_if_not_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        int initialCount = masterGlobalFunctionMgr.getFunctions().size();
+
+        // First add
+        masterGlobalFunctionMgr.userAddFunction(function, false, true);
+        Assertions.assertEquals(initialCount + 1, masterGlobalFunctionMgr.getFunctions().size());
+
+        // Add again with createIfNotExists=true should not add (no-op)
+        masterGlobalFunctionMgr.userAddFunction(function, false, true);
+        Assertions.assertEquals(initialCount + 1, masterGlobalFunctionMgr.getFunctions().size());
+        Function retrievedFunction = masterGlobalFunctionMgr.getFunction(function, Function.CompareMode.IS_IDENTICAL);
+        Assertions.assertNotNull(retrievedFunction);
+    }
+
+    @Test
+    public void testUserAddFunctionWithBothAllowExistsAndCreateIfNotExists() throws Exception {
+        // Test allowExists=true, createIfNotExists=true should throw exception
+        FunctionName functionName = new FunctionName("", "test_func_both");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
+            masterGlobalFunctionMgr.userAddFunction(function, true, true);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together"));
+    }
+
+    @Test
+    public void testUserAddFunctionWithAllowExistsFalseAndCreateIfNotExistsFalse() throws Exception {
+        // Test allowExists=false, createIfNotExists=false - should throw exception if exists
+        FunctionName functionName = new FunctionName("", "test_func_no_allow");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        int initialCount = masterGlobalFunctionMgr.getFunctions().size();
+
+        // First add should succeed
+        masterGlobalFunctionMgr.userAddFunction(function, false, false);
+        Assertions.assertEquals(initialCount + 1, masterGlobalFunctionMgr.getFunctions().size());
+
+        // Add again should throw exception
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
+            masterGlobalFunctionMgr.userAddFunction(function, false, false);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("function already exists"));
+    }
+
+    // ==================== User Drop Function with Different Parameters Tests ====================
+
+    @Test
+    public void testUserDropFunctionWithDropIfExistsTrue() throws Exception {
+        // Test dropIfExists=true when function exists
+        FunctionName functionName = new FunctionName("", "test_func_drop_if_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        Function function = new ScalarFunction(functionName, argTypes, IntegerType.INT, false);
+        function.setBinaryType(TFunctionBinaryType.SRJAR);
+        function.setUserVisible(true);
+
+        int initialCount = masterGlobalFunctionMgr.getFunctions().size();
+        masterGlobalFunctionMgr.userAddFunction(function, false, false);
+        Assertions.assertEquals(initialCount + 1, masterGlobalFunctionMgr.getFunctions().size());
+
+        // Drop with dropIfExists=true should succeed
+        FunctionSearchDesc functionSearchDesc = new FunctionSearchDesc(functionName, argTypes, false);
+        masterGlobalFunctionMgr.userDropFunction(functionSearchDesc, true);
+        Assertions.assertEquals(initialCount, masterGlobalFunctionMgr.getFunctions().size());
+    }
+
+    @Test
+    public void testUserDropFunctionWithDropIfExistsTrueWhenNotExists() throws Exception {
+        // Test dropIfExists=true when function does not exist
+        FunctionName functionName = new FunctionName("", "test_func_not_exists");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        FunctionSearchDesc functionSearchDesc = new FunctionSearchDesc(functionName, argTypes, false);
+
+        int initialCount = masterGlobalFunctionMgr.getFunctions().size();
+
+        // Drop with dropIfExists=true should not throw exception
+        masterGlobalFunctionMgr.userDropFunction(functionSearchDesc, true);
+        Assertions.assertEquals(initialCount, masterGlobalFunctionMgr.getFunctions().size());
+    }
+
+    @Test
+    public void testUserDropFunctionWithDropIfExistsFalseWhenNotExists() throws Exception {
+        // Test dropIfExists=false when function does not exist should throw exception
+        FunctionName functionName = new FunctionName("", "test_func_drop_fail");
+        Type[] argTypes = new Type[]{IntegerType.INT};
+        FunctionSearchDesc functionSearchDesc = new FunctionSearchDesc(functionName, argTypes, false);
+
+        // Drop with dropIfExists=false should throw exception
+        StarRocksException exception = Assertions.assertThrows(StarRocksException.class, () -> {
+            masterGlobalFunctionMgr.userDropFunction(functionSearchDesc, false);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("Unknown function"));
+    }
 }
 
