@@ -135,21 +135,22 @@ public class MvRewritePreprocessor {
             // use a new context rather than reuse the existed context to avoid cache conflict.
             try {
                 // 1. get related mvs for all input tables
-                Set<MaterializedViewWrapper> relatedMVs =
+                List<MaterializedViewWrapper> relatedMVs =
                         getRelatedMVs(queryTables, context.getOptimizerOptions().isRuleBased());
                 if (relatedMVs.isEmpty()) {
                     return;
                 }
 
                 // filter mvs which is set by config: including/excluding mvs
-                Set<MaterializedViewWrapper> relatedMVWrappers = getRelatedMVsByConfig(relatedMVs);
+                List<MaterializedViewWrapper> relatedMVWrappers = getRelatedMVsByConfig(relatedMVs);
                 logMVPrepare(connectContext, "Choose {}/{} mvs after user config", relatedMVWrappers.size(), relatedMVs.size());
                 // add into queryMaterializationContext for later use
                 if (relatedMVWrappers.isEmpty()) {
                     return;
                 }
-                this.queryMaterializationContext.addRelatedMVs(
-                        relatedMVWrappers.stream().map(MaterializedViewWrapper::getMV).collect(Collectors.toSet()));
+                relatedMVWrappers.forEach(relatedMVWrapper -> {
+                    this.queryMaterializationContext.addRelatedMV(relatedMVWrapper.getMV());
+                });
 
                 // 2. choose best related mvs by user's config or related mv limit
                 List<MaterializedViewWrapper> candidateMVs;
@@ -351,14 +352,19 @@ public class MvRewritePreprocessor {
         }
     }
 
+    /**
+     * @param queryTables query's input tables to get related mvs
+     * @param isRuleBased whether this query is rule based or cost based
+     * @return input query tables' related mvs and ensure the result is deduplicated and sorted by mv's level.
+     */
     @VisibleForTesting
-    public Set<MaterializedViewWrapper> getRelatedMVs(Set<Table> queryTables,
-                                                      boolean isRuleBased) {
+    public List<MaterializedViewWrapper> getRelatedMVs(Set<Table> queryTables,
+                                                       boolean isRuleBased) {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !isRuleBased) {
             // related asynchronous materialized views
-            Set<MaterializedViewWrapper> relatedMVs = getRelatedAsyncMVs(queryTables);
+            List<MaterializedViewWrapper> relatedMVs = getRelatedAsyncMVs(queryTables);
 
             // related synchronous materialized views
             if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
@@ -366,7 +372,7 @@ public class MvRewritePreprocessor {
             }
             return relatedMVs;
         } else {
-            return Sets.newHashSet();
+            return Lists.newArrayList();
         }
     }
 
@@ -377,7 +383,7 @@ public class MvRewritePreprocessor {
         return Arrays.stream(str.split(",")).map(String::trim).collect(Collectors.toSet());
     }
 
-    private Set<MaterializedViewWrapper> getRelatedMVsByConfig(Set<MaterializedViewWrapper> relatedMVs) {
+    private List<MaterializedViewWrapper> getRelatedMVsByConfig(List<MaterializedViewWrapper> relatedMVs) {
         // filter mvs by including/excluding settings
         String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
         String queryIncludingMVNames = connectContext.getSessionVariable().getQueryIncludingMVNames();
@@ -396,7 +402,7 @@ public class MvRewritePreprocessor {
                         || queryIncludingMVNamesSet.contains(wrapper.getMV().getName()))
                 .filter(wrapper -> queryExcludingMVNamesSet.isEmpty()
                         || !queryExcludingMVNamesSet.contains(wrapper.getMV().getName()))
-                .collect(Collectors.toSet());
+                .collect(Collectors.toList());
     }
 
     /**
@@ -572,7 +578,7 @@ public class MvRewritePreprocessor {
      */
     @VisibleForTesting
     public List<MaterializedViewWrapper> chooseBestRelatedMVs(Set<Table> queryTables,
-                                                              Set<MaterializedViewWrapper> relatedMVs,
+                                                              List<MaterializedViewWrapper> relatedMVs,
                                                               OptExpression queryOptExpression) {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
@@ -613,20 +619,20 @@ public class MvRewritePreprocessor {
         return mvWithPlanContexts;
     }
 
-    private Set<MaterializedViewWrapper> getRelatedAsyncMVs(Set<Table> queryTables) {
+    private List<MaterializedViewWrapper> getRelatedAsyncMVs(Set<Table> queryTables) {
         int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
         // get all related materialized views, include nested mvs
-        return MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
+        return new ArrayList<>(MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables));
     }
 
-    private Set<MaterializedViewWrapper> getRelatedSyncMVs(Set<Table> queryTables) {
+    private List<MaterializedViewWrapper> getRelatedSyncMVs(Set<Table> queryTables) {
         // get all related materialized views, include nested mvs
         return queryTables.stream()
                 .filter(table -> table instanceof OlapTable)
                 .map(table -> getTableRelatedSyncMVs((OlapTable) table))
                 .flatMap(Set::stream)
                 .map(mv -> MaterializedViewWrapper.create(mv, 0))
-                .collect(Collectors.toSet());
+                .collect(Collectors.toList());
     }
 
     private Set<MaterializedView> getTableRelatedSyncMVs(OlapTable olapTable) {

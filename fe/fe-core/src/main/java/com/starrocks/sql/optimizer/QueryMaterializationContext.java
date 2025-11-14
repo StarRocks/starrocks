@@ -200,10 +200,10 @@ public class QueryMaterializationContext {
 
     /**
      * Add related mvs about this query.
-     * @param mvs: related mvs
+     * @param mv: related mvs
      */
-    public void addRelatedMVs(Set<MaterializedView> mvs) {
-        relatedMVs.addAll(mvs);
+    public void addRelatedMV(MaterializedView mv) {
+        relatedMVs.add(mv);
     }
 
     /**
