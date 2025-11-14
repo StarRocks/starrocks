@@ -123,7 +123,12 @@ public class StatisticsCollectionTrigger {
     }
 
     private void process() {
-        // check if this feature is disabled
+        if (table instanceof OlapTable) {
+            if (!((OlapTable) table).enableStatisticCollectOnFirstLoad()) {
+                return;
+            }
+        }
+
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
