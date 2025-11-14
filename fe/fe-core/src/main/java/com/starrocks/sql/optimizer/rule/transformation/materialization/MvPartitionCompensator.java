@@ -123,16 +123,6 @@ public class MvPartitionCompensator {
         return false;
     }
 
-    public static boolean isSupportPartitionPruneCompensate(Table t) {
-        if (t == null) {
-            return false;
-        }
-        if (t.isNativeTableOrMaterializedView() || t.isHiveTable()) {
-            return true;
-        }
-        return false;
-
-    }
     /**
      * Determine whether to compensate extra partition predicates to query plan for the mv,
      * - if it needs compensate, use `selectedPartitionIds` to compensate complete partition ranges
