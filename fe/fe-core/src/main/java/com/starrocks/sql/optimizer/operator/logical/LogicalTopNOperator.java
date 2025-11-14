@@ -222,13 +222,14 @@ public class LogicalTopNOperator extends LogicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
-                sortPhase == that.sortPhase && topNType == that.topNType &&
+                sortPhase == that.sortPhase && topNType == that.topNType && perPipeline == that.perPipeline &&
                 Objects.equals(partitionPreAggCall, that.partitionPreAggCall);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit, partitionPreAggCall);
+        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit, perPipeline,
+                partitionPreAggCall);
     }
 
     public static Builder builder() {
