@@ -81,7 +81,7 @@ Status SchemaFeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
     auto end = _cur_idx + 1;
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
-            for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
