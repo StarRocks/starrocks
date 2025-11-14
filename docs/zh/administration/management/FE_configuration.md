@@ -2746,6 +2746,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：在 Tablet 副本丢失/损坏时，是否使用空的 Tablet 代替。这样可以保证在有 Tablet 副本丢失/损坏时，查询依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 `false`，表示不进行替代，查询会失败。
 - 引入版本：-
 
+##### tablet_checker_lock_time_per_cycle_ms
+
+- 默认值：1000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Tablet Checker 在释放并重新获取表锁之前，每个周期持有锁的最大时间（毫秒）。小于 100 的值将被视为 100。
+- 引入版本：v3.5.9, v4.0.2
+
 ##### tablet_create_timeout_second
 
 - 默认值：10

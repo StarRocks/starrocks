@@ -2761,6 +2761,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
 - Introduced in: -
 
+##### tablet_checker_lock_time_per_cycle_ms
+
+- Default: 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum lock hold time per cycle for tablet checker before releasing and reacquiring the table lock. Values less than 100 will be treated as 100.
+- Introduced in: v3.5.9, v4.0.2
+
 ##### tablet_create_timeout_second
 
 - Default: 10
