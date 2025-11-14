@@ -11,41 +11,35 @@ CREATE TABLE `unique_table_with_null` ( `k1` date, `k2` datetime, `k3` char(20),
 CREATE VIEW `unique_view_with_null` AS SELECT * FROM `unique_table_with_null`;
 -- result:
 -- !result
-select TABLE_TYPE, `VERSION`, ROW_FORMAT  from information_schema.tables where TABLE_SCHEMA='db_${uuid0}' limit 1;
+select TABLE_TYPE, `VERSION`, ROW_FORMAT  from information_schema.tables where TABLE_SCHEMA='db_${uuid0}' order by TABLE_NAME limit 1;
 -- result:
 BASE TABLE	None	None
 -- !result
 [UC]select * from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
 -- result:
-def	db_9949a2cf56024ba1b1aa6efff42afb13	unique_table_with_null	BASE TABLE	StarRocks	None	None	0	0	0	None	None	None	None	2025-11-14 15:17:57	2025-11-14 15:17:57	1970-01-01 08:00:00	utf8_general_ci	None	None	OLAP	db_9949a2cf56024ba1b1aa6efff42afb13	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	45536
-def	db_9949a2cf56024ba1b1aa6efff42afb13	unique_view_with_null	VIEW	None	None	None	None	None	None	None	None	None	None	2025-11-14 15:17:57	None	1970-01-01 08:00:00	utf8_general_ci	None	None		db_9949a2cf56024ba1b1aa6efff42afb13	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	45536
-def	test	test_mv1	VIEW	StarRocks	None	None	5	2837	14187	None	None	None	None	2025-11-13 21:19:42	2025-11-13 21:21:37	1970-01-01 08:00:00	utf8_general_ci	None	None		test	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	44058
-def	test	unique_view_with_null	VIEW	None	None	None	None	None	None	None	None	None	None	2025-11-14 14:49:05	None	1970-01-01 08:00:00	utf8_general_ci	None	None		test	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	44058
-def	test	unique_table_with_null	BASE TABLE	StarRocks	None	None	0	0	0	None	None	None	None	2025-11-14 14:49:02	2025-11-14 14:49:02	1970-01-01 08:00:00	utf8_general_ci	None	None	OLAP	test	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	44058
+def	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_view_with_null	VIEW	None	None	None	None	None	None	None	None	None	None	2025-11-14 15:28:09	None	1970-01-01 08:00:00	utf8_general_ci	None	None		db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
+def	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	BASE TABLE	StarRocks	None	None	0	0	0	None	None	None	None	2025-11-14 15:28:09	2025-11-14 15:28:09	1970-01-01 08:00:00	utf8_general_ci	None	None	OLAP	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
 -- !result
 [UC]select a.TABLE_NAME, b.* from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
 -- result:
-test_mv1	test	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	44058
-unique_view_with_null	test	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	44058
-unique_table_with_null	test	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	44058
-unique_table_with_null	db_9949a2cf56024ba1b1aa6efff42afb13	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	45536
-unique_view_with_null	db_9949a2cf56024ba1b1aa6efff42afb13	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	45536
+unique_view_with_null	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
+unique_table_with_null	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
 -- !result
 set enable_evaluate_schema_scan_rule=true;
 -- result:
 -- !result
 select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
 -- result:
-unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 unique_view_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
+unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 -- !result
 set enable_evaluate_schema_scan_rule=false;
 -- result:
 -- !result
 select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
 -- result:
-unique_view_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
+unique_view_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 -- !result
 set enable_evaluate_schema_scan_rule=true;
 -- result:
@@ -58,13 +52,13 @@ select if (count(*) > 0, "OK", "FAILED") from information_schema.views;
 -- result:
 OK
 -- !result
-[UC] select if count(*) from information_schema.tables;
+[UC] select count(*) from information_schema.tables;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+76
 -- !result
-[UC] select if count(*) from information_schema.views;
+[UC] select count(*) from information_schema.views;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+1
 -- !result
 set enable_evaluate_schema_scan_rule=false;
 -- result:
@@ -77,13 +71,13 @@ select if (count(*) > 0, "OK", "FAILED") from information_schema.views;
 -- result:
 OK
 -- !result
-[UC] select if count(*) from information_schema.tables;
+[UC] select count(*) from information_schema.tables;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+76
 -- !result
-[UC] select if count(*) from information_schema.views;
+[UC] select count(*) from information_schema.views;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+1
 -- !result
 create database if not exists test_information_schema_tables;
 -- result:
@@ -102,13 +96,13 @@ select if (count(*) > 0, "OK", "FAILED") from information_schema.views;
 -- result:
 OK
 -- !result
-[UC] select if count(*) from information_schema.tables;
+[UC] select count(*) from information_schema.tables;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+76
 -- !result
-[UC] select if count(*) from information_schema.views;
+[UC] select count(*) from information_schema.views;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+1
 -- !result
 set enable_evaluate_schema_scan_rule=false;
 -- result:
@@ -121,13 +115,13 @@ select if (count(*) > 0, "OK", "FAILED") from information_schema.views;
 -- result:
 OK
 -- !result
-[UC] select if count(*) from information_schema.tables;
+[UC] select count(*) from information_schema.tables;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+76
 -- !result
-[UC] select if count(*) from information_schema.views;
+[UC] select count(*) from information_schema.views;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+1
 -- !result
 drop database if exists test_information_schema;
 -- result:
