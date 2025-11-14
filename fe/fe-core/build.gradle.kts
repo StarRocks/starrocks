@@ -302,24 +302,22 @@ tasks.register<Task>("generateProtoSources") {
     val protoDir = file("../../gensrc/proto")
     val outputDir = layout.buildDirectory.get().dir("generated-sources/proto").asFile
 
-    // List of proto files to process
-    val protoFiles = listOf(
-        "lake_types.proto",
-        "internal_service.proto",
-        "types.proto",
-        "tablet_schema.proto",
-        "lake_service.proto",
-        "encryption.proto"
-    )
+    // Automatically detect all .proto files in the directory
+    val protoFiles = fileTree(protoDir) {
+        include("*.proto")
+    }.files.map { it.name }.sorted()
 
-    // Declare inputs (proto files)
-    inputs.files(protoFiles.map { file("$protoDir/$it") })
+    // Declare inputs (all proto files in the directory)
+    inputs.dir(protoDir).withPropertyName("protoSourceDir")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 
     // Declare output directory
     outputs.dir(outputDir)
 
     doFirst {
         mkdir(outputDir)
+
+        logger.lifecycle("Detected ${protoFiles.size} proto files to process")
 
         // Process each proto file individually
         protoFiles.forEach { protoFile ->
