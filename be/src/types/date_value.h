@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
@@ -99,6 +100,9 @@ public:
     std::string to_string() const;
 
     JulianDate julian() const { return _julian; }
+
+    // Convert to C++20 chrono sys_days for time arithmetic
+    inline std::chrono::sys_days to_sys_days() const;
 
     template <TimeUnit UNIT>
     inline DateValue add(int count) const;

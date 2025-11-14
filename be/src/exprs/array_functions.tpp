@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include <chrono>
 #include <memory>
 
 #include "column/array_column.h"
@@ -1644,114 +1645,446 @@ private:
     }
 };
 
+// Helper template to map TimeUnit to chrono duration type
+template <TimeUnit UNIT>
+struct TimeUnitToDuration;
+
+template <>
+struct TimeUnitToDuration<TimeUnit::MICROSECOND> {
+    using type = std::chrono::microseconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::MILLISECOND> {
+    using type = std::chrono::milliseconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::SECOND> {
+    using type = std::chrono::seconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::MINUTE> {
+    using type = std::chrono::minutes;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::HOUR> {
+    using type = std::chrono::hours;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::DAY> {
+    using type = std::chrono::days;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::WEEK> {
+    using type = std::chrono::weeks;
+};
+
+// Helper function to accurately calculate step count for all time units
+// Uses C++20 chrono for precise, standard-compliant time arithmetic
+template <LogicalType LType, TimeUnit TIME_UNIT>
+inline size_t calculate_accurate_step_count(
+        const typename std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>& start,
+        const typename std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>& stop, int32_t step) {
+    using namespace std::chrono;
+
+    if (step == 0) return 0;
+
+    // For fixed-length time units, use chrono duration_cast for O(1) calculation
+    if constexpr (TIME_UNIT == TimeUnit::MICROSECOND || TIME_UNIT == TimeUnit::MILLISECOND ||
+                  TIME_UNIT == TimeUnit::SECOND || TIME_UNIT == TimeUnit::MINUTE || TIME_UNIT == TimeUnit::HOUR ||
+                  TIME_UNIT == TimeUnit::DAY || TIME_UNIT == TimeUnit::WEEK) {
+        // Get the time difference
+        auto diff = [&]() {
+            if constexpr (LType == TYPE_DATE) {
+                return stop.to_sys_days() - start.to_sys_days();
+            } else {
+                return stop.to_sys_time() - start.to_sys_time();
+            }
+        }();
+
+        // Convert to target time unit and calculate count
+        using TargetDuration = typename TimeUnitToDuration<TIME_UNIT>::type;
+        int64_t count = std::abs(duration_cast<TargetDuration>(diff).count());
+        return count / step + 1;
+    }
+
+    // For variable-length time units (MONTH, QUARTER, YEAR)
+    // Use C++20 chrono year_month_day for calendar arithmetic
+    if constexpr (TIME_UNIT == TimeUnit::MONTH || TIME_UNIT == TimeUnit::QUARTER || TIME_UNIT == TimeUnit::YEAR) {
+        // Convert to year_month_day using sys_days
+        year_month_day start_ymd, stop_ymd;
+        if constexpr (LType == TYPE_DATE) {
+            start_ymd = year_month_day{start.to_sys_days()};
+            stop_ymd = year_month_day{stop.to_sys_days()};
+        } else {
+            start_ymd = year_month_day{floor<days>(start.to_sys_time())};
+            stop_ymd = year_month_day{floor<days>(stop.to_sys_time())};
+        }
+
+        // Calculate difference based on time unit
+        int64_t diff = 0;
+        if constexpr (TIME_UNIT == TimeUnit::YEAR) {
+            // Year difference
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            diff = std::abs(years_diff);
+        } else if constexpr (TIME_UNIT == TimeUnit::QUARTER) {
+            // Quarter difference: years * 4 + quarter_offset
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            int start_quarter = (static_cast<unsigned>(start_ymd.month()) - 1) / 3;
+            int stop_quarter = (static_cast<unsigned>(stop_ymd.month()) - 1) / 3;
+            diff = std::abs(years_diff * 4 + (stop_quarter - start_quarter));
+        } else { // MONTH
+            // Month difference: years * 12 + month_offset
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            int months_diff = static_cast<unsigned>(stop_ymd.month()) - static_cast<unsigned>(start_ymd.month());
+            diff = std::abs(years_diff * 12 + months_diff);
+        }
+
+        return diff / step + 1;
+    }
+
+    return 0;
+}
+
+#define DEFINE_ARRAY_GENERATE_FN(NAME, TIME_UNIT)                                                                  \
+    template <LogicalType LType, LogicalType ResultType>                                                           \
+    static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {      \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                      \
+        RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));                             \
+                                                                                                                   \
+        auto num_rows = columns[0]->size();                                                                        \
+                                                                                                                   \
+        NullColumnPtr nulls;                                                                                       \
+        for (auto& column : columns) {                                                                             \
+            if (column->has_null()) {                                                                              \
+                const auto* nullable_column = down_cast<const NullableColumn*>(column.get());                      \
+                if (nulls == nullptr) {                                                                            \
+                    nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());              \
+                } else {                                                                                           \
+                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),                               \
+                                                 nullable_column->null_column()->immutable_data().data());         \
+                }                                                                                                  \
+            }                                                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        auto array_offsets = UInt32Column::create(0);                                                              \
+        auto array_elements = ColumnHelper::create_column(TypeDescriptor(ResultType), true, false, 0);             \
+                                                                                                                   \
+        auto offsets = array_offsets.get();                                                                        \
+        auto elements = down_cast<NullableColumn*>(array_elements.get());                                          \
+                                                                                                                   \
+        offsets->reserve(num_rows + 1);                                                                            \
+        offsets->append(0);                                                                                        \
+                                                                                                                   \
+        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant(); \
+        auto num_rows_to_process = all_const_cols ? 1 : num_rows;                                                  \
+                                                                                                                   \
+        auto* data_column = elements->mutable_data_column();                                                       \
+        auto* null_column = elements->mutable_null_column();                                                       \
+        ColumnViewer<LType> start_viewer = ColumnViewer<LType>(columns[0]);                                        \
+        ColumnViewer<LType> stop_viewer = ColumnViewer<LType>(columns[1]);                                         \
+        ColumnViewer<TYPE_INT> step_viewer = ColumnViewer<TYPE_INT>(columns[2]);                                   \
+                                                                                                                   \
+        size_t total_elements = 0;                                                                                 \
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
+            if (nulls && nulls->get_data()[cur_row]) {                                                             \
+                continue;                                                                                          \
+            }                                                                                                      \
+            auto start = start_viewer.value(cur_row);                                                              \
+            auto stop = stop_viewer.value(cur_row);                                                                \
+            auto step = step_viewer.value(cur_row);                                                                \
+                                                                                                                   \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
+                continue;                                                                                          \
+            }                                                                                                      \
+                                                                                                                   \
+            size_t accurate_count = calculate_accurate_step_count<LType, TIME_UNIT>(start, stop, step);            \
+            total_elements += accurate_count;                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));                                                 \
+                                                                                                                   \
+        size_t total_elements_num = 0;                                                                             \
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
+            if (nulls && nulls->get_data()[cur_row]) {                                                             \
+                offsets->append(offsets->get_data().back());                                                       \
+                continue;                                                                                          \
+            }                                                                                                      \
+                                                                                                                   \
+            auto start = start_viewer.value(cur_row);                                                              \
+            auto stop = stop_viewer.value(cur_row);                                                                \
+            auto step = step_viewer.value(cur_row);                                                                \
+                                                                                                                   \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
+                offsets->append(offsets->get_data().back());                                                       \
+                continue;                                                                                          \
+            }                                                                                                      \
+                                                                                                                   \
+            bool is_forward = (start <= stop);                                                                     \
+            int32_t actual_step = is_forward ? step : -step;                                                       \
+                                                                                                                   \
+            using ValueType = std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>;                   \
+            ValueType current = start;                                                                             \
+            while (true) {                                                                                         \
+                if (is_forward) {                                                                                  \
+                    if (current > stop) break;                                                                     \
+                } else {                                                                                           \
+                    if (current < stop) break;                                                                     \
+                }                                                                                                  \
+                                                                                                                   \
+                data_column->append_datum(current);                                                                \
+                total_elements_num++;                                                                              \
+                                                                                                                   \
+                ValueType next = current.template add<TIME_UNIT>(actual_step);                                     \
+                                                                                                                   \
+                if (!next.is_valid_non_strict()) break;                                                            \
+                                                                                                                   \
+                if (next == current) break;                                                                        \
+                                                                                                                   \
+                current = next;                                                                                    \
+            }                                                                                                      \
+                                                                                                                   \
+            offsets->append(total_elements_num);                                                                   \
+        }                                                                                                          \
+                                                                                                                   \
+        null_column->get_data().resize(total_elements_num, 0);                                                     \
+        CHECK_EQ(offsets->get_data().back(), elements->size());                                                    \
+                                                                                                                   \
+        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));                       \
+                                                                                                                   \
+        if (all_const_cols) {                                                                                      \
+            if (nulls && nulls->is_null(0)) {                                                                      \
+                return ColumnHelper::create_const_null_column(num_rows);                                           \
+            } else {                                                                                               \
+                return ConstColumn::create(std::move(dst), num_rows);                                              \
+            }                                                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        if (nulls == nullptr) {                                                                                    \
+            return std::move(dst);                                                                                 \
+        } else {                                                                                                   \
+            return NullableColumn::create(std::move(dst), std::move(nulls));                                       \
+        }                                                                                                          \
+    }
+
+// Generate functions for all supported time units (lowercase names)
+DEFINE_ARRAY_GENERATE_FN(year, TimeUnit::YEAR);
+DEFINE_ARRAY_GENERATE_FN(quarter, TimeUnit::QUARTER);
+DEFINE_ARRAY_GENERATE_FN(month, TimeUnit::MONTH);
+DEFINE_ARRAY_GENERATE_FN(week, TimeUnit::WEEK);
+DEFINE_ARRAY_GENERATE_FN(day, TimeUnit::DAY);
+DEFINE_ARRAY_GENERATE_FN(hour, TimeUnit::HOUR);
+DEFINE_ARRAY_GENERATE_FN(minute, TimeUnit::MINUTE);
+DEFINE_ARRAY_GENERATE_FN(second, TimeUnit::SECOND);
+DEFINE_ARRAY_GENERATE_FN(millisecond, TimeUnit::MILLISECOND);
+DEFINE_ARRAY_GENERATE_FN(microsecond, TimeUnit::MICROSECOND);
+
 // Todo:support datetime/date
 template <LogicalType Type>
 class ArrayGenerate {
 public:
     using InputColumnType = RunTimeColumnType<Type>;
     using InputCppType = RunTimeCppType<Type>;
+    using ArrayGenerateFn = std::function<StatusOr<ColumnPtr>(FunctionContext*, const Columns&)>;
+
+    struct ArrayGenerateState {
+        ArrayGenerateFn function;
+    };
+
+    static Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (scope != FunctionContext::FRAGMENT_LOCAL) {
+            return Status::OK();
+        }
+
+        // Only DATE and DATETIME types need prepare phase for time unit selection
+        if constexpr (Type != TYPE_DATE && Type != TYPE_DATETIME) {
+            return Status::OK();
+        }
+
+        // FE ensures that DATE/DATETIME array_generate always has 4 parameters
+        ColumnPtr column_unit = context->get_constant_column(3);
+        std::string time_unit = "day";
+        if (!column_unit->only_null()) {
+            Slice unit_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_unit);
+            time_unit = unit_slice.to_string();
+        }
+
+        // Select the appropriate function based on time unit
+        ArrayGenerateFn function;
+
+        if (time_unit == "year") {
+            function = array_generate_function_year<Type, Type>;
+        } else if (time_unit == "quarter") {
+            function = array_generate_function_quarter<Type, Type>;
+        } else if (time_unit == "month") {
+            function = array_generate_function_month<Type, Type>;
+        } else if (time_unit == "week") {
+            function = array_generate_function_week<Type, Type>;
+        } else if (time_unit == "day") {
+            function = array_generate_function_day<Type, Type>;
+        } else if (time_unit == "hour") {
+            if constexpr (Type == TYPE_DATE) {
+                return Status::InvalidArgument(
+                        "DATE type does not support hour/minute/second/millisecond/microsecond units");
+            }
+            function = array_generate_function_hour<Type, Type>;
+        } else if (time_unit == "minute") {
+            if constexpr (Type == TYPE_DATE) {
+                return Status::InvalidArgument(
+                        "DATE type does not support hour/minute/second/millisecond/microsecond units");
+            }
+            function = array_generate_function_minute<Type, Type>;
+        } else if (time_unit == "second") {
+            if constexpr (Type == TYPE_DATE) {
+                return Status::InvalidArgument(
+                        "DATE type does not support hour/minute/second/millisecond/microsecond units");
+            }
+            function = array_generate_function_second<Type, Type>;
+        } else if (time_unit == "millisecond") {
+            if constexpr (Type == TYPE_DATE) {
+                return Status::InvalidArgument(
+                        "DATE type does not support hour/minute/second/millisecond/microsecond units");
+            }
+            function = array_generate_function_millisecond<Type, Type>;
+        } else if (time_unit == "microsecond") {
+            if constexpr (Type == TYPE_DATE) {
+                return Status::InvalidArgument(
+                        "DATE type does not support hour/minute/second/millisecond/microsecond units");
+            }
+            function = array_generate_function_microsecond<Type, Type>;
+        } else {
+            return Status::InvalidArgument(fmt::format("Unsupported time unit: {}", time_unit));
+        }
+
+        // Save the selected function to context
+        auto state = new ArrayGenerateState();
+        state->function = function;
+        context->set_function_state(scope, state);
+
+        return Status::OK();
+    }
+
+    static Status close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (LIKELY(scope == FunctionContext::FRAGMENT_LOCAL)) {
+            auto* state = reinterpret_cast<ArrayGenerateState*>(context->get_function_state(scope));
+            if (LIKELY(state != nullptr)) {
+                delete state;
+            }
+        }
+        return Status::OK();
+    }
+
     static StatusOr<ColumnPtr> process(FunctionContext* ctx, const Columns& columns) {
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        DCHECK(columns.size() == 3);
+        // For DATE and DATETIME types, use dynamic dispatch
+        if constexpr (Type == TYPE_DATE || Type == TYPE_DATETIME) {
+            DCHECK(columns.size() == 4);
+            auto state =
+                    reinterpret_cast<ArrayGenerateState*>(ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+            DCHECK(state != nullptr && state->function != nullptr);
+            return state->function(ctx, columns);
+        } else {
+            // For other types, use the original implementation
+            RETURN_IF_COLUMNS_ONLY_NULL(columns);
+            DCHECK(columns.size() == 3);
 
-        auto num_rows = columns[0]->size();
+            auto num_rows = columns[0]->size();
 
-        // compute nulls first. if any input is null, then output is null
-        NullColumnPtr nulls;
-        for (auto& column : columns) {
-            if (column->has_null()) {
-                const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
-                if (nulls == nullptr) {
-                    nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
-                } else {
-                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
-                                                 nullable_column->null_column()->immutable_data().data());
+            // compute nulls first. if any input is null, then output is null
+            NullColumnPtr nulls;
+            for (auto& column : columns) {
+                if (column->has_null()) {
+                    const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+                    if (nulls == nullptr) {
+                        nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
+                    } else {
+                        ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
+                                                     nullable_column->null_column()->immutable_data().data());
+                    }
                 }
             }
-        }
 
-        auto array_offsets = UInt32Column::create(0);
-        auto array_elements = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+            auto array_offsets = UInt32Column::create(0);
+            auto array_elements = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
 
-        auto offsets = array_offsets.get();
-        auto elements = down_cast<NullableColumn*>(array_elements.get());
+            auto offsets = array_offsets.get();
+            auto elements = down_cast<NullableColumn*>(array_elements.get());
 
-        offsets->reserve(num_rows + 1);
-        offsets->append(0);
+            offsets->reserve(num_rows + 1);
+            offsets->append(0);
 
-        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant();
+            auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant();
 
-        auto num_rows_to_process = all_const_cols ? 1 : num_rows;
+            auto num_rows_to_process = all_const_cols ? 1 : num_rows;
 
-        size_t total_elements = 0;
-        auto* data_column = elements->mutable_data_column();
-        auto* null_column = elements->mutable_null_column();
-        ColumnViewer start_viewer = ColumnViewer<Type>(columns[0]);
-        ColumnViewer stop_viewer = ColumnViewer<Type>(columns[1]);
-        ColumnViewer step_viewer = ColumnViewer<Type>(columns[2]);
-        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
-            if (nulls && nulls->get_data()[cur_row]) {
-                continue;
+            size_t total_elements = 0;
+            auto* data_column = elements->mutable_data_column();
+            auto* null_column = elements->mutable_null_column();
+            ColumnViewer start_viewer = ColumnViewer<Type>(columns[0]);
+            ColumnViewer stop_viewer = ColumnViewer<Type>(columns[1]);
+            ColumnViewer step_viewer = ColumnViewer<Type>(columns[2]);
+            for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+                if (nulls && nulls->get_data()[cur_row]) {
+                    continue;
+                }
+                auto step = step_viewer.value(cur_row);
+                if (step == 0) {
+                    continue;
+                }
+                auto start = start_viewer.value(cur_row);
+                auto stop = stop_viewer.value(cur_row);
+                if (step > 0 && start <= stop) {
+                    total_elements += (stop - start) / step + 1;
+                } else if (step < 0 && start >= stop) {
+                    total_elements += (start - stop) / (-step) + 1;
+                }
             }
-            auto step = step_viewer.value(cur_row);
-            if (step == 0) {
-                continue;
+            TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));
+
+            size_t total_elements_num = 0;
+            for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+                if (nulls && nulls->get_data()[cur_row]) {
+                    offsets->append(offsets->get_data().back());
+                    continue;
+                }
+
+                auto step = step_viewer.value(cur_row);
+
+                // just return empty array
+                if (step == 0) {
+                    offsets->append(offsets->get_data().back());
+                    continue;
+                }
+                auto start = start_viewer.value(cur_row);
+                auto stop = stop_viewer.value(cur_row);
+
+                InputCppType temp;
+                for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
+                     cur_element += step) {
+                    data_column->append_datum(cur_element);
+                    total_elements_num++;
+                    if (__builtin_add_overflow(cur_element, step, &temp)) break;
+                }
+                offsets->append(total_elements_num);
             }
-            auto start = start_viewer.value(cur_row);
-            auto stop = stop_viewer.value(cur_row);
-            if (step > 0 && start <= stop) {
-                total_elements += (stop - start) / step + 1;
-            } else if (step < 0 && start >= stop) {
-                total_elements += (start - stop) / (-step) + 1;
-            }
-        }
-        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));
 
-        size_t total_elements_num = 0;
-        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
-            if (nulls && nulls->get_data()[cur_row]) {
-                offsets->append(offsets->get_data().back());
-                continue;
+            null_column->get_data().resize(total_elements_num, 0);
+            CHECK_EQ(offsets->get_data().back(), elements->size());
+
+            auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+
+            if (all_const_cols) {
+                if (nulls->is_null(0)) {
+                    return ColumnHelper::create_const_null_column(num_rows);
+                } else {
+                    return ConstColumn::create(std::move(dst), num_rows);
+                }
             }
 
-            auto step = step_viewer.value(cur_row);
-
-            // just return empty array
-            if (step == 0) {
-                offsets->append(offsets->get_data().back());
-                continue;
-            }
-            auto start = start_viewer.value(cur_row);
-            auto stop = stop_viewer.value(cur_row);
-
-            InputCppType temp;
-            for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
-                 cur_element += step) {
-                data_column->append_datum(cur_element);
-                total_elements_num++;
-                if (__builtin_add_overflow(cur_element, step, &temp)) break;
-            }
-            offsets->append(total_elements_num);
-        }
-
-        null_column->get_data().resize(total_elements_num, 0);
-        CHECK_EQ(offsets->get_data().back(), elements->size());
-
-        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
-
-        if (all_const_cols) {
-            if (nulls->is_null(0)) {
-                return ColumnHelper::create_const_null_column(num_rows);
+            if (nulls == nullptr) {
+                return std::move(dst);
             } else {
-                return ConstColumn::create(std::move(dst), num_rows);
+                // if any of input column has null value, then output column is nullable
+                return NullableColumn::create(std::move(dst), std::move(nulls));
             }
-        }
-
-        if (nulls == nullptr) {
-            return std::move(dst);
-        } else {
-            // if any of input column has null value, then output column is nullable
-            return NullableColumn::create(std::move(dst), std::move(nulls));
         }
     }
 };
