@@ -201,7 +201,9 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
+            if (distributionInfo.getType() != DistributionInfo.DistributionInfoType.RANGE) {
+                sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
+            }
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());

@@ -24,22 +24,33 @@ import java.util.List;
 public class KeysDesc implements ParseNode {
     private final KeysType type;
     private final List<String> keysColumnNames;
+    private final boolean keysColumnsDerived;
     private final NodePosition pos;
 
     public KeysDesc() {
         pos = NodePosition.ZERO;
         this.type = KeysType.AGG_KEYS;
         this.keysColumnNames = Lists.newArrayList();
+        this.keysColumnsDerived = false;
     }
 
     public KeysDesc(KeysType type, List<String> keysColumnNames) {
-        this(type, keysColumnNames, NodePosition.ZERO);
+        this(type, keysColumnNames, false);
+    }
+
+    public KeysDesc(KeysType type, List<String> keysColumnNames, boolean keysColumnsDerived) {
+        this(type, keysColumnNames, keysColumnsDerived, NodePosition.ZERO);
     }
 
     public KeysDesc(KeysType type, List<String> keysColumnNames, NodePosition pos) {
+        this(type, keysColumnNames, false, pos);
+    }
+
+    public KeysDesc(KeysType type, List<String> keysColumnNames, boolean keysColumnsDerived, NodePosition pos) {
         this.pos = pos;
         this.type = type;
         this.keysColumnNames = keysColumnNames;
+        this.keysColumnsDerived = keysColumnsDerived;
     }
 
     public KeysType getKeysType() {
@@ -52,6 +63,10 @@ public class KeysDesc implements ParseNode {
 
     public boolean containsCol(String colName) {
         return keysColumnNames.stream().anyMatch(e -> StringUtils.equalsIgnoreCase(e, colName));
+    }
+
+    public boolean isKeysColumnsDerived() {
+        return keysColumnsDerived;
     }
 
     @Override

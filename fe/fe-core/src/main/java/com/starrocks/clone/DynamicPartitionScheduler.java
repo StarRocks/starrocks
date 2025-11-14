@@ -46,6 +46,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -72,6 +73,7 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.common.MetaUtils;
@@ -273,6 +275,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                         distColumnNames);
         } else if (distributionInfo instanceof RandomDistributionInfo) {
             distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
+        } else if (distributionInfo instanceof RangeDistributionInfo) {
+            distributionDesc = new RangeDistributionDesc();
         }
         return distributionDesc;
     }

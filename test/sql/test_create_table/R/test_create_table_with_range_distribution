@@ -1,0 +1,75 @@
+-- name: test_create_table_with_range_distribution
+admin set frontend config ("enable_range_distribution" = "true");
+-- result:
+-- !result
+CREATE TABLE dup_table1 (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+ORDER BY (tenant_id, created_time, id);
+-- result:
+-- !result
+CREATE TABLE dup_table2 (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+DUPLICATE KEY (tenant_id, created_time, id);
+-- result:
+-- !result
+CREATE TABLE dup_table3 (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+DUPLICATE KEY (tenant_id)
+ORDER BY (tenant_id, created_time, id);
+-- result:
+-- !result
+CREATE TABLE random_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+);
+-- result:
+-- !result
+CREATE TABLE pk_table1 (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id);
+-- result:
+-- !result
+SHOW PARTITIONS FROM pk_table1;
+CREATE TABLE pk_table2 (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id)
+ORDER BY (tenant_id, id, created_time);
+-- result:
+-- !result
+SHOW PARTITIONS FROM pk_table2;
+CREATE TABLE not_supported_pk_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id)
+ORDER BY (tenant_id);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The sort columns must be same with key columns.')
+-- !result
+admin set frontend config ("enable_range_distribution" = "false");
+-- result:
+-- !result
