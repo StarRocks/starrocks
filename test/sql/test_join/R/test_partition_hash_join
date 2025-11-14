@@ -127,7 +127,7 @@ select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_nu
 -- result:
 51200
 -- !result
-select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_string);
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 on tt1.c_string=tt2.c_string;
 -- result:
 5120000
 -- !result
