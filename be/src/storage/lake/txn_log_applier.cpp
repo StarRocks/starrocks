@@ -409,7 +409,7 @@ private:
                 // Same logic for pk and non-pk tables
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
 
-                auto copied_tablet_meta = op_replication.tablet_metadata();
+                const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 if (copied_tablet_meta.rowsets_size() > 0) {
                     _metadata->mutable_rowsets()->Clear();
                     _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
@@ -841,7 +841,7 @@ private:
                 // Same logic for pk and non-pk tables
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
 
-                auto copied_tablet_meta = op_replication.tablet_metadata();
+                const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 if (copied_tablet_meta.rowsets_size() > 0) {
                     _metadata->mutable_rowsets()->Clear();
                     _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
