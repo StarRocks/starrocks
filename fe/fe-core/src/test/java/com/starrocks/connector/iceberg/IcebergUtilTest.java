@@ -17,6 +17,8 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Column;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.thrift.TExprMinMaxValue;
+import com.starrocks.type.Type;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.iceberg.Schema;
@@ -102,11 +104,11 @@ public class IcebergUtilTest {
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(5, "date", Types.StringType.get()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(5), "id", Type.INT, true),
-                new SlotDescriptor(new SlotId(3), "date", Type.STRING, true)
+                new SlotDescriptor(new SlotId(3), "id", IntegerType.INT, true),
+                new SlotDescriptor(new SlotId(5), "date", StringType.STRING, true)
         );
-        slots.get(0).setColumn(new Column("id", Type.INT, true));
-        slots.get(1).setColumn(new Column("date", Type.STRING, true));
+        slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
+        slots.get(1).setColumn(new Column("date", StringType.STRING, true));
         var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-01".getBytes()));
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
@@ -148,6 +150,15 @@ public class IcebergUtilTest {
             assertEquals(10, result.get(3).maxValue);
             assertEquals(1, result.get(3).nullValueCount);
             assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
+            Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds,
+                    nullValueCounts, valueCounts, slots);
+            assertEquals(1, tExprMinMaxValueMap.size());
+            assertEquals(1, tExprMinMaxValueMap.get(5).min_int_value);
+            assertEquals(10, tExprMinMaxValueMap.get(5).max_int_value);
         }
     }
 }
