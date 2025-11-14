@@ -68,16 +68,11 @@ template <typename T>
 void FixedLengthColumnBase<T>::append_with_filter(const Column& src, const uint8_t* filter, size_t count) {
     DCHECK(this != &src);
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    const T* __restrict src_data = reinterpret_cast<const T*>(src.raw_data());
     auto& datas = get_data();
 
     // First pass: count selected rows
-    size_t selected_count = 0;
-    for (size_t i = 0; i < count; i++) {
-        if (filter[i]) {
-            selected_count++;
-        }
-    }
+    size_t selected_count = SIMD::count_nonzero(filter, count);
 
     if (selected_count == 0) {
         return;
@@ -86,7 +81,7 @@ void FixedLengthColumnBase<T>::append_with_filter(const Column& src, const uint8
     // Reserve space
     const size_t orig_size = datas.size();
     raw::stl_vector_resize_uninitialized(&datas, orig_size + selected_count);
-    auto* dest_data = datas.data() + orig_size;
+    auto* __restrict dest_data = datas.data() + orig_size;
 
     // Second pass: copy selected data
     for (size_t i = 0; i < count; i++) {
