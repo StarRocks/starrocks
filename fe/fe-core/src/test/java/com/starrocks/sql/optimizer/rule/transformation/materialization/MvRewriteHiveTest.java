@@ -461,7 +461,7 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
         String plan = getFragmentPlan(query1, "MV");
-        PlanTestBase.assertNotContains(plan, "hive_partitioned_mv");
+        PlanTestBase.assertContains(plan, "hive_partitioned_mv");
         dropMv("test", "hive_partitioned_mv");
     }
 
