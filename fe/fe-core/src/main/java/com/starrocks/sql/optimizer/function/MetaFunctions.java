@@ -298,7 +298,15 @@ public class MetaFunctions {
         Table table = inspectExternalTable(tableName);
         JsonArray array = new JsonArray();
         Set<MvId> visited = Sets.newHashSet();
-        collectRelatedMvsRecursively(table, array, 0, visited);
+
+        Optional<Database> mayDb;
+        if (table.isNativeTableOrMaterializedView()) {
+            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
+        } else {
+            mayDb = Optional.empty();
+        }
+        Optional<Long> dbId = mayDb.map(Database::getId);
+        collectRelatedMvsRecursively(dbId, table, array, 0, visited);
 
         String json = array.toString();
         return ConstantOperator.createVarchar(json);
@@ -310,8 +318,21 @@ public class MetaFunctions {
      * @param array The JSON array to add results to
      * @param level The depth level in the MV hierarchy (0 for direct, 1 for nested, etc.)
      */
-    private static void collectRelatedMvsRecursively(Table table, JsonArray array, int level, Set<MvId> visited) {
-        Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+    private static void collectRelatedMvsRecursively(Optional<Long> optDbId, Table table,
+                                                     JsonArray array, int level,
+                                                     Set<MvId> visited) {
+        Set<MvId> relatedMvs;
+
+        // use locker to get the related mvs
+        Locker locker = new Locker();
+        try {
+            optDbId.ifPresent(dbId -> locker.lockTableWithIntensiveDbLock(dbId, table.getId(), LockType.READ));
+            // get table's related mvs
+            relatedMvs = table.getRelatedMaterializedViews();
+        } finally {
+            optDbId.ifPresent(dbId -> locker.unLockTableWithIntensiveDbLock(dbId, table.getId(), LockType.READ));
+        }
+
         for (MvId mvId : SetUtils.emptyIfNull(relatedMvs)) {
             if (visited.contains(mvId)) {
                 continue;
@@ -340,7 +361,7 @@ public class MetaFunctions {
 
             // Create nested related_mvs array
             JsonArray nestedMvs = new JsonArray();
-            collectRelatedMvsRecursively(mvTable, nestedMvs, level + 1,  visited);
+            collectRelatedMvsRecursively(Optional.of(mvDbId), mvTable, nestedMvs, level + 1,  visited);
             obj.add("related_mvs", nestedMvs);
             array.add(obj);
         }
