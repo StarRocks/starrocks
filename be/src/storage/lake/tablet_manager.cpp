@@ -413,7 +413,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
                                                                const std::shared_ptr<FileSystem>& fs) {
     if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
         TRACE("got cached tablet metadata");
-        LOG(INFO) << "got cached tablet: " << tablet_id << ", version: " << version << ", tablet_metadata id: " << ptr->id() << ", path: " << path;
+        LOG(INFO) << "got cached tablet: " << tablet_id << ", tablet_metadata id: " << ptr->id() << ", path: " << path;
         return ptr;
     }
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
