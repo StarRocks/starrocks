@@ -325,7 +325,7 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 | histogram_mcv_size             | INT    | 100      | 直方图 most common value (MCV) 的数量。 |
 | histogram_sample_ratio         | FLOAT  | 0.1      | 直方图采样比例。                         |
 | histogram_buckets_size                      | LONG    | 64           | 直方图默认分桶数。                                                                                             |
-| histogram_max_sample_row_count | LONG   | 10000000 | 直方图最大采样行数。                       |
+| histogram_max_sample_row_count    | LONG   | 10000000 | 直方图最大采样行数。                       |
 
 直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 `histogram_sample_ratio` 两者中的最大值。最多不超过 `histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
 
