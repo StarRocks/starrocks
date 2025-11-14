@@ -200,9 +200,29 @@ public class SqlCredentialRedactorTest {
     @Test
     @Timeout(10)
     public void testLongString() {
-        String longString = "1234567890".repeat(104857);
-        String longSql = "INSERT INTO t1 VALUES(\"" + longString + "\", 1)";
-        String redacted = SqlCredentialRedactor.redact(longSql);
-        Assertions.assertEquals(longSql, redacted);
+        {
+            // long key
+            String longString = "1234567890".repeat(104857);
+            String longSql = "INSERT INTO t1 VALUES(\"" + longString + "\", 1)";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
+        {
+            // long key & value
+            String longString = "a".repeat(104857);
+            String longSql = "ALTER TABLE t1 SET PROPERTIES(\"" + longString + "\"= \"" + longString + "\")";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+            longSql = "ALTER TABLE t1 SET PROPERTIES('" + longString + "'= '" + longString + "')";
+            redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
+        {
+            // long value
+            String longString = '"' + "a".repeat(104857) + '"';
+            String longSql = "ALTER  TABLE t1 SET PROPERTIES('key'= " + longString + ")";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
     }
 }

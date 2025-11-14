@@ -1910,7 +1910,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewriteSumByAssociativeRule = true;
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
-    private boolean enableRewriteSimpleAggToMetaScan = false;
+    private boolean enableRewriteSimpleAggToMetaScan = true;
 
     @VarAttr(name = ENABLE_REWRITE_PARTITION_COLUMN_MINMAX)
     private boolean enableRewritePartitionColumnMinMax = true;
