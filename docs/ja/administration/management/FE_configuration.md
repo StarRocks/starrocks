@@ -1986,6 +1986,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: BE ディレクトリ内の残りストレージスペースのソフトリミット。BE ストレージディレクトリの残りストレージスペースがこの値より少なく、ストレージ使用率（パーセンテージ）が `storage_usage_soft_limit_percent` を超える場合、tablets はこのディレクトリにクローンできません。
 - 導入バージョン: -
 
+##### tablet_checker_lock_time_per_cycle_ms
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: Tablet Checker がテーブルロックを解放して再取得する前の、サイクルごとの最大ロック保持時間（ミリ秒）。100 未満の値は 100 として扱われます。
+- 導入バージョン: v3.5.9, v4.0.2
+
 ##### tablet_create_timeout_second
 
 - デフォルト: 10

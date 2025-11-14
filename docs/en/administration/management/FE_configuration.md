@@ -2094,6 +2094,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Soft limit of the remaining storage space in a BE directory. If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory.
 - Introduced in: -
 
+##### tablet_checker_lock_time_per_cycle_ms
+
+- Default: 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum lock hold time per cycle for tablet checker before releasing and reacquiring the table lock. Values less than 100 will be treated as 100.
+- Introduced in: v3.5.9, v4.0.2
+
 ##### tablet_create_timeout_second
 
 - Default: 10
