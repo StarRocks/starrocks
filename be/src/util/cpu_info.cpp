@@ -201,8 +201,10 @@ void CpuInfo::init() {
         LOG(WARNING) << "Kernel does not support sched_getcpu(). Performance may be impacted.";
     }
 #else
+#ifndef __APPLE__
     LOG(WARNING) << "Built on a system without sched_getcpu() support. Performance may"
                  << " be impacted.";
+#endif
 #endif
 
     _init_numa();
@@ -218,7 +220,9 @@ void CpuInfo::_init_numa() {
     core_to_numa_node_.reset(new int[max_num_cores_]);
 
     if (!std::filesystem::is_directory("/sys/devices/system/node")) {
+#ifndef __APPLE__
         LOG(WARNING) << "/sys/devices/system/node is not present - no NUMA support";
+#endif
         // Assume a single NUMA node.
         max_num_numa_nodes_ = 1;
         std::fill_n(core_to_numa_node_.get(), max_num_cores_, 0);
