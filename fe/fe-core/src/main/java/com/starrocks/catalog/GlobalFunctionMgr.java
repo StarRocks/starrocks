@@ -177,7 +177,7 @@ public class GlobalFunctionMgr {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return false;
             }
-            return false;
+            throw new StarRocksException("Unknown function, function=" + function.toString());
         }
         return true;
     }
