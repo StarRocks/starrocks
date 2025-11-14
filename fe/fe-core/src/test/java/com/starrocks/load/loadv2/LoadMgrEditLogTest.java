@@ -40,7 +40,7 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -84,10 +84,10 @@ public class LoadMgrEditLogTest {
         
         // Create table columns
         List<Column> columns = Lists.newArrayList();
-        Column col1 = new Column("k1", Type.INT);
+        Column col1 = new Column("k1", IntegerType.INT);
         col1.setIsKey(true);
         columns.add(col1);
-        Column col2 = new Column("v1", Type.BIGINT);
+        Column col2 = new Column("v1", IntegerType.BIGINT);
         columns.add(col2);
         
         // Create partition info
