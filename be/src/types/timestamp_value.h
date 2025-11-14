@@ -17,6 +17,7 @@
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
 
+#include <chrono>
 #include <string>
 
 #include "runtime/datetime_value.h"
@@ -85,6 +86,9 @@ public:
     void from_timestamp(int year, int month, int day, int hour, int minute, int second, int usec);
 
     void to_timestamp(int* year, int* month, int* day, int* hour, int* minute, int* second, int* usec) const;
+
+    // Convert to C++20 chrono sys_time<microseconds> for time arithmetic
+    inline std::chrono::sys_time<std::chrono::microseconds> to_sys_time() const;
 
     void trunc_to_millisecond();
     void trunc_to_second();
@@ -166,6 +170,16 @@ TimestampValue TimestampValue::create(int year, int month, int day, int hour, in
     TimestampValue ts;
     ts.from_timestamp(year, month, day, hour, minute, second, microsecond);
     return ts;
+}
+
+std::chrono::sys_time<std::chrono::microseconds> TimestampValue::to_sys_time() const {
+    int year, month, day, hour, minute, second, microsecond;
+    to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
+
+    auto ymd = std::chrono::year_month_day{std::chrono::year{year}, std::chrono::month{static_cast<unsigned>(month)},
+                                           std::chrono::day{static_cast<unsigned>(day)}};
+    return std::chrono::sys_days{ymd} + std::chrono::hours{hour} + std::chrono::minutes{minute} +
+           std::chrono::seconds{second} + std::chrono::microseconds{microsecond};
 }
 
 template <bool end>

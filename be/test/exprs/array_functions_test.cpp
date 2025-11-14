@@ -6036,4 +6036,621 @@ TEST_F(ArrayFunctionsTest, null_or_empty) {
         EXPECT_EQ("CONST: 1", result->debug_item(0));
     }
 }
+
+// Tests for time series array generation functions
+TEST_F(ArrayFunctionsTest, array_generate_date_with_year_unit) {
+    // Test DATE type with YEAR unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+
+    // Set constant column for time unit
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("year"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case 1: 2020-01-01 to 2023-01-01, step 1 year
+    start_column->append_datum(DateValue::create(2020, 1, 1));
+    stop_column->append_datum(DateValue::create(2023, 1, 1));
+    step_column->append_datum(Datum((int32_t)1));
+
+    // Test case 2: 2020-06-15 to 2025-06-15, step 2 years
+    start_column->append_datum(DateValue::create(2020, 6, 15));
+    stop_column->append_datum(DateValue::create(2025, 6, 15));
+    step_column->append_datum(Datum((int32_t)2));
+
+    // Test case 3: Reverse direction - 2023-01-01 to 2020-01-01, step 1 year
+    start_column->append_datum(DateValue::create(2023, 1, 1));
+    stop_column->append_datum(DateValue::create(2020, 1, 1));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATE>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 3);
+
+    // Verify test case 1: should generate [2020-01-01, 2021-01-01, 2022-01-01, 2023-01-01]
+    auto array1 = dest_column->get(0).get_array();
+    ASSERT_EQ(array1.size(), 4);
+    EXPECT_EQ(DateValue::create(2020, 1, 1), array1[0].get_date());
+    EXPECT_EQ(DateValue::create(2021, 1, 1), array1[1].get_date());
+    EXPECT_EQ(DateValue::create(2022, 1, 1), array1[2].get_date());
+    EXPECT_EQ(DateValue::create(2023, 1, 1), array1[3].get_date());
+
+    // Verify test case 2: should generate [2020-06-15, 2022-06-15, 2024-06-15]
+    auto array2 = dest_column->get(1).get_array();
+    ASSERT_EQ(array2.size(), 3);
+    EXPECT_EQ(DateValue::create(2020, 6, 15), array2[0].get_date());
+    EXPECT_EQ(DateValue::create(2022, 6, 15), array2[1].get_date());
+    EXPECT_EQ(DateValue::create(2024, 6, 15), array2[2].get_date());
+
+    // Verify test case 3: should generate [2023-01-01, 2022-01-01, 2021-01-01, 2020-01-01]
+    auto array3 = dest_column->get(2).get_array();
+    ASSERT_EQ(array3.size(), 4);
+    EXPECT_EQ(DateValue::create(2023, 1, 1), array3[0].get_date());
+    EXPECT_EQ(DateValue::create(2022, 1, 1), array3[1].get_date());
+    EXPECT_EQ(DateValue::create(2021, 1, 1), array3[2].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 1), array3[3].get_date());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_date_with_month_unit) {
+    // Test DATE type with MONTH unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("month"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-15 to 2020-04-15, step 1 month
+    start_column->append_datum(DateValue::create(2020, 1, 15));
+    stop_column->append_datum(DateValue::create(2020, 4, 15));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATE>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate [2020-01-15, 2020-02-15, 2020-03-15, 2020-04-15]
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+    EXPECT_EQ(DateValue::create(2020, 1, 15), array[0].get_date());
+    EXPECT_EQ(DateValue::create(2020, 2, 15), array[1].get_date());
+    EXPECT_EQ(DateValue::create(2020, 3, 15), array[2].get_date());
+    EXPECT_EQ(DateValue::create(2020, 4, 15), array[3].get_date());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_date_with_day_unit) {
+    // Test DATE type with DAY unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 to 2020-01-05, step 1 day
+    start_column->append_datum(DateValue::create(2020, 1, 1));
+    stop_column->append_datum(DateValue::create(2020, 1, 5));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATE>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate [2020-01-01, 2020-01-02, 2020-01-03, 2020-01-04, 2020-01-05]
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 5);
+    EXPECT_EQ(DateValue::create(2020, 1, 1), array[0].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 2), array[1].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 3), array[2].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 4), array[3].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 5), array[4].get_date());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_hour_unit) {
+    // Test DATETIME type with HOUR unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("hour"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 10:00:00 to 2020-01-01 14:00:00, step 2 hours
+    start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
+    stop_column->append_datum(TimestampValue::create(2020, 1, 1, 14, 0, 0));
+    step_column->append_datum(Datum((int32_t)2));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate [10:00:00, 12:00:00, 14:00:00]
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 3);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 0, 0), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 12, 0, 0), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 14, 0, 0), array[2].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_minute_unit) {
+    // Test DATETIME type with MINUTE unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("minute"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 10:00:00 to 2020-01-01 10:05:00, step 1 minute
+    start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
+    stop_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 5, 0));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 6 timestamps
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 6);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 0, 0), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 1, 0), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 2, 0), array[2].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 3, 0), array[3].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 4, 0), array[4].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 5, 0), array[5].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_second_unit) {
+    // Test DATETIME type with SECOND unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("second"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 10:00:00 to 2020-01-01 10:00:03, step 1 second
+    start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
+    stop_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 3));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 4 timestamps
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 0, 0), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 0, 1), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 0, 2), array[2].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 0, 3), array[3].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_date_with_null_values) {
+    // Test DATE type with NULL values
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case 1: Normal case
+    start_column->append_datum(DateValue::create(2020, 1, 1));
+    stop_column->append_datum(DateValue::create(2020, 1, 3));
+    step_column->append_datum(Datum((int32_t)1));
+
+    // Test case 2: NULL start
+    start_column->append_datum(Datum());
+    stop_column->append_datum(DateValue::create(2020, 1, 3));
+    step_column->append_datum(Datum((int32_t)1));
+
+    // Test case 3: NULL stop
+    start_column->append_datum(DateValue::create(2020, 1, 1));
+    stop_column->append_datum(Datum());
+    step_column->append_datum(Datum((int32_t)1));
+
+    // Test case 4: step = 0
+    start_column->append_datum(DateValue::create(2020, 1, 1));
+    stop_column->append_datum(DateValue::create(2020, 1, 3));
+    step_column->append_datum(Datum((int32_t)0));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATE>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 4);
+
+    // Verify test case 1: should generate [2020-01-01, 2020-01-02, 2020-01-03]
+    auto array1 = dest_column->get(0).get_array();
+    ASSERT_EQ(array1.size(), 3);
+
+    // Verify test case 2: should be NULL
+    ASSERT_TRUE(dest_column->is_null(1));
+
+    // Verify test case 3: should be NULL
+    ASSERT_TRUE(dest_column->is_null(2));
+
+    // Verify test case 4: should be empty array
+    auto array4 = dest_column->get(3).get_array();
+    ASSERT_EQ(array4.size(), 0);
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_date_with_week_quarter_units) {
+    // Test DATE type with WEEK and QUARTER units
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATE), TypeDescriptor::from_logical_type(TYPE_DATE),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATE)));
+
+    // Test WEEK unit
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("week"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 to 2020-01-22, step 1 week
+    start_column->append_datum(DateValue::create(2020, 1, 1));
+    stop_column->append_datum(DateValue::create(2020, 1, 22));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATE>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate [2020-01-01, 2020-01-08, 2020-01-15, 2020-01-22]
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+    EXPECT_EQ(DateValue::create(2020, 1, 1), array[0].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 8), array[1].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 15), array[2].get_date());
+    EXPECT_EQ(DateValue::create(2020, 1, 22), array[3].get_date());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_year_unit) {
+    // Test DATETIME type with YEAR unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("year"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 10:30:45 to 2023-01-01 10:30:45, step 1 year
+    start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 30, 45));
+    stop_column->append_datum(TimestampValue::create(2023, 1, 1, 10, 30, 45));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 4 timestamps
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 10, 30, 45), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2021, 1, 1, 10, 30, 45), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2022, 1, 1, 10, 30, 45), array[2].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2023, 1, 1, 10, 30, 45), array[3].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_month_unit) {
+    // Test DATETIME type with MONTH unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("month"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-15 08:20:30 to 2020-04-15 08:20:30, step 1 month
+    start_column->append_datum(TimestampValue::create(2020, 1, 15, 8, 20, 30));
+    stop_column->append_datum(TimestampValue::create(2020, 4, 15, 8, 20, 30));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 4 timestamps
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 15, 8, 20, 30), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 2, 15, 8, 20, 30), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 3, 15, 8, 20, 30), array[2].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 4, 15, 8, 20, 30), array[3].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_day_unit) {
+    // Test DATETIME type with DAY unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 12:00:00 to 2020-01-03 12:00:00, step 1 day
+    start_column->append_datum(TimestampValue::create(2020, 1, 1, 12, 0, 0));
+    stop_column->append_datum(TimestampValue::create(2020, 1, 3, 12, 0, 0));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 3 timestamps
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 3);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 12, 0, 0), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 2, 12, 0, 0), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 3, 12, 0, 0), array[2].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_week_unit) {
+    // Test DATETIME type with WEEK unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("week"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 09:00:00 to 2020-01-22 09:00:00, step 1 week
+    start_column->append_datum(TimestampValue::create(2020, 1, 1, 9, 0, 0));
+    stop_column->append_datum(TimestampValue::create(2020, 1, 22, 9, 0, 0));
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 4 timestamps (every 7 days)
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+    EXPECT_EQ(TimestampValue::create(2020, 1, 1, 9, 0, 0), array[0].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 8, 9, 0, 0), array[1].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 15, 9, 0, 0), array[2].get_timestamp());
+    EXPECT_EQ(TimestampValue::create(2020, 1, 22, 9, 0, 0), array[3].get_timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_millisecond_unit) {
+    // Test DATETIME type with MILLISECOND unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("millisecond"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 10:00:00.000 to 2020-01-01 10:00:00.003, step 1 millisecond
+    // Note: TimestampValue stores microseconds, so 1ms = 1000us
+    auto start_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);
+    auto stop_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);
+    stop_ts.set_timestamp(stop_ts.timestamp() + 3000); // Add 3 milliseconds (3000 microseconds)
+
+    start_column->append_datum(start_ts);
+    stop_column->append_datum(stop_ts);
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 4 timestamps (0ms, 1ms, 2ms, 3ms)
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 4);
+
+    auto expected_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);
+    EXPECT_EQ(expected_ts.timestamp(), array[0].get_timestamp().timestamp());
+
+    expected_ts.set_timestamp(expected_ts.timestamp() + 1000);
+    EXPECT_EQ(expected_ts.timestamp(), array[1].get_timestamp().timestamp());
+
+    expected_ts.set_timestamp(expected_ts.timestamp() + 1000);
+    EXPECT_EQ(expected_ts.timestamp(), array[2].get_timestamp().timestamp());
+
+    expected_ts.set_timestamp(expected_ts.timestamp() + 1000);
+    EXPECT_EQ(expected_ts.timestamp(), array[3].get_timestamp().timestamp());
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_datetime_with_microsecond_unit) {
+    // Test DATETIME type with MICROSECOND unit
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto ctx = FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DATETIME)));
+
+    auto unit_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("microsecond"), 1);
+    ctx->set_constant_columns({nullptr, nullptr, nullptr, unit_column});
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+
+    // Test case: 2020-01-01 10:00:00.000000 to 2020-01-01 10:00:00.000005, step 1 microsecond
+    auto start_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);
+    auto stop_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);
+    stop_ts.set_timestamp(stop_ts.timestamp() + 5); // Add 5 microseconds
+
+    start_column->append_datum(start_ts);
+    stop_column->append_datum(stop_ts);
+    step_column->append_datum(Datum((int32_t)1));
+
+    auto dest_column =
+            ArrayGenerate<TYPE_DATETIME>::process(ctx, {start_column, stop_column, step_column, unit_column}).value();
+
+    ASSERT_EQ(dest_column->size(), 1);
+
+    // Verify: should generate 6 timestamps (0us, 1us, 2us, 3us, 4us, 5us)
+    auto array = dest_column->get(0).get_array();
+    ASSERT_EQ(array.size(), 6);
+
+    auto expected_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);
+    for (int i = 0; i < 6; i++) {
+        EXPECT_EQ(expected_ts.timestamp(), array[i].get_timestamp().timestamp());
+        expected_ts.set_timestamp(expected_ts.timestamp() + 1);
+    }
+
+    ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
+    delete ctx;
+}
+
 } // namespace starrocks

@@ -1429,6 +1429,11 @@ vectorized_functions = [
 
     [150345, 'array_flatten', True, False, 'ANY_ELEMENT', ['ANY_ARRAY'], 'ArrayFunctions::array_flatten'],
 
+    [150350, 'array_generate', True, False, 'ARRAY_DATETIME', ['DATETIME', 'DATETIME', 'INT', 'VARCHAR'],
+     "ArrayFunctions::array_generate<TYPE_DATETIME>", "ArrayFunctions::array_generate_prepare<TYPE_DATETIME>", "ArrayFunctions::array_generate_close<TYPE_DATETIME>"],
+    [150351, 'array_generate', True, False, 'ARRAY_DATE', ['DATE', 'DATE', 'INT', 'VARCHAR'],
+     "ArrayFunctions::array_generate<TYPE_DATE>", "ArrayFunctions::array_generate_prepare<TYPE_DATE>", "ArrayFunctions::array_generate_close<TYPE_DATE>"],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],
 

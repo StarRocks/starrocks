@@ -7703,7 +7703,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private static void addArgumentUseTypeInt(Expr value, List<Expr> exprs) {
         // IntLiteral may use TINYINT/SMALLINT/INT/BIGINT type
-        // but time_slice only support INT type when executed in BE
+        // but time_slice/array_generate only support INT type when executed in BE
         try {
             if (value instanceof IntLiteral) {
                 exprs.add(new IntLiteral(((IntLiteral) value).getValue(), IntegerType.INT));
@@ -7722,6 +7722,23 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
+        if (functionName.equals(FunctionSet.ARRAY_GENERATE)) {
+            if (context.expression().size() == 3) {
+                Expr e3 = (Expr) visit(context.expression(2));
+                if (e3 instanceof IntervalLiteral) {
+                    Expr e1 = (Expr) visit(context.expression(0));
+                    Expr e2 = (Expr) visit(context.expression(1));
+                    List<Expr> exprs = Lists.newLinkedList();
+                    exprs.add(e1);
+                    exprs.add(e2);
+                    IntervalLiteral intervalLiteral = (IntervalLiteral) e3;
+                    addArgumentUseTypeInt(intervalLiteral.getValue(), exprs);
+                    exprs.add(new StringLiteral(intervalLiteral.getUnitIdentifier().getDescription().toLowerCase()));
+                    FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, exprs, pos);
+                    return functionCallExpr;
+                }
+            }
+        }
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
