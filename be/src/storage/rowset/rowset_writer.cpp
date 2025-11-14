@@ -689,9 +689,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
-        if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
-            return Status::InternalError("deletes column serialize failed");
-        }
+        RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
         if (config::sync_tablet_meta) {
             RETURN_IF_ERROR(wfile->sync());

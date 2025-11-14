@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -105,7 +106,7 @@ Status GroupReader::prepare() {
     }
 
     RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
-    _init_read_chunk();
+    RETURN_IF_ERROR(_init_read_chunk());
 
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
@@ -478,13 +479,14 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
     *end_offset = end;
 }
 
-void GroupReader::_init_read_chunk() {
+Status GroupReader::_init_read_chunk() {
     std::vector<SlotDescriptor*> read_slots;
     for (const auto& column : _param.read_cols) {
         read_slots.emplace_back(column.slot_desc);
     }
     size_t chunk_size = _param.chunk_size;
-    _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
+    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    return Status::OK();
 }
 
 void GroupReader::_use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path) {
