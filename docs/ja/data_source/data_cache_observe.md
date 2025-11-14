@@ -82,7 +82,7 @@ mysql> select * from information_schema.be_datacache_metrics;
 
 v3.3.2 以降、StarRocks は異なるレベルでのキャッシュ状態を反映するキャッシュメトリクスを取得するための 2 つの API を提供しています。
 
-- `/api/datacache/app_stat`: クエリの実際のキャッシュヒット率を示し、`Remote Read Bytes / (Remote Read Bytes + Data Cache Read Bytes)` として計算されます。
+- `/api/datacache/app_stat`: Block Cache と Page Cache の命中率を取得します。
 - `/api/datacache/stat`: Data Cache の基礎的な実行状態。このインターフェースは主に Data Cache のメンテナンスとボトルネックの特定に使用され、クエリの実際のヒット率を反映しません。一般ユーザーはこのインターフェースに注意を払う必要はありません。
 
 ### キャッシュヒットメトリクスの表示
@@ -102,18 +102,36 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
     "hit_rate": 0.67,
     "hit_bytes_last_minute": 4008,
     "miss_bytes_last_minute": 2004, "hit_rate": 0.67, "hit_bytes_last_minute": 4008,
-    "hit_rate_last_minute": 0.67
+    "hit_rate_last_minute": 0.67,
+    "block_cache_hit_bytes": 1642106883,
+    "block_cache_miss_bytes": 8531219739,
+    "block_cache_hit_rate": 0.16,
+    "block_cache_hit_bytes_last_minute": 899037056,
+    "block_cache_miss_bytes_last_minute": 4163253265,
+    "block_cache_hit_rate_last_minute": 0.18,
+    "page_cache_hit_count": 15048,
+    "page_cache_miss_count": 10032,
+    "page_cache_hit_rate": 0.6,
+    "page_cache_hit_count_last_minute": 10032,
+    "page_cache_miss_count_last_minute": 5016,
+    "page_cache_hit_rate_last_minute": 0.67
 }
 ```
 
-| **Metric**             | **Description**                                      |
-| ---------------------- | ---------------------------------------------------- |
-| hit_bytes              | キャッシュから読み取られたバイト数。                 |
-| miss_bytes             | リモートストレージから読み取られたバイト数。            |
-| hit_rate               | キャッシュヒット率、`(hit_bytes / (hit_bytes + miss_bytes))` として計算されます。 |
-| hit_bytes_last_minute  | 最後の 1 分間にキャッシュから読み取られたバイト数。 |
-| miss_bytes_last_minute | 最後の 1 分間にリモートストレージから読み取られたバイト数。 |
-| hit_rate_last_minute   | 最後の 1 分間のキャッシュヒット率。                   |
+| **メトリクス**                          | **説明**                                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| block_cache_hit_bytes              | Block Cache から読み取られたデータ量（バイト数）。                                                          |
+| block_cache_miss_bytes             | リモートストレージから読み取られたデータ量（Block Cache ミス時）。                                             |
+| block_cache_hit_rate               | Block Cache のヒット率。計算式：`(block_cache_hit_bytes / (block_cache_hit_bytes + block_cache_miss_bytes))`。 |
+| block_cache_hit_bytes_last_minute  | 直近 1 分間に Block Cache から読み取られたデータ量（バイト数）。                                              |
+| block_cache_miss_bytes_last_minute | 直近 1 分間にリモートストレージから読み取られたデータ量（バイト数）。                                            |
+| block_cache_hit_rate_last_minute   | 直近 1 分間の Block Cache ヒット率。                                                                     |
+| page_cache_hit_count               | Page Cache から読み取られたページ数。                                                                     |
+| page_cache_miss_count              | Page Cache のミスページ数。                                                                             |
+| page_cache_hit_rate                | Page Cache のヒット率。計算式：`(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`。 |
+| page_cache_hit_count_last_minute   | 直近 1 分間に Page Cache から読み取られたページ数。                                                        |
+| page_cache_miss_count_last_minute  | 直近 1 分間の Page Cache ミスページ数。                                                                  |
+| page_cache_hit_rate_last_minute    | 直近 1 分間の Page Cache ヒット率。                                                                      |
 
 ### Data Cache の基礎的な実行状態の表示
 
