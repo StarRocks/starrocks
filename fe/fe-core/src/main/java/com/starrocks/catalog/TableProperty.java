@@ -313,6 +313,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private Multimap<String, String> location;
 
+<<<<<<< HEAD
+=======
+    private boolean fileBundling = false;
+
+    private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
+
+    @SerializedName(value = "enableStatisticCollectOnFirstLoad")
+    private boolean enableStatisticCollectOnFirstLoad = true;
+
+>>>>>>> 90d12c2b3e ([Enhancement] Support enable_statistic_collect_on_first_load at table granularity (#65463))
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -401,6 +411,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
+                buildEnableStatisticCollectOnFirstLoad();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -983,6 +994,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return location;
     }
 
+    public boolean enableStatisticCollectOnFirstLoad() {
+        return enableStatisticCollectOnFirstLoad;
+    }
+
+    public void setEnableStatisticCollectOnFirstLoad(boolean enableStatisticCollectOnFirstLoad) {
+        this.enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad;
+    }
+
     public TWriteQuorumType writeQuorum() {
         return writeQuorum;
     }
@@ -1095,10 +1114,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
+<<<<<<< HEAD
 
 
     public static TableProperty read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);
+=======
+    public TableProperty buildEnableStatisticCollectOnFirstLoad() {
+        enableStatisticCollectOnFirstLoad = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true"));
+        return this;
+>>>>>>> 90d12c2b3e ([Enhancement] Support enable_statistic_collect_on_first_load at table granularity (#65463))
     }
 
     @Override
@@ -1132,5 +1158,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
         buildMutableBucketNum();
+<<<<<<< HEAD
+=======
+        buildCompactionStrategy();
+        buildEnableStatisticCollectOnFirstLoad();
+>>>>>>> 90d12c2b3e ([Enhancement] Support enable_statistic_collect_on_first_load at table granularity (#65463))
     }
 }
