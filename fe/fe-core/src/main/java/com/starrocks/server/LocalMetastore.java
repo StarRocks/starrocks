@@ -2577,6 +2577,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return database.getTable(tblName);
     }
 
+    /**
+     * @param mvId mv's mvid
+     * @return a checked mv by input mvid.
+     */
+    public MaterializedView getMaterializedView(MvId mvId) {
+        long dbId = mvId.getDbId();
+        long tableId = mvId.getId();
+        Table table = getTable(dbId, tableId);
+        if (table == null || !(table instanceof MaterializedView)) {
+            return null;
+        }
+        return (MaterializedView) table;
+    }
+
     public Table getTable(Long dbId, Long tableId) {
         Database database = getDb(dbId);
         if (database == null) {
@@ -3470,7 +3484,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         db.dropTable(oldTableName);
         db.registerTableUnlocked(olapTable);
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                 MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
