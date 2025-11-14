@@ -972,7 +972,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                             IcebergMetricsReporter metricsReporter =
                                     ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
                             if (metricsReporter.getScanReport() != null) {
-                                String name = "ICEBERG.ScanMetrics." + 
+                                String name = "ICEBERG.ScanMetrics." +
                                         ((StarRocksIcebergTableScan) tableScan).getIcebergTableName().toString();
                                 String value = metricsReporter.getScanReport().toString();
                                 Tracers.record(Tracers.Module.EXTERNAL, name, value);
@@ -1065,15 +1065,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit,
+<<<<<<< HEAD
                                          TableVersionRange version) {
         boolean useDefaultStats = false;
+=======
+                                         TvrVersionRange version) {
+>>>>>>> c2ee9671c3 ([Enhancement] disable table stats when single table for all connectors (#65430))
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
-            useDefaultStats = true;
-        }
-        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() && session.getSourceTablesCount() == 1) {
-            useDefaultStats = true;
-        }
-        if (useDefaultStats) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
         IcebergTable icebergTable = (IcebergTable) table;
