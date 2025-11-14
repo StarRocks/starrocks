@@ -143,7 +143,7 @@ public:
         params.partition_param.partitions[0].id = 1;
         params.partition_param.partitions[0].indexes.resize(1);
         params.partition_param.partitions[0].indexes[0].index_id = 1111;
-        params.partition_param.partitions[0].indexes[0].tablets = _tablet_ids;
+        params.partition_param.partitions[0].indexes[0].tablet_ids = _tablet_ids;
         params.partition_param.distributed_columns = {"pk1"};
         params.partition_versions[1] = version;
     }
