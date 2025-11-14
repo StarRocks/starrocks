@@ -22,6 +22,10 @@ public:
     SegmentRewriter();
     ~SegmentRewriter() = default;
 
+    static Status rewrite_inverted_indexes(const FileInfo& src, const FileInfo* dest,
+                                           std::vector<std::string>* removed_inverted_indexes,
+                                           const std::vector<std::shared_ptr<TabletIndex>>& inverted_indexes);
+
     // rewrite a segment file, add/replace some of it's columns
     // read from src, write to dest
     // this function will read data from src_file and write to dest file first

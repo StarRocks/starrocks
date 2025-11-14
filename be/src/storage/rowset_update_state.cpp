@@ -727,11 +727,11 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // columns needs to be read from tablet's data
     std::vector<uint32_t> read_column_ids;
     std::vector<uint32_t> read_column_ids_without_full_row;
+    std::vector<std::shared_ptr<TabletIndex>> modified_inverted_indexes;
     // currently assume it's a partial update (explict for normal, implict for auto increment)
     if (!txn_meta.partial_update_column_ids().empty()) {
-        std::vector<uint32_t> update_column_uids(txn_meta.partial_update_column_unique_ids().begin(),
-                                                 txn_meta.partial_update_column_unique_ids().end());
-        std::set<uint32_t> update_columns_set(update_column_uids.begin(), update_column_uids.end());
+        std::set<ColumnUID> update_columns_set(txn_meta.partial_update_column_unique_ids().begin(),
+                                               txn_meta.partial_update_column_unique_ids().end());
         for (uint32_t i = 0; i < _tablet_schema->num_columns(); i++) {
             const auto& tablet_column = _tablet_schema->column(i);
             if (update_columns_set.find(tablet_column.unique_id()) == update_columns_set.end()) {
@@ -741,6 +741,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                 }
             }
         }
+
+        RETURN_IF_ERROR(
+                tablet_schema->get_indexes_for_columns(update_columns_set, IndexType::GIN, &modified_inverted_indexes));
 
         DCHECK(_upserts[segment_id] != nullptr);
         if (_partial_update_states.size() == 0 || !_partial_update_states[segment_id].inited) {
@@ -786,6 +789,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // so encryption meta support in segment file rewrite is not supported here
     if (txn_meta.has_auto_increment_partial_update_column_id() &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+        FileInfo src{.path = src_path};
+        FileInfo dest{.path = dest_path};
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment(
                 src_path, dest_path, _tablet_schema, _auto_increment_partial_update_states[segment_id], read_column_ids,
                 _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));

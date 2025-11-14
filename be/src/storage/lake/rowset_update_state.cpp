@@ -304,6 +304,18 @@ static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
     return unmodified_column_ids;
 }
 
+static StatusOr<std::vector<std::shared_ptr<TabletIndex>>> get_indexes_for_rewrite(
+        const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema) {
+    const auto& txn_meta = op_write.txn_meta();
+
+    std::set<ColumnUID> modified_column_unique_ids(txn_meta.partial_update_column_unique_ids().begin(),
+                                                   txn_meta.partial_update_column_unique_ids().end());
+
+    std::vector<std::shared_ptr<TabletIndex>> indexes;
+    RETURN_IF_ERROR(tablet_schema->get_indexes_for_columns(modified_column_unique_ids, IndexType::GIN, &indexes));
+    return indexes;
+}
+
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
                                                                         const RowsetUpdateStateParams& params,
                                                                         bool need_lock) {
@@ -501,6 +513,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     // currently assume it's a partial update
     const auto& txn_meta = params.op_write.txn_meta();
     std::vector<ColumnId> unmodified_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
+    ASSIGN_OR_RETURN(auto modified_inverted_indexes, get_indexes_for_rewrite(params.op_write, params.tablet_schema));
 
     bool has_auto_increment_col = false;
     for (uint32_t i = 0; i < params.tablet_schema->num_columns(); i++) {
@@ -541,9 +554,12 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     }
 
     int64_t t_rewrite_start = MonotonicMillis();
+    std::vector<std::string> removed_inverted_indexes;
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_inverted_indexes(src, &file_info, &removed_inverted_indexes,
+                                                                  modified_inverted_indexes));
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids,
@@ -554,6 +570,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
+        RETURN_IF_ERROR(SegmentRewriter::rewrite_inverted_indexes(src, &file_info, &removed_inverted_indexes,
+                                                                  modified_inverted_indexes));
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                 src, &file_info, params.tablet_schema, unmodified_column_ids,
                 _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
@@ -572,6 +590,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     if (need_rename) {
         // after rename, add old segment to orphan files, for gc later.
         orphan_files->push_back(rowset_meta.segments(segment_id));
+        for (const auto& removed_inverted_index : removed_inverted_indexes) {
+            orphan_files->push_back(removed_inverted_index);
+        }
     }
     TRACE("end rewrite segment");
     return Status::OK();

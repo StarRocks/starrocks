@@ -344,6 +344,8 @@ public:
     const std::vector<TabletIndex>* indexes() const { return &_indexes; }
     Status get_indexes_for_column(int32_t col_unique_id, std::unordered_map<IndexType, TabletIndex>* res) const;
     Status get_indexes_for_column(int32_t col_unique_id, IndexType index_type, std::shared_ptr<TabletIndex>& res) const;
+    Status get_indexes_for_columns(const std::set<int32_t>& col_unique_ids, IndexType index_type,
+                                   std::vector<std::shared_ptr<TabletIndex>>* res) const;
     bool has_index(int32_t col_unique_id, IndexType index_type) const;
 
 private:

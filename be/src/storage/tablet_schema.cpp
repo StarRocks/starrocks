@@ -393,6 +393,22 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
         index.to_schema_pb(index_pb);
     }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
+
+    std::unordered_set<int32_t> column_ids(referenced_column_ids.begin(), referenced_column_ids.end());
+    for (const TabletIndex& index : *src_tablet_schema->indexes()) {
+        bool found = false;
+        for (const auto col_id : index.col_unique_ids()) {
+            if (column_ids.contains(col_id)) {
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            TabletIndexPB tablet_index_pb;
+            index.to_schema_pb(&tablet_index_pb);
+            partial_tablet_schema_pb.mutable_table_indices()->Add(std::move(tablet_index_pb));
+        }
+    }
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
@@ -660,6 +676,21 @@ Status TabletSchema::get_indexes_for_column(int32_t col_unique_id, IndexType ind
         const auto& it = map_res.find(index_type);
         if (it != map_res.end()) {
             res = std::make_shared<TabletIndex>(it->second);
+        }
+    }
+    return Status::OK();
+}
+
+Status TabletSchema::get_indexes_for_columns(const std::set<int32_t>& col_unique_ids, IndexType index_type,
+                                             std::vector<std::shared_ptr<TabletIndex>>* res) const {
+    RETURN_IF(res == nullptr, Status::InternalError("Index vector should not be nullptr"));
+    for (const auto& index : _indexes) {
+        if (index.col_unique_ids().size() > 1) {
+            // TODO: implement multi-column index
+            return Status::NotSupported("Multi-column index is not supported for now. ");
+        }
+        if (index.index_type() == index_type && col_unique_ids.contains(index.col_unique_ids()[0])) {
+            res->emplace_back(std::make_shared<TabletIndex>(index));
         }
     }
     return Status::OK();

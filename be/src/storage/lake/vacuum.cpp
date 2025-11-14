@@ -26,6 +26,7 @@
 #include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/util.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -256,13 +257,33 @@ void run_clear_task_async(std::function<void()> task) {
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
+static std::vector<int32_t> get_inverted_index_ids(const TabletMetadataPB& metadata) {
+    if (!metadata.has_schema() || metadata.schema().table_indices().size() == 0) {
+        return {};
+    }
+    std::vector<int32_t> inverted_index_ids;
+    for (const auto& tablet_index : metadata.schema().table_indices()) {
+        if (tablet_index.index_type() == GIN) {
+            inverted_index_ids.push_back(tablet_index.index_id());
+        }
+    }
+    return inverted_index_ids;
+}
+
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
                                     AsyncFileDeleter* deleter, int64_t* garbage_data_size) {
+    const auto inverted_index_ids = get_inverted_index_ids(metadata);
     for (const auto& rowset : metadata.compaction_inputs()) {
         if (rowset.bundle_file_offsets_size() == 0) {
             // skip delete rowset with bundle file offsets
             for (const auto& segment : rowset.segments()) {
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
+                for (const auto& id : inverted_index_ids) {
+                    auto inverted_index_file =
+                            join_path(base_dir, IndexDescriptor::inverted_index_file_path(segment, id));
+                    VLOG(10) << "Vacuum inverted index file: " << inverted_index_file;
+                    RETURN_IF_ERROR(deleter->delete_file(inverted_index_file));
+                }
             }
         }
         for (const auto& del_file : rowset.del_files()) {

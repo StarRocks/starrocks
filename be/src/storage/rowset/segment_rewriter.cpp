@@ -9,6 +9,7 @@
 #include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -21,6 +22,36 @@
 namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
+
+Status SegmentRewriter::rewrite_inverted_indexes(const FileInfo& src, const FileInfo* dest,
+                                                 std::vector<std::string>* removed_inverted_indexes,
+                                                 const std::vector<std::shared_ptr<TabletIndex>>& inverted_indexes) {
+    if (inverted_indexes.empty()) {
+        return Status::OK();
+    }
+
+    if (removed_inverted_indexes == nullptr) {
+        return Status::InvalidArgument(fmt::format("removed_inverted_indexes must be non-null"));
+    }
+
+    constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
+    removed_inverted_indexes->reserve(inverted_indexes.size());
+
+    for (const auto& inverted_index : inverted_indexes) {
+        const auto& src_idx_path = IndexDescriptor::inverted_index_file_path(src.path, inverted_index->index_id());
+        const auto& dest_idx_path = IndexDescriptor::inverted_index_file_path(dest->path, inverted_index->index_id());
+
+        RETURN_IF_ERROR(fs::copy_file(src_idx_path, dest_idx_path, kBufferSize));
+        VLOG(10) << "Rewritten inverted index from " << src_idx_path << " to " << dest_idx_path;
+
+        if (const auto pos = src_idx_path.find_last_of('/'); pos != std::string::npos) {
+            removed_inverted_indexes->emplace_back(src_idx_path.substr(pos + 1));
+        } else {
+            removed_inverted_indexes->emplace_back(src_idx_path);
+        }
+    }
+    return Status::OK();
+}
 
 Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                                const std::shared_ptr<const TabletSchema>& tschema,
