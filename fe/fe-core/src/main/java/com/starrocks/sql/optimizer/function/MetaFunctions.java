@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.function;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -288,40 +289,81 @@ public class MetaFunctions {
     }
 
     /**
-     * Return related materialized-views of a table, in JSON array format
+     * Return related materialized-views of a table, in nested JSON array format
+     * This function recursively traverses the MV hierarchy to get all nested MVs
      */
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspectRelatedMv(ConstantOperator name) {
         TableName tableName = TableName.fromString(name.getVarchar());
-        Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
+        JsonArray array = new JsonArray();
+        Set<MvId> visited = Sets.newHashSet();
+
+        Optional<Database> mayDb;
         if (table.isNativeTableOrMaterializedView()) {
             mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
         } else {
             mayDb = Optional.empty();
         }
+        Optional<Long> dbId = mayDb.map(Database::getId);
+        collectRelatedMvsRecursively(dbId, table, array, 0, visited);
 
+        String json = array.toString();
+        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Helper method to recursively collect all related MVs in nested structure
+     * @param table The table to get related MVs from
+     * @param array The JSON array to add results to
+     * @param level The depth level in the MV hierarchy (0 for direct, 1 for nested, etc.)
+     */
+    private static void collectRelatedMvsRecursively(Optional<Long> optDbId, Table table,
+                                                     JsonArray array, int level,
+                                                     Set<MvId> visited) {
+        Set<MvId> relatedMvs;
+
+        // use locker to get the related mvs
         Locker locker = new Locker();
         try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
+            optDbId.ifPresent(dbId -> locker.lockTableWithIntensiveDbLock(dbId, table.getId(), LockType.READ));
+            // get table's related mvs
+            relatedMvs = table.getRelatedMaterializedViews();
+        } finally {
+            optDbId.ifPresent(dbId -> locker.unLockTableWithIntensiveDbLock(dbId, table.getId(), LockType.READ));
+        }
 
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            JsonArray array = new JsonArray();
-            for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
-                        .map(Table::getName)
-                        .orElse(null);
-                JsonObject obj = new JsonObject();
-                obj.add("id", new JsonPrimitive(mv.getId()));
-                obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
-
-                array.add(obj);
+        for (MvId mvId : SetUtils.emptyIfNull(relatedMvs)) {
+            if (visited.contains(mvId)) {
+                continue;
+            }
+            visited.add(mvId);
+            // Get the database for this MV using its dbId from mvId
+            long mvDbId = mvId.getDbId();
+            Optional<Database> mayMvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mvDbId);
+            if (!mayMvDb.isPresent()) {
+                continue;
             }
 
-            String json = array.toString();
-            return ConstantOperator.createVarchar(json);
-        } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
+            Optional<Table> mayMvTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .mayGetTable(mvDbId, mvId.getId());
+            if (!mayMvTable.isPresent()) {
+                continue;
+            }
+
+            Table mvTable = mayMvTable.get();
+
+            String mvName = mvTable.getName();
+            JsonObject obj = new JsonObject();
+            obj.add("id", new JsonPrimitive(mvId.getId()));
+            obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
+            obj.add("level", new JsonPrimitive(level));
+
+            // Create nested related_mvs array
+            JsonArray nestedMvs = new JsonArray();
+            collectRelatedMvsRecursively(Optional.of(mvDbId), mvTable, nestedMvs, level + 1,  visited);
+            obj.add("related_mvs", nestedMvs);
+            array.add(obj);
         }
     }
 
