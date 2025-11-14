@@ -402,7 +402,9 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
     }
 
     auto tablet_metadata = std::make_shared<TabletMetadata>(*tablet_metadata_or.value());
+    LOG(INFO) << "before set get tablet: " << tablet_id << ", version: " << version << ", tablet_metadata id: " << tablet_metadata->id() << ", fill_cache: " << fill_cache;
     tablet_metadata->set_id(tablet_id);
+    LOG(INFO) << "after set get tablet: " << tablet_id << ", version: " << version << ", tablet_metadata id: " << tablet_metadata->id() << ", fill_cache: " << fill_cache;
     return tablet_metadata;
 }
 
@@ -411,9 +413,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
                                                                const std::shared_ptr<FileSystem>& fs) {
     if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
         TRACE("got cached tablet metadata");
+        LOG(INFO) << "got cached tablet: " << tablet_id << ", version: " << version << ", tablet_metadata id: " << ptr->id() << ", path: " << path;
         return ptr;
     }
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
+    LOG(INFO) << "before load tablet: " << tablet_id << ", version: " << version << ", path: " << path;
     StatusOr<TabletMetadataPtr> metadata_or = load_tablet_metadata(path, fill_cache, expected_gtid, fs);
     if (metadata_or.status().is_not_found()) {
         metadata_or = get_single_tablet_metadata(tablet_id, version, fill_cache, expected_gtid, fs);
@@ -429,6 +433,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         return metadata_or.status();
     }
 
+    LOG(INFO) << "after load tablet: " << tablet_id << ", version: " << version << ", tablet_metadata id: " << metadata_or.value()->id() << ", path: " << path;
     if (fill_cache) {
         _metacache->cache_tablet_metadata(path, metadata_or.value());
     }
