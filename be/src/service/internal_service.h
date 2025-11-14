@@ -236,7 +236,8 @@ private:
     Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request,
                                PExecPlanFragmentResult* response);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
-                                           const TExecPlanFragmentParams& t_unique_request);
+                                           const TExecPlanFragmentParams& t_unique_request,
+                                           int64_t deserialize_thrift_time);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
     // MV Maintenance task

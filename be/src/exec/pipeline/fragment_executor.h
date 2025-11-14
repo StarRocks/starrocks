@@ -108,7 +108,9 @@ public:
     Status execute(ExecEnv* exec_env);
 
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
-                                                 TExecPlanFragmentResult* response);
+                                                 TExecPlanFragmentResult* response, int64_t deserialize_thrift_time);
+
+    void set_fragment_deserialize_time(int64_t time_ms) { _fragment_deserialize_thrift_time = time_ms; }
 
 private:
     void _fail_cleanup(bool fragment_has_registed);
@@ -137,6 +139,7 @@ private:
     bool _is_in_colocate_exec_group(PlanNodeId plan_node_id);
 
     int64_t _fragment_start_time = 0;
+    int64_t _fragment_deserialize_thrift_time = 0;
     QueryContext* _query_ctx = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;
     workgroup::WorkGroupPtr _wg = nullptr;

@@ -340,7 +340,10 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
+
+    int64_t deserialize_thrift_time = 0;
     {
+        SCOPED_RAW_TIMER(&deserialize_thrift_time);
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
@@ -358,7 +361,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         return;
     }
 
-    Status status = _exec_plan_fragment_by_pipeline(common_request, unique_requests[0]);
+    Status status = _exec_plan_fragment_by_pipeline(common_request, unique_requests[0], deserialize_thrift_time);
     status.to_protobuf(response->mutable_status());
 }
 
@@ -447,15 +450,20 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
                                                         PExecPlanFragmentResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
+
+    int64_t deserialize_thrift_time = 0;
     {
+        SCOPED_RAW_TIMER(&deserialize_thrift_time);
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result,
+                                                                                 deserialize_thrift_time);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -475,7 +483,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
             << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
             << ", chunk_size=" << t_request.query_options.batch_size;
     if (is_pipeline) {
-        return _exec_plan_fragment_by_pipeline(t_request, t_request);
+        return _exec_plan_fragment_by_pipeline(t_request, t_request, deserialize_thrift_time);
     } else {
         bool has_schema_table_sink = t_request.__isset.fragment && t_request.fragment.__isset.output_sink &&
                                      t_request.fragment.output_sink.type == TDataSinkType::SCHEMA_TABLE_SINK;
@@ -491,10 +499,12 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
-                                                                    const TExecPlanFragmentParams& t_unique_request) {
+                                                                    const TExecPlanFragmentParams& t_unique_request,
+                                                                    int64_t deserialize_thrift_time) {
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
+    fragment_executor.set_fragment_deserialize_time(deserialize_thrift_time);
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);

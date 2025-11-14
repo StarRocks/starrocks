@@ -841,7 +841,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     DCHECK(common_request.__isset.fragment);
 
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
-
     bool prepare_success = false;
     struct {
         int64_t prepare_time = 0;
@@ -882,6 +881,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
             auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
             COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
+
+            auto* deserialize_thrift_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentDeserializeThrift", 10_ms);
+            COUNTER_UPDATE(deserialize_thrift_timer, _fragment_deserialize_thrift_time);
 
             VLOG_QUERY << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
                        << " fragment_instance_id=" << print_id(request.fragment_instance_id())
@@ -983,7 +985,8 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
 }
 
 Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
-                                                        TExecPlanFragmentResult* response) {
+                                                        TExecPlanFragmentResult* response,
+                                                        int64_t deserializ_thrift_time) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
     const TPlanFragmentExecParams& params = request.params;
@@ -1001,6 +1004,13 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         return Status::InternalError(fmt::format("FragmentContext not found for query_id: {}, instance_id: {}",
                                                  print_id(query_id), print_id(instance_id)));
     }
+
+    {
+        auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+        auto* deserialize_thrift_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentDeserializeThrift", 1_ms);
+        COUNTER_UPDATE(deserialize_thrift_timer, deserializ_thrift_time);
+    }
+
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
     std::unordered_set<int> notify_ids;
