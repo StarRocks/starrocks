@@ -17,7 +17,8 @@
 
 #include "types/hll_sketch.h"
 
-#include "common/logging.h"
+#include <glog/logging.h>
+
 #include "runtime/mem_pool.h"
 
 namespace starrocks {

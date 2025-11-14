@@ -14,10 +14,11 @@
 
 #include "exprs/agg/data_sketch/ds_theta.h"
 
+#include <glog/logging.h>
+
 #include <memory>
 #include <string>
 
-#include "common/status.h"
 #include "util/slice.h"
 
 namespace starrocks {
