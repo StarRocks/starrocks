@@ -25,11 +25,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-<<<<<<< HEAD
-import com.starrocks.catalog.Type;
-=======
 import com.starrocks.catalog.Table;
->>>>>>> 6cfb51b709 ([Enhancement] enable rewrite simple agg to meta scan by default (#64698))
+import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
