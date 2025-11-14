@@ -482,7 +482,7 @@ private:
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \
-        SCOPED_SET_CATCHED(true);
+        SCOPED_SET_CATCHED(CurrentThread::current().check_mem_limit());
 
 #define TRY_CATCH_ALLOC_SCOPE_END()                                                                                    \
     }                                                                                                                  \
