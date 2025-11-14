@@ -18,7 +18,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.thrift.TExprMinMaxValue;
-import com.starrocks.type.Type;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.iceberg.Schema;
@@ -104,8 +103,8 @@ public class IcebergUtilTest {
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(5, "date", Types.StringType.get()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(3), "id", IntegerType.INT, true),
-                new SlotDescriptor(new SlotId(5), "date", StringType.STRING, true)
+                new SlotDescriptor(new SlotId(5), "id", IntegerType.INT, true),
+                new SlotDescriptor(new SlotId(3), "date", StringType.STRING, true)
         );
         slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
         slots.get(1).setColumn(new Column("date", StringType.STRING, true));
