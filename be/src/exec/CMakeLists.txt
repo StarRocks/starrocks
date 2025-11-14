@@ -97,6 +97,7 @@ set(EXEC_FILES
     assert_num_rows_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
+    hdfs_scanner_json.cpp
     json_parser.cpp
     project_node.cpp
     dict_decode_node.cpp

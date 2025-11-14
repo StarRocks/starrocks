@@ -491,6 +491,7 @@ private:
 
 protected:
     HdfsScannerContext _scanner_ctx;
+    std::vector<TypeDescriptor> _json_types;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _app_stats;
