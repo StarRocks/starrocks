@@ -39,6 +39,7 @@ set(WEB_SERVER_FILES
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/pprof_actions.cpp
+  action/proc_profile_action.cpp
   action/proc_profile_file_action.cpp
   action/profile_utils.cpp
   action/memory_metrics_action.cpp

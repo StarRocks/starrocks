@@ -27,7 +27,7 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 [UC]shell: cat be_profile_file.txt
 -- result:
 0
-cpu-profile-20251027-140332-pprof.gz
+cpu-profile-20251111-184044-pprof.gz
 -- !result
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 -- result:
@@ -48,6 +48,31 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 -- result:
 0
 Invalid filename
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"profiles\""
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/invalid_action" | grep -c "\"error\""
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"error\""
+-- result:
+1
+
+-- !result
+shell: curl -s -I -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -i "content-type" | grep -c "application/json"
+-- result:
+1
+
+-- !result
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"profiles\""
+-- result:
+0
+1
 -- !result
 shell: rm -f be_profile_file.txt
 -- result:
