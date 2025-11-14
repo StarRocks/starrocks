@@ -148,7 +148,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true,
+                scanOptimizeOption.getCanUseMinMaxOpt());
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -188,7 +189,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
+                scanOptimizeOption.getCanUseMinMaxOpt());
     }
 
     private void setupCloudCredential() {
