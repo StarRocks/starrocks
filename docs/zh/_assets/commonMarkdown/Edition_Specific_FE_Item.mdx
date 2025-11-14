@@ -7,3 +7,12 @@
 - 是否动态：否
 - 描述：是否开启鉴权检查功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开启该功能。`FALSE`表示关闭该功能。
 - 引入版本：-
+
+##### warehouse_idle_check_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 WarehouseIdleChecker。启用后，可以通过接口 `/api/idle_status` 查看集群 Idle 的情况。
+- 引入版本：v3.3
