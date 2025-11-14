@@ -1041,7 +1041,7 @@ public class FunctionAnalyzer {
 
         if (hasDateFunctionSignatureOverloading) {
             if (node.getChildren().size() == 2) {
-                IntLiteral e3 = new IntLiteral(1, Type.INT);
+                IntLiteral e3 = new IntLiteral(1, IntegerType.INT);
                 node.addChild(e3);
                 node.addChild(new StringLiteral("day"));
             }
