@@ -70,5 +70,5 @@ select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_nu
 select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 10 = 0;
 select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 100 = 0;
 
-select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_string);
+select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 on tt1.c_string=tt2.c_string;
 
