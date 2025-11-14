@@ -309,7 +309,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         // inactive mv when base table's schema changed
         Database db = starRocksAssert.getDb(connectContext.getDatabase());
         Table parTbl1 = starRocksAssert.getTable(connectContext.getDatabase(), "par_tbl1");
-        AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) parTbl1, Set.of("item_id"));
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) parTbl1, Set.of("item_id"));
         baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assertions.assertTrue(baseTableVisibleVersionMap.isEmpty());
     }
