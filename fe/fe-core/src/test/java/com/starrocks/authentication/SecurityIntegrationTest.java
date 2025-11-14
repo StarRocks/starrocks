@@ -20,7 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.persist.EditLog;
+import com.starrocks.persist.NoOpEditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -61,11 +61,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
-
 public class SecurityIntegrationTest {
     private final MockTokenUtils mockTokenUtils = new MockTokenUtils();
     private ConnectContext ctx;
@@ -78,10 +73,7 @@ public class SecurityIntegrationTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        // Mock EditLog
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        GlobalStateMgr.getCurrentState().setEditLog(new NoOpEditLog());
 
         // Initialize authentication manager
         authenticationMgr = new AuthenticationMgr();
@@ -264,9 +256,7 @@ public class SecurityIntegrationTest {
 
     @Test
     public void testLDAPSecurityIntegrationPassword() throws DdlException, AuthenticationException, IOException {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        GlobalStateMgr.getCurrentState().setEditLog(new NoOpEditLog());
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
 
@@ -297,9 +287,7 @@ public class SecurityIntegrationTest {
 
     @Test
     public void testShowCreateGroupProviderPassword() throws DdlException {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+        GlobalStateMgr.getCurrentState().setEditLog(new NoOpEditLog());
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
 
@@ -778,4 +766,5 @@ public class SecurityIntegrationTest {
         authenticationMgr.dropSecurityIntegration("valid_jwt", true);
         authenticationMgr.dropSecurityIntegration("full_jwt", true);
     }
+
 }
