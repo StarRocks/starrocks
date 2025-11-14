@@ -117,82 +117,85 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         return Status::OK();
     }
 
-    bool found_at_least_one = false;
     roaring::Roaring filtered_key_words;
+    filtered_key_words.addRange(0, _bitmap_itr->bitmap_nums());
+
     std::vector<std::pair<Slice, std::vector<size_t>>> keywords;
 
-    SCOPED_RAW_TIMER(&_stats->gin_ngram_filter_dict_ns);
-    // parse wildcard like '%%key%word%%' into ['key', 'word']
-    // use ngram to filter each word
-    wildcard_pos = 0;
-    int64_t last_wildcard_pos = 0;
-    while (wildcard_pos < search_query->get_size()) {
-        while (wildcard_pos < search_query->get_size() && (*search_query)[wildcard_pos] == '%') {
-            ++wildcard_pos;
-        }
-        if (wildcard_pos >= search_query->get_size()) {
-            break;
-        }
-        last_wildcard_pos = wildcard_pos;
-        wildcard_pos = search_query->find('%', last_wildcard_pos);
+    _stats->gin_dict_count = _bitmap_itr->bitmap_nums();
+    _stats->gin_ngram_dict_count = _bitmap_itr->ngram_bitmap_nums();
 
-        auto sub_query =
-                wildcard_pos != -1
-                        ? Slice(search_query->data + last_wildcard_pos, wildcard_pos - last_wildcard_pos)
-                        : Slice(search_query->data + last_wildcard_pos, search_query->get_size() - last_wildcard_pos);
-        keywords.emplace_back(std::make_pair(sub_query, sub_query.build_next()));
-        roaring::Roaring tmp;
+    {
+        SCOPED_RAW_TIMER(&_stats->gin_ngram_filter_dict_ns);
+        // parse wildcard like '%%key%word%%' into ['key', 'word']
+        // use ngram to filter each word
+        wildcard_pos = 0;
+        int64_t last_wildcard_pos = 0;
+        while (0 <= wildcard_pos && wildcard_pos < search_query->get_size()) {
+            while (0 <= wildcard_pos && wildcard_pos < search_query->get_size() &&
+                   (*search_query)[wildcard_pos] == '%') {
+                ++wildcard_pos;
+            }
+            if (wildcard_pos < 0 || wildcard_pos >= search_query->get_size()) {
+                break;
+            }
+            last_wildcard_pos = wildcard_pos;
+            wildcard_pos = search_query->find('%', last_wildcard_pos);
 
-        if (const auto st = _bitmap_itr->seek_dict_by_ngram(&sub_query, &tmp); !st.ok()) {
-            if (st.is_not_found()) {
+            auto sub_query = wildcard_pos != -1
+                                     ? Slice(search_query->data + last_wildcard_pos, wildcard_pos - last_wildcard_pos)
+                                     : Slice(search_query->data + last_wildcard_pos,
+                                             search_query->get_size() - last_wildcard_pos);
+            keywords.emplace_back(sub_query, sub_query.build_next());
+
+            if (_bitmap_itr->ngram_bitmap_nums() == 0) {
+                continue;
+            }
+
+            roaring::Roaring tmp;
+            if (auto st = _bitmap_itr->seek_dict_by_ngram(&sub_query, &tmp); !st.ok()) {
+                if (st.is_not_found()) {
+                    // no words match ngram index, just return empty bitmap
+                    VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
+                    return Status::OK();
+                }
+                return st;
+            }
+
+            if (tmp.cardinality() <= 0) {
                 // no words match ngram index, just return empty bitmap
                 VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
                 return Status::OK();
             }
-            return st;
-        }
 
-        if (tmp.cardinality() <= 0) {
-            // no words match ngram index, just return empty bitmap
-            VLOG(10) << "no words match ngram index for gram query " << sub_query.to_string();
-            return Status::OK();
-        }
-
-        if (!found_at_least_one) {
-            filtered_key_words = std::move(tmp);
-            found_at_least_one = true;
-        } else {
             filtered_key_words &= tmp;
-        }
-
-        if (filtered_key_words.cardinality() <= 0) {
-            // no words match ngram index, just return empty bitmap
-            VLOG(10) << "no words match ngram index for gram query " << sub_query;
-            return Status::OK();
-        }
-    }
-
-    if (!found_at_least_one) {
-        VLOG(10) << "no words match ngram index for " << search_query->to_string();
-        // no words match ngram index, just return empty bitmap
-        return Status::OK();
-    }
-
-    auto predicate = [&keywords](const Slice* dict) -> bool {
-        // just need to make sure keywords is in order.
-        size_t last_pos = 0;
-        for (const auto& [keyword, next_array] : keywords) {
-            last_pos = dict->find(keyword, next_array, last_pos);
-            if (last_pos == -1) {
-                return false;
+            if (filtered_key_words.cardinality() <= 0) {
+                // no words match ngram index, just return empty bitmap
+                VLOG(10) << "no words match ngram index for query " << search_query->to_string();
+                return Status::OK();
             }
-            last_pos += keyword.get_size();
         }
-        return true;
-    };
+        _stats->gin_ngram_dict_filtered = _bitmap_itr->bitmap_nums() - filtered_key_words.cardinality();
+    }
 
-    SCOPED_RAW_TIMER(&_stats->gin_filter_dict_ns);
-    ASSIGN_OR_RETURN(const auto hit_rowids, _bitmap_itr->filter_dict_by_predicate(&filtered_key_words, predicate));
+    Buffer<rowid_t> hit_rowids;
+    {
+        SCOPED_RAW_TIMER(&_stats->gin_predicate_filter_dict_ns);
+        auto predicate = [&keywords](const Slice* dict) -> bool {
+            // just need to make sure keywords is in order.
+            size_t last_pos = 0;
+            for (const auto& [keyword, next_array] : keywords) {
+                last_pos = dict->find(keyword, next_array, last_pos);
+                if (last_pos == -1) {
+                    return false;
+                }
+                last_pos += keyword.get_size();
+            }
+            return true;
+        };
+        ASSIGN_OR_RETURN(hit_rowids, _bitmap_itr->filter_dict_by_predicate(&filtered_key_words, predicate));
+        _stats->gin_predicate_dict_filtered = filtered_key_words.cardinality() - hit_rowids.size();
+    }
     return _bitmap_itr->read_union_bitmap(hit_rowids, bit_map);
 }
 

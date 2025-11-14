@@ -158,11 +158,18 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
-    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+
+    // Gin filter Statistics
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
     RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
-    RuntimeProfile::Counter* _gin_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
