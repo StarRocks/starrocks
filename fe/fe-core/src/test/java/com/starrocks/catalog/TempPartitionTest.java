@@ -74,6 +74,8 @@ public class TempPartitionTest extends StarRocksTestBase {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
+    private static long defaultRetentionPeriod;
+
     @BeforeAll
     public static void setup() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -82,10 +84,17 @@ public class TempPartitionTest extends StarRocksTestBase {
         starRocksAssert = new StarRocksAssert(ctx);
         Deencapsulation.setField(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr(),
                                  "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
+
+        // temporarily disable partition duration to prevent CatalogRecycleBin waiting too long time
+        // and blocking ut progress
+        defaultRetentionPeriod = Config.partition_recycle_retention_period_secs;
+        Config.partition_recycle_retention_period_secs = 0;
     }
 
     @AfterAll
     public static void tearDown() {
+        Config.partition_recycle_retention_period_secs = defaultRetentionPeriod;
+
         File file2 = new File(tempPartitionFile);
         file2.delete();
         File file3 = new File(tblFile);
