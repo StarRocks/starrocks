@@ -1019,28 +1019,59 @@ public class FunctionAnalyzer {
         return fn;
     }
 
-    private static Function getArrayGenerateFunction(FunctionCallExpr node) {
-        // add the default parameters for array_generate
-        if (node.getChildren().size() == 1) {
-            Expr secondParam = node.getChild(0);
-            node.clearChildren();
-            node.addChild(new IntLiteral(1));
-            node.addChild(secondParam);
+    /**
+     * Check if array_generate function should use date function signature.
+     * Date signature is used when the first two parameters are date/datetime types or string types.
+     *
+     * @param node function call expression
+     * @return true if date signature should be used
+     */
+    public static boolean isArrayGenerateDateSignature(FunctionCallExpr node) {
+        if (node.getChildren().size() >= 2) {
+            Type type0 = node.getChild(0).getType();
+            Type type1 = node.getChild(1).getType();
+            return type0.isDateType() || type1.isDateType() ||
+                   type0.isStringType() || type1.isStringType();
         }
-        if (node.getChildren().size() == 2) {
-            Expr startExpr = node.getChild(0);
-            Expr endExpr = node.getChild(1);
+        return false;
+    }
 
-            if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
-                BigInteger start = toBigInteger(startExpr);
-                BigInteger end = toBigInteger(endExpr);
-                if (start != null && end != null) {
-                    node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+    private static Function getArrayGenerateFunction(FunctionCallExpr node) {
+        boolean hasDateFunctionSignatureOverloading = isArrayGenerateDateSignature(node);
+
+        if (hasDateFunctionSignatureOverloading) {
+            if (node.getChildren().size() == 2) {
+                IntLiteral e3 = new IntLiteral(1, Type.INT);
+                node.addChild(e3);
+                node.addChild(new StringLiteral("day"));
+            }
+
+            if (node.getChildren().size() == 3) {
+                node.addChild(new StringLiteral("day"));
+            }
+        } else {
+            // add the default parameters for array_generate
+            if (node.getChildren().size() == 1) {
+                Expr secondParam = node.getChild(0);
+                node.clearChildren();
+                node.addChild(new IntLiteral(1));
+                node.addChild(secondParam);
+            }
+            if (node.getChildren().size() == 2) {
+                Expr startExpr = node.getChild(0);
+                Expr endExpr = node.getChild(1);
+
+                if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
+                    BigInteger start = toBigInteger(startExpr);
+                    BigInteger end = toBigInteger(endExpr);
+                    if (start != null && end != null) {
+                        node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+                    } else {
+                        node.addChild(new IntLiteral(1));
+                    }
                 } else {
                     node.addChild(new IntLiteral(1));
                 }
-            } else {
-                node.addChild(new IntLiteral(1));
             }
         }
 
@@ -1048,7 +1079,7 @@ public class FunctionAnalyzer {
         return ExprUtils.getBuiltinFunction(
             FunctionSet.ARRAY_GENERATE,
             argTypes,
-            Function.CompareMode.IS_SUPERTYPE_OF);
+            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     private static BigInteger toBigInteger(Expr expr) {

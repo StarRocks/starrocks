@@ -1299,15 +1299,33 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 case FunctionSet.ARRAY_GENERATE:
-                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 4) {
                         throw new SemanticException(fnName + " has wrong input numbers");
                     }
-                    for (Expr expr : node.getChildren()) {
-                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
-                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                    boolean hasDateFunctionSignatureOverloading = FunctionAnalyzer.isArrayGenerateDateSignature(node);
+
+                    if (hasDateFunctionSignatureOverloading) {
+                        if (node.getChildren().size() == 3 || node.getChildren().size() == 4) {
+                            if (!(node.getChild(2) instanceof IntLiteral)) {
+                                throw new SemanticException(
+                                        fnName + " requires step parameter must be a constant integer", node.getPos());
+                            }
+                            if (((IntLiteral) node.getChild(2)).getValue() < 0) {
+                                throw new SemanticException(
+                                        fnName + " requires step parameter must be non-negative", node.getPos());
+                            }
                         }
-                        if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
-                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                    } else {
+                        if (node.getChildren().size() == 4) {
+                            throw new SemanticException(fnName + " step param has wrong input type");
+                        }
+                        for (Expr expr : node.getChildren()) {
+                            if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                                throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                            }
+                            if (!(expr.getType().isFixedPointType()) && !expr.getType().isNull()) {
+                                throw new SemanticException(fnName + "'s parameter only support Integer");
+                            }
                         }
                     }
                     break;
