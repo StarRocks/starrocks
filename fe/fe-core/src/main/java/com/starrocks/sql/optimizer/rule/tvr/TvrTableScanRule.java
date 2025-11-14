@@ -25,7 +25,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrLazyOptExpression;
@@ -34,20 +34,20 @@ import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptMeta;
 import org.apache.hadoop.util.Lists;
 
 import java.util.List;
-import java.util.Set;
 
 public class TvrTableScanRule extends TvrTransformationRule {
 
-    private static final Set<OperatorType> SUPPORTED = Set.of(
-            OperatorType.LOGICAL_ICEBERG_SCAN
-    );
-
     public TvrTableScanRule() {
-        super(RuleType.TF_TVR_TABLE_SCAN, MultiOpPattern.of(SUPPORTED));
+        super(RuleType.TF_TVR_TABLE_SCAN, Pattern.create(OperatorType.PATTERN_SCAN));
     }
 
     private boolean isSupportedTvr(LogicalScanOperator scanOperator) {
-        return scanOperator.getTvrTableDeltaTrait().isPresent() && scanOperator.getTvrTableDeltaTrait().get().isAppendOnly();
+        // check whether this table is supported for ivm.
+        if (!IVMAnalyzer.isTableTypeIVMSupported(scanOperator.getTable().getType())) {
+            return false;
+        }
+        return scanOperator.getTvrTableDeltaTrait().isPresent()
+                && scanOperator.getTvrTableDeltaTrait().get().isAppendOnly();
     }
 
     @Override

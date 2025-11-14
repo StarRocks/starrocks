@@ -358,12 +358,18 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * If tvrVersionRange is present, build an incremental scan from start snapshot to end snapshot.
+     * @param nativeTable paimon native table
+     * @param tvrVersionRange input tvrVersionRange
+     * @return a native paimon table with
+     */
     private org.apache.paimon.table.Table getNativeTable(org.apache.paimon.table.Table nativeTable,
                                                          TvrVersionRange tvrVersionRange) {
-        // Build dynamic options for incremental-between
         Map<String, String> dynamicOptions = new HashMap<>();
         if (tvrVersionRange != null && tvrVersionRange.start().isPresent()
                 && tvrVersionRange.end().isPresent()) {
+            // Build dynamic options for incremental-between
             TvrTableDelta tableDelta = (TvrTableDelta) tvrVersionRange;
             long startSnapshotId = tableDelta.start().get();
             long endSnapshotId = tableDelta.end().get();
@@ -380,6 +386,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         TvrVersionRange tvrVersionRange = params.getTableVersionRange();
         if (tvrVersionRange == null) {
+            // if input version range is null, use the lastest snapshot id as it
             long latestSnapshotId = -1L;
             try {
                 if (paimonTable.getNativeTable().latestSnapshot().isPresent()) {
