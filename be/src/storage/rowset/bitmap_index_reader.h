@@ -194,6 +194,13 @@ public:
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 
+    rowid_t ngram_bitmap_nums() const {
+        if (_reader != nullptr) {
+            return _reader->ngram_bitmap_nums();
+        }
+        return 0;
+    }
+
     rowid_t current_ordinal() const { return _current_rowid; }
 
 private:
