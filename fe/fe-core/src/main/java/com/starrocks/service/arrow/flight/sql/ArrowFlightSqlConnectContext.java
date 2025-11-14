@@ -96,12 +96,6 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
                         "Query already in progress on this connection"
                 );
             }
-
-            removeAllResults();
-            statement = null;
-            coordinatorFuture.complete(null);
-            coordinatorFuture = new CompletableFuture<>();
-            returnResultFromFE = true;
             this.query = query;
             this.setQueryId(UUIDUtil.genUUID());
             this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
@@ -114,6 +108,12 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         queryLock.lock(); 
         try {
             this.query = ""; 
+            this.statement = null; 
+
+            coordinatorFuture.complete(null);
+            coordinatorFuture = new CompletableFuture<>();
+            returnResultFromFE = true; 
+            removeAllResults();
         } finally {
             queryLock.unlock();
         }

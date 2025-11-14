@@ -169,6 +169,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public void closePreparedStatement(FlightSql.ActionClosePreparedStatementRequest request, CallContext context,
                                        StreamListener<Result> listener) {
+        String token = context.peerIdentity();
+        ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
+        ctx.reset(); 
         executor.submit(listener::onCompleted);
     }
 
@@ -436,14 +439,10 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         listener.setOnCancelHandler(ctx::cancelQuery);
 
-        try {
-            listener.start(vectorSchemaRoot);
-            listener.putNext();
-            listener.completed();
-        } finally {
-            ctx.removeResult(queryId);
-            ctx.reset();
-        }
+        listener.start(vectorSchemaRoot);
+        listener.putNext();
+        listener.completed();
+        ctx.removeResult(queryId);
     }
 
     protected FlightInfo getFlightInfoFromQuery(ArrowFlightSqlConnectContext ctx, FlightDescriptor descriptor) {
