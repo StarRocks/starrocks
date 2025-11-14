@@ -2922,6 +2922,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableTableStatsFromMetadataForSingleTable;
     }
 
+    public void setDisableTableStatsFromMetadataForSingleTable(boolean value) {
+        this.disableTableStatsFromMetadataForSingleTable = value;
+    }
+
     public boolean enableIcebergColumnStatistics() {
         return enableIcebergColumnStatistics;
     }

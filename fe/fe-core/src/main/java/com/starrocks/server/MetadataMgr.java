@@ -66,6 +66,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -745,6 +746,9 @@ public class MetadataMgr {
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
+            } else if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
+                    session.getSourceTablesCount() == 1) {
+                return StatisticsUtils.buildDefaultStatistics(columns.keySet());
             } else {
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
                 Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
