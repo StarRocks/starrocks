@@ -209,6 +209,7 @@ if __name__ == "__main__":
             "run_info": run_info,
             "log_filtered": str(log_filtered),
             "check_status": str(check_status),
+            "case_timeout": str(timeout),
         }
     )
 
@@ -242,7 +243,7 @@ if __name__ == "__main__":
         print("-t|--timeout(s) must be in (0, 10min]!")
         print_help()
         sys.exit(4)
-    argv += ["--process-timeout=%s" % timeout]
+    argv += ["--process-timeout=%s" % str(timeout + 5)]
     argv += ["--process-restartworker"]
 
     # test xml
