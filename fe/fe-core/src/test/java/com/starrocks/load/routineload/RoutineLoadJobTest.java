@@ -40,7 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -55,7 +55,6 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -63,23 +62,35 @@ import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
 public class RoutineLoadJobTest {
+
+    @BeforeEach
+    public void setUp() throws Exception {
+        // Initialize test environment
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @Test
-    public void testAfterAbortedReasonOffsetOutOfRange(@Mocked GlobalStateMgr globalStateMgr,
-                                                       @Injectable TransactionState transactionState,
+    public void testAfterAbortedReasonOffsetOutOfRange(@Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
 
@@ -339,7 +350,7 @@ public class RoutineLoadJobTest {
             ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
                     .put("pause_on_fatal_parse_error", "false");
 
-            routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
+            routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null);
             // The job is set unstable due to the progress is too slow.
             routineLoadJob.updateSubstate();
             Assertions.assertTrue(routineLoadJob.isUnstable());
@@ -382,26 +393,15 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked WarehouseManager warehouseManager) throws StarRocksException {
+    public void testGetShowInfoSharedData() {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
             }
         };
-
-        new Expectations() {
-            {
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
-                warehouseManager.getWarehouse(0L);
-                result = new DefaultWarehouse(0, "default_warehouse");
-                warehouseManager.getWarehouse(1L);
-                result = new Exception("Warehouse id: 1 not exist");
-            }
-        };
-
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+        
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
@@ -410,19 +410,11 @@ public class RoutineLoadJobTest {
 
         routineLoadJob.setWarehouseId(1L);
         showInfo = routineLoadJob.getShowInfo();
-        Assertions.assertEquals("Warehouse id: 1 not exist", showInfo.get(20));
+        Assertions.assertEquals("Warehouse id: 1 not exist.", showInfo.get(20));
     }
 
     @Test
-    public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = null;
-            }
-        };
-
+    public void testUpdateWhileDbDeleted() throws StarRocksException {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.update();
 
@@ -430,40 +422,25 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateWhileTableDeleted(@Mocked GlobalStateMgr globalStateMgr,
-                                            @Injectable Database database) throws StarRocksException {
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = null;
-            }
-        };
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+    public void testUpdateWhileTableDeleted() throws StarRocksException {
+        long dbId = 11L;
+        Database database = new Database(dbId, "testDb");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(
+                1L, "test", dbId, 111L, "brokerList", "topic");
         routineLoadJob.update();
 
         Assertions.assertEquals(RoutineLoadJob.JobState.CANCELLED, routineLoadJob.getState());
     }
 
     @Test
-    public void testUpdateWhilePartitionChanged(@Mocked GlobalStateMgr globalStateMgr,
-                                                @Injectable Database database,
-                                                @Injectable Table table,
-                                                @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+    public void testUpdateWhilePartitionChanged(@Injectable KafkaProgress kafkaProgress) throws StarRocksException {
 
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
-                minTimes = 0;
-                result = table;
-            }
-        };
+        long dbId = 11L;
+        Database database = new Database(dbId, "testDb");
+        OlapTable table = new OlapTable(22L, "test", null, null, null, null);
+        database.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
 
         new MockUp<KafkaUtil>() {
             @Mock
@@ -481,7 +458,7 @@ public class RoutineLoadJobTest {
             }
         };
 
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(111L, "test", dbId, 22L, "brokerList", "topic");
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
         Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
         routineLoadJob.update();
@@ -490,7 +467,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testUpdateNumOfDataErrorRowMoreThanMax(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testUpdateNumOfDataErrorRowMoreThanMax() {
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 0);
         Deencapsulation.setField(routineLoadJob, "maxBatchRows", 0);
@@ -567,8 +544,8 @@ public class RoutineLoadJobTest {
             System.out.println("Key: " + key);
             System.out.println("Value: " + stmt.getAnalyzedJobProperties().get(key));
         }
-        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
         Assertions.assertEquals(Integer.parseInt(desiredConcurrentNumber),
                 (int) Deencapsulation.getField(routineLoadJob, "desireTaskConcurrentNum"));
         Assertions.assertEquals(Long.parseLong(maxBatchInterval),
@@ -607,8 +584,8 @@ public class RoutineLoadJobTest {
                 ")";
         routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
         routineLoadJob.convertCustomProperties(true);
         Map<String, String> properties = routineLoadJob.getConvertedCustomProperties();
         Assertions.assertEquals(groupId, properties.get("group.id"));
@@ -630,8 +607,8 @@ public class RoutineLoadJobTest {
                 "ROWS TERMINATED BY \"A\"";
         routineLoadJob.setOrigStmt(new OriginStatementInfo(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), new OriginStatementInfo(originStmt, 0), true);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
         Assertions.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
         Assertions.assertEquals("`a` = 1", ExprToSql.toSql(routineLoadJob.getWhereExpr()));
         Assertions.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
@@ -651,8 +628,8 @@ public class RoutineLoadJobTest {
 
         try {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(validStmt, connectContext);
-            routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                    stmt.getDataSourceProperties(), new OriginStatementInfo(validStmt, 0), true);
+            routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties());
 
             // Verify broker list was updated successfully
             Assertions.assertEquals("192.168.1.2:9092,192.168.1.3:9092", routineLoadJob.getBrokerList());
@@ -674,7 +651,7 @@ public class RoutineLoadJobTest {
         try {
             AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(invalidStmt, connectContext);
             routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                    stmt.getDataSourceProperties(), new OriginStatementInfo(invalidStmt, 0), false);
+                    stmt.getDataSourceProperties(), new OriginStatementInfo(invalidStmt, 0));
             Assertions.fail("Invalid broker list should throw DdlException");
         } catch (Exception e) {
             // This should trigger the catch block on line 841-842
@@ -840,8 +817,8 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr, @Injectable TransactionState transactionState,
-                                                       @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+    public void testPauseOnFatalParseError(@Injectable TransactionState transactionState,
+                                            @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
         long txnId = 1L;
         new Expectations() {

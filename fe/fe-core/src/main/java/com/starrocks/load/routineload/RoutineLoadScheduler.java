@@ -120,7 +120,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
                         .build(), userException);
                 try {
                     ErrorReason reason = new ErrorReason(userException.getInternalErrorCode(), userException.getMessage());
-                    routineLoadJob.updateState(errorJobState, reason, false);
+                    routineLoadJob.updateState(errorJobState, reason);
                 } catch (StarRocksException e) {
                     LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                             .add("current_state", routineLoadJob.getState())

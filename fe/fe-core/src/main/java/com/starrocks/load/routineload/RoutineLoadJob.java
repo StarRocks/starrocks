@@ -453,7 +453,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
         if (routineLoadDesc.getColumnsInfo() != null) {
             ImportColumnsStmt columnsStmt = routineLoadDesc.getColumnsInfo();
-            if (columnsStmt.getColumns() != null || columnsStmt.getColumns().size() != 0) {
+            if (columnsStmt.getColumns() != null || !columnsStmt.getColumns().isEmpty()) {
                 columnDescs = Lists.newArrayList();
                 columnDescs.addAll(columnsStmt.getColumns());
             }
@@ -787,7 +787,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     // All of private method could not be call without lock
-    private void checkStateTransform(RoutineLoadJob.JobState desireState) throws StarRocksException {
+    private void checkStateTransform(JobState desireState) throws StarRocksException {
         switch (state) {
             case PAUSED:
                 if (desireState == JobState.PAUSED) {
@@ -841,8 +841,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                             String.format("Current error rows: %d is more than max error num: %d", currentErrorRows, maxErrorNum);
                     updateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")),
-                            isReplay);
+                                    ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")));
                 }
             }
 
@@ -871,8 +870,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         String.format("Current error rows: %d is more than max error num: %d", currentErrorRows, maxErrorNum);
                 updateState(JobState.PAUSED,
                         new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")),
-                        isReplay);
+                                ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(errMsg, "max_error_number")));
             }
             // reset currentTotalNum and currentErrorNum
             currentErrorRows = 0;
@@ -1059,8 +1057,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             String errmsg = "be " + taskBeId + " commit task failed " + txnState.getLabel()
                     + " with error " + e.getMessage()
                     + " while transaction " + txnState.getTransactionId() + " has been committed";
-            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.INTERNAL_ERR, errmsg),
-                    false /* not replay */);
+            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.INTERNAL_ERR, errmsg));
         } finally {
             // this lock is locked in executeBeforeCheck function
             writeUnlock();
@@ -1134,8 +1131,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         routineLoadTaskInfo.getTxnStatus().name());
                 LOG.warn(msg);
                 try {
-                    updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.IMPOSSIBLE_ERROR_ERR, msg),
-                            false /* not replay */);
+                    updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.IMPOSSIBLE_ERROR_ERR, msg));
                 } catch (StarRocksException e) {
                     // should not happen
                     LOG.warn("failed to pause the job {}. this should not happen", id, e);
@@ -1224,8 +1220,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                                 String msg = "be " + taskBeId + " abort task "
                                         + "with reason: " + txnStatusChangeReasonString;
                                 updateState(JobState.PAUSED,
-                                        new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg),
-                                        false /* not replay */);
+                                        new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
                                 return;
                             default:
                                 break;
@@ -1240,8 +1235,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } catch (Exception e) {
             String msg =
                     "be " + taskBeId + " abort task " + txnState.getLabel() + " failed with error " + e.getMessage();
-            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg),
-                    false /* not replay */);
+            updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                     .add("task_id", txnState.getLabel())
                     .add("error_msg",
@@ -1323,7 +1317,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         Optional<ErrorReason> pauseOptional = shouldPauseOnTxnStateChange(txnStatusChangeReasonStr);
         if (pauseOptional.isPresent()) {
-            updateState(JobState.PAUSED, pauseOptional.get(), false /* not replay */);
+            updateState(JobState.PAUSED, pauseOptional.get());
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
@@ -1384,16 +1378,31 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         // columns will be checked when planing
     }
 
-    public void updateState(JobState jobState, ErrorReason reason, boolean isReplay) throws StarRocksException {
+    public void updateState(JobState jobState, ErrorReason reason) throws StarRocksException {
         writeLock();
         try {
-            unprotectUpdateState(jobState, reason, isReplay);
+            unprotectUpdateState(jobState, reason);
         } finally {
             writeUnlock();
         }
     }
 
-    protected void unprotectUpdateState(JobState jobState, ErrorReason reason, boolean isReplay) throws
+    public void replayUpdateState(JobState jobState, ErrorReason reason) {
+        writeLock();
+        try {
+            transformState(jobState, reason);
+        } finally {
+            writeUnlock();
+        }
+
+        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("current_job_state", getState())
+                .add("msg", "job state has been changed")
+                .add("is replay", "true")
+                .build());
+    }
+
+    protected void unprotectUpdateState(JobState jobState, ErrorReason reason) throws
             StarRocksException {
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
                 .add("current_job_state", getState())
@@ -1402,6 +1411,26 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 .build());
 
         checkStateTransform(jobState);
+
+        if (jobState != JobState.RUNNING) {
+            GlobalStateMgr.getCurrentState().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState), wal -> {
+                transformState(jobState, reason);
+            });
+        } else {
+            transformState(jobState, reason);
+        }
+
+        if (MetricRepo.hasInit && JobState.PAUSED == jobState) {
+            MetricRepo.COUNTER_ROUTINE_LOAD_PAUSED.increase(1L);
+        }
+        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                .add("current_job_state", getState())
+                .add("msg", "job state has been changed")
+                .add("is replay", "false")
+                .build());
+    }
+
+    private void transformState(JobState jobState, ErrorReason reason) {
         switch (jobState) {
             case RUNNING:
                 executeRunning();
@@ -1428,19 +1457,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (state.isFinalState()) {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         }
-
-        if (!isReplay && jobState != JobState.RUNNING) {
-            GlobalStateMgr.getCurrentState().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState));
-        }
-
-        if (!isReplay && MetricRepo.hasInit && JobState.PAUSED == jobState) {
-            MetricRepo.COUNTER_ROUTINE_LOAD_PAUSED.increase(1L);
-        }
-        LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                .add("current_job_state", getState())
-                .add("msg", "job state has been changed")
-                .add("is replay", String.valueOf(isReplay))
-                .build());
     }
 
     private void executeRunning() {
@@ -1497,8 +1513,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             try {
                 if (!state.isFinalState()) {
                     unprotectUpdateState(JobState.CANCELLED,
-                            new ErrorReason(InternalErrorCode.DB_ERR, "db " + dbId + "not exist"),
-                            false /* not replay */);
+                            new ErrorReason(InternalErrorCode.DB_ERR, "db " + dbId + "not exist"));
                 }
                 return;
             } finally {
@@ -1516,7 +1531,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             try {
                 if (!state.isFinalState()) {
                     unprotectUpdateState(JobState.CANCELLED,
-                            new ErrorReason(InternalErrorCode.TABLE_ERR, "table not exist"), false /* not replay */);
+                            new ErrorReason(InternalErrorCode.TABLE_ERR, "table not exist"));
                 }
                 return;
             } finally {
@@ -1532,7 +1547,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         .add("msg", "Job need to be rescheduled")
                         .build());
                 unprotectUpdateProgress();
-                unprotectUpdateState(JobState.NEED_SCHEDULE, null, false);
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
             }
         } finally {
             writeUnlock();
@@ -1806,35 +1821,57 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return false;
     }
 
-
-
-
-
-
-
-
     public void modifyJob(RoutineLoadDesc routineLoadDesc,
                           Map<String, String> jobProperties,
                           RoutineLoadDataSourceProperties dataSourceProperties,
-                          OriginStatementInfo originStatement,
-                          boolean isReplay) throws DdlException {
+                          OriginStatementInfo originStatement) throws DdlException {
+        if (jobProperties != null) {
+            checkCommonJobProperties(jobProperties);
+        }
+        if (dataSourceProperties != null) {
+            checkDataSourceProperties(dataSourceProperties);
+        }
+
         writeLock();
         try {
-            if (routineLoadDesc != null) {
-                setRoutineLoadDesc(routineLoadDesc);
-                mergeLoadDescToOriginStatement(routineLoadDesc);
-            }
-            if (jobProperties != null) {
+            AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
+                    jobProperties, dataSourceProperties, originStatement);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log,
+                    wal -> applyModifyJob(routineLoadDesc, jobProperties, dataSourceProperties));
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void applyModifyJob(RoutineLoadDesc routineLoadDesc,
+                                Map<String, String> jobProperties,
+                                RoutineLoadDataSourceProperties dataSourceProperties) {
+        if (routineLoadDesc != null) {
+            setRoutineLoadDesc(routineLoadDesc);
+            mergeLoadDescToOriginStatement(routineLoadDesc);
+        }
+        if (jobProperties != null) {
+            try {
                 modifyCommonJobProperties(jobProperties);
+            } catch (DdlException e) {
+                LOG.error("modify common job properties failed", e);
             }
-            if (dataSourceProperties != null) {
+        }
+        if (dataSourceProperties != null) {
+            try {
                 modifyDataSourceProperties(dataSourceProperties);
+            } catch (DdlException e) {
+                LOG.error("modify data source properties failed", e);
             }
-            if (!isReplay) {
-                AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
-                        jobProperties, dataSourceProperties, originStatement);
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log);
-            }
+        }
+    }
+
+    public void replayModifyJob(RoutineLoadDesc routineLoadDesc,
+                                Map<String, String> jobProperties,
+                                RoutineLoadDataSourceProperties dataSourceProperties) {
+        writeLock();
+        try {
+            applyModifyJob(routineLoadDesc, jobProperties, dataSourceProperties);
         } finally {
             writeUnlock();
         }
@@ -1882,9 +1919,44 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         origStmt = new OriginStatementInfo(sql, 0);
     }
 
+    protected abstract void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)
+            throws DdlException;
+
     protected abstract void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)
             throws DdlException;
 
+    private void checkCommonJobProperties(Map<String, String> jobProperties) throws DdlException {
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
+            Integer.parseInt(jobProperties.get(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
+        }
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
+            Long.parseLong(jobProperties.get(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+        }
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            Double.parseDouble(jobProperties.get(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
+        }
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
+            Long.parseLong(jobProperties.get(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY));
+        }
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
+            Long.parseLong(jobProperties.get(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        }
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)) {
+            Long.parseLong(jobProperties.get(CreateRoutineLoadStmt.TASK_CONSUME_SECOND));
+        }
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
+            Long.parseLong(jobProperties.get(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+        }
+        if (jobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = jobProperties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            if (warehouse == null) {
+                if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                    throw new DdlException("Warehouse " + warehouseName + " not exist");
+                }
+            }
+        }
+    }
     // for ALTER ROUTINE LOAD
     private void modifyCommonJobProperties(Map<String, String> jobProperties) throws DdlException {
         // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties

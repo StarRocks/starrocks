@@ -144,11 +144,10 @@ public class LoadMgr implements MemoryTrackable {
                         "There are more than " + Config.desired_max_waiting_jobs + " load jobs in waiting queue, "
                                 + "please retry later.");
             }
-            createLoadJob(loadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         } finally {
             writeUnlock();
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
 
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
@@ -271,12 +270,8 @@ public class LoadMgr implements MemoryTrackable {
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
-        addLoadJob(loadJob);
-        if (!loadJob.isCompleted()) {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
-        }
         // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         return loadJob;
     }
 

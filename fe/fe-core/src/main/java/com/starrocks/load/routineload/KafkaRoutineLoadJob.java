@@ -66,9 +66,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
-import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
-import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -301,7 +299,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
                 // change job state to running
                 if (result.size() != 0) {
-                    unprotectUpdateState(JobState.RUNNING, null, false);
+                    unprotectUpdateState(JobState.RUNNING, null);
                 }
             } else {
                 LOG.debug("Ignore to divide routine load job while job state {}", state);
@@ -446,8 +444,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                             .build(), e);
                     if (this.state == JobState.NEED_SCHEDULE) {
                         unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
+                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                     }
                     return false;
                 }
@@ -566,7 +563,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // check file
                 if (!smallFileMgr.containsFile(dbId, KAFKA_FILE_CATALOG, file)) {
                     throw new DdlException("File " + file + " does not exist in db "
-                            + dbId + " with globalStateMgr: " + KAFKA_FILE_CATALOG);
+                            + dbId + " with catalog: " + KAFKA_FILE_CATALOG);
                 }
             }
         }
@@ -768,38 +765,55 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(maskedProperties);
     }
 
-
-
-
-
-
-    /**
-     * add extra parameter check for changing kafka offset
-     * 1. if customKafkaParition is specified, only the specific partitions can be modified
-     * 2. otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
-     */
     @Override
-    public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
-                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatementInfo originStatement,
-                          boolean isReplay) throws DdlException {
-        if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
-            List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
-            if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
-                for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
-                    if (!customKafkaPartitions.contains(pair.first)) {
-                        throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
-                    }
+    protected void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
+        if (!dataSourceProperties.hasAnalyzedProperties()) {
+            return;
+        }
+
+        // check kafka partition offsets
+        // If customKafkaPartition is specified, only the specific partitions can be modified
+        // otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
+        List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
+        if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
+            for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
+                if (!customKafkaPartitions.contains(pair.first)) {
+                    throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                 }
-            } else {
-                // check if partition is validate
-                try {
-                    checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
-                } catch (StarRocksException e) {
-                    throw new DdlException("The specified partition is not in the consumed partitions ", e);
+            }
+        } else {
+            // check if partition is validate
+            try {
+                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+            } catch (StarRocksException e) {
+                throw new DdlException("The specified partition is not in the consumed partitions ", e);
+            }
+        }
+
+        Map<String, String> changedProperties = dataSourceProperties.getCustomKafkaProperties();
+        // check kafka default offsets
+        if (changedProperties.containsKey(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS)) {
+            try {
+                CreateRoutineLoadStmt.getKafkaOffset(
+                        changedProperties.get(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
+        // check file existence
+        SmallFileMgr smallFileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
+        for (Map.Entry<String, String> entry : changedProperties.entrySet()) {
+            if (entry.getValue().startsWith("FILE:")) {
+                // convert FILE:file_name -> FILE:file_id:md5
+                String file = entry.getValue().substring(entry.getValue().indexOf(":") + 1);
+                // check file
+                if (!smallFileMgr.containsFile(dbId, KAFKA_FILE_CATALOG, file)) {
+                    throw new DdlException("File " + file + " does not exist in db "
+                            + dbId + " with catalog: " + KAFKA_FILE_CATALOG);
                 }
             }
         }
-        super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }
 
     @Override
@@ -915,5 +929,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             // Return empty map as fallback
             return Maps.newHashMap();
         }
+    }
+
+    protected Long getKafkaDefaultOffSet() {
+        return kafkaDefaultOffSet;
     }
 }
