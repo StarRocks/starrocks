@@ -290,6 +290,9 @@ public class PruneComplexTypeUtil {
                 complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
             } else if (call.getFnName().equals(FunctionSet.MAP_VALUES)) {
                 complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_VALUE));
+            } else if (call.getFnName().equals(FunctionSet.MAP_ENTRIES)) {
+                // map_entries returns array<struct<key, value>>, so it needs both key and value
+                complexTypeAccessPaths.push(new ComplexTypeAccessPath(ComplexTypeAccessPathType.ALL_SUBFIELDS));
             }
 
             for (ScalarOperator child : call.getChildren()) {
@@ -297,7 +300,7 @@ public class PruneComplexTypeUtil {
             }
 
             if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE) ||
-                    call.getFnName().equals(FunctionSet.MAP_VALUES)) {
+                    call.getFnName().equals(FunctionSet.MAP_VALUES) || call.getFnName().equals(FunctionSet.MAP_ENTRIES)) {
                 complexTypeAccessPaths.pop();
             }
 

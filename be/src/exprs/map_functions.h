@@ -31,6 +31,8 @@ public:
 
     DEFINE_VECTORIZED_FN(map_filter);
 
+    DEFINE_VECTORIZED_FN(map_entries);
+
     DEFINE_VECTORIZED_FN(distinct_map_keys);
 
     DEFINE_VECTORIZED_FN(map_concat);
