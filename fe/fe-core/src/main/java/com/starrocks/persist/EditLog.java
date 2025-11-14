@@ -1779,8 +1779,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info, walApplier);
     }
 
-    public void logDropSmallFile(SmallFile info, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info, walApplier);
+    public void logDropSmallFile(RemoveSmallFileLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, log, walApplier);
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {

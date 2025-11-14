@@ -245,7 +245,7 @@ public class SmallFileMgr implements Writable {
             }
             SmallFile smallFile = smallFiles.getFile(fileName);
             if (smallFile != null) {
-                GlobalStateMgr.getCurrentState().getEditLog().logDropSmallFile(smallFile, wal -> {
+                GlobalStateMgr.getCurrentState().getEditLog().logDropSmallFile(new RemoveSmallFileLog(dbId, catalog, fileName), wal -> {
                     smallFiles.removeFile(fileName);
                     idToFiles.remove(smallFile.id);
                 });
