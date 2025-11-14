@@ -26,6 +26,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
 #include "exprs/expr.h"
+#include "exec/hdfs_scanner_json.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
