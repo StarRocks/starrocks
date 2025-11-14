@@ -194,7 +194,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
         if (!IVMAnalyzer.isTableTypeIVMSupported(snapshotTable.getType())) {
-            throw new SemanticException(String.format("Only support {} tables for MVIVMBasedRefreshProcessor, " +
+            throw new SemanticException(String.format("Only support %s tables for MVIVMBasedRefreshProcessor, " +
                     "but got: %s", Joiner.on(",").join(IVMAnalyzer.SUPPORTED_TABLE_TYPES),
                     snapshotTable.getType()));
         }
