@@ -209,6 +209,13 @@ public class AlterJobMgr {
         }
     }
 
+    /**
+     * NOTE: Inactive the specific mv and not inactive its relative mvs recursively.
+     * @param materializedView target mv to inactive
+     * @param status status to be set
+     * @param reason reason why to set inactive
+     * @param isReplay whehter this is called in replay
+     */
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
@@ -224,6 +231,7 @@ public class AlterJobMgr {
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (Exception e) {
+                LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
                         "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
@@ -620,7 +628,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            AlterMVJobExecutor.inactiveRelatedMaterializedView(view,
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
