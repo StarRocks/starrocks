@@ -109,6 +109,7 @@ public class PartitionPruneTest extends PlanTestBase {
                 " PARTITION BY (c2, c3) " +
                 " PROPERTIES('replication_num'='1')");
         starRocksAssert.ddl("ALTER TABLE t_gen_col_1 ADD PARTITION p1_01 VALUES IN (('1', '1'))");
+        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test

@@ -2774,7 +2774,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
     def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
         timeout = 300
         scan_table_sql = (
-            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
         fetch_segments_sql = r"""
             with profile as (

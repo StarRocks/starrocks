@@ -346,6 +346,7 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testProjectFilterRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String queryStr = "select 1 as b, MIN(v1) from t0 having (b + 1) != b;";
         String explainString = getFragmentPlan(queryStr);
         Assertions.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
@@ -481,6 +482,7 @@ public class ScanTest extends PlanTestBase {
     @Test
     public void testPruneColumnTest() throws Exception {
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String[] sqlString = {
                 "select count(*) from lineitem_partition",
                 // for olap, partition key is not partition column.

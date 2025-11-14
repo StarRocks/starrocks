@@ -63,6 +63,9 @@ select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from w1;
 alter resource group rg_${uuid0} with ('big_query_cpu_second_limit'='0','big_query_scan_rows_limit'='1');
 -- result:
 -- !result
+set enable_rewrite_simple_agg_to_meta_scan = false;
+-- result:
+-- !result
 select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from t1;
 -- result:
 [REGEX].*exceed big query scan_rows limit: current is \d+ but limit is 1.*
