@@ -584,10 +584,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
     /**
      * Inactive the materialized view and its related materialized views.
-<<<<<<< HEAD
-     *
-     * NOTE:
-=======
      */
     private static void doInactiveMaterializedViewRecursive(MaterializedView mv, String reason,
                                                             boolean isClearVersionMap,
@@ -628,7 +624,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     }
 
     /**
->>>>>>> 171bac0e67 ([BugFix] Fix inactive mv with nested mvs (#65317))
      * 1. This method will clear all visible version map of the MV since for all schema changes, the MV should be
      * refreshed.
      * 2. User's inactive-mv command should not call this which will reserve the visible version map.
