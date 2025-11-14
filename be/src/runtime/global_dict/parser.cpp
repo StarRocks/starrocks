@@ -270,6 +270,7 @@ void DictOptimizeParser::close() noexcept {
 
 Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
                                              int32_t targetSlotId) {
+    std::lock_guard guard(_dict_maps_mutex);
     auto* dict_mapping = down_cast<DictMappingExpr*>(expr);
     auto* origin_expr = dict_mapping->get_child(1);
     std::vector<SlotId> slots;
