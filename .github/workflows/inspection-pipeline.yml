@@ -4,7 +4,6 @@ on:
   schedule:
     - cron: "0 0 * * 1-5"
     - cron: "30 4 * * 1-5"
-    - cron: "30 9 * * 1-5"
     - cron: "0 11 * * 1,3,5"
     - cron: "0 11 * * 2,4"
   workflow_dispatch:
@@ -419,6 +418,7 @@ jobs:
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
+      IS_ARM: ${{ needs.info.outputs.IS_ARM }}
 
   system-test-asan:
     name: 'ASAN/Centos'
@@ -436,6 +436,7 @@ jobs:
       LINUX_DISTRO: centos7
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
+      IS_ARM: ${{ needs.info.outputs.IS_ARM }}
 
   system-test-release-ubuntu:
     name: 'Release/Ubuntu'
@@ -472,6 +473,7 @@ jobs:
       LINUX_DISTRO: ubuntu
       IS_SELF_BUILD: ${{ needs.test_filter.outputs.IS_SELF_BUILD }}
       INCLUDE_ADMIT: ${{ needs.info.outputs.INCLUDE_ADMIT }}
+      IS_ARM: ${{ needs.info.outputs.IS_ARM }}
 
   diff-info:
     runs-on: [self-hosted, quick]
