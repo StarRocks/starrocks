@@ -80,7 +80,7 @@ public class GlobalFunctionMgr {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
-            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are not allowed to use together
             throw new StarRocksException(
                     "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
         }

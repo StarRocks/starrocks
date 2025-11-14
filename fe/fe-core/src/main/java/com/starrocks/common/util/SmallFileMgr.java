@@ -206,8 +206,7 @@ public class SmallFileMgr implements Writable {
             smallFiles.checkFileExist(fileName);
 
             GlobalStateMgr.getCurrentState().getEditLog().logCreateSmallFile(smallFile, wal -> {
-                smallFiles.addFile(fileName, smallFile);
-                idToFiles.put(smallFile.id, smallFile);
+                addFileInternal(smallFiles, smallFile);
             });
 
             LOG.info("finished to add file {} from url {}. current file number: {}", fileName, downloadUrl,
@@ -232,9 +231,13 @@ public class SmallFileMgr implements Writable {
                 files.put(smallFile.dbId, smallFile.catalog, smallFiles);
             }
 
-            smallFiles.addFile(smallFile.name, smallFile);
-            idToFiles.put(smallFile.id, smallFile);
+            addFileInternal(smallFiles, smallFile);
         }
+    }
+
+    private void addFileInternal(SmallFiles smallFiles, SmallFile smallFile) {
+        smallFiles.addFile(smallFile.name, smallFile);
+        idToFiles.put(smallFile.id, smallFile);
     }
 
     public void removeFile(long dbId, String catalog, String fileName) throws DdlException {
@@ -246,8 +249,7 @@ public class SmallFileMgr implements Writable {
             SmallFile smallFile = smallFiles.getFile(fileName);
             if (smallFile != null) {
                 GlobalStateMgr.getCurrentState().getEditLog().logDropSmallFile(new RemoveSmallFileLog(dbId, catalog, fileName), wal -> {
-                    smallFiles.removeFile(fileName);
-                    idToFiles.remove(smallFile.id);
+                    removeFileInternal(smallFiles, smallFile);
                 });
                 LOG.info("finished to remove file {}. current file number: {}", fileName, idToFiles.size());
             } else {
@@ -265,11 +267,15 @@ public class SmallFileMgr implements Writable {
             if (smallFiles != null) {
                 SmallFile smallFile = smallFiles.getFile(fileName);
                 if (smallFile != null) {
-                    smallFiles.removeFile(fileName);
-                    idToFiles.remove(smallFile.id);
+                    removeFileInternal(smallFiles, smallFile);
                 }
             }
         }
+    }
+
+    private void removeFileInternal(SmallFiles smallFiles, SmallFile smallFile) {
+        smallFiles.removeFile(smallFile.name);
+        idToFiles.remove(smallFile.id);
     }
 
     public boolean containsFile(long dbId, String catalog, String fileName) {
