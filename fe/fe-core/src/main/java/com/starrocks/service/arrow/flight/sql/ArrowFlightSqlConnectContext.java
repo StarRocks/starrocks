@@ -88,7 +88,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         this.returnResultFromFE = true;
     }
 
-    public void reset(String query) {
+    public void initWithStatement(String query) {
         queryLock.lock(); 
         try {
             if (!this.query.isEmpty()) {
@@ -110,7 +110,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         }
     }
 
-    public void clearQuery() {
+    public void reset() {
         queryLock.lock(); 
         try {
             this.query = ""; 
@@ -181,7 +181,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     public void cancelQuery() {
         if (executor != null) {
             executor.cancel("Arrow Flight SQL client disconnected");
-            clearQuery();
+            reset();
         }
     }
 
