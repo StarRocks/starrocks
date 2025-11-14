@@ -4487,17 +4487,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbTbl.getDb());
         }
 
-<<<<<<< HEAD
         boolean truncateEntireTable = tblRef.getPartitionNames() == null;
-=======
-        TableRef tblRef = truncateTableStmt.getTblRef();
-        TableName dbTbl = new TableName(dbName, tableName);
-        boolean truncateEntireTable = tblRef.getPartitionDef() == null;
+        String dbName = dbTbl.getDb();
 
         // Get the table outside the lock to obtain the tableId for fine-grained locking.
         // Use session-aware lookup to support temporary tables.
         long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
->>>>>>> 4e4a279f8d ([BugFix] turn db-level lock to table-level lock in LocalMetastore.truncateTable() (#65191))
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
