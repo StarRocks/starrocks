@@ -77,7 +77,7 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
                    << ", column: " << col->get_name();
         const uint8_t* buff = reinterpret_cast<const uint8_t*>(pcolumn.data().data());
         auto ret = serde::ColumnArraySerde::deserialize(buff, col.get());
-        if (ret == nullptr) {
+        if (!ret.ok()) {
             auto msg = fmt::format("deserialize column failed, slot_id: {}, data_size: {}", slot_id, data_size);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
@@ -115,7 +115,7 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
         auto pcolumn = response->add_columns();
         pcolumn->set_slot_id(slots[i]->id());
         uint8_t* start = buff;
-        buff = serde::ColumnArraySerde::serialize(*column, buff);
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column, buff));
         pcolumn->set_data_size(buff - start);
         DLOG(INFO) << "serialize column: " << slots[i]->id() << ", " << column->get_name()
                    << ", data_size: " << (buff - start);

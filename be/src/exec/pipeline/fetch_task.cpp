@@ -112,14 +112,13 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                 auto column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
                 const uint8_t* buff = reinterpret_cast<const uint8_t*>(buffer.data());
                 auto ret = serde::ColumnArraySerde::deserialize(buff, column.get());
-                if (ret == nullptr) {
+                if (!ret.ok()) {
                     auto msg = fmt::format("deserialize column error, slot_id: {}", slot_id);
                     LOG(WARNING) << msg;
                     ctx->processor->_set_io_task_status(Status::InternalError(msg));
                     return;
                 }
-                DCHECK(!ctx->response_columns.contains(slot_id))
-                        << "response_columns should not contain slot_id: " << slot_id;
+                DCHECK(!ctx->response_columns.contains(slot_id));
                 DLOG(INFO) << "[GLM] add response column, slot_id: " << slot_id << ", column: " << column->get_name();
                 ctx->response_columns.insert({slot_id, std::move(column)});
             }
@@ -168,7 +167,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
             p_column->set_slot_id(slot_id);
             const auto& column = request_chunk->get_column_by_index(idx);
             uint8_t* start = buff;
-            buff = serde::ColumnArraySerde::serialize(*column, buff);
+            ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column, buff));
             p_column->set_data_size(buff - start);
         }
         size_t actual_serialize_size = buff - begin;
