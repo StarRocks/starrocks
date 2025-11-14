@@ -99,7 +99,7 @@ public:
                                     TGetTablesConfigResponse* var_result);
 
     static Status get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
-                                      TGetTabletScheduleResponse* response);
+                                       TGetTabletScheduleResponse* response);
 
     static Status get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
                                  TGetFeThreadsResponse* response);
