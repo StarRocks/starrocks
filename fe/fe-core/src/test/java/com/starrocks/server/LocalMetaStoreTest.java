@@ -17,6 +17,8 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -51,22 +53,13 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
-<<<<<<< HEAD
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-=======
-import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Invocation;
->>>>>>> 4e4a279f8d ([BugFix] turn db-level lock to table-level lock in LocalMetastore.truncateTable() (#65191))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -382,9 +375,7 @@ public class LocalMetaStoreTest {
             }
         };
 
-
-        List<String> parts = Lists.newArrayList(dbName, "t1");
-        TableRef tableRef = new TableRef(QualifiedName.of(parts), null, NodePosition.ZERO);
+        TableRef tableRef = new TableRef(new TableName(dbName, "t1"), null);
         TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
         DdlException exception =
                 Assertions.assertThrows(DdlException.class, () -> localMetastore.truncateTable(stmt, connectContext));
