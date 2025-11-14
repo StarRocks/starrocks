@@ -97,7 +97,6 @@ set(EXEC_FILES
     assert_num_rows_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
-    hdfs_scanner_json.cpp
     json_parser.cpp
     project_node.cpp
     dict_decode_node.cpp
@@ -112,6 +111,7 @@ set(EXEC_FILES
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_json.cpp
     hdfs_scanner/hdfs_scanner_partition.cpp
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
