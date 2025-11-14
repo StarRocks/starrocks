@@ -64,13 +64,7 @@ import org.apache.logging.log4j.Logger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
-<<<<<<< HEAD
-=======
-import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
->>>>>>> 297cc06d8e ([BugFix] Fix error log for HTTP SQL changing user (#65371))
 
 import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
