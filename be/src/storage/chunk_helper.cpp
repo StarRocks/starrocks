@@ -457,6 +457,35 @@ ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots,
     return chunk;
 }
 
+// create object column then reserve is exception safe.
+
+StatusOr<Chunk*> ChunkHelper::new_chunk_pooled_checked(const Schema& schema, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    auto* chunk = ChunkHelper::new_chunk_pooled(schema, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const Schema& schema, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    ChunkUniquePtr chunk;
+    chunk = ChunkHelper::new_chunk(schema, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    ChunkUniquePtr chunk;
+    chunk = ChunkHelper::new_chunk(slots, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
+    return ChunkHelper::new_chunk_checked(tuple_desc.slots(), n);
+}
+
 void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {
     return reorder_chunk(tuple_desc.slots(), chunk);
 }

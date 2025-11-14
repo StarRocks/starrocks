@@ -16,6 +16,7 @@
 
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/raw_container_checked.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
 #include "util/coding.h"
 #include "util/raw_container.h"
@@ -45,9 +46,8 @@ public:
         // data_size is size of decoded_data
         // compressed_size contains encoded_data size and BITSHUFFLE_PAGE_HEADER_SIZE
         std::unique_ptr<std::vector<uint8_t>> decompressed_page(new std::vector<uint8_t>());
-        raw::stl_vector_resize_uninitialized(
-                decompressed_page.get(),
-                page_slice->size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE));
+        size_t new_size = page_slice->size + data_size - (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);
+        RETURN_IF_ERROR(raw::stl_vector_resize_uninitialized_checked(decompressed_page.get(), new_size));
         memcpy(decompressed_page.get()->data(), page_slice->data, header_size);
 
         Slice compressed_body(page_slice->data + header_size, compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE);

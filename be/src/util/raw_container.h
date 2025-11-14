@@ -127,18 +127,12 @@ public:
     bool operator==(const AlignmentAllocator<T, N>& other) const { return true; }
 };
 
-// https://github.com/StarRocks/starrocks/issues/233
-// older versions of CXX11 string abi are cow semantic and our optimization to provide raw_string causes crashes.
-//
-// So we can't use this optimization when we detect a link to an old version of abi,
-// and this may affect performance. So we strongly recommend to use the new version of abi
-//
+// see details about ABI compatibility issue https://github.com/StarRocks/starrocks/issues/233
 #if _GLIBCXX_USE_CXX11_ABI
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
 #else
-using RawString = std::string;
-using RawStringPad16 = std::string;
+#error "Cannot use RawString optimization with old CXX11 ABI"
 #endif
 // From cpp reference: "A trivial destructor is a destructor that performs no action. Objects with
 // trivial destructors don't require a delete-expression and may be disposed of by simply
@@ -155,11 +149,16 @@ using RawVector = std::vector<T, RawAllocator<T, 0, Alloc>>;
 template <class T, class Alloc = std::allocator<T>>
 using RawVectorPad16 = std::vector<T, RawAllocator<T, 16, Alloc>>;
 
-template <typename Container, typename T = typename Container::value_type>
-inline typename std::enable_if<
-        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
-        void>::type
-make_room(Container* v, size_t n) {
+template <typename Container>
+concept VecContainer = requires(Container c) {
+    typename Container::value_type;
+    typename Container::allocator_type;
+}
+&&std::same_as<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>;
+
+template <VecContainer Container>
+inline void make_room(Container* v, size_t n) {
+    using T = typename Container::value_type;
     RawVector<T, typename Container::allocator_type> rv;
     rv.resize(n);
     v->swap(reinterpret_cast<Container&>(rv));
@@ -171,19 +170,15 @@ inline void make_room(std::string* s, size_t n) {
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
-template <typename Container, typename T = typename Container::value_type>
-inline typename std::enable_if<
-        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
-        void>::type
-stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
+template <VecContainer Container>
+inline void stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
+    using T = typename Container::value_type;
     ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
 }
 
-template <typename Container, typename T = typename Container::value_type>
-inline typename std::enable_if<
-        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
-        void>::type
-stl_vector_resize_uninitialized(Container* vec, size_t reserve_size, size_t new_size) {
+template <VecContainer Container>
+inline void stl_vector_resize_uninitialized(Container* vec, size_t reserve_size, size_t new_size) {
+    using T = typename Container::value_type;
     ((RawVector<T, typename Container::allocator_type>*)vec)->resize(reserve_size);
     vec->resize(new_size);
 }
