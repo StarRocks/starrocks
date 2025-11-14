@@ -1,0 +1,113 @@
+commit bab40883343ae9ff276668a48d952f1cc31489f3
+Author: Your Name <you@example.com>
+Date:   Thu Nov 13 10:09:49 2025 +0000
+
+    support
+
+diff --git a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/Makefile b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/Makefile
+new file mode 100644
+index 00000000..27f89af7
+--- /dev/null
++++ b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/Makefile
+@@ -0,0 +1,52 @@
++# ==========================
++# Makefile for libhdfs.a (Linux, static library, no JVM link)
++# ==========================
++
++# Get JAVA_HOME from environment variable
++ifndef JAVA_HOME
++$(error JAVA_HOME is not set)
++endif
++
++CC      := gcc
++CFLAGS  := -O2 -Wall -fPIC \
++	   -I ./include/\
++           -I ./ \
++	   -I ./os/posix/\
++           -I$(JAVA_HOME)/include \
++           -I$(JAVA_HOME)/include/linux
++
++# Automatically collect source files
++SRC := $(wildcard *.c os/posix/*.c)
++OBJS := $(SRC:.c=.o)
++TARGET := libhdfs.a
++
++# ==========================
++# Default target
++# ==========================
++all: $(TARGET)
++
++# ==========================
++# Build static library
++# ==========================
++$(TARGET): $(OBJS)
++	ar rcs $@ $(OBJS)
++	@echo "Built $@"
++
++# ==========================
++# Compile object files
++# ==========================
++%.o: %.c
++	$(CC) $(CFLAGS) -c $< -o $@
++
++# ==========================
++# Clean up build files
++# ==========================
++clean:
++	rm -f $(OBJS) $(TARGET)
++
++# ==========================
++# Print variables (for debugging)
++# ==========================
++print-%:
++	@echo '$*=$($*)'
++
+diff --git a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/config.h b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/config.h
+new file mode 100644
+index 00000000..2fed7ca0
+--- /dev/null
++++ b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/config.h
+@@ -0,0 +1,26 @@
++// Copyright 2021-present StarRocks, Inc. All rights reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     https://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++#pragma once
++
++#ifndef CONFIG_H
++#define CONFIG_H
++
++#define HAVE_BETTER_TLS
++
++#if defined(__x86_64__)
++#define HAVE_INTEL_SSE_INTRINSICS
++#endif
++
++#endif
+diff --git a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
+index 8f00a08b..aaddec1b 100644
+--- a/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
++++ b/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
+@@ -23,8 +23,10 @@
+ #include "platform.h"
+ #include "os/mutexes.h"
+ #include "os/thread_local_storage.h"
+-#include "x-platform/c-api/dirent.h"
+-#include "x-platform/types.h"
++//#include "x-platform/c-api/dirent.h"
++//#include "x-platform/types.h"
++#include <dirent.h>
++#include <sys/types.h>
+ 
+ #include <errno.h>
+ #include <stdio.h> 
