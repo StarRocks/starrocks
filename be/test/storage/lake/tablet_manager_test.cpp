@@ -826,6 +826,27 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_tablet_metadata(_tablet_manager->tablet_metadata_location(4, 1)).ok());
 }
 
+TEST_F(LakeTabletManagerTest, get_inital_tablet_metadata) {
+    auto tablet_id = next_id();
+
+    // Create initial tablet metadata without setting tablet id
+    starrocks::TabletMetadata initial_metadata;
+    initial_metadata.set_version(1);
+    initial_metadata.set_next_rowset_id(1);
+
+    // Save it to initial metadata location
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(std::make_shared<starrocks::TabletMetadata>(initial_metadata),
+                                                   _tablet_manager->tablet_initial_metadata_location(tablet_id)));
+
+    // Get tablet metadata by tablet_id and version
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 1);
+    ASSERT_TRUE(res.ok());
+
+    // Verify that tablet_id is correctly set from the initial metadata
+    EXPECT_EQ(res.value()->id(), tablet_id);
+    EXPECT_EQ(res.value()->version(), 1);
+}
+
 TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
