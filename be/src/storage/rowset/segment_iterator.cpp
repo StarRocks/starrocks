@@ -1749,12 +1749,13 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_read_chunk, ChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _reserve_chunk_size);
+            ASSIGN_OR_RETURN(to->_dict_chunk,
+                             ChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -1789,15 +1790,16 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                 output_schema_idx++;
             }
         }
-
-        to->_final_chunk = ChunkHelper::new_chunk(final_chunk_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     }
-
-    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size)
-                                           : to->_final_chunk;
+    if (to->_has_force_dict_encode) {
+        ASSIGN_OR_RETURN(to->_adapt_global_dict_chunk,
+                         ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+    } else {
+        to->_adapt_global_dict_chunk = to->_final_chunk;
+    }
 
     _context = to;
     return Status::OK();

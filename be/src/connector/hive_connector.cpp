@@ -880,8 +880,8 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
 
-    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
     return Status::OK();
 }
 

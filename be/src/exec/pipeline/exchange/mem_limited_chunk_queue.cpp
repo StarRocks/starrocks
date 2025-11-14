@@ -412,8 +412,7 @@ Status MemLimitedChunkQueue::_flush() {
     // 2. serialize data
     for (auto& chunk : chunks) {
         for (const auto& column : chunk->columns()) {
-            buf = serde::ColumnArraySerde::serialize(*column, buf, false, _opts.encode_level);
-            RETURN_IF(buf == nullptr, Status::InternalError("serialize data error"));
+            ASSIGN_OR_RETURN(buf, serde::ColumnArraySerde::serialize(*column, buf, false, _opts.encode_level));
         }
     }
     size_t content_length = buf - begin;
@@ -516,8 +515,8 @@ Status MemLimitedChunkQueue::_load(Block* block) {
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
         for (auto& column : chunk->columns()) {
-            read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false, _opts.encode_level);
-            RETURN_IF(read_cursor == nullptr, Status::InternalError("deserialize failed"));
+            ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false,
+                                                                               _opts.encode_level));
         }
     }
     {

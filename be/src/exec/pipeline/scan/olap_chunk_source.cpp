@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
@@ -22,6 +23,7 @@
 #include "column/column_access_path.h"
 #include "column/field.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -619,7 +621,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
