@@ -436,11 +436,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         listener.setOnCancelHandler(ctx::cancelQuery);
 
-        listener.start(vectorSchemaRoot);
-        listener.putNext();
-        listener.completed();
-
-        ctx.removeResult(queryId);
+        try {
+            listener.start(vectorSchemaRoot);
+            listener.putNext();
+            listener.completed();
+        } finally {
+            ctx.removeResult(queryId);
+            ctx.clearQuery();
+        }
     }
 
     protected FlightInfo getFlightInfoFromQuery(ArrowFlightSqlConnectContext ctx, FlightDescriptor descriptor) {
@@ -517,6 +520,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
             return buildFlightInfo(ticketStatement, descriptor, schema, endpoint);
         } catch (Exception e) {
+            ctx.clearQuery();
             LOG.warn("[ARROW] failed to getFlightInfoFromQuery [queryID={}]", DebugUtil.printId(ctx.getExecutionId()), e);
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
         }

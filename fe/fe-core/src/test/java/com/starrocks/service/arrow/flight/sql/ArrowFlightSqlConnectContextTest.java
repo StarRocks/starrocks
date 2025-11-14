@@ -87,6 +87,43 @@ public class ArrowFlightSqlConnectContextTest {
     }
 
     @Test
+    public void testResetThrowsWhenQueryAlreadySet() {
+        // First reset should succeed
+        context.reset("SELECT 1");
+        assertEquals("SELECT 1", context.getQuery());
+        
+        // Second reset should throw IllegalStateException
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            context.reset("SELECT 2");
+        });
+        
+        assertTrue(exception.getMessage().contains("Query already in progress"));
+    }
+
+    @Test
+    public void testResetAfterClearQuery() {
+        context.reset("SELECT 1");
+        context.clearQuery();
+        
+        // Should not throw since query was cleared
+        context.reset("SELECT 2");
+        assertEquals("SELECT 2", context.getQuery());
+    }
+
+    @Test
+    public void testClearQuery() {
+        context.reset("SELECT 1");
+        assertEquals("SELECT 1", context.getQuery());
+        
+        context.clearQuery();
+        assertEquals("", context.getQuery());
+        
+        // After clearing, reset should work again
+        context.reset("SELECT 2");
+        assertEquals("SELECT 2", context.getQuery());
+    }
+
+    @Test
     public void testSetReturnResultFromFE() {
         context.setReturnResultFromFE(false);
         assertFalse(context.returnFromFE());
