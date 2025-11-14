@@ -144,8 +144,7 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
 Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
-    ++_doc_stream_itr;
-    if (_doc_stream_itr != _doc_stream.end() ||
+    if (++_doc_stream_itr != _doc_stream.end() ||
         /*
          * When the iterator reach the end, we should always to reset the
          * batch_size until _len - _last_begin_offset to check if the
