@@ -820,6 +820,7 @@ public class SubqueryTest extends PlanTestBase {
 
     @Test
     public void testOnClauseNonCorrelatedScalarAggSubquery() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         {
             String sql = "select * from t0 " +
                     "join t1 on t0.v1 = (select count(*) from t3 join t4)";
@@ -1349,6 +1350,7 @@ public class SubqueryTest extends PlanTestBase {
 
     @Test
     public void testSubqueryTypeRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         {
             String sql =
                     "select nullif((select max(v4) from t1), (select min(v6) from t1))";

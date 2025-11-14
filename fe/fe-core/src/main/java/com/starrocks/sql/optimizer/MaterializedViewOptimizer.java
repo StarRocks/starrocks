@@ -64,6 +64,11 @@ public class MaterializedViewOptimizer {
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG);
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG_FUNCTION);
         optimizerOptions.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
+<<<<<<< HEAD
+=======
+        optimizerOptions.disableRule(RuleType.TF_JSON_PATH_REWRITE);
+        optimizerOptions.disableRule(RuleType.TF_REWRITE_SIMPLE_AGG);
+>>>>>>> 6cfb51b709 ([Enhancement] enable rewrite simple agg to meta scan by default (#64698))
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerOptions.disableRule(RuleType.TF_MATERIALIZED_VIEW);
