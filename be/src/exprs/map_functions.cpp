@@ -186,6 +186,42 @@ StatusOr<ColumnPtr> MapFunctions::map_values(FunctionContext* context, const Col
     }
 }
 
+// map_entries(map) -> array<struct<key, value>>
+// Converts all key-value pairs in a MAP to ARRAY<STRUCT<K, V>>
+// Example: map_entries(map{1:'a', 2:'b'}) -> [{1,'a'}, {2,'b'}]
+StatusOr<ColumnPtr> MapFunctions::map_entries(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
+    const auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0.get()));
+
+    // Get keys and values from the map
+    const auto& map_keys = col_map->keys_column();
+    const auto& map_values = col_map->values_column();
+
+    // Construct StructColumn with two fields: key and value
+    Columns struct_fields;
+    struct_fields.emplace_back(map_keys->clone());
+    struct_fields.emplace_back(map_values->clone());
+
+    // Provide field names to avoid anonymous struct check failure
+    std::vector<std::string> field_names = {"key", "value"};
+    auto struct_column = StructColumn::create(std::move(struct_fields), std::move(field_names));
+
+    auto null_column = NullColumn::create(struct_column->size(), 0);
+    auto nullable_struct = NullableColumn::create(std::move(struct_column), std::move(null_column));
+    auto result_array = ArrayColumn::create(std::move(nullable_struct), UInt32Column::create(col_map->offsets()));
+
+    if (arg0->has_null()) {
+        return NullableColumn::create(
+                std::move(result_array),
+                NullColumn::static_pointer_cast(down_cast<NullableColumn*>(arg0.get())->null_column()->clone()));
+    } else {
+        return result_array;
+    }
+}
+
 // by design map_filter(map, bool_array), if bool_array is null, return an empty map. We do not return null, as
 // it will change the null property of return results which keeps the same with the first argument map.
 StatusOr<ColumnPtr> MapFunctions::map_filter(FunctionContext* context, const Columns& columns) {
