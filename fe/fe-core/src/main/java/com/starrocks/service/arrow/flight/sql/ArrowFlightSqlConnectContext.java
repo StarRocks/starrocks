@@ -146,7 +146,12 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public String getQuery() {
-        return query;
+        queryLock.lock(); 
+        try {
+            return query;
+        } finally {
+            queryLock.unlock();
+        }
     }
 
     public boolean returnFromFE() {
