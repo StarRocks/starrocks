@@ -258,7 +258,7 @@ public class PluginMgr implements Writable {
             // install plugin
             pluginLoader.reload();
             pluginLoader.setStatus(PluginStatus.INSTALLED);
-        } catch (Exception e) {
+        } catch (IOException | StarRocksException e) {
             pluginLoader.setStatus(PluginStatus.ERROR, e.getMessage());
             LOG.warn("fail to load plugin", e);
         } finally {
