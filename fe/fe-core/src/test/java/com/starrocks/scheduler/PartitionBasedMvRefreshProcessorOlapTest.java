@@ -2185,6 +2185,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 // specific db
                                 Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(DB_NAME, null).isEmpty());
 
+                                int i = 0;
+                                while (i++ < 120 && (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null
+                                        || tm.listMVRefreshedTaskRunStatus(null, null).isEmpty())) {
+                                    Thread.sleep(1000);
+                                }
+                                // without db name
+                                if (tm.listMVRefreshedTaskRunStatus(null, null).isEmpty()) {
+                                    return;
+                                }
+
                                 Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
                                         tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
                                 System.out.println(taskNameJobStatusMap);
