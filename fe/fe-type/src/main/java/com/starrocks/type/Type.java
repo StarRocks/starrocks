@@ -35,7 +35,6 @@
 package com.starrocks.type;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.combinator.AggStateDesc;
 
 /**
  * Abstract class describing an Impala data type (scalar/complex type).
