@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -92,6 +93,8 @@ private:
     GlobalDictMaps* _mutable_dict_maps = nullptr;
     ObjectPool _free_pool;
     std::unordered_map<SlotId, ExprContext*> _dict_exprs;
+    // Mutex to protect concurrent access to _mutable_dict_maps in parallel prepare
+    std::recursive_mutex _dict_maps_mutex;
 };
 
 } // namespace starrocks
