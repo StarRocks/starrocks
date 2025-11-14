@@ -123,7 +123,6 @@ public class ViewsSystemTable extends SystemTable {
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
-        params.setDb(context.getDatabase());
         params.setType(VIEW);
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
