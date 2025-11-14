@@ -17,6 +17,12 @@
 // NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <memory>
 
+<<<<<<< HEAD
+=======
+#include "column/chunk.h"
+#include "column/column_visitor.h"
+#include "column/column_visitor_adapter.h"
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
@@ -70,6 +76,13 @@ public:
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
     static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+
+    // a wrapper of new_chunk_pooled with memory check
+    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
+    // a wrapper of new_chunk with memory check
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.

@@ -231,6 +231,26 @@ void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBui
 
     if (!need_sender_grf) return;
 
+<<<<<<< HEAD
+=======
+    PTransmitRuntimeFilterParams params;
+    prepare_params(params, state, rf_desc);
+
+    VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters for skew join's boradcast site. join filter_id="
+              << rf_desc->filter_id() << ", finst_id=" << state->fragment_instance_id()
+              << "RuntimeFilterPort::publish_runtime_filters. merge_node[0]=" << rf_desc->merge_nodes()[0]
+              << ", query_id=" << params.query_id() << ", finst_id=" << params.finst_id()
+              << ", be_number=" << params.build_be_number() << ", is_pipeline=" << params.is_pipeline();
+
+    std::string* rf_data = params.mutable_data();
+    size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(keyColumn);
+    rf_data->resize(max_size);
+    auto actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(
+            keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
+    RETURN_IF(!actual_size.status().ok(), (void)nullptr);
+    rf_data->resize(actual_size.value());
+    *(params.mutable_columntype()) = type_desc.to_protobuf();
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
         timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
@@ -500,10 +520,10 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
 
     // store material of broadcast join rf
     status->skew_broadcast_rf_material = nullptr;
-    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
+    auto rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
             &(status->pool), &(status->skew_broadcast_rf_material),
             reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size(), params.columntype());
-
+    RETURN_IF(!rf_version.ok(), (void)nullptr);
     if (status->skew_broadcast_rf_material == nullptr) {
         // something wrong with deserialization.
         return;
@@ -513,7 +533,7 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
     if (status->filters.size() < status->expect_number) return;
 
     // this only happens when boradcast's rf is the last rf instance arrived
-    _send_total_runtime_filter(rf_version, filter_id);
+    _send_total_runtime_filter(rf_version.value(), filter_id);
 }
 
 struct BatchClosuresJoinAndClean {
