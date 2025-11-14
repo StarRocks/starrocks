@@ -6,11 +6,23 @@ displayed_sidebar: docs
 
 :::note
 
+<<<<<<< HEAD
 - v3.0以降、Hive、Iceberg、Hudiからデータをクエリするためにcatalogを使用することを推奨します。[Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md)を参照してください。
+=======
+外部テーブル機能は、特定の特殊な使用ケースを除き推奨されなくなり、将来のリリースで廃止される可能性があります。一般的なシナリオで外部データソースからのデータを管理およびクエリするには、[External Catalog](./catalog/catalog_overview.md) の使用が推奨されます。
+
+- v3.0以降、Hive、Iceberg、Hudiからデータをクエリするには、catalogを使用することを推奨します。詳細は [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) を参照してください。
+>>>>>>> 2bfea2a75b ([Doc] Add External Table Note (#65479))
 
 - v3.1以降、MySQLおよびPostgreSQLからデータをクエリするために [JDBC catalog](../data_source/catalog/jdbc_catalog.md) を使用し、Elasticsearchからデータをクエリするために [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) を使用することを推奨します。
 
+<<<<<<< HEAD
 - 外部テーブル機能は、StarRocksにデータをロードするために設計されており、通常の操作として外部システムに対して効率的なクエリを実行するためのものではありません。より効率的なソリューションは、データをStarRocksにロードすることです。
+=======
+- v3.2.9 および v3.3.1 以降では、Oracle および SQL Server からデータをクエリするには [JDBC カタログ](../data_source/catalog/jdbc_catalog.md) の使用を推奨します。
+
+- 外部テーブル機能は、StarRocksにデータをロードするために設計されており、外部システムに対して通常の操作として効率的なクエリを実行するためのものではありません。より効率的な解決策は、データをStarRocksにロードすることです。
+>>>>>>> 2bfea2a75b ([Doc] Add External Table Note (#65479))
 
 :::
 
