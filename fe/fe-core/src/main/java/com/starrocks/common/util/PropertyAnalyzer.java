@@ -267,6 +267,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
 
+    public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
+
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
      * leading and trailing space of key and value will be ignored.
@@ -584,6 +586,14 @@ public class PropertyAnalyzer {
             enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
         }
         return enableLoadProfile;
+    }
+
+    public static boolean analyzeEnableStatisticCollectOnFirstLoad(Map<String, String> properties) {
+        boolean enable = true;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            enable = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+        }
+        return enable;
     }
 
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {

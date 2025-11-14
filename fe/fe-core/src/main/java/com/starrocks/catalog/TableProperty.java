@@ -331,6 +331,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    @SerializedName(value = "enableStatisticCollectOnFirstLoad")
+    private boolean enableStatisticCollectOnFirstLoad = true;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -419,6 +422,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
+                buildEnableStatisticCollectOnFirstLoad();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -1113,6 +1117,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return location;
     }
 
+    public boolean enableStatisticCollectOnFirstLoad() {
+        return enableStatisticCollectOnFirstLoad;
+    }
+
+    public void setEnableStatisticCollectOnFirstLoad(boolean enableStatisticCollectOnFirstLoad) {
+        this.enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad;
+    }
+
     public TWriteQuorumType writeQuorum() {
         return writeQuorum;
     }
@@ -1229,6 +1241,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
+    public TableProperty buildEnableStatisticCollectOnFirstLoad() {
+        enableStatisticCollectOnFirstLoad = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true"));
+        return this;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1263,5 +1281,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildEnableStatisticCollectOnFirstLoad();
     }
 }
