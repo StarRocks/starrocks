@@ -1479,7 +1479,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     res = InactiveReason.ofInactive(
-                            MaterializedViewExceptions.inactiveReasonForBaseTableActive(baseTableInfo.getTableName()));
+                            MaterializedViewExceptions.inactiveReasonForBaseTableInActive(baseTableInfo.getTableName()));
                 }
             }
 
