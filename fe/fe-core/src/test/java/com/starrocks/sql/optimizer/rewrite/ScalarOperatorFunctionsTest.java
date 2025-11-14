@@ -1616,4 +1616,70 @@ public class ScalarOperatorFunctionsTest {
             assertEquals(String.format("test case failed: %s, result = %d", tc, result), tc.value, result);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLastDayDefaultMonth() {
+        Object[][] testCases = {
+                // date, expected last day of month
+                {"2023-05-10T10:00:00", "2023-05-31"},
+                {"2024-02-01T00:00:00", "2024-02-29"}, // Leap year
+                {"2021-02-01T00:00:00", "2021-02-28"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input);
+            assertEquals(tc[1], result.getDate().toLocalDate().toString(), "Failed case: " + Arrays.toString(tc));
+        }
+    }
+
+    @Test
+    public void testLastDayWithUnit() {
+        Object[][] testCases = {
+                {"2023-03-15T00:00:00", "month", "2023-03-31"},
+                {"2023-03-15T00:00:00", "quarter", "2023-03-31"},
+                {"2023-05-01T00:00:00", "quarter", "2023-06-30"},
+                {"2023-05-01T00:00:00", "year", "2023-12-31"},
+        };
+
+        for (Object[] tc : testCases) {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse((String) tc[0]));
+            ConstantOperator unit = ConstantOperator.createVarchar((String) tc[1]);
+            ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+            assertEquals(tc[2], result.getDate().toLocalDate().toString(), "Failed case: " + Arrays.toString(tc));
+        }
+    }
+
+    @Test
+    public void testLastDayWithInvalidUnit() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            ConstantOperator input = ConstantOperator.createDatetime(LocalDateTime.parse("2023-05-10T00:00:00"));
+            ConstantOperator unit = ConstantOperator.createVarchar("invalid");
+            ScalarOperatorFunctions.lastDay(input, unit);
+        });
+    }
+
+    @Test
+    public void testLastDayWithNull() {
+        ConstantOperator input = ConstantOperator.createNull(DateType.DATETIME);
+        ConstantOperator unit = ConstantOperator.createVarchar("month");
+        ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
+        assertEquals(true, result.isNull());
+    }
+
+    @Test
+    public void testHourMinuteSecond() {
+        ConstantOperator v = ConstantOperator.createDatetime(LocalDateTime.of(2022, 11, 11, 11, 10, 9));
+        assertEquals(11, ScalarOperatorFunctions.hour(v).getTinyInt());
+        assertEquals(10, ScalarOperatorFunctions.minute(v).getTinyInt());
+        assertEquals(9, ScalarOperatorFunctions.second(v).getTinyInt());
+
+        v = ConstantOperator.createDate(LocalDate.parse("2022-11-11").atTime(0, 0, 0, 0));
+        assertEquals(0, ScalarOperatorFunctions.hour(v).getTinyInt());
+        assertEquals(0, ScalarOperatorFunctions.minute(v).getTinyInt());
+        assertEquals(0, ScalarOperatorFunctions.second(v).getTinyInt());
+    }
+>>>>>>> e66c880dfc ([Enhancement] Support hour/minute/second constant evaluation in FE (#64953))
 }
