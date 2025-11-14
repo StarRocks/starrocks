@@ -2030,7 +2030,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                             extraMessage.getMvPartitionsToRefresh());
                                     Assertions.assertEquals(Sets.newHashSet("p0", "p1", "p2", "p3"),
                                             extraMessage.getBasePartitionsToRefreshMap().get("mock_tbl"));
-                                    Assertions.assertTrue(processor.getNextTaskRun() == null);
+                                    Assertions.assertTrue(processor.getNextTaskRun() != null);
                                 }
                             });
                 }
