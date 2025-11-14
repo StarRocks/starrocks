@@ -16,7 +16,7 @@
 
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.cpp"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
