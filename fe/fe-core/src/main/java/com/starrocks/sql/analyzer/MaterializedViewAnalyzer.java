@@ -85,6 +85,7 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
@@ -1568,21 +1569,30 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            // If the key type is primary key, the distribution must be hash distribution.
-            if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                distributionDesc = checkDistributionForPrimaryKey(statement);
-            } else {
-                // for non primary key tables, if user not specify distribution, we use hash distribution
+            if (Config.enable_range_distribution) {
                 if (distributionDesc == null) {
-                    if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
-                        distributionDesc = new HashDistributionDesc(0,
-                                Lists.newArrayList(mvColumnItems.get(0).getName()));
-                    } else {
-                        distributionDesc = new RandomDistributionDesc();
-                    }
+                    // If no distribution specified, use range distribution
+                    distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
+            } else {
+                // If the key type is primary key, the distribution must be hash distribution.
+                if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
+                    distributionDesc = checkDistributionForPrimaryKey(statement);
+                } else {
+                    // for non primary key tables, if user not specify distribution, we use hash distribution
+                    if (distributionDesc == null) {
+                        if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
+                            distributionDesc = new HashDistributionDesc(0,
+                                    Lists.newArrayList(mvColumnItems.get(0).getName()));
+                        } else {
+                            distributionDesc = new RandomDistributionDesc();
+                        }
+                        statement.setDistributionDesc(distributionDesc);
+                    }
+                }
             }
+
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (Column columnDef : mvColumnItems) {
                 if (!columnSet.add(columnDef.getName())) {

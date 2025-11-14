@@ -3961,6 +3961,12 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L;
 
     /**
+     * Whether enable range distribution.
+     */
+    @ConfField(mutable = true, comment = "Whether enable range distribution.")
+    public static boolean enable_range_distribution = false;
+
+    /**
      * The default scheduler interval for dynamic tablet jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
