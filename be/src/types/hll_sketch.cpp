@@ -24,7 +24,7 @@ namespace starrocks {
 
 DataSketchesHll::DataSketchesHll(const Slice& src, int64_t* memory_usage) : _memory_usage(memory_usage) {
     if (!deserialize(src)) {
-        LOG(WARNING) << "Failed to init DataSketchHll from slice, will be reset to 0.";
+        DLOG(INFO) << "Failed to init DataSketchesHll from slice, will be reset to 0.";
     }
 }
 
@@ -101,7 +101,7 @@ bool DataSketchesHll::deserialize(const Slice& slice) {
         _sketch_union->update(*sketch);
         this->mark_changed();
     } catch (std::logic_error& e) {
-        LOG(WARNING) << "DataSketchesHll deserialize error: " << e.what();
+        DLOG(INFO) << "DataSketchesHll deserialize error with exception:" << e.what();
         return false;
     }
 

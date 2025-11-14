@@ -17,13 +17,14 @@
 #include <memory>
 #include <string>
 
+#include "common/status.h"
 #include "util/slice.h"
 
 namespace starrocks {
 
 DataSketchesTheta::DataSketchesTheta(const Slice& src, int64_t* memory_usage) : _memory_usage(memory_usage) {
     if (!deserialize(src)) {
-        LOG(WARNING) << "Failed to init DataSketchesFrequent from slice, will be reset to 0.";
+        DLOG(INFO) << "Failed to init DataSketchesTheta from slice, will be reset to 0.";
     }
 }
 
@@ -83,7 +84,7 @@ bool DataSketchesTheta::deserialize(const Slice& slice) {
         auto sk = wrapped_compact_theta_sketch::wrap(slice.get_data(), slice.get_size());
         get_sketch_union()->update(sk);
     } catch (std::logic_error& e) {
-        LOG(WARNING) << "DataSketchesTheta deserialize error: " << e.what();
+        DLOG(INFO) << "DataSketchesTheta deserialize error with exception:" << e.what();
         return false;
     }
     return true;
