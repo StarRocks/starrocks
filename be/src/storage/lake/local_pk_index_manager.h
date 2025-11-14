@@ -47,6 +47,8 @@ public:
 
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction(UpdateManager* update_magager);
 
+    void stop();
+
 private:
     static bool need_evict_tablet(const std::string& tablet_pk_path);
 

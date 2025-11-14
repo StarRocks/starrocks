@@ -27,7 +27,9 @@
 
 namespace starrocks::lake {
 
-LocalPkIndexManager::~LocalPkIndexManager() {
+LocalPkIndexManager::~LocalPkIndexManager() {}
+
+void LocalPkIndexManager::stop() {
     if (_worker_thread_pool != nullptr) {
         _worker_thread_pool->shutdown();
     }
