@@ -555,6 +555,9 @@ endif()
 # LLVM
 include(cmake_modules/FindLLVM.cmake)
 
+# install runtime libraries if needed
+include(cmake_modules/InstallSysRuntime.cmake)
+
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
 

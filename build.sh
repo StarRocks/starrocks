@@ -1,4 +1,4 @@
-export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -511,7 +511,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
-                  .. --trace
+                  ..
 
     if [ "${BUILD_BE_MODULE}" != "all" ] ; then
         echo "build Backend module: ${BUILD_BE_MODULE}"
@@ -668,11 +668,11 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
 
-    if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ] ; then
-        LIBSTDCXX_DIR=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so))
-        cp -r $LIBSTDCXX_DIR/libstdc++.so* ${STARROCKS_OUTPUT}/be/lib/
-        cp -r $LIBSTDCXX_DIR/libgcc.so* ${STARROCKS_OUTPUT}/be/lib/
-    fi
+    # if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ] ; then
+    #     LIBSTDCXX_DIR=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so))
+    #     cp -r $LIBSTDCXX_DIR/libstdc++.so* ${STARROCKS_OUTPUT}/be/lib/
+    #     cp -r $LIBSTDCXX_DIR/libgcc.so* ${STARROCKS_OUTPUT}/be/lib/
+    # fi
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
@@ -698,7 +698,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
         # note that conf files will not be overwritten when doing upgrade.
         # so we have to preserve directory structure to avoid upgrade incompatibility.
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/native
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop/common
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

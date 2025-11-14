@@ -630,8 +630,8 @@ fi
 # libhdfs is build by -fhidden. we need access hidden symbol getJNIEnv
 if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
-    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.0-src" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.0-src.patch"
+    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.2-src" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
