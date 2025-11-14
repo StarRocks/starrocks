@@ -18,6 +18,13 @@
 #include <memory>
 
 #include "column/chunk.h"
+<<<<<<< HEAD
+=======
+#include "column/column_visitor.h"
+#include "column/column_visitor_adapter.h"
+#include "column/datum.h"
+#include "column/fixed_length_column_base.h"
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "tablet_schema.h"

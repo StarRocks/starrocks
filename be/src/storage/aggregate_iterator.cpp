@@ -62,8 +62,14 @@ public:
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_child->init_encoded_schema(dict_maps));
         ASSIGN_OR_RETURN(_curr_chunk, ChunkHelper::new_chunk_checked(encoded_schema(), _chunk_size));
+<<<<<<< HEAD
         _aggregator = std::make_unique<ChunkAggregator>(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
                                                         _is_vertical_merge, _is_key);
+=======
+        ASSIGN_OR_RETURN(_aggregator,
+                         ChunkAggregator::create(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
+                                                 _is_vertical_merge, _is_key));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
@@ -71,8 +77,14 @@ public:
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
         ASSIGN_OR_RETURN(_curr_chunk, ChunkHelper::new_chunk_checked(output_schema(), _chunk_size));
+<<<<<<< HEAD
         _aggregator = std::make_unique<ChunkAggregator>(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
                                                         _is_vertical_merge, _is_key);
+=======
+        ASSIGN_OR_RETURN(_aggregator,
+                         ChunkAggregator::create(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
+                                                 _is_vertical_merge, _is_key));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 

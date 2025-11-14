@@ -377,8 +377,12 @@ StatusOr<int> RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast
     auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
 
     const uint8_t* cur = data + offset;
+<<<<<<< HEAD
     const uint8_t* end = data + size;
     ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, columnPtr.get()));
+=======
+    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, columnPtr.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     offset += (cur - (data + offset));
 
     DCHECK(offset == size);

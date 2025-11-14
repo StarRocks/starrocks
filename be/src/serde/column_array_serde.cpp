@@ -34,7 +34,14 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+<<<<<<< HEAD
 #include "common/statusor.h"
+=======
+#include "column/variant_column.h"
+#include "common/statusor.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/descriptors.h"
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
 #include "util/coding.h"
@@ -436,6 +443,7 @@ public:
     }
 
     static StatusOr<uint8_t*> serialize(const NullableColumn& column, uint8_t* buff, const int encode_level) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(buff, Serde::serialize(*column.null_column(), buff, false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::serialize(*column.data_column(), buff, false, encode_level));
         return buff;
@@ -445,6 +453,18 @@ public:
                                                 const int encode_level) {
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->null_column().get(), false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->data_column().get(), false, encode_level));
+=======
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column.null_column(), buff, false, encode_level));
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column.data_column(), buff, false, encode_level));
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, NullableColumn* column, const int encode_level) {
+        ASSIGN_OR_RETURN(buff,
+                         serde::ColumnArraySerde::deserialize(buff, column->null_column().get(), false, encode_level));
+        ASSIGN_OR_RETURN(buff,
+                         serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         column->update_has_null();
         return buff;
     }
@@ -459,6 +479,7 @@ public:
     }
 
     static StatusOr<uint8_t*> serialize(const ArrayColumn& column, uint8_t* buff, const int encode_level) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(buff, Serde::serialize(column.offsets(), buff, true, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::serialize(column.elements(), buff, false, encode_level));
         return buff;
@@ -468,6 +489,18 @@ public:
                                                 const int encode_level) {
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->offsets_column().get(), true, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->elements_column().get(), false, encode_level));
+=======
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(column.offsets(), buff, true, encode_level));
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(column.elements(), buff, false, encode_level));
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, ArrayColumn* column, const int encode_level) {
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level));
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->elements_column().get(), false, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return buff;
     }
 };
@@ -482,6 +515,7 @@ public:
     }
 
     static StatusOr<uint8_t*> serialize(const MapColumn& column, uint8_t* buff, const int encode_level) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(buff, Serde::serialize(column.offsets(), buff, true, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::serialize(column.keys(), buff, false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::serialize(column.values(), buff, false, encode_level));
@@ -493,6 +527,21 @@ public:
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->offsets_column().get(), true, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->keys_column().get(), false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->values_column().get(), false, encode_level));
+=======
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(column.offsets(), buff, true, encode_level));
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(column.keys(), buff, false, encode_level));
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(column.values(), buff, false, encode_level));
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, MapColumn* column, const int encode_level) {
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), true, encode_level));
+        ASSIGN_OR_RETURN(buff,
+                         serde::ColumnArraySerde::deserialize(buff, column->keys_column().get(), false, encode_level));
+        ASSIGN_OR_RETURN(
+                buff, serde::ColumnArraySerde::deserialize(buff, column->values_column().get(), false, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return buff;
     }
 };
@@ -510,15 +559,25 @@ public:
 
     static StatusOr<uint8_t*> serialize(const StructColumn& column, uint8_t* buff, const int encode_level) {
         for (const auto& field : column.fields()) {
+<<<<<<< HEAD
             ASSIGN_OR_RETURN(buff, Serde::serialize(*field, buff, false, encode_level));
+=======
+            ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*field, buff, false, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         }
         return buff;
     }
 
+<<<<<<< HEAD
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, StructColumn* column,
                                                 const int encode_level) {
         for (auto& field : column->fields_column()) {
             ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, end, field.get(), false, encode_level));
+=======
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
+        for (auto& field : column->fields_column()) {
+            ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         }
         return buff;
     }
@@ -533,6 +592,7 @@ public:
 
     static StatusOr<uint8_t*> serialize(const ConstColumn& column, uint8_t* buff, const int encode_level) {
         buff = write_little_endian_64(column.size(), buff);
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(buff, Serde::serialize(*column.data_column(), buff, false, encode_level));
         return buff;
     }
@@ -542,6 +602,17 @@ public:
         uint64_t size = 0;
         ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &size));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->data_column().get(), false, encode_level));
+=======
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column.data_column(), buff, false, encode_level));
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, ConstColumn* column, const int encode_level) {
+        uint64_t size = 0;
+        buff = read_little_endian_64(buff, &size);
+        ASSIGN_OR_RETURN(buff,
+                         serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), false, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         column->resize(size);
         return buff;
     }
@@ -686,27 +757,47 @@ public:
               _encode_level(encode_level) {}
 
     Status do_visit(NullableColumn* column) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(_cur, NullableColumnSerde::deserialize(_cur, _end, column, _encode_level));
+=======
+        ASSIGN_OR_RETURN(_cur, NullableColumnSerde::deserialize(_cur, column, _encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
     Status do_visit(ConstColumn* column) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(_cur, ConstColumnSerde::deserialize(_cur, _end, column, _encode_level));
+=======
+        ASSIGN_OR_RETURN(_cur, ConstColumnSerde::deserialize(_cur, column, _encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
     Status do_visit(ArrayColumn* column) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(_cur, ArrayColumnSerde::deserialize(_cur, _end, column, _encode_level));
+=======
+        ASSIGN_OR_RETURN(_cur, ArrayColumnSerde::deserialize(_cur, column, _encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
     Status do_visit(MapColumn* column) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(_cur, MapColumnSerde::deserialize(_cur, _end, column, _encode_level));
+=======
+        ASSIGN_OR_RETURN(_cur, MapColumnSerde::deserialize(_cur, column, _encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
     Status do_visit(StructColumn* column) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(_cur, StructColumnSerde::deserialize(_cur, _end, column, _encode_level));
+=======
+        ASSIGN_OR_RETURN(_cur, StructColumnSerde::deserialize(_cur, column, _encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
@@ -765,6 +856,7 @@ StatusOr<uint8_t*> ColumnArraySerde::serialize(const Column& column, uint8_t* bu
     return visitor.cur();
 }
 
+<<<<<<< HEAD
 StatusOr<const uint8_t*> ColumnArraySerde::deserialize(const uint8_t* buff, const uint8_t* end, Column* column,
                                                        bool sorted, const int encode_level) {
     ColumnDeserializingVisitor visitor(buff, end, sorted, encode_level);
@@ -772,6 +864,12 @@ StatusOr<const uint8_t*> ColumnArraySerde::deserialize(const uint8_t* buff, cons
     if (visitor.cur() > end) {
         return Status::InvalidArgument("Buffer overflow");
     }
+=======
+StatusOr<const uint8_t*> ColumnArraySerde::deserialize(const uint8_t* data, Column* column, bool sorted,
+                                                       const int encode_level) {
+    ColumnDeserializingVisitor visitor(data, sorted, encode_level);
+    RETURN_IF_ERROR(column->accept_mutable(&visitor));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     return visitor.cur();
 }
 

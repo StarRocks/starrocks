@@ -89,12 +89,19 @@ StatusOr<uint8_t*> ChunkExtraColumnsData::serialize(uint8_t* buff, bool sorted, 
     return buff;
 }
 
+<<<<<<< HEAD
 StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff, const uint8_t* end, bool sorted,
                                                             const int encode_level) {
     DCHECK_EQ(encode_level, 0);
     for (auto& column : _columns) {
         using Serd = serde::ColumnArraySerde;
         ASSIGN_OR_RETURN(buff, Serd::deserialize(buff, end, column.get(), sorted, encode_level));
+=======
+StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff, bool sorted, const int encode_level) {
+    DCHECK_EQ(encode_level, 0);
+    for (auto& column : _columns) {
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, column.get(), sorted, encode_level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     }
     return buff;
 }

@@ -524,7 +524,11 @@ Status MemLimitedChunkQueue::_load(Block* block) {
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
         for (auto& column : chunk->columns()) {
+<<<<<<< HEAD
             ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(read_cursor, end, column.get(), false,
+=======
+            ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false,
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
                                                                                _opts.encode_level));
         }
     }

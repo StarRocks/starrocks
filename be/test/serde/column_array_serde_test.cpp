@@ -24,6 +24,10 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+<<<<<<< HEAD
+=======
+#include "column/variant_column.h"
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "testutil/assert.h"
@@ -54,9 +58,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
 
@@ -73,9 +82,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
     // no effect
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1), level);
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         ASSERT_EQ(buffer.data() + buffer.size(), p1);
         ASSERT_EQ(buffer.data() + buffer.size(), p2);
 
@@ -100,6 +114,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, hll_column_failed_deserialize) {
     for (int i = 0; i < 200; ++i) {
         sparse_hll.update(HashUtil::murmur_hash64A(&i, sizeof(i), HashUtil::MURMUR_SEED));
     }
+<<<<<<< HEAD
     // prepare a full-encoded HLL (many non-zero registers)
     HyperLogLog full_hll;
     for (int i = 0; i < 5000; ++i) {
@@ -131,6 +146,67 @@ PARALLEL_TEST(ColumnArraySerdeTest, hll_column_failed_deserialize) {
 
     mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(mode);
+=======
+    ASSERT_EQ(expected_max_size, ColumnArraySerde::max_serialized_size(*c1));
+
+    auto c2 = VariantColumn::create();
+    std::vector<uint8_t> buffer;
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), p1);
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
+
+    ASSERT_EQ(5, c2->size());
+    for (size_t i = 0; i < c1->size(); i++) {
+        const VariantValue* datum1 = c1->get(i).get_variant();
+        const VariantValue* datum2 = c2->get(i).get_variant();
+        ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
+        ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
+        ASSERT_EQ(datum1->get_value(), datum2->get_value());
+        EXPECT_EQ(datum1->to_string(), datum2->to_string());
+    }
+
+    // no effect
+    for (auto level = -1; level < 8; ++level) {
+        buffer.resize(ColumnArraySerde::max_serialized_size(*c1), level);
+        ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+        ASSERT_EQ(buffer.data() + buffer.size(), p1);
+        ASSERT_EQ(buffer.data() + buffer.size(), p2);
+
+        ASSERT_EQ(5, c2->size());
+        for (size_t i = 0; i < c1->size(); i++) {
+            const VariantValue* datum1 = c1->get(i).get_variant();
+            const VariantValue* datum2 = c2->get(i).get_variant();
+            ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
+            ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
+            ASSERT_EQ(datum1->get_value(), datum2->get_value());
+            EXPECT_EQ(datum1->to_string(), datum2->to_string());
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
+    auto c1 = VariantColumn::create();
+    ASSERT_EQ(4, ColumnArraySerde::max_serialized_size(*c1));
+
+    // Prepare a variant value with an unsupported version
+    constexpr uint8_t v2_metadata_charts[] = {0x02, 0x00, 0x00};
+    const std::string_view v2_metadata(reinterpret_cast<const char*>(v2_metadata_charts), sizeof(v2_metadata_charts));
+    const VariantValue variant(v2_metadata, "");
+    c1->append(&variant);
+    ASSERT_EQ(1, c1->size());
+
+    std::vector<uint8_t> buffer;
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data()));
+
+    auto c2 = VariantColumn::create();
+    ASSERT_ERROR(ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(0, c2->size()); // Deserialization should fail, resulting in an empty column
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 }
 #endif
 
@@ -148,9 +224,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, decimal_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < c1->size(); i++) {
@@ -159,9 +240,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, decimal_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -179,9 +265,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, int_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < numbers.size(); i++) {
@@ -190,9 +281,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, int_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < numbers.size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -200,9 +296,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, int_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), true, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), true, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), true, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), true, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < numbers.size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -241,20 +342,32 @@ PARALLEL_TEST(ColumnArraySerdeTest, double_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
     ASSERT_EQ(end, p1);
     ASSERT_EQ(end, p2);
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), p1);
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     for (size_t i = 0; i < numbers.size(); i++) {
         ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
     }
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < numbers.size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -275,9 +388,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < c1->size(); i++) {
@@ -289,9 +407,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->is_null(i), c2->is_null(i));
             if (!c1->is_null(i)) {
@@ -312,9 +435,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < c1->size(); i++) {
@@ -323,9 +451,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
@@ -343,9 +476,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < c1->size(); i++) {
@@ -354,9 +492,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
@@ -379,9 +522,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     ASSERT_EQ(c1->size(), c2->size());
@@ -391,9 +539,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get(i).get_int32(), c2->get(i).get_int32());
         }
@@ -423,7 +576,10 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
+<<<<<<< HEAD
     const auto* end = buffer.data() + buffer.size();
+=======
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
 
@@ -431,21 +587,32 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
     NullableColumn::Ptr elem2 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
     ArrayColumn::Ptr c2 = ArrayColumn::create(elem1, off2);
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
+=======
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     ASSERT_EQ("[1,2,3]", c2->debug_item(0));
     ASSERT_EQ("[4,5,6]", c2->debug_item(1));
 
     for (auto level = -1; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
+<<<<<<< HEAD
         const auto* end = buffer.data() + buffer.size();
+=======
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         ASSERT_OK(ColumnArraySerde::serialize(*c1, buffer.data(), false, level));
 
         off2 = UInt32Column::create();
         elem2 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
         c2 = ArrayColumn::create(elem1, off2);
 
+<<<<<<< HEAD
         ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
+=======
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 
         ASSERT_EQ("[1,2,3]", c2->debug_item(0));
         ASSERT_EQ("[4,5,6]", c2->debug_item(1));

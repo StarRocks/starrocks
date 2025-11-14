@@ -632,7 +632,11 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // serialize to column
         auto pkc = pk_column->clone();
         using Serd = serde::ColumnArraySerde;
+<<<<<<< HEAD
         RETURN_IF_ERROR(Serd::deserialize(data, end, pkc.get()));
+=======
+        RETURN_IF_ERROR(Serd::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), pkc.get()));
+>>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         // We can't insert delete operation to index directly, because some delete operation is
         // older than current item, and we need to igore these delete operations.
         std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
