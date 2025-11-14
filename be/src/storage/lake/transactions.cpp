@@ -221,6 +221,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     }
 
     auto base_metadata = std::move(base_metadata_or).value();
+    LOG(INFO) << "tablet: " << tablet_id << ", base_version: " << base_version << ", base_metadata id: " << base_metadata->id();
+
     std::unique_ptr<TxnLogApplier> log_applier;
     std::shared_ptr<TabletMetadataPB> new_metadata;
     std::vector<std::string> files_to_delete;
