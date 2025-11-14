@@ -144,12 +144,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
-<<<<<<< HEAD
                                          TableVersionRange versionRange) {
-        boolean useDefaultStats = false;
-=======
-                                         TvrVersionRange versionRange) {
->>>>>>> c2ee9671c3 ([Enhancement] disable table stats when single table for all connectors (#65430))
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
