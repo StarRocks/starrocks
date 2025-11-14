@@ -39,6 +39,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -51,12 +52,23 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+=======
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Invocation;
+>>>>>>> 4e4a279f8d ([BugFix] turn db-level lock to table-level lock in LocalMetastore.truncateTable() (#65191))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -66,6 +78,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
@@ -344,4 +357,50 @@ public class LocalMetaStoreTest {
         Assertions.assertNull(db.getTable(tableName));
     }
 
+    @Test
+    public void testTruncateInTheMiddleOfDatabaseDropped() throws Exception {
+        String dbName = "db_to_be_dropped";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("CREATE TABLE t1(k1 int, k2 int, k3 int) distributed by " +
+                        "hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        Database db = localMetastore.getDb(dbName);
+        long t1TableId = db.getTable("t1").getId();
+        AtomicBoolean writeLockAcquired = new AtomicBoolean(false);
+
+        long tabletsCountBefore = connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+        new MockUp<Locker>() {
+            @Mock
+            public boolean lockTableAndCheckDbExist(Invocation invocation, Database database, long tableId,
+                                                    LockType lockType)
+                    throws DdlException, MetaNotFoundException {
+                if (lockType == LockType.WRITE && database.getId() == db.getId() && t1TableId == tableId) {
+                    // simulate that the database is dropped after locking the table
+                    localMetastore.dropDb(connectContext, dbName, false);
+                    long tabletCountInMiddle =
+                            connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+                    // The new partition is ready, but not committed yet, so 3 more tablets are created
+                    Assertions.assertEquals(tabletsCountBefore + 3, tabletCountInMiddle,
+                            "3 new tablets should be created for the new partition during truncate");
+                    writeLockAcquired.set(true);
+                    return false;
+                } else {
+                    return Boolean.TRUE.equals(invocation.proceed(database, tableId, lockType));
+                }
+            }
+        };
+
+
+        List<String> parts = Lists.newArrayList(dbName, "t1");
+        TableRef tableRef = new TableRef(QualifiedName.of(parts), null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
+        DdlException exception =
+                Assertions.assertThrows(DdlException.class, () -> localMetastore.truncateTable(stmt, connectContext));
+        Assertions.assertEquals("Unknown database 'db_to_be_dropped'", exception.getMessage());
+        long tabletsCountAfter = connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+        Assertions.assertEquals(tabletsCountBefore, tabletsCountAfter,
+                "Tablets should not be changed when truncate fails");
+        Assertions.assertTrue(writeLockAcquired.get(), "Write lock should be acquired during truncate");
+    }
 }
