@@ -97,21 +97,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### big_query_log_dir
 
-- デフォルト: `Config.STARROCKS_HOME_DIR + "/log"`
+- デフォルト: Config.STARROCKS_HOME_DIR + "/log"
 - タイプ: String
 - 単位: -
 - 変更可能: No
 - 説明: FE が big query ダンプログを書き込むディレクトリ（ファイル名: fe.big_query.log）。Log4j の設定はこのパスを使用して `fe.big_query.log` とローテートされたファイル用の RollingFile appender を作成します。ローテーションと保持は `big_query_log_roll_interval`（時間ベースのサフィックス）、`log_roll_size_mb`（サイズトリガー）、`big_query_log_roll_num`（最大ファイル数）、および `big_query_log_delete_age`（年齢ベースの削除）によって制御されます。big-query レコードは `big_query_log_cpu_second_threshold`、`big_query_log_scan_rows_threshold`、`big_query_log_scan_bytes_threshold` のようなユーザー定義の閾値を超えたクエリについて出力されます。どのモジュールがこのファイルにログを出力するかは `big_query_log_modules` で制御してください。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### big_query_log_roll_num
 
-- デフォルト: `10`
+- デフォルト: 10
 - タイプ: Int
 - 単位: -
 - 変更可能: No
 - 説明: `big_query_log_roll_interval` ごとに保持する FE big query ログのローテート済みファイルの最大数です。この値は RollingFile appender の DefaultRolloverStrategy の `max` 属性（`fe.big_query.log` 用）にバインドされます。ログが時間または `log_roll_size_mb` によってロールすると、StarRocks は最大で `big_query_log_roll_num` 個のインデックス付きファイルを保持します（filePattern は時間サフィックスとインデックスを使用します）。この数より古いファイルはロールオーバーにより削除される可能性があり、`big_query_log_delete_age` によって最終更新日時に基づく削除が追加で行われることがあります。この値を変更するには、FE の再起動が必要です。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### dump_log_delete_age
 
@@ -171,12 +171,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_profile_log_compress
 
-- デフォルト: `false`
+- デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: No
 - 説明: 有効にすると、ProfileManager が生成する JSON クエリプロファイルを PROFILE_LOG に書き込む前に `CompressionUtils.gzipCompressString` を使って GZIP 圧縮します。この圧縮は `enable_collect_query_detail_info` と `enable_profile_log` の両方が true の場合にのみ有効です。圧縮によりログ量と I/O は削減されますが CPU 負荷が増加します。PROFILE_LOG の消費者はクエリ詳細を読むために GZIP ペイロードを解凍する必要があります。圧縮が失敗した場合、コードは警告をログに出力し、圧縮されたプロファイルは書き込まれません。
-- 導入バージョン: `v3.2.7`
+- 導入バージョン: v3.2.7
 
 ##### log_roll_size_mb
 
@@ -189,7 +189,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### profile_log_roll_size_mb
 
-- デフォルト: `1024`
+- デフォルト: 1024
 - タイプ: Int
 - 単位: MB
 - 変更可能: No

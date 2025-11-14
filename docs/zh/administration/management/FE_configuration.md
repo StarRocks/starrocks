@@ -145,21 +145,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### internal_log_modules
 
-- 默认值: `{"base", "statistic"}`
+- 默认值: {"base", "statistic"}
 - 类型: String[]
 - 単位: -
 - 是否可变: No
 - 描述: 一个将接收专用内部日志记录的模块标识符列表。对于每个条目 X，Log4j 会创建一个名为 `internal.&lt;X&gt;` 的 logger，级别为 INFO 且 additivity="false"。这些 logger 会被路由到 internal appender（写入 `fe.internal.log`），当启用 `sys_log_to_console` 时则输出到控制台。根据需要使用简短名称或包片段 —— 精确的 logger 名称将成为 `internal.` + 配置的字符串。内部日志文件的滚动和保留遵循 `internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval` 和 `log_roll_size_mb` 的设置。添加模块会将其运行时消息分离到内部 logger 流中，便于调试和审计。
-- 引入版本: `v3.2.4`
+- 引入版本: v3.2.4
 
 ##### internal_log_roll_interval
 
-- 默认值: `DAY`
+- 默认值: DAY
 - 类型: String
 - 単位: -
 - 是否可变: No
 - 描述: 控制 FE 内部日志 appender 的基于时间的滚动间隔。接受（不区分大小写）的值为 `HOUR` 和 `DAY`。`HOUR` 生成每小时的文件模式 ("%d{yyyyMMddHH}")，`DAY` 生成每日的文件模式 ("%d{yyyyMMdd}")，这些模式由 RollingFile TimeBasedTriggeringPolicy 用于命名旋转后的 `fe.internal.log` 文件。无效的值会导致初始化失败（在构建活动 Log4j 配置时会抛出 IOException）。滚动行为还取决于相关设置，例如 `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num` 和 `internal_log_delete_age`。
-- 引入版本: `v3.2.4`
+- 引入版本: v3.2.4
 
 ##### log_roll_size_mb
 
@@ -172,7 +172,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### profile_log_dir
 
-- 默认值: `Config.STARROCKS_HOME_DIR + "/log"`
+- 默认值: Config.STARROCKS_HOME_DIR + "/log"
 - 类型: String
 - 单位: -
 - 是否可变: No
@@ -186,7 +186,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: Number of files
 - 是否可变: No
 - 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 ${profile_log_roll_num} 注入到日志 XML 中（例如 &lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
-- 引入版本: `v3.2.5`
+- 引入版本: v3.2.5
 
 ##### qe_slow_log_ms
 
@@ -1651,12 +1651,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### loads_history_sync_interval_second
 
-- 默认值: `60`
+- 默认值: 60
 - 类型: Int
 - 单位: Seconds
 - 是否可变: Yes
 - 描述: 由 LoadsHistorySyncer 用于调度周期性同步的时间间隔（秒），用于将已完成的 load 作业从 `information_schema.loads` 同步到内部表 `_statistics_.loads_history`。构造函数中将该值乘以 1000L 以设置 FrontendDaemon 的间隔。syncer 在每次运行时也会重新读取该配置，并在变化时调用 setInterval，因此更新可以在运行时生效而无需重启。syncer 会跳过首次运行（以允许表创建），且仅导入结束时间超过一分钟的 load；较小的频繁值会增加 DML 和 executor 负载，而较大的值会延迟历史 load 记录的可用性。关于目标表的保留/分区行为，请参见 `loads_history_retained_days`。
-- 引入版本: `v3.3.6, v3.4.0, v3.5.0`
+- 引入版本: v3.3.6, v3.4.0, v3.5.0
 
 ##### max_broker_load_job_concurrency
 
@@ -1859,12 +1859,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### stream_load_task_keep_max_second
 
-- 默认值: `3 * 24 * 3600`
+- 默认值: 3 * 24 * 3600
 - 类型: Int
 - 单位: Seconds
 - 是否可变: Yes
 - 描述: 已完成或已取消的 StreamLoad 任务的保留窗口（秒）。当任务达到最终状态且其结束时间戳早于此阈值时（代码以毫秒比较：currentMs - endTimeMs > stream_load_task_keep_max_second * 1000），该任务将有资格被 `StreamLoadMgr.cleanOldStreamLoadTasks` 移除，并在加载持久化状态时被丢弃。适用于 `StreamLoadTask` 和 `StreamLoadMultiStmtTask`。如果总任务数超过 `stream_load_task_keep_max_num`，可能会提前触发清理（同步任务由 `cleanSyncStreamLoadTasks` 优先处理）。请根据历史记录/可调试性与内存使用之间的权衡设置此值。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ##### transaction_clean_interval_second
 
