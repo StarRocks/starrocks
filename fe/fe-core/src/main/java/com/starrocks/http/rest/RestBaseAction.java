@@ -64,6 +64,13 @@ import org.apache.logging.log4j.Logger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+>>>>>>> 297cc06d8e ([BugFix] Fix error log for HTTP SQL changing user (#65371))
 
 import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
@@ -138,12 +145,20 @@ public class RestBaseAction extends BaseAction {
         HttpConnectContext ctx = request.getConnectContext();
 
         // Change user for ConnectContext if necessary
+        UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
+        Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
         String prevUserName = ctx.getQualifiedUser();
+
+        ctx.setCurrentUserIdentity(currentUser);
+        ctx.setCurrentRoleIds(currentUser);
         ctx.setQualifiedUser(authInfo.fullUserName);
+
         if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
             ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
             Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
             if (!userChangeRes.first) {
+                ctx.setCurrentUserIdentity(prevUserIdentity);
+                ctx.setCurrentRoleIds(prevRoleIds);
                 ctx.setQualifiedUser(prevUserName);
                 throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
             }
@@ -154,8 +169,6 @@ public class RestBaseAction extends BaseAction {
         ctx.setNettyChannel(request.getContext());
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
-        ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCurrentRoleIds(currentUser);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }
