@@ -40,7 +40,7 @@ SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
 -- result:
-mv-45440
+mv-11425
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
@@ -55,7 +55,7 @@ admin set frontend config('enable_task_run_fe_evaluation'='false');
 -- !result
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
 -- result:
-019a813a-3992-7157-ba4f-5ab020a653e7
+019a8143-9531-7cd3-9983-023d5aeae57e
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
 -- result:
@@ -76,21 +76,9 @@ SELECT count(1) FROM information_schema.task_runs WHERE `STATE` = '${state}' and
 set enable_evaluate_schema_scan_rule=true;
 -- result:
 -- !result
-[UC] select if count(*) from information_schema.task_runs;
+[UC] select count(*) from information_schema.task_runs;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
--- result:
-OK
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+7
 -- !result
 select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
 -- result:
@@ -99,21 +87,9 @@ OK
 set enable_evaluate_schema_scan_rule=false;
 -- result:
 -- !result
-[UC] select if count(*) from information_schema.task_runs;
+[UC] select count(*) from information_schema.task_runs;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
--- result:
-OK
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+7
 -- !result
 select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
 -- result:
@@ -125,21 +101,12 @@ create database if not exists test_information_schema_task_runs;
 use test_information_schema_task_runs;
 -- result:
 -- !result
-[UC] select if count(*) from information_schema.task_runs;
+set enable_evaluate_schema_scan_rule=true;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
 -- !result
-[UC] select if count(*) from information_schema.task_runs;
+[UC] select count(*) from information_schema.task_runs;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
--- result:
-OK
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+7
 -- !result
 select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
 -- result:
@@ -148,21 +115,9 @@ OK
 set enable_evaluate_schema_scan_rule=false;
 -- result:
 -- !result
-[UC] select if count(*) from information_schema.task_runs;
+[UC] select count(*) from information_schema.task_runs;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
--- !result
-select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
--- result:
-OK
--- !result
-[UC] select if count(*) from information_schema.task_runs;
--- result:
-E: (1064, "Getting syntax error at line 1, column 11. Detail message: Unexpected input 'count', the most similar input is {'('}.")
+7
 -- !result
 select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
 -- result:
