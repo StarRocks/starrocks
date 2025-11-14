@@ -50,7 +50,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -916,9 +916,9 @@ public class LateMaterializationRewriter {
 
             if (rowIdColumnRef == null) {
                 // _row_id column is not existed, we should add it
-                Column rowIdColumn = new Column(ROW_ID, Type.BIGINT, true);
+                Column rowIdColumn = new Column(ROW_ID, IntegerType.BIGINT, true);
                 ColumnRefOperator columnRefOperator = optimizerContext.getColumnRefFactory()
-                        .create(ROW_ID, Type.BIGINT, true);
+                        .create(ROW_ID, IntegerType.BIGINT, true);
                 optimizerContext.getColumnRefFactory()
                         .updateColumnRefToColumns(columnRefOperator, rowIdColumn, scanOperator.getTable());
                 newColumnRefMap.put(columnRefOperator, rowIdColumn);
@@ -928,16 +928,16 @@ public class LateMaterializationRewriter {
             }
 
             // generate row source id to distinguish scan operator
-            Column rowSourceIdColumn = new Column(ROW_SOURCE_ID, Type.INT, true);
+            Column rowSourceIdColumn = new Column(ROW_SOURCE_ID, IntegerType.INT, true);
             ColumnRefOperator rowSourceIdColumnRef =
-                    optimizerContext.getColumnRefFactory().create(ROW_SOURCE_ID, Type.INT, true);
+                    optimizerContext.getColumnRefFactory().create(ROW_SOURCE_ID, IntegerType.INT, true);
             optimizerContext.getColumnRefFactory()
                     .updateColumnRefToColumns(rowSourceIdColumnRef, rowSourceIdColumn, scanOperator.getTable());
             newColumnRefMap.put(rowSourceIdColumnRef, rowSourceIdColumn);
 
-            Column scanRangeIdColumn = new Column(SCAN_RANGE_ID, Type.INT, true);
+            Column scanRangeIdColumn = new Column(SCAN_RANGE_ID, IntegerType.INT, true);
             ColumnRefOperator scanRangeIdColumnRef =
-                    optimizerContext.getColumnRefFactory().create(SCAN_RANGE_ID, Type.INT, true);
+                    optimizerContext.getColumnRefFactory().create(SCAN_RANGE_ID, IntegerType.INT, true);
             optimizerContext.getColumnRefFactory()
                     .updateColumnRefToColumns(scanRangeIdColumnRef, scanRangeIdColumn, scanOperator.getTable());
             newColumnRefMap.put(scanRangeIdColumnRef, scanRangeIdColumn);
