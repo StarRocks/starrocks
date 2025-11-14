@@ -62,11 +62,8 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
-=======
 import com.starrocks.server.LocalMetastore;
->>>>>>> 4691aa30c9 ([BugFix] turn to db intent lock in TabletChecker.doCheck() (#65237))
+import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.system.Backend;
