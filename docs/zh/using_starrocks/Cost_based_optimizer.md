@@ -467,7 +467,7 @@ CREATE ANALYZE FULL ALL db_name PROPERTIES (
 
 | **PROPERTIES**                        | **类型** | **默认值** | **说明**                                                                                                                           |
 |-------------------------------------------|--------|---------|---------------------------------------------------------------------------------------------------------------------------- |
-| enable_statistic_collect_on_first_load    | BOOLEAN  | TRUE     | 执行 INSERT INTO/OVERWRITE 后是否触发统计信息采集任务。                                                                       |
+| enable_statistic_collect_on_first_load    | BOOLEAN  | TRUE     | 执行 INSERT INTO/OVERWRITE 后是否触发统计信息采集任务。该属性既是 FE 全局配置项，也可在表级别通过 CREATE TABLE 或 ALTER TABLE 设置。只有当全局配置和表级配置均为 `TRUE` 时，才会触发统计信息采集。                                                                       |
 | semi_sync_collect_statistic_await_seconds | LONG    | 30     | 返回结果前等待统计信息采集的最长时间。                                                                  |
 | statistic_sample_collect_ratio_threshold_of_first_load | DOUBLE    | 0.1  | OVERWRITE 不触发统计信息搜集任务的数据变动比例。                                                               |
 | statistic_sample_collect_rows             | LONG | 200000    | DML 导入总数据量超过该值时，使用抽样采集统计信息。                                                                               |
