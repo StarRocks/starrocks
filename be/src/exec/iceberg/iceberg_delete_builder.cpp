@@ -138,7 +138,9 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
 
     while (true) {
-        ChunkPtr chunk = ChunkHelper::new_chunk(slot_descriptors, _runtime_state->chunk_size());
+        ASSIGN_OR_RETURN(ChunkPtr chunk,
+                         ChunkHelper::new_chunk_checked(slot_descriptors, _runtime_state->chunk_size()));
+
         Status status = reader->get_next(&chunk);
         if (status.is_end_of_file()) {
             break;
