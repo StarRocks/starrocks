@@ -1223,6 +1223,8 @@ public class OlapTable extends Table {
                 numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
                 info.setBucketNum((int) numBucket);
             }
+        } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            // Range distribution, do nothing
         } else {
             throw new DdlException("Unknown distribution info type: " + info.getType());
         }

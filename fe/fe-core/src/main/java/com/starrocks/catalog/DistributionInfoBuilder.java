@@ -19,6 +19,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 
 import java.util.List;
 
@@ -31,13 +32,23 @@ public class DistributionInfoBuilder {
      * Build DistributionInfo from a DistributionDesc
      */
     public static DistributionInfo build(DistributionDesc distributionDesc, List<Column> columns) throws DdlException {
-        if (distributionDesc instanceof RandomDistributionDesc) {
+        if (distributionDesc instanceof RangeDistributionDesc) {
+            return buildRangeDistributionInfo((RangeDistributionDesc) distributionDesc, columns);
+        } else if (distributionDesc instanceof RandomDistributionDesc) {
             return buildRandomDistributionInfo((RandomDistributionDesc) distributionDesc, columns);
         } else if (distributionDesc instanceof HashDistributionDesc) {
             return buildHashDistributionInfo((HashDistributionDesc) distributionDesc, columns);
         } else {
             throw new DdlException("Unsupported distribution type: " + distributionDesc.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * Build RangeDistributionInfo from RangeDistributionDesc
+     */
+    public static RangeDistributionInfo buildRangeDistributionInfo(RangeDistributionDesc rangeDistributionDesc,
+                                                                   List<Column> columns) {
+        return new RangeDistributionInfo();
     }
 
     /**

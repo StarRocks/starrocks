@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -234,6 +235,24 @@ public class MetaUtils {
             result.put(column.getColumnId(), column);
         }
         return result;
+    }
+
+    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
+        List<String> columnNames = new ArrayList<>();
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        List<Column> baseSchema = olapTable.getBaseSchema();
+        if (baseIndexMeta.getSortKeyIdxes() != null) {
+            for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
+                columnNames.add(baseSchema.get(i).getName());
+            }
+        } else {
+            for (Column column : baseSchema) {
+                if (column.isKey()) {
+                    columnNames.add(column.getName());
+                }
+            }
+        }
+        return columnNames;
     }
 
     public static List<String> getColumnNamesByColumnIds(Table table, List<ColumnId> columnIds) {

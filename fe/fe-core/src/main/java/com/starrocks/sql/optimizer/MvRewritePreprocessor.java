@@ -1121,6 +1121,8 @@ public class MvRewritePreprocessor {
             distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
+        } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
+            distributionSpec = DistributionSpec.createAnyDistributionSpec();
         }
 
         return distributionSpec;
