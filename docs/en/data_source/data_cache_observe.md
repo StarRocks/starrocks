@@ -82,7 +82,7 @@ mysql> select * from information_schema.be_datacache_metrics;
 
 Since v3.3.2, StarRocks provides two APIs to get cache metrics, which reflect the cache state at different levels:
 
-- `/api/datacache/app_stat`: the actual cache hit rate of queries, calculated as `Remote Read Bytes / (Remote Read Bytes + Data Cache Read Bytes)`.
+- `/api/datacache/app_stat`: Query the Block Cache and Page Cache hit rates.
 - `/api/datacache/stat`: the underlying execution state of Data Cache. This interface is mainly used for maintenance and bottleneck identification of Data Cache. It does not reflect the actual hit rate of the query. Common users do not need to pay attention to this interface.
 
 ### View cache hit metrics
@@ -97,23 +97,35 @@ Return:
 
 ```bash
 {
-    "hit_bytes": 4008,
-    "miss_bytes": 2004,
-    "hit_rate": 0.67,
-    "hit_bytes_last_minute": 4008,
-    "miss_bytes_last_minute": 2004, "hit_rate": 0.67, "hit_bytes_last_minute": 4008,
-    "hit_rate_last_minute": 0.67
+    "block_cache_hit_bytes": 1642106883,
+    "block_cache_miss_bytes": 8531219739,
+    "block_cache_hit_rate": 0.16,
+    "block_cache_hit_bytes_last_minute": 899037056,
+    "block_cache_miss_bytes_last_minute": 4163253265,
+    "block_cache_hit_rate_last_minute": 0.18,
+    "page_cache_hit_count": 15048,
+    "page_cache_miss_count": 10032,
+    "page_cache_hit_rate": 0.6,
+    "page_cache_hit_count_last_minute": 10032,
+    "page_cache_miss_count_last_minute": 5016,
+    "page_cache_hit_rate_last_minute": 0.67
 }
 ```
 
-| **Metric**             | **Description**                                      |
-| ---------------------- | ---------------------------------------------------- |
-| hit_bytes              | Number of bytes read from the cache.                 |
-| miss_bytes             | Number of bytes read from remote storage.            |
-| hit_rate               | Cache hit rate, calculated as `(hit_bytes / (hit_bytes + miss_bytes))`. |
-| hit_bytes_last_minute  | Number of bytes read from the cache in the last minute. |
-| miss_bytes_last_minute | Number of bytes read from the remote storage in the last minute. |
-| hit_rate_last_minute   | Cache hit rate in the last minute.                   |
+| **Metric**                         | **Description**                                                                                     |
+|------------------------------------|-----------------------------------------------------------------------------------------------------|
+| block_cache_hit_bytes              | Bytes read from the block cache.                                                                    |
+| block_cache_miss_bytes             | Bytes read from remote storage (Block Cache misses).                                                |
+| block_cache_hit_rate               | Block Cache hit rate, `(block_cache_hit_bytes / (block_cache_hit_bytes + block_cache_miss_bytes))`. |
+| block_cache_hit_bytes_last_minute  | Bytes read from the Block Cache in the last minute.                                                 |
+| block_cache_miss_bytes_last_minute | Bytes read from the remote storage in the last minute.                                              |
+| block_cache_hit_rate_last_minute   | Block Cache hit rate in the last minute.                                                            |
+| page_cache_hit_count               | Number of pages read from the Page Cache.                                                           |
+| page_cache_miss_count              | Number of pages missed in the Page Cache.                                                           |
+| block_cache_hit_rate               | Page Cache hit rate: `(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`.     |
+| page_cache_hit_count_last_minute   | Number of pages read from the Page Cache in the last minute.                                        |
+| page_cache_miss_count_last_minute  | Number of pages missed in the Page Cache in the last minute.                                        |
+| page_cache_hit_rate_last_minute    | Page Cache hit rate in the last minute.                                                             |
 
 ### View the underlying execution state of Data Cache
 

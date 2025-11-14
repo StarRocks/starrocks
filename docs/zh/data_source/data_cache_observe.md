@@ -80,7 +80,7 @@ mysql> select * from information_schema.be_datacache_metrics;
 
 自 v3.3.2 起，StarRocks 提供了两个 API 接口获取缓存指标，其反应的是系统不同层面的缓存状态：
 
-- `/api/datacache/app_stat`：查询真实的缓存命中率，计算公式为 `远端读取数据量 / (远端读取数据量 + Data Cache 数据读取量)`。
+- `/api/datacache/app_stat`：查询 Block Cache 和 Page Cache 的缓存命中率。
 - `/api/datacache/stat`：Data Cache 的底层执行状态。该接口主要用于 Data Cache 的运维和性能问题定位，并不能反应查询的真实命中率，普通用户无需关注该接口。
 
 ### 获取缓存命中指标
@@ -95,23 +95,35 @@ http://${BE_HOST}:${BE_HTTP_PORT}/api/datacache/app_stat
 
 ```bash
 {
-    "hit_bytes": 4008,
-    "miss_bytes": 2004,
-    "hit_rate": 0.67,
-    "hit_bytes_last_minute": 4008,
-    "miss_bytes_last_minute": 2004,
-    "hit_rate_last_minute": 0.67
+    "block_cache_hit_bytes": 1642106883,
+    "block_cache_miss_bytes": 8531219739,
+    "block_cache_hit_rate": 0.16,
+    "block_cache_hit_bytes_last_minute": 899037056,
+    "block_cache_miss_bytes_last_minute": 4163253265,
+    "block_cache_hit_rate_last_minute": 0.18,
+    "page_cache_hit_count": 15048,
+    "page_cache_miss_count": 10032,
+    "page_cache_hit_rate": 0.6,
+    "page_cache_hit_count_last_minute": 10032,
+    "page_cache_miss_count_last_minute": 5016,
+    "page_cache_hit_rate_last_minute": 0.67
 }
 ```
 
-| **指标**               | **说明**                                             |
-| ---------------------- | ---------------------------------------------------- |
-| hit_bytes              | 从缓存中读取的字节数。                               |
-| miss_bytes             | 从远端读取的字节数。                                 |
-| hit_rate               | 缓存命中率 `(hit_bytes / (hit_bytes + miss_bytes))`。 |
-| hit_bytes_last_minute  | 最近一分钟内从缓存中读取的字节数。                   |
-| miss_bytes_last_minute | 最近一分钟内从远端读取的字节数。                     |
-| hit_rate_last_minute   | 最近一分钟内缓存命中率。                             |
+| **指标**                             | **说明**                                                                                        |
+|------------------------------------|-----------------------------------------------------------------------------------------------|
+| block_cache_hit_bytes              | 从 Block Cache 中读取的字节数。                                                                        |
+| block_cache_miss_bytes             | 从远端读取的字节数。                                                                                    |
+| block_cache_hit_rate               | Block Cache 命中率 `(block_cache_hit_bytes / (block_cache_hit_bytes + block_cache_miss_bytes))`。 |
+| block_cache_hit_bytes_last_minute  | 最近一分钟内从 Block Cache 中读取的字节数。                                                                  |
+| block_cache_miss_bytes_last_minute | 最近一分钟内从远端读取的字节数（Block Cache 未命中）。                                                             |
+| block_cache_hit_rate_last_minute   | 最近一分钟内 Block Cache 命中率。                                                                       |
+| page_cache_hit_count               | 从 Page Cache 中读取的 Page 数量。                                                                    |
+| page_cache_miss_count              | Page Cache 未命中的 Page 数量。                                                                      |
+| page_cache_hit_rate                | Page Cache 命中率 `(page_cache_hit_count / (page_cache_hit_count + page_cache_miss_count))`。     |
+| page_cache_hit_count_last_minute   | 最近一分钟内从 Page Cache 中读取的 Page 数量。                                                              |
+| page_cache_miss_count_last_minute  | 最近一分钟内未命中 Page Cache 的 Page 数量。                                                               |
+| page_cache_hit_rate_last_minute    | 最近一分钟内 Page Cache 命中率。                                                                        |
 
 ### 获取底层 Data Cache 详细指标
 
