@@ -532,37 +532,30 @@ public class InformationSchemaDataSource {
             }
 
             List<BasicTable> tables = new ArrayList<>();
-            Locker locker = new Locker();
-            try {
-                locker.lockDatabase(db.getId(), LockType.READ);
-                List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
-                for (String tableName : tableNames) {
-                    if (request.isSetTable_name()) {
-                        if (!tableName.equals(request.getTable_name())) {
-                            continue;
-                        }
-                    }
-
-                    BasicTable table = null;
-                    try {
-                        table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
-                    } catch (Exception e) {
-                        LOG.warn(e.getMessage(), e);
-                    }
-                    if (table == null) {
+            List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
+            for (String tableName : tableNames) {
+                if (request.isSetTable_name()) {
+                    if (!tableName.equals(request.getTable_name())) {
                         continue;
                     }
-
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    tables.add(table);
                 }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+
+                BasicTable table = null;
+                try {
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage(), e);
+                }
+                if (table == null) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+                tables.add(table);
             }
 
             for (BasicTable table : tables) {
