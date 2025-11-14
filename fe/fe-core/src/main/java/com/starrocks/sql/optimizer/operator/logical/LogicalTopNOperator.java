@@ -253,6 +253,7 @@ public class LogicalTopNOperator extends LogicalOperator {
             builder.isSplit = topNOperator.isSplit;
             builder.partitionLimit = topNOperator.partitionLimit;
             builder.partitionByColumns = topNOperator.partitionByColumns;
+            builder.perPipeline = topNOperator.perPipeline;
             builder.partitionPreAggCall = topNOperator.partitionPreAggCall;
             return this;
         }

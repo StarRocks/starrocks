@@ -139,7 +139,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced);
+        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced, perPipeline);
     }
 
     @Override
@@ -158,7 +158,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderSpec, that.orderSpec) &&
                 Objects.equals(preAggCall, that.preAggCall) &&
-                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced;
+                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced &&
+                perPipeline == that.perPipeline;
     }
 
     @Override
@@ -214,6 +215,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             builder.topNType = operator.topNType;
             builder.isSplit = operator.isSplit;
             builder.isEnforced = operator.isEnforced;
+            builder.perPipeline = operator.perPipeline;
             return this;
         }
 
