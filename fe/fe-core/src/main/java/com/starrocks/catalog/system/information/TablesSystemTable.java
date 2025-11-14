@@ -22,6 +22,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -177,10 +178,9 @@ public class TablesSystemTable extends SystemTable {
             return result.getTables_infos().stream()
                     .map(t -> infoToScalar(this, t))
                     .collect(Collectors.toList());
-        } catch (Exception e) {
-            LOG.warn("Failed to query tables ", e);
-            // Return empty result if query failed
-            return Lists.newArrayList();
+        } catch (TException e) {
+            LOG.debug("Failed to get table info for table: {}, error: ", params.getTable_name(), e);
+            throw new SemanticException("Failed to get table info for table: " + params.getTable_name(), e);
         }
     }
 
