@@ -628,3 +628,20 @@ struct TParquetOptions {
     // for files table function
     4: optional string version
 }
+
+struct TVariant {
+    1: optional TTypeDesc type
+    2: optional i64 int_value
+    3: optional string string_value
+}
+
+struct TTuple {
+    1: optional list<TVariant> values
+}
+
+struct TTabletRange {
+    1: optional TTuple lower_bound
+    2: optional TTuple upper_bound
+    3: optional bool lower_bound_included
+    4: optional bool upper_bound_included
+}
