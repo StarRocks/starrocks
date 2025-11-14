@@ -1716,4 +1716,17 @@ public class ScalarOperatorFunctionsTest {
         ConstantOperator result = ScalarOperatorFunctions.lastDay(input, unit);
         assertEquals(true, result.isNull());
     }
+
+    @Test
+    public void testHourMinuteSecond() {
+        ConstantOperator v = ConstantOperator.createDatetime(LocalDateTime.of(2022, 11, 11, 11, 10, 9));
+        assertEquals(11, ScalarOperatorFunctions.hour(v).getTinyInt());
+        assertEquals(10, ScalarOperatorFunctions.minute(v).getTinyInt());
+        assertEquals(9, ScalarOperatorFunctions.second(v).getTinyInt());
+
+        v = ConstantOperator.createDate(LocalDate.parse("2022-11-11").atTime(0, 0, 0, 0));
+        assertEquals(0, ScalarOperatorFunctions.hour(v).getTinyInt());
+        assertEquals(0, ScalarOperatorFunctions.minute(v).getTinyInt());
+        assertEquals(0, ScalarOperatorFunctions.second(v).getTinyInt());
+    }
 }
