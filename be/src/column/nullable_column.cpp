@@ -135,12 +135,7 @@ void NullableColumn::append_with_filter(const Column& src, const uint8_t* filter
 
     if (src.only_null()) {
         // Count selected rows
-        size_t selected_count = 0;
-        for (size_t i = 0; i < count; i++) {
-            if (filter[i]) {
-                selected_count++;
-            }
-        }
+        size_t selected_count = SIMD::count_nonzero(filter, count);
         append_nulls(selected_count);
     } else if (src.is_nullable()) {
         const auto& src_column = down_cast<const NullableColumn&>(src);
@@ -148,12 +143,7 @@ void NullableColumn::append_with_filter(const Column& src, const uint8_t* filter
 
         if (!src_column.has_null()) {
             // No nulls in source, fill zeros for selected rows in null column
-            size_t selected_count = 0;
-            for (size_t i = 0; i < count; i++) {
-                if (filter[i]) {
-                    selected_count++;
-                }
-            }
+            size_t selected_count = SIMD::count_nonzero(filter, count);
             _null_column->resize(orig_size + selected_count);
             _data_column->append_with_filter(*src_column._data_column, filter, count);
         } else {
@@ -165,12 +155,7 @@ void NullableColumn::append_with_filter(const Column& src, const uint8_t* filter
         }
     } else {
         // Source is not nullable, fill zeros for selected rows in null column
-        size_t selected_count = 0;
-        for (size_t i = 0; i < count; i++) {
-            if (filter[i]) {
-                selected_count++;
-            }
-        }
+        size_t selected_count = SIMD::count_nonzero(filter, count);
         _null_column->resize(orig_size + selected_count);
         _data_column->append_with_filter(src, filter, count);
     }

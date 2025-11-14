@@ -167,11 +167,10 @@ void BinaryColumnBase<T>::append_with_filter(const Column& src, const uint8_t* f
     const auto* __restrict src_bytes = src_column.continuous_data();
 
     // First pass: count selected rows and calculate total bytes needed
-    size_t selected_count = 0;
+    size_t selected_count = SIMD::count_nonzero(filter, count);
     size_t total_bytes = 0;
     for (size_t i = 0; i < count; i++) {
         if (filter[i]) {
-            selected_count++;
             total_bytes += src_offsets[i + 1] - src_offsets[i];
         }
     }
