@@ -430,9 +430,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 }
 
                 // inactive the related MVs
-                AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
-                AlterMVJobExecutor.inactiveRelatedMaterializedView(olapNewTbl,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapNewTbl,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
@@ -642,7 +642,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
 
             // If modified columns are already done, inactive related mv
-            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) table, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) table, modifiedColumns);
 
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
