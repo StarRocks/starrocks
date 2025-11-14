@@ -32,6 +32,7 @@ public class SchedulerHiveTPCHTest extends SchedulerConnectorTestBase {
     @BeforeEach
     public void before() throws DdlException {
         connectContext.changeCatalogDb("hive0.tpch");
+        connectContext.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(false);
     }
 
     @MethodSource("getTPCHTestFileNames")
