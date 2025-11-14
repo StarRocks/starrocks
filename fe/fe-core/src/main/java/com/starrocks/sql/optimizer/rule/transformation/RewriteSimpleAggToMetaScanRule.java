@@ -271,7 +271,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         }
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
-        if (!scanOperator.getSelectedPartitionId().isEmpty()) {
+        if (scanOperator.getSelectedPartitionId() != null && !scanOperator.getSelectedPartitionId().isEmpty()) {
             return Optional.empty();
         }
 
