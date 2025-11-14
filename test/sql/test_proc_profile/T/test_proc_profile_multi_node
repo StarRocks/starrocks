@@ -1,0 +1,92 @@
+-- name: test_proc_profile_multi_node
+-- Test FE /proc_profile page accessing different nodes (FE and BE)
+
+-- Get BE IP and HTTP port from show backends command
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+
+-- Test 1: Check that FE /proc_profile page with node=FE parameter is accessible
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Process Profiles"
+
+-- Test 2: Check that FE /proc_profile page contains tab navigation
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "nav nav-tabs"
+
+-- Test 3: Check that FE /proc_profile page contains FE tab
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "node=FE"
+
+-- Test 4: Check that FE /proc_profile page contains BE tabs
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "BE:"
+
+-- Test 5: Test accessing BE node via FE /proc_profile page
+-- This should fetch profile list from BE using the JSON API
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Process Profiles"
+
+-- Test 6: Test accessing BE node and verify tab is active
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)"
+
+-- Test 7: Test FE /proc_profile/file endpoint with FE node (default)
+-- Get a profile filename from FE page if exists
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > fe_profile_file.txt || echo "" > fe_profile_file.txt
+[UC]shell: cat fe_profile_file.txt
+shell: if [ -s fe_profile_file.txt ] && [ "$(cat fe_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat fe_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
+
+-- Test 8: Test FE /proc_profile/file endpoint with BE node parameter
+-- Get a profile filename from BE via FE page if exists
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt || echo "" > be_profile_file.txt
+[UC]shell: cat be_profile_file.txt
+shell: if [ -s be_profile_file.txt ] && [ "$(cat be_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
+
+-- Test 10: Test error handling when BE node is unavailable
+-- This should still show the page but with empty profile list
+shell: curl -s -u root: "${url}/proc_profile?node=BE:127.0.0.1:99999" | grep -c "Process Profiles"
+
+-- Test 11: Test invalid node parameter (not FE or BE:...)
+-- Should show error message for invalid node parameter (covers ProcProfileAction.java:124-125)
+shell: curl -s -u root: "${url}/proc_profile?node=INVALID" | grep -c "Invalid node parameter: INVALID"
+
+-- Test 12: Test invalid BE node format (missing port)
+-- Should handle gracefully (covers ProcProfileAction.java:221-222, ProcProfileFileAction.java:108-110)
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt)" | grep -c "Process Profiles"
+
+-- Test 13: Test invalid BE node format (too many parts)
+-- Should handle gracefully (covers ProcProfileAction.java:221-222, ProcProfileFileAction.java:108-110)
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt):extra" | grep -c "Process Profiles"
+
+-- Test 14: Test invalid BE port (non-numeric)
+-- Should handle gracefully (covers ProcProfileAction.java:229-231, ProcProfileFileAction.java:117-120)
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):invalid_port" | grep -c "Process Profiles"
+
+-- Test 15: Test /proc_profile/file with invalid BE node format (missing port)
+-- Should return error (covers ProcProfileFileAction.java:108-110)
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt)&filename=test.tar.gz"
+
+-- Test 16: Test /proc_profile/file with invalid BE node format (too many parts)
+-- Should return error (covers ProcProfileFileAction.java:108-110)
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt):extra&filename=test.tar.gz"
+
+-- Test 17: Test /proc_profile/file with invalid BE port (non-numeric)
+-- Should return error (covers ProcProfileFileAction.java:117-120)
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):invalid_port&filename=test.tar.gz"
+
+-- Test 18: Test /proc_profile/file with BE node and non-pprof file (tar.gz)
+-- Should set content-type to application/octet-stream (covers ProcProfileFileAction.java:159)
+-- Get a tar.gz file from BE if exists (not pprof.gz)
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > be_tar_file.txt || echo "" > be_tar_file.txt
+[UC]shell: cat be_tar_file.txt
+shell: if [ -s be_tar_file.txt ] && [ "$(cat be_tar_file.txt)" != "" ]; then curl -s -I -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_tar_file.txt)" | grep -i "content-type" | grep -c "application/octet-stream"; else echo "0"; fi
+
+-- Test 19: Test /proc_profile/file with BE node and pprof file
+-- Should set content-type to text/html (covers ProcProfileFileAction.java:156)
+-- Get a pprof.gz file from BE if exists
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*pprof\.gz' | head -1 | cut -d'=' -f2 > be_pprof_file.txt || echo "" > be_pprof_file.txt
+[UC]shell: cat be_pprof_file.txt
+shell: if [ -s be_pprof_file.txt ] && [ "$(cat be_pprof_file.txt)" != "" ]; then curl -s -I -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_pprof_file.txt)" | grep -i "content-type" | grep -c "text/html"; else echo "0"; fi
+
+-- Test 20: Test /proc_profile/file with BE node and non-existent file
+-- Should handle error from BE (covers ProcProfileFileAction.java:165-166)
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=nonexistent_file.tar.gz"
+
+-- Cleanup
+shell: rm -f fe_profile_file.txt be_profile_file.txt be_ip.txt be_http_port.txt be_tar_file.txt be_pprof_file.txt
+

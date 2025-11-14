@@ -1,0 +1,156 @@
+-- name: test_proc_profile_multi_node
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+-- result:
+0
+
+-- !result
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+-- result:
+0
+
+-- !result
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+-- result:
+0
+BE_IP=172.26.92.227, BE_HTTP_PORT=8042
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "nav nav-tabs"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "node=FE"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "BE:"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > fe_profile_file.txt || echo "" > fe_profile_file.txt
+-- result:
+0
+
+-- !result
+[UC]shell: cat fe_profile_file.txt
+-- result:
+0
+cpu-profile-20251113-183700.html.tar.gz
+-- !result
+shell: if [ -s fe_profile_file.txt ] && [ "$(cat fe_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat fe_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
+-- result:
+0
+exist
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt || echo "" > be_profile_file.txt
+-- result:
+0
+
+-- !result
+[UC]shell: cat be_profile_file.txt
+-- result:
+0
+cpu-profile-20251111-183934-pprof.gz
+-- !result
+shell: if [ -s be_profile_file.txt ] && [ "$(cat be_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
+-- result:
+0
+exist
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:127.0.0.1:99999" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=INVALID" | grep -c "Invalid node parameter: INVALID"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt)" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt):extra" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):invalid_port" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt)&filename=test.tar.gz"
+-- result:
+0
+400
+-- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt):extra&filename=test.tar.gz"
+-- result:
+0
+400
+-- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):invalid_port&filename=test.tar.gz"
+-- result:
+0
+400
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > be_tar_file.txt || echo "" > be_tar_file.txt
+-- result:
+0
+
+-- !result
+[UC]shell: cat be_tar_file.txt
+-- result:
+0
+
+-- !result
+shell: if [ -s be_tar_file.txt ] && [ "$(cat be_tar_file.txt)" != "" ]; then curl -s -I -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_tar_file.txt)" | grep -i "content-type" | grep -c "application/octet-stream"; else echo "0"; fi
+-- result:
+0
+0
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -o 'filename=[^"]*pprof\.gz' | head -1 | cut -d'=' -f2 > be_pprof_file.txt || echo "" > be_pprof_file.txt
+-- result:
+0
+
+-- !result
+[UC]shell: cat be_pprof_file.txt
+-- result:
+0
+cpu-profile-20251113-183928-pprof.gz
+-- !result
+shell: if [ -s be_pprof_file.txt ] && [ "$(cat be_pprof_file.txt)" != "" ]; then curl -s -I -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_pprof_file.txt)" | grep -i "content-type" | grep -c "text/html"; else echo "0"; fi
+-- result:
+0
+1
+-- !result
+shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=nonexistent_file.tar.gz"
+-- result:
+0
+500
+-- !result
+shell: rm -f fe_profile_file.txt be_profile_file.txt be_ip.txt be_http_port.txt be_tar_file.txt be_pprof_file.txt
+-- result:
+0
+
+-- !result
