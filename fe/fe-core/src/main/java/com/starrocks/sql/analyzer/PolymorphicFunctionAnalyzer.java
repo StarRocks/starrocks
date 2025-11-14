@@ -115,6 +115,21 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class MapEntriesDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            // Return ARRAY<STRUCT<key_type, value_type>>
+            // Create named struct fields with "key" and "value" as field names
+            List<StructField> structFields = Arrays.asList(
+                    new StructField("key", mapType.getKeyType()),
+                    new StructField("value", mapType.getValueType())
+            );
+            StructType structType = new StructType(structFields, true);
+            return new ArrayType(structType);
+        }
+    }
+
     private static class MapFilterDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
@@ -204,6 +219,7 @@ public class PolymorphicFunctionAnalyzer {
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
             .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_ENTRIES, new MapEntriesDeduce())
             .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
             .put(FunctionSet.ROW, new RowDeduce())
             .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
