@@ -63,6 +63,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.PartitionRef;
@@ -89,8 +90,9 @@ import java.util.stream.Collectors;
  */
 public class TabletChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
-    // 1 min
+
     private static final long LOG_PRINT_INTERVAL = 60000L;
+    private static final long MIN_LOCK_HOLD_TIME_MS = 100L;
 
     private final TabletScheduler tabletScheduler;
     private final TabletSchedulerStat stat;
@@ -140,6 +142,12 @@ public class TabletChecker extends FrontendDaemon {
             this.tblId = tblId;
             this.partIds = partIds;
         }
+    }
+
+    private static class LockStatistic {
+        public long lockHoldTotalTime = 0L;
+        public long lockAcquireCount = 0L;
+        public long proactiveReleaseCount = 0L;
     }
 
     public TabletChecker(TabletScheduler tabletScheduler, TabletSchedulerStat stat) {
@@ -265,131 +273,158 @@ public class TabletChecker extends FrontendDaemon {
     }
 
     private void doCheck(boolean isUrgent) {
-        long start = System.nanoTime();
+        long start = System.currentTimeMillis();
         TabletCheckerStat totStat = new TabletCheckerStat();
+        LockStatistic lockStat = new LockStatistic();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin()
+                .forEach(x -> checkOneDatabase(x, isUrgent, totStat, lockStat));
 
-        long lockTotalTime = 0;
-        long waitTotalTime = 0;
-        long lockStart;
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
-        DATABASE:
-        for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            if (db == null) {
-                continue;
-            }
-
-            if (db.isSystemDatabase()) {
-                continue;
-            }
-
-            // set the config to a local variable to avoid config params changed.
-            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
-            int partitionChecked = 0;
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            lockStart = System.nanoTime();
-            try {
-                List<Long> aliveBeIdsInCluster =
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
-                TABLE:
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    if (!table.needSchedule(false)) {
-                        continue;
-                    }
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        // replicas are managed by StarOS and cloud storage.
-                        continue;
-                    }
-
-                    if ((isUrgent && !isUrgentTable(dbId, table.getId()))) {
-                        continue;
-                    }
-
-                    OlapTable olapTbl = (OlapTable) table;
-                    for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
-                        partitionChecked++;
-
-                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), physicalPartition.getId());
-                        totStat.isUrgentPartitionHealthy = true;
-                        if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
-                            continue;
-                        }
-
-                        if (partitionChecked % partitionBatchNum == 0) {
-                            LOG.debug("partition checked reached batch value, release lock");
-                            lockTotalTime += System.nanoTime() - lockStart;
-                            // release lock, so that lock can be acquired by other threads.
-                            locker.unLockDatabase(db.getId(), LockType.READ);
-                            locker.lockDatabase(db.getId(), LockType.READ);
-                            LOG.debug("checker get lock again");
-                            lockStart = System.nanoTime();
-                            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
-                                continue DATABASE;
-                            }
-                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
-                                continue TABLE;
-                            }
-                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getPhysicalPartitionIncludeRecycleBin(olapTbl, physicalPartition.getId()) == null) {
-                                continue;
-                            }
-                        }
-
-                        Partition logicalPartition = olapTbl.getPartition(physicalPartition.getParentId());
-                        if (logicalPartition == null) {
-                            continue;
-                        }
-
-                        if (logicalPartition.getState() != PartitionState.NORMAL) {
-                            // when alter job is in FINISHING state, partition state will be set to NORMAL,
-                            // and we can schedule the tablets in it.
-                            continue;
-                        }
-
-                        short replicaNum = GlobalStateMgr.getCurrentState()
-                                .getLocalMetastore()
-                                .getReplicationNumIncludeRecycleBin(
-                                        olapTbl.getPartitionInfo(), physicalPartition.getParentId());
-                        if (replicaNum == (short) -1) {
-                            continue;
-                        }
-
-                        TabletCheckerStat partitionTabletCheckerStat = doCheckOnePartition(db, olapTbl, physicalPartition,
-                                replicaNum, aliveBeIdsInCluster, isPartitionUrgent);
-                        totStat.accumulateStat(partitionTabletCheckerStat);
-
-                        if (totStat.isUrgentPartitionHealthy && isPartitionUrgent) {
-                            // if all replicas in this partition are healthy, remove this partition from
-                            // priorities.
-                            LOG.debug("partition is healthy, remove from urgent table: {}-{}-{}",
-                                    db.getId(), olapTbl.getId(), physicalPartition.getId());
-                            removeFromUrgentTable(new RepairTabletInfo(db.getId(),
-                                    olapTbl.getId(), Lists.newArrayList(physicalPartition.getId())));
-                        }
-                    } // partitions
-                } // tables
-            } finally {
-                lockTotalTime += System.nanoTime() - lockStart;
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
-        } // end for dbs
-
-        long cost = (System.nanoTime() - start) / 1000000;
-        lockTotalTime = lockTotalTime / 1000000;
-
+        // Update statistics
+        long cost = System.currentTimeMillis() - start;
         stat.counterTabletCheckCostMs.addAndGet(cost);
         stat.counterTabletChecked.addAndGet(totStat.totalTabletNum);
         stat.counterUnhealthyTabletNum.addAndGet(totStat.unhealthyTabletNum);
         stat.counterTabletAddToBeScheduled.addAndGet(totStat.addToSchedulerTabletNum);
 
-        LOG.info("finished to check tablets. isUrgent: {}, " +
+        LOG.info("Finished one cycle check of tablets. isUrgent: {}, " +
                         "unhealthy/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, " +
-                        "cost: {} ms, in lock time: {} ms, wait time: {}ms",
+                        "cost: {} ms, in lock time: {} ms, wait time: {}ms, " +
+                "lock acquire count: {}, lock proactive release count: {}",
                 isUrgent, totStat.unhealthyTabletNum, totStat.totalTabletNum, totStat.addToSchedulerTabletNum,
-                totStat.tabletInScheduler, totStat.tabletNotReady, cost, lockTotalTime - waitTotalTime, waitTotalTime);
+                totStat.tabletInScheduler, totStat.tabletNotReady, cost, lockStat.lockHoldTotalTime,
+                totStat.waitTotalTime, lockStat.lockAcquireCount, lockStat.proactiveReleaseCount);
+    }
+
+    private void checkOneDatabase(long dbId, boolean isUrgent, TabletCheckerStat totStat, LockStatistic lockStat) {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDbIncludeRecycleBin(dbId);
+        if (db == null) {
+            return;
+        }
+        if (db.isSystemDatabase()) {
+            return;
+        }
+        for (Table table : metastore.getTablesIncludeRecycleBin(db)) {
+            // Acquire the READ lock and do some sanity check first.
+            checkOneTable(db, table, isUrgent, totStat, lockStat);
+        }
+    }
+
+    /**
+     * Check one table for unhealthy tablets.
+     * This method implements a lock release/reacquire mechanism to prevent
+     * holding the table lock for extended periods when processing large tables.
+     *
+     */
+    private void checkOneTable(Database db, Table table, boolean isUrgent, TabletCheckerStat totStat,
+                               LockStatistic lockStat) {
+        long maxLockHoldTimeMs = Config.tablet_checker_lock_time_per_cycle_ms;
+        if (maxLockHoldTimeMs < MIN_LOCK_HOLD_TIME_MS) {
+            // Value less than 100ms is not reasonable.
+            maxLockHoldTimeMs = MIN_LOCK_HOLD_TIME_MS;
+        }
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        List<Long> aliveBeIdsInCluster;
+
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        boolean locked = true;
+        long lockStartTime = 0L;
+        try {
+            lockStat.lockAcquireCount++;
+            lockStartTime = System.currentTimeMillis();
+            aliveBeIdsInCluster = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+
+            if (metastore.getTableIncludeRecycleBin(db, table.getId()) == null) {
+                // Get the table by tableId again, ensure it still exists under the lock.
+                return;
+            }
+            if (!table.needSchedule(false)) {
+                return;
+            }
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                // replicas are managed by StarOS and cloud storage.
+                return;
+            }
+            if ((isUrgent && !isUrgentTable(db.getId(), table.getId()))) {
+                return;
+            }
+            if (!(table instanceof OlapTable)) {
+                return;
+            }
+            OlapTable olapTbl = (OlapTable) table;
+            List<Long> physicalPartitionIds =
+                    olapTbl.getPhysicalPartitions().stream().map(PhysicalPartition::getId).collect(Collectors.toList());
+            for (long physicalPartitionId : physicalPartitionIds) {
+                // Retrieve the physical partition by physicalPartitionId to ensure it still exists, because the
+                // table lock can be released and acquired again in the middle.
+                PhysicalPartition physicalPartition =
+                        metastore.getPhysicalPartitionIncludeRecycleBin(olapTbl, physicalPartitionId);
+                if (physicalPartition == null) {
+                    continue;
+                }
+                boolean isPartitionUrgent = isPartitionUrgent(db.getId(), table.getId(), physicalPartition.getId());
+                totStat.isUrgentPartitionHealthy = true;
+                if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
+                    continue;
+                }
+                Partition logicalPartition = olapTbl.getPartition(physicalPartition.getParentId());
+                if (logicalPartition == null) {
+                    continue;
+                }
+                if (logicalPartition.getState() != PartitionState.NORMAL) {
+                    // when alter job is in FINISHING state, partition state will be set to NORMAL,
+                    // and we can schedule the tablets in it.
+                    continue;
+                }
+
+                short replicaNum = metastore.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
+                        physicalPartition.getParentId());
+                if (replicaNum == (short) -1) {
+                    continue;
+                }
+
+                TabletCheckerStat partitionTabletCheckerStat =
+                        doCheckOnePartition(db, olapTbl, physicalPartition, replicaNum, aliveBeIdsInCluster,
+                                isPartitionUrgent);
+                totStat.accumulateStat(partitionTabletCheckerStat);
+
+                if (totStat.isUrgentPartitionHealthy && isPartitionUrgent) {
+                    // if all replicas in this partition are healthy, remove this partition from
+                    // priorities.
+                    LOG.debug("partition is healthy, remove from urgent table: {}-{}-{}",
+                            db.getId(), olapTbl.getId(), physicalPartition.getId());
+                    removeFromUrgentTable(new RepairTabletInfo(db.getId(),
+                            olapTbl.getId(), Lists.newArrayList(physicalPartition.getId())));
+                }
+                long lockElapsedTime = System.currentTimeMillis() - lockStartTime;
+                if (lockElapsedTime >= maxLockHoldTimeMs) {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    locked = false;
+                    lockStat.proactiveReleaseCount++;
+
+                    LOG.debug("lock time for one cycle reached the limit {}, release lock.", maxLockHoldTimeMs);
+                    lockStat.lockHoldTotalTime += lockElapsedTime;
+
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    locked = true;
+                    lockStat.lockAcquireCount++;
+                    lockStartTime = System.currentTimeMillis();
+                    if (metastore.getTableIncludeRecycleBin(db, table.getId()) == null) {
+                        // Get the table by tableId again, ensure it still exists under the lock.
+                        return;
+                    }
+                    // Refresh alive BE list after reacquire the lock
+                    aliveBeIdsInCluster =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+                }
+            }
+        } finally {
+            if (locked) {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                lockStat.lockHoldTotalTime += System.currentTimeMillis() - lockStartTime;
+            }
+        }
     }
 
     private static class TabletCheckerStat {
