@@ -555,12 +555,7 @@ public class Database extends MetaObject implements Writable {
 
     public synchronized void dropFunctionForRestore(Function function) {
         FunctionSearchDesc fnDesc = new FunctionSearchDesc(function.getFunctionName(), function.getArgs(), function.hasVarArgs());
-        try {
-            if (checkDropFunction(fnDesc, true)) {
-                GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(fnDesc, wal -> dropFunctionInternal(fnDesc));
-            }
-        } catch (StarRocksException ignore) {
-        }
+        dropFunctionInternal(fnDesc);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
