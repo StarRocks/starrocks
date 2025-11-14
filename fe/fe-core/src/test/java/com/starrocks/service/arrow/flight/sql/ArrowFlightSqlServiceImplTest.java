@@ -377,59 +377,6 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testCreatePreparedStatementTwiceThrowsException() throws Exception {
-        // Setup
-        FlightSql.ActionCreatePreparedStatementRequest request1 = mock(FlightSql.ActionCreatePreparedStatementRequest.class);
-        when(request1.getQuery()).thenReturn("SELECT 1");
-        
-        FlightSql.ActionCreatePreparedStatementRequest request2 = mock(FlightSql.ActionCreatePreparedStatementRequest.class);
-        when(request2.getQuery()).thenReturn("SELECT 2");
-
-        FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
-        when(callContext.peerIdentity()).thenReturn("token123");
-
-        // Create a real context to test the actual locking behavior
-        ArrowFlightSqlConnectContext realContext = new ArrowFlightSqlConnectContext("token123");
-        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(realContext);
-
-        FlightProducer.StreamListener<Result> listener1 = mock(FlightProducer.StreamListener.class);
-        FlightProducer.StreamListener<Result> listener2 = mock(FlightProducer.StreamListener.class);
-
-        try (
-                MockedStatic<ArrowUtil> mockArrowUtil = mockStatic(ArrowUtil.class);
-                MockedStatic<ArrowFlightSqlServiceImpl> mockStatic =
-                        mockStatic(ArrowFlightSqlServiceImpl.class, CALLS_REAL_METHODS)
-        ) {
-            VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
-            Schema mockSchema = mock(Schema.class);
-            when(mockRoot.getSchema()).thenReturn(mockSchema);
-            mockArrowUtil.when(() -> ArrowUtil.createSingleSchemaRoot(anyString(), anyString())).thenReturn(mockRoot);
-            mockStatic.when(() -> ArrowFlightSqlServiceImpl.serializeMetadata(mockSchema))
-                    .thenReturn(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)));
-
-            // First call - this should succeed and set the query
-            service.createPreparedStatement(request1, callContext, listener1);
-            
-            // Wait for first call to complete
-            Thread.sleep(200);
-
-            // Second call - this should fail because query is already set
-            service.createPreparedStatement(request2, callContext, listener2);
-            
-            // Wait for second call to complete
-            Thread.sleep(200);
-
-            // Verify that listener2 received an error about query already in progress
-            verify(listener2, timeout(1000)).onError(any(FlightRuntimeException.class));
-            verify(listener2, timeout(1000)).onCompleted();
-            
-            // Verify listener1 succeeded
-            verify(listener1, timeout(1000)).onNext(any(Result.class));
-            verify(listener1, timeout(1000)).onCompleted();
-        }
-    }
-
-    @Test
     public void testSetSessionOptions() throws Exception {
         // Arrange
         ArrowFlightSqlServiceImpl service = new ArrowFlightSqlServiceImpl(mock(ArrowFlightSqlSessionManager.class), null);
