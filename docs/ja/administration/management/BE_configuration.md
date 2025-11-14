@@ -34,6 +34,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### ロギング
 
+##### log_buffer_level
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: ログをフラッシュするための戦略。デフォルト値は、ログがメモリにバッファリングされることを示します。有効な値は `-1` と `0` です。`-1` は、ログがメモリにバッファリングされないことを示します。
+- 導入バージョン: -
+
 ##### sys_log_dir
 
 - デフォルト: `${STARROCKS_HOME}/log`
@@ -70,15 +79,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 保持するログロールの数。
 - 導入バージョン: -
 
-##### sys_log_verbose_modules
-
-- デフォルト: 
-- タイプ: Strings
-- 単位: -
-- 可変: いいえ
-- 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
-- 導入バージョン: -
-
 ##### sys_log_verbose_level
 
 - デフォルト: 10
@@ -88,16 +88,52 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 印刷するログのレベル。この設定項目は、コード内で VLOG で開始されたログの出力を制御するために使用されます。
 - 導入バージョン: -
 
-##### log_buffer_level
+##### sys_log_verbose_modules
 
-- デフォルト: 空の文字列
-- タイプ: String
+- デフォルト: 
+- タイプ: Strings
 - 単位: -
 - 可変: いいえ
-- 説明: ログをフラッシュするための戦略。デフォルト値は、ログがメモリにバッファリングされることを示します。有効な値は `-1` と `0` です。`-1` は、ログがメモリにバッファリングされないことを示します。
+- 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
 - 導入バージョン: -
 
 ### サーバー
+
+##### abort_on_large_memory_allocation
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: Yes
+- 説明: 単一の割り当て要求が設定された large-allocation 閾値を超えた場合（g_large_memory_alloc_failure_threshold > 0 かつ 要求サイズ > 閾値）、プロセスがどのように応答するかを制御します。true の場合、こうした大きな割り当てが検出されると直ちに std::abort() を呼び出して（ハードクラッシュ）終了します。false の場合は割り当てがブロックされ、アロケータは失敗（nullptr または ENOMEM）を返すため、呼び出し元がエラーを処理できます。このチェックは TRY_CATCH_BAD_ALLOC パスでラップされていない割り当てに対してのみ有効です（mem hook は bad-alloc を捕捉している場合に別のフローを使用します）。予期しない巨大な割り当ての fail-fast デバッグ目的で有効にしてください。運用環境では、過大な割り当て試行で即時プロセス中断を望む場合を除き無効のままにしてください。
+- 導入バージョン: 3.4.3, 3.5.0, 4.0.0
+
+##### be_exit_after_disk_write_hang_second
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 可変: いいえ
+- 説明: ディスクがハングした後、BE が終了するまでの待機時間。
+- 導入バージョン: -
+
+##### be_http_num_workers
+
+- デフォルト: 48
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: HTTP サーバーが使用するスレッドの数。
+- 導入バージョン: -
+
+##### be_http_port
+
+- デフォルト: 8040
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: BE HTTP サーバーポート。
+- 導入バージョン: -
 
 ##### be_port
 
@@ -108,13 +144,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE の thrift サーバーポートで、FEs からのリクエストを受け取るために使用されます。
 - 導入バージョン: -
 
-##### brpc_port
+##### brpc_max_body_size
 
-- デフォルト: 8060
+- デフォルト: 2147483648
 - タイプ: Int
-- 単位: -
+- 単位: バイト
 - 可変: いいえ
-- 説明: BE bRPC ポートで、bRPC のネットワーク統計を表示するために使用されます。
+- 説明: bRPC の最大ボディサイズ。
 - 導入バージョン: -
 
 ##### brpc_num_threads
@@ -126,6 +162,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: bRPC の bthreads の数。値 `-1` は CPU スレッドと同じ数を示します。
 - 導入バージョン: -
 
+##### brpc_port
+
+- デフォルト: 8060
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: BE bRPC ポートで、bRPC のネットワーク統計を表示するために使用されます。
+- 導入バージョン: -
+
 ##### brpc_stub_expire_s
 
 - デフォルト: 3600
@@ -135,41 +180,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BRPC stub キャッシュの有効期限。デフォルトは60分です。
 - 導入バージョン: -
 
-##### priority_networks
+##### compress_rowbatches
 
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 可変: いいえ
-- 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
-- 導入バージョン: -
-
-##### net_use_ipv6_when_priority_networks_empty
-
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: いいえ
-- 説明: `priority_networks` が指定されていない場合に IPv6 アドレスを優先的に使用するかどうかを制御するブール値です。`true` は、ノードをホストするサーバーが IPv4 と IPv6 の両方のアドレスを持ち、`priority_networks` が指定されていない場合に、システムが IPv6 アドレスを優先的に使用することを許可することを示します。
-- 導入バージョン: v3.3.0
-
-##### mem_limit
-
-- デフォルト: 90%
-- タイプ: String
-- 単位: -
-- 可変: いいえ
-- 説明: BE プロセスのメモリ上限。パーセンテージ ("80%") または物理的な制限 ("100G") として設定できます。デフォルトのハードリミットはサーバーのメモリサイズの 90% で、ソフトリミットは 80% です。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。
+- 説明: BE 間の RPC で行バッチを圧縮するかどうかを制御するブール値です。`true` は行バッチを圧縮することを示し、`false` は圧縮しないことを示します。
 - 導入バージョン: -
-
-##### abort_on_large_memory_allocation
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: N/A
-- 変更可能: Yes
-- 説明: 単一の割り当て要求が設定された large-allocation 閾値を超えた場合（g_large_memory_alloc_failure_threshold > 0 かつ 要求サイズ > 閾値）、プロセスがどのように応答するかを制御します。true の場合、こうした大きな割り当てが検出されると直ちに std::abort() を呼び出して（ハードクラッシュ）終了します。false の場合は割り当てがブロックされ、アロケータは失敗（nullptr または ENOMEM）を返すため、呼び出し元がエラーを処理できます。このチェックは TRY_CATCH_BAD_ALLOC パスでラップされていない割り当てに対してのみ有効です（mem hook は bad-alloc を捕捉している場合に別のフローを使用します）。予期しない巨大な割り当ての fail-fast デバッグ目的で有効にしてください。運用環境では、過大な割り当て試行で即時プロセス中断を望む場合を除き無効のままにしてください。
-- 導入バージョン: 3.4.3, 3.5.0, 4.0.0
 
 ##### heartbeat_service_port
 
@@ -189,13 +207,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE ハートビートサービスのスレッド数。
 - 導入バージョン: -
 
-##### compress_rowbatches
+##### mem_limit
 
-- デフォルト: true
+- デフォルト: 90%
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: BE プロセスのメモリ上限。パーセンテージ ("80%") または物理的な制限 ("100G") として設定できます。デフォルトのハードリミットはサーバーのメモリサイズの 90% で、ソフトリミットは 80% です。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。
+- 導入バージョン: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 可変: いいえ
-- 説明: BE 間の RPC で行バッチを圧縮するかどうかを制御するブール値です。`true` は行バッチを圧縮することを示し、`false` は圧縮しないことを示します。
+- 説明: `priority_networks` が指定されていない場合に IPv6 アドレスを優先的に使用するかどうかを制御するブール値です。`true` は、ノードをホストするサーバーが IPv4 と IPv6 の両方のアドレスを持ち、`priority_networks` が指定されていない場合に、システムが IPv6 アドレスを優先的に使用することを許可することを示します。
+- 導入バージョン: v3.3.0
+
+##### priority_networks
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。注意すべき点は、このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。例: `10.10.10.0/24`。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
 - 導入バージョン: -
 
 ##### thrift_client_retry_interval_ms
@@ -207,40 +243,21 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: thrift クライアントがリトライする時間間隔。
 - 導入バージョン: -
 
-##### be_http_port
-
-- デフォルト: 8040
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: BE HTTP サーバーポート。
-- 導入バージョン: -
-
-##### be_http_num_workers
-
-- デフォルト: 48
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: HTTP サーバーが使用するスレッドの数。
-- 導入バージョン: -
-
-##### be_exit_after_disk_write_hang_second
-
-- デフォルト: 60
-- タイプ: Int
-- 単位: 秒
-- 可変: いいえ
-- 説明: ディスクがハングした後、BE が終了するまでの待機時間。
-- 導入バージョン: -
-
-##### thrift_rpc_timeout_ms
+##### thrift_rpc_connection_max_valid_time_ms
 
 - デフォルト: 5000
 - タイプ: Int
-- 単位: ミリ秒
-- 可変: はい
-- 説明: thrift RPC のタイムアウト。
+- 単位: Milliseconds
+- 変更可能: いいえ
+- 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
+
+##### thrift_rpc_max_body_size
+
+- デフォルト: 0
+- タイプ: Int
+- 単位:
+- 変更可能: いいえ
+- 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
 - 導入バージョン: -
 
 ##### thrift_rpc_strict_mode
@@ -252,30 +269,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Thrift の Strict 実行モードが有効かどうか。Thrift の Strict モードについては、[Thrift Binary protocol encoding](https://github.com/apache/thrift/blob/master/doc/specs/thrift-binary-protocol.md) を参照してください。
 - 導入バージョン: -
 
-##### thrift_rpc_max_body_size
-
-- デフォルト: 0
-- タイプ: Int
-- 単位:
-- 変更可能: いいえ
-- 説明: RPC の文字列ボディの最大サイズ。`0` は無制限であることを示す。
-- 導入バージョン: -
-
-##### thrift_rpc_connection_max_valid_time_ms
+##### thrift_rpc_timeout_ms
 
 - デフォルト: 5000
 - タイプ: Int
-- 単位: Milliseconds
-- 変更可能: いいえ
-- 説明: Thrift RPC 接続の最大有効時間。コネクションプールにこの値以上存在すると、コネクションは閉じられます。この値は FE 設定 `thrift_client_timeout_ms` と一致するように設定する必要があります。
-
-##### brpc_max_body_size
-
-- デフォルト: 2147483648
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: bRPC の最大ボディサイズ。
+- 単位: ミリ秒
+- 可変: はい
+- 説明: thrift RPC のタイムアウト。
 - 導入バージョン: -
 
 ### メタデータとクラスタ管理
@@ -302,78 +302,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### クエリエンジン
 
-##### scanner_thread_pool_thread_num
-
-- デフォルト: 48
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: ストレージエンジンが同時ストレージボリュームスキャンに使用するスレッドの数。すべてのスレッドはスレッドプールで管理されます。
-- 導入バージョン: -
-
-##### scanner_thread_pool_queue_size
-
-- デフォルト: 102400
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: ストレージエンジンがサポートするスキャンタスクの数。
-- 導入バージョン: -
-
-##### scanner_row_num
-
-- デフォルト: 16384
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 各スキャンで各スキャンスレッドが返す最大行数。
-- 導入バージョン: -
-
-##### max_scan_key_num
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 各クエリによってセグメント化される最大スキャンキー数。
-- 導入バージョン: -
-
-##### max_pushdown_conditions_per_column
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 各列でプッシュダウンを許可する条件の最大数。この制限を超えると、述語はストレージレイヤーにプッシュダウンされません。
-- 導入バージョン: -
-
-##### exchg_node_buffer_size_bytes
-
-- デフォルト: 10485760
-- タイプ: Int
-- 単位: バイト
-- 可変: はい
-- 説明: 各クエリの交換ノードの受信側の最大バッファサイズ。この設定項目はソフトリミットです。データが過剰な速度で受信側に送信されると、バックプレッシャーがトリガーされます。
-- 導入バージョン: -
-
-##### file_descriptor_cache_capacity
-
-- デフォルト: 16384
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: キャッシュできるファイルディスクリプタの数。
-- 導入バージョン: -
-
-##### min_file_descriptor_number
-
-- デフォルト: 60000
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: BE プロセスの最小ファイルディスクリプタ数。
-- 導入バージョン: -
-
 ##### disable_storage_page_cache
 
 - デフォルト: false
@@ -396,14 +324,32 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明:Bitmap インデックスのメモリキャッシュを有効にするかどうか。Bitmap インデックスを使用してポイントクエリを高速化したい場合は、メモリキャッシュを使用することを推奨します。
 - 導入バージョン: v3.1
 
-##### enable_zonemap_index_memory_page_cache
+##### enable_compaction_flat_json
 
-- デフォルト: true
+- デフォルト: True
 - タイプ: Boolean
-- 単位: -
+- 単位: 
 - 可変: はい
-- 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
-- 導入バージョン: -
+- 説明: Flat JSON データのコンパクションを有効にするかどうか。
+- 導入バージョン: v3.3.3
+
+##### enable_json_flat
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: 
+- 可変: はい
+- 説明: Flat JSON 機能を有効にするかどうか。 この機能を有効にすると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリパフォーマンスが向上します。
+- 導入バージョン: v3.3.0
+
+##### enable_lazy_dynamic_flat_json
+
+- デフォルト: True
+- タイプ: Boolean
+- 単位: 
+- 可変: はい
+- 説明: クエリが読み取りプロセスで Flat JSON スキーマを見逃した場合に Lazy Dynamic Flat JSON を有効にするかどうか。この項目が `true` に設定されている場合、StarRocks は Flat JSON 操作を読み取りプロセスではなく計算プロセスに延期します。
+- 導入バージョン: v3.3.3
 
 ##### enable_ordinal_index_memory_page_cache
 
@@ -423,40 +369,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 文字列（CHAR/VARCHAR）列に対して、前置長に基づくゾーンマップを有効にするかどうか。非キー列では、最小値/最大値は `string_prefix_zonemap_prefix_len` で指定した長さに切り詰められます。
 - 導入バージョン: -
 
-##### string_prefix_zonemap_prefix_len
+##### enable_zonemap_index_memory_page_cache
 
-- デフォルト: 16
-- タイプ: Int
+- デフォルト: true
+- タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
+- 説明: ゾーンマップインデックスのメモリーキャッシュを有効にするかどうか。ゾーンマップインデックスを使用してスキャンを高速化したい場合は、メモリキャッシュを使用することを推奨します。
 - 導入バージョン: -
 
-##### fragment_pool_thread_num_min
+##### exchg_node_buffer_size_bytes
 
-- デフォルト: 64
+- デフォルト: 10485760
 - タイプ: Int
-- 単位: 分
-- 可変: いいえ
-- 説明: クエリに使用される最小スレッド数。
+- 単位: バイト
+- 可変: はい
+- 説明: 各クエリの交換ノードの受信側の最大バッファサイズ。この設定項目はソフトリミットです。データが過剰な速度で受信側に送信されると、バックプレッシャーがトリガーされます。
 - 導入バージョン: -
 
-##### fragment_pool_thread_num_max
+##### file_descriptor_cache_capacity
 
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: クエリに使用される最大スレッド数。
-- 導入バージョン: -
-
-##### fragment_pool_queue_size
-
-- デフォルト: 2048
+- デフォルト: 16384
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: 各 BE ノードで処理できるクエリ数の上限。
+- 説明: キャッシュできるファイルディスクリプタの数。
 - 導入バージョン: -
 
 ##### flamegraph_tool_dir
@@ -468,121 +405,113 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: フレームグラフツールのディレクトリ。このディレクトリには、プロファイルデータからフレームグラフを生成するための pprof、stackcollapse-go.pl、flamegraph.pl スクリプトが含まれている必要があります。
 - 導入バージョン: -
 
-##### query_pool_spill_mem_limit_threshold
+##### fragment_pool_queue_size
 
-- デフォルト: 1.0
-- タイプ: Double
+- デフォルト: 2048
+- タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: 自動スピリングが有効な場合、すべてのクエリのメモリ使用量が `query_pool memory limit * query_pool_spill_mem_limit_threshold` を超えると、中間結果のスピリングがトリガーされます。
-- 導入バージョン: v3.2.7
-
-##### result_buffer_cancelled_interval_time
-
-- デフォルト: 300
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: BufferControlBlock がデータを解放するまでの待機時間。
+- 説明: 各 BE ノードで処理できるクエリ数の上限。
 - 導入バージョン: -
 
-##### max_memory_sink_batch_count
+##### fragment_pool_thread_num_max
 
-- デフォルト: 20
+- デフォルト: 4096
 - タイプ: Int
 - 単位: -
-- 可変: はい
-- 説明: スキャンキャッシュバッチの最大数。
+- 可変: いいえ
+- 説明: クエリに使用される最大スレッド数。
 - 導入バージョン: -
 
-##### scan_context_gc_interval_min
+##### fragment_pool_thread_num_min
 
-- デフォルト: 5
+- デフォルト: 64
 - タイプ: Int
 - 単位: 分
-- 可変: はい
-- 説明: スキャンコンテキストをクリーンアップする時間間隔。
+- 可変: いいえ
+- 説明: クエリに使用される最小スレッド数。
 - 導入バージョン: -
 
-##### path_gc_check_step
+##### hdfs_client_enable_hedged_read
 
-- デフォルト: 1000
-- タイプ: Int
+- デフォルト: false
+- タイプ: Boolean
 - 単位: -
-- 可変: はい
-- 説明: 連続してスキャンできる最大ファイル数。
-- 導入バージョン: -
+- 可変: いいえ
+- 説明: ヘッジドリード機能を有効にするかどうかを指定します。
+- 導入バージョン: v3.0
 
-##### path_gc_check_step_interval_ms
+##### hdfs_client_hedged_read_threadpool_size
 
-- デフォルト: 10
-- タイプ: Int
-- 単位: ミリ秒
-- 可変: はい
-- 説明: ファイルスキャン間の時間間隔。
-- 導入バージョン: -
-
-##### path_scan_interval_second
-
-- デフォルト: 86400
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: GC が期限切れデータをクリーンアップする時間間隔。
-- 導入バージョン: -
-
-##### pipeline_poller_timeout_guard_ms
-
-- デフォルト: -1
-- タイプ: Int
-- 単位: Milliseconds
-- 可変: はい
-- 説明: この項目が `0` より大きい値に設定されている場合、ドライバがポーラの 1 回のディスパッチに `pipeline_poller_timeout_guard_ms` 以上の時間がかかると、ドライバとオペレータの情報が出力される。
-- 導入バージョン: -
-
-##### pipeline_prepare_timeout_guard_ms
-
-- デフォルト: -1
-- タイプ: Int
-- 単位: Milliseconds
-- 可変: はい
-- 説明: この項目が `0` より大きい値に設定されている場合、PREPARE 処理中にプランの Fragment が `pipeline_prepare_timeout_guard_ms` を超えると、プランの Fragment のスタックトレースが出力される。
-
-##### pipeline_connector_scan_thread_num_per_cpu
-
-- デフォルト: 8
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: BE ノードの CPU コアごとに Pipeline Connector に割り当てられるスキャンスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
-- 導入バージョン: -
-
-##### pipeline_scan_thread_pool_queue_size
-
-- デフォルト: 102400
+- デフォルト: 128
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
-- 導入バージョン: -
+- 説明: HDFS クライアントのヘッジドリードスレッドプールのサイズを指定します。スレッドプールのサイズは、HDFS クライアントでヘッジドリードを実行するために専用されるスレッドの数を制限します。これは、HDFS クラスターの **hdfs-site.xml** ファイルの `dfs.client.hedged.read.threadpool.size` パラメータに相当します。
+- 導入バージョン: v3.0
 
-##### pipeline_prepare_thread_pool_thread_num
+##### hdfs_client_hedged_read_threshold_millis
+
+- デフォルト: 2500
+- タイプ: Int
+- 単位: ミリ秒
+- 可変: いいえ
+- 説明: ヘッジドリードを開始する前に待機するミリ秒数を指定します。たとえば、このパラメータを `30` に設定した場合、ブロックからの読み取りが 30 ミリ秒以内に返されない場合、HDFS クライアントはすぐに別のブロックレプリカに対して新しい読み取りを開始します。これは、HDFS クラスターの **hdfs-site.xml** ファイルの `dfs.client.hedged.read.threshold.millis` パラメータに相当します。
+- 導入バージョン: v3.0
+
+##### io_coalesce_adaptive_lazy_active
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 述語の選択性に基づいて、述語列と非述語列の I/O を結合するかどうかを適応的に決定します。
+- 導入バージョン: v3.2
+
+##### jit_lru_cache_size
 
 - デフォルト: 0
 - タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: Pipeline 実行エンジン PREPARE Fragment スレッドプールのスレッド数。`0` はシステムの VCPU コア数と同じであることを示す。
+- 単位: Bytes
+- 可変: はい
+- 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
 - 導入バージョン: -
 
-##### pipeline_prepare_thread_pool_queue_size
+##### json_flat_column_max
 
-- デフォルト: 102400
+- デフォルト: 100
 - タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
+- 単位: 
+- 可変: はい
+- 説明: Flat JSON によって抽出できるサブフィールドの最大数。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
+- 導入バージョン: v3.3.0
+
+##### json_flat_create_zonemap
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: 
+- 可変: はい
+- 説明: フラット化された JSON のサブカラムに対してゾーンマップを作成するかどうか。`enable_json_flat` が `true` の場合にのみ有効です。
 - 導入バージョン: -
+
+##### json_flat_null_factor
+
+- デフォルト: 0.3
+- タイプ: Double
+- 単位: 
+- 可変: はい
+- 説明: Flat JSON のために抽出する NULL 値の割合。NULL 値の割合がこのしきい値を超える列は抽出されません。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
+- 導入バージョン: v3.3.0
+
+##### json_flat_sparsity_factor
+
+- デフォルト: 0.3
+- タイプ: Double
+- 単位: 
+- 可変: はい
+- 説明: Flat JSON の同じ名前を持つ列の割合。この値より低い場合、抽出は行われません。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
+- 導入バージョン: v3.3.0
 
 ##### lake_tablet_ignore_invalid_delete_predicate
 
@@ -600,6 +529,42 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 可変: はい
 - 説明: 開くことができる HDFS ファイルディスクリプタの最大数。
+- 導入バージョン: -
+
+##### max_memory_sink_batch_count
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: スキャンキャッシュバッチの最大数。
+- 導入バージョン: -
+
+##### max_pushdown_conditions_per_column
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 各列でプッシュダウンを許可する条件の最大数。この制限を超えると、述語はストレージレイヤーにプッシュダウンされません。
+- 導入バージョン: -
+
+##### max_scan_key_num
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 各クエリによってセグメント化される最大スキャンキー数。
+- 導入バージョン: -
+
+##### min_file_descriptor_number
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: BE プロセスの最小ファイルディスクリプタ数。
 - 導入バージョン: -
 
 ##### object_storage_connect_timeout_ms
@@ -647,41 +612,85 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: パフォーマンスを向上させるために Parquet ファイルのブルームフィルターを有効にするかどうかを制御するブール値。`true` はブルームフィルタを有効にすることを示し、`false` は無効にすることを示す。システム変数 `enable_parquet_reader_bloom_filter` を使用して、セッションレベルでこの動作を制御することもできます。Parquet におけるブルームフィルタは、**各行グループ内のカラムレベルで管理されます**。Parquet ファイルに特定の列に対するブルームフィルタが含まれている場合、クエリはそれらの列に対する述語を使用して行グループを効率的にスキップすることができます。
 - 導入バージョン: v3.5
 
-##### io_coalesce_adaptive_lazy_active
+##### path_gc_check_step
 
-- デフォルト: true
-- タイプ: Boolean
+- デフォルト: 1000
+- タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 述語の選択性に基づいて、述語列と非述語列の I/O を結合するかどうかを適応的に決定します。
-- 導入バージョン: v3.2
+- 説明: 連続してスキャンできる最大ファイル数。
+- 導入バージョン: -
 
-##### hdfs_client_enable_hedged_read
+##### path_gc_check_step_interval_ms
 
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: ヘッジドリード機能を有効にするかどうかを指定します。
-- 導入バージョン: v3.0
-
-##### hdfs_client_hedged_read_threadpool_size
-
-- デフォルト: 128
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: HDFS クライアントのヘッジドリードスレッドプールのサイズを指定します。スレッドプールのサイズは、HDFS クライアントでヘッジドリードを実行するために専用されるスレッドの数を制限します。これは、HDFS クラスターの **hdfs-site.xml** ファイルの `dfs.client.hedged.read.threadpool.size` パラメータに相当します。
-- 導入バージョン: v3.0
-
-##### hdfs_client_hedged_read_threshold_millis
-
-- デフォルト: 2500
+- デフォルト: 10
 - タイプ: Int
 - 単位: ミリ秒
+- 可変: はい
+- 説明: ファイルスキャン間の時間間隔。
+- 導入バージョン: -
+
+##### path_scan_interval_second
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: GC が期限切れデータをクリーンアップする時間間隔。
+- 導入バージョン: -
+
+##### pipeline_connector_scan_thread_num_per_cpu
+
+- デフォルト: 8
+- タイプ: Double
+- 単位: -
+- 可変: はい
+- 説明: BE ノードの CPU コアごとに Pipeline Connector に割り当てられるスキャンスレッドの数。この設定は v3.1.7 以降、動的に変更されました。
+- 導入バージョン: -
+
+##### pipeline_poller_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、ドライバがポーラの 1 回のディスパッチに `pipeline_poller_timeout_guard_ms` 以上の時間がかかると、ドライバとオペレータの情報が出力される。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
 - 可変: いいえ
-- 説明: ヘッジドリードを開始する前に待機するミリ秒数を指定します。たとえば、このパラメータを `30` に設定した場合、ブロックからの読み取りが 30 ミリ秒以内に返されない場合、HDFS クライアントはすぐに別のブロックレプリカに対して新しい読み取りを開始します。これは、HDFS クラスターの **hdfs-site.xml** ファイルの `dfs.client.hedged.read.threshold.millis` パラメータに相当します。
-- 導入バージョン: v3.0
+- 説明: Pipeline 実行エンジンの PREPARE Fragment スレッドプールの最大キュー長。
+- 導入バージョン: -
+
+##### pipeline_prepare_thread_pool_thread_num
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジン PREPARE Fragment スレッドプールのスレッド数。`0` はシステムの VCPU コア数と同じであることを示す。
+- 導入バージョン: -
+
+##### pipeline_prepare_timeout_guard_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 可変: はい
+- 説明: この項目が `0` より大きい値に設定されている場合、PREPARE 処理中にプランの Fragment が `pipeline_prepare_timeout_guard_ms` を超えると、プランの Fragment のスタックトレースが出力される。
+
+##### pipeline_scan_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: Pipeline 実行エンジンの SCAN スレッドプールの最大タスクキュー長。
+- 導入バージョン: -
 
 ##### query_cache_capacity
 
@@ -692,115 +701,70 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE のクエリキャッシュのサイズ。デフォルトサイズは 512 MB です。サイズは 4 MB 未満にすることはできません。BE のメモリ容量が期待するクエリキャッシュサイズを提供するのに不十分な場合、BE のメモリ容量を増やすことができます。
 - 導入バージョン: -
 
-##### enable_json_flat
+##### query_pool_spill_mem_limit_threshold
 
-- デフォルト: false
-- タイプ: Boolean
-- 単位: 
+- デフォルト: 1.0
+- タイプ: Double
+- 単位: -
+- 可変: いいえ
+- 説明: 自動スピリングが有効な場合、すべてのクエリのメモリ使用量が `query_pool memory limit * query_pool_spill_mem_limit_threshold` を超えると、中間結果のスピリングがトリガーされます。
+- 導入バージョン: v3.2.7
+
+##### result_buffer_cancelled_interval_time
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
 - 可変: はい
-- 説明: Flat JSON 機能を有効にするかどうか。 この機能を有効にすると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリパフォーマンスが向上します。
-- 導入バージョン: v3.3.0
-
-##### enable_compaction_flat_json
-
-- デフォルト: True
-- タイプ: Boolean
-- 単位: 
-- 可変: はい
-- 説明: Flat JSON データのコンパクションを有効にするかどうか。
-- 導入バージョン: v3.3.3
-
-##### enable_lazy_dynamic_flat_json
-
-- デフォルト: True
-- タイプ: Boolean
-- 単位: 
-- 可変: はい
-- 説明: クエリが読み取りプロセスで Flat JSON スキーマを見逃した場合に Lazy Dynamic Flat JSON を有効にするかどうか。この項目が `true` に設定されている場合、StarRocks は Flat JSON 操作を読み取りプロセスではなく計算プロセスに延期します。
-- 導入バージョン: v3.3.3
-
-##### json_flat_create_zonemap
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: 
-- 可変: はい
-- 説明: フラット化された JSON のサブカラムに対してゾーンマップを作成するかどうか。`enable_json_flat` が `true` の場合にのみ有効です。
+- 説明: BufferControlBlock がデータを解放するまでの待機時間。
 - 導入バージョン: -
 
-##### json_flat_null_factor
+##### scan_context_gc_interval_min
 
-- デフォルト: 0.3
-- タイプ: Double
-- 単位: 
-- 可変: はい
-- 説明: Flat JSON のために抽出する NULL 値の割合。NULL 値の割合がこのしきい値を超える列は抽出されません。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
-- 導入バージョン: v3.3.0
-
-##### json_flat_sparsity_factor
-
-- デフォルト: 0.3
-- タイプ: Double
-- 単位: 
-- 可変: はい
-- 説明: Flat JSON の同じ名前を持つ列の割合。この値より低い場合、抽出は行われません。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
-- 導入バージョン: v3.3.0
-
-##### json_flat_column_max
-
-- デフォルト: 100
+- デフォルト: 5
 - タイプ: Int
-- 単位: 
+- 単位: 分
 - 可変: はい
-- 説明: Flat JSON によって抽出できるサブフィールドの最大数。このパラメータは `enable_json_flat` が `true` に設定されている場合にのみ有効です。
-- 導入バージョン: v3.3.0
+- 説明: スキャンコンテキストをクリーンアップする時間間隔。
+- 導入バージョン: -
 
-##### jit_lru_cache_size
+##### scanner_row_num
 
-- デフォルト: 0
+- デフォルト: 16384
 - タイプ: Int
-- 単位: Bytes
+- 単位: -
 - 可変: はい
-- 説明: JIT コンパイルのための LRU キャッシュサイズ。0 より大きい場合、キャッシュの実際のサイズを表します。0 以下に設定されている場合、システムは `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` の式を使用してキャッシュを適応的に設定します (ノードの `mem_limit` は 16 GB 以上でなければなりません)。
+- 説明: 各スキャンで各スキャンスレッドが返す最大行数。
+- 導入バージョン: -
+
+##### scanner_thread_pool_queue_size
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: ストレージエンジンがサポートするスキャンタスクの数。
+- 導入バージョン: -
+
+##### scanner_thread_pool_thread_num
+
+- デフォルト: 48
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: ストレージエンジンが同時ストレージボリュームスキャンに使用するスレッドの数。すべてのスレッドはスレッドプールで管理されます。
+- 導入バージョン: -
+
+##### string_prefix_zonemap_prefix_len
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列ゾーンマップの最小値/最大値に使用する前置長。
 - 導入バージョン: -
 
 ### ロード
-
-##### push_worker_count_normal_priority
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: NORMAL 優先度のロードタスクを処理するために使用されるスレッドの数。
-- 導入バージョン: -
-
-##### push_worker_count_high_priority
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: HIGH 優先度のロードタスクを処理するために使用されるスレッドの数。
-- 導入バージョン: -
-
-##### transaction_publish_version_worker_count
-
-- デフォルト: 0
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: バージョンを公開するために使用される最大スレッド数。この値が `0` 以下に設定されている場合、システムは CPU コア数を値として使用し、インポートの同時実行が高いが固定スレッド数しか使用されない場合にスレッドリソースが不足するのを回避します。v2.5 以降、デフォルト値は `8` から `0` に変更されました。
-- 導入バージョン: -
-
-##### transaction_publish_version_thread_pool_idle_time_ms
-
-- デフォルト: 60000
-- タイプ: Int
-- 単位: ミリ秒
-- 可変: いいえ
-- 説明: スレッドが Publish Version スレッドプールによって再利用されるまでの Idle 時間。
-- 導入バージョン: -
 
 ##### clear_transaction_task_worker_count
 
@@ -811,86 +775,23 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: トランザクションをクリアするために使用されるスレッドの数。
 - 導入バージョン: -
 
-##### load_data_reserve_hours
+##### column_mode_partial_update_insert_batch_size
 
-- デフォルト: 4
-- タイプ: Int
-- 単位: 時間
-- 可変: いいえ
-- 説明: 小規模ロードによって生成されたファイルの予約時間。
-- 導入バージョン: -
-
-##### load_error_log_reserve_hours
-
-- デフォルト: 48
-- タイプ: Int
-- 単位: 時間
-- 可変: はい
-- 説明: データロードログが保持される時間。
-- 導入バージョン: -
-
-##### number_tablet_writer_threads
-
-- デフォルト: 0
+- デフォルト: 4096
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: インポート用の tablet writer のスレッド数，Stream Load、Broker Load、Insert などに使用されます。パラメータが 0 以下に設定されている場合、システムは CPU コア数の半分（最小で 16）を使用します。パラメータが 0 より大きい値に設定されている場合、システムはその値を使用します。この設定は v3.1.7 以降、動的に変更されました。
-- 導入バージョン: -
+- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
+- 導入バージョン: v3.5.10, v4.0.2
 
-##### streaming_load_max_mb
+##### enable_stream_load_verbose_log
 
-- デフォルト: 102400
-- タイプ: Int
-- 単位: MB
-- 可変: はい
-- 説明: StarRocks にストリーミングできるファイルの最大サイズ。v3.0 以降、デフォルト値は `10240` から `102400` に変更されました。
-- 導入バージョン: -
-
-##### streaming_load_max_batch_size_mb
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: MB
-- 可変: はい
-- 説明: StarRocks にストリーミングできる JSON ファイルの最大サイズ。
-- 導入バージョン: -
-
-##### streaming_load_rpc_max_alive_time_sec
-
-- デフォルト: 1200
-- タイプ: Int
-- 単位: 秒
-- 可変: いいえ
-- 説明: Stream Load の RPC タイムアウト。
-- 導入バージョン: -
-
-##### write_buffer_size
-
-- デフォルト: 104857600
-- タイプ: Int
-- 単位: バイト
-- 可変: はい
-- 説明: メモリ内の MemTable のバッファサイズ。この設定項目はフラッシュをトリガーするしきい値です。
-- 導入バージョン: -
-
-##### load_process_max_memory_limit_bytes
-
-- デフォルト: 107374182400
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースの最大サイズ制限。
-- 導入バージョン: -
-
-##### max_consumer_num_per_group
-
-- デフォルト: 3
-- タイプ: Int
+- デフォルト: false
+- タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: Routine Load のコンシューマーグループ内の最大コンシューマー数。
-- 導入バージョン: -
+- 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
+- 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
 ##### flush_thread_num_per_store
 
@@ -912,14 +813,41 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   この値が `0` 未満に設定されている場合、システムはその絶対値と CPU コア数の積を値として使用します。
 - 導入バージョン: 3.1.12, 3.2.7
 
-##### column_mode_partial_update_insert_batch_size
+##### load_data_reserve_hours
 
-- デフォルト: 4096
+- デフォルト: 4
+- タイプ: Int
+- 単位: 時間
+- 可変: いいえ
+- 説明: 小規模ロードによって生成されたファイルの予約時間。
+- 導入バージョン: -
+
+##### load_error_log_reserve_hours
+
+- デフォルト: 48
+- タイプ: Int
+- 単位: 時間
+- 可変: はい
+- 説明: データロードログが保持される時間。
+- 導入バージョン: -
+
+##### load_process_max_memory_limit_bytes
+
+- デフォルト: 107374182400
+- タイプ: Int
+- 単位: バイト
+- 可変: いいえ
+- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースの最大サイズ制限。
+- 導入バージョン: -
+
+##### max_consumer_num_per_group
+
+- デフォルト: 3
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
-- 導入バージョン: v3.5.10, v4.0.2
+- 説明: Routine Load のコンシューマーグループ内の最大コンシューマー数。
+- 導入バージョン: -
 
 ##### max_runnings_transactions_per_txn_map
 
@@ -930,27 +858,90 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 各パーティションで同時に実行できるトランザクションの最大数。
 - 導入バージョン: -
 
-##### enable_stream_load_verbose_log
+##### number_tablet_writer_threads
 
-- デフォルト: false
-- タイプ: Boolean
+- デフォルト: 0
+- タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
-- 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
+- 説明: インポート用の tablet writer のスレッド数，Stream Load、Broker Load、Insert などに使用されます。パラメータが 0 以下に設定されている場合、システムは CPU コア数の半分（最小で 16）を使用します。パラメータが 0 より大きい値に設定されている場合、システムはその値を使用します。この設定は v3.1.7 以降、動的に変更されました。
+- 導入バージョン: -
+
+##### push_worker_count_high_priority
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: HIGH 優先度のロードタスクを処理するために使用されるスレッドの数。
+- 導入バージョン: -
+
+##### push_worker_count_normal_priority
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: NORMAL 優先度のロードタスクを処理するために使用されるスレッドの数。
+- 導入バージョン: -
+
+##### streaming_load_max_batch_size_mb
+
+- デフォルト: 100
+- タイプ: Int
+- 単位: MB
+- 可変: はい
+- 説明: StarRocks にストリーミングできる JSON ファイルの最大サイズ。
+- 導入バージョン: -
+
+##### streaming_load_max_mb
+
+- デフォルト: 102400
+- タイプ: Int
+- 単位: MB
+- 可変: はい
+- 説明: StarRocks にストリーミングできるファイルの最大サイズ。v3.0 以降、デフォルト値は `10240` から `102400` に変更されました。
+- 導入バージョン: -
+
+##### streaming_load_rpc_max_alive_time_sec
+
+- デフォルト: 1200
+- タイプ: Int
+- 単位: 秒
+- 可変: いいえ
+- 説明: Stream Load の RPC タイムアウト。
+- 導入バージョン: -
+
+##### transaction_publish_version_thread_pool_idle_time_ms
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: ミリ秒
+- 可変: いいえ
+- 説明: スレッドが Publish Version スレッドプールによって再利用されるまでの Idle 時間。
+- 導入バージョン: -
+
+##### transaction_publish_version_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: バージョンを公開するために使用される最大スレッド数。この値が `0` 以下に設定されている場合、システムは CPU コア数を値として使用し、インポートの同時実行が高いが固定スレッド数しか使用されない場合にスレッドリソースが不足するのを回避します。v2.5 以降、デフォルト値は `8` から `0` に変更されました。
+- 導入バージョン: -
+
+##### write_buffer_size
+
+- デフォルト: 104857600
+- タイプ: Int
+- 単位: バイト
+- 可変: はい
+- 説明: メモリ内の MemTable のバッファサイズ。この設定項目はフラッシュをトリガーするしきい値です。
+- 導入バージョン: -
 
 ### ロードとアンロード
 
 ### 統計レポート
-
-##### report_task_interval_seconds
-
-- デフォルト: 10
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: タスクの状態を報告する時間間隔。タスクは、テーブルの作成、テーブルの削除、データのロード、またはテーブルスキーマの変更を行うことができます。
-- 導入バージョン: -
 
 ##### report_disk_state_interval_seconds
 
@@ -970,6 +961,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: すべてのタブレットの最新バージョンを報告する時間間隔。
 - 導入バージョン: -
 
+##### report_task_interval_seconds
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: タスクの状態を報告する時間間隔。タスクは、テーブルの作成、テーブルの削除、データのロード、またはテーブルスキーマの変更を行うことができます。
+- 導入バージョン: -
+
 ##### report_workgroup_interval_seconds
 
 - デフォルト: 5
@@ -981,24 +981,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### ストレージ
 
-##### create_tablet_worker_count
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: Threads
-- 変更可能: Yes
-- 説明: FE により送信される TTaskType::CREATE（create-tablet）タスクを処理する AgentServer のスレッドプール内の最大ワーカースレッド数を設定します。BE 起動時にこの値はスレッドプールの max として使用されます（プールは min threads = 1、max queue size = unlimited で作成されます）。ランタイムで変更すると ExecEnv::agent_server()->get_thread_pool(TTaskType::CREATE)->update_max_threads(...) が呼ばれます。バルクロードやパーティション作成時など、同時の tablet 作成スループットを上げたい場合に増やしてください。減らすと同時作成操作が制限されます。値を上げると CPU、メモリ、I/O の並列性が増し競合が発生する可能性があります。スレッドプールは少なくとも 1 スレッドを保証するため、1 未満の値は実質的な効果がありません。
-- 導入バージョン: 3.2.0
-
-##### drop_tablet_worker_count
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: タブレットを削除するために使用されるスレッドの数。
-- 導入バージョン: -
-
 ##### alter_tablet_worker_count
 
 - デフォルト: 3
@@ -1008,13 +990,49 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: スキーマ変更のために使用されるスレッドの数。
 - 導入バージョン: -
 
-##### storage_medium_migrate_count
+##### avro_ignore_union_type_tag
 
-- デフォルト: 3
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Avro の Union データタイプからシリアライズされた JSON 文字列からタイプタグを取り除くかどうか。
+- 導入バージョン: v3.3.7, v3.4
+
+##### base_compaction_check_interval_seconds
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: ベースコンパクションのスレッドポーリングの時間間隔。
+- 導入バージョン: -
+
+##### base_compaction_interval_seconds_since_last_operation
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 最後のベースコンパクションからの時間間隔。この設定項目はベースコンパクションをトリガーする条件の一つです。
+- 導入バージョン: -
+
+##### base_compaction_num_threads_per_disk
+
+- デフォルト: 1
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: 記憶媒体の移行 (SATA から SSD への移行) に使用されるスレッドの数。
+- 説明: 各ストレージボリュームでのベースコンパクションに使用されるスレッド数。
+- 導入バージョン: -
+
+##### base_cumulative_delta_ratio
+
+- デフォルト: 0.3
+- タイプ: Double
+- 単位: -
+- 可変: はい
+- 説明: 累積ファイルサイズとベースファイルサイズの比率。この比率がこの値に達することがベースコンパクションをトリガーする条件の一つです。
 - 導入バージョン: -
 
 ##### check_consistency_worker_count
@@ -1026,49 +1044,94 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: タブレットの一貫性をチェックするために使用されるスレッドの数。
 - 導入バージョン: -
 
-##### upload_worker_count
+##### clear_expired_replication_snapshots_interval_seconds
 
-- デフォルト: 0
+- デフォルト: 3600
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 異常なレプリケーションによって残された期限切れのスナップショットをシステムがクリアする時間間隔。
+- 導入バージョン: v3.3.5
+
+##### compact_threads
+
+- デフォルト: 4
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: BE ノードでのバックアップジョブのアップロードタスクの最大スレッド数。`0` は、BE が存在するマシンの CPU コア数に値を設定することを示します。
+- 説明: 同時コンパクションタスクに使用される最大スレッド数。この設定は v3.1.7 および v3.2.2 以降、動的に変更されました。
+- 導入バージョン: v3.0.0
+
+##### compaction_memory_limit_per_worker
+
+- デフォルト: 2147483648
+- タイプ: Int
+- 単位: バイト
+- 可変: いいえ
+- 説明: 各コンパクションスレッドに許可される最大メモリサイズ。
 - 導入バージョン: -
 
-##### download_worker_count
+##### compaction_trace_threshold
 
-- デフォルト: 0
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 各コンパクションの時間しきい値。コンパクションがこの時間しきい値を超えて時間がかかる場合、StarRocks は対応するトレースを出力します。
+- 導入バージョン: -
+
+##### create_tablet_worker_count
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: Threads
+- 変更可能: Yes
+- 説明: FE により送信される TTaskType::CREATE（create-tablet）タスクを処理する AgentServer のスレッドプール内の最大ワーカースレッド数を設定します。BE 起動時にこの値はスレッドプールの max として使用されます（プールは min threads = 1、max queue size = unlimited で作成されます）。ランタイムで変更すると ExecEnv::agent_server()->get_thread_pool(TTaskType::CREATE)->update_max_threads(...) が呼ばれます。バルクロードやパーティション作成時など、同時の tablet 作成スループットを上げたい場合に増やしてください。減らすと同時作成操作が制限されます。値を上げると CPU、メモリ、I/O の並列性が増し競合が発生する可能性があります。スレッドプールは少なくとも 1 スレッドを保証するため、1 未満の値は実質的な効果がありません。
+- 導入バージョン: 3.2.0
+
+##### cumulative_compaction_check_interval_seconds
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 累積コンパクションのスレッドポーリングの時間間隔。
+- 導入バージョン: -
+
+##### cumulative_compaction_num_threads_per_disk
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: ディスクごとの累積コンパクションスレッド数。
+- 導入バージョン: -
+
+##### data_page_size
+
+- デフォルト: 65536
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: No
+- 説明: 列データおよびインデックスページを構築する際に使用されるターゲットの非圧縮ページサイズ（バイト）。この値は ColumnWriterOptions.data_page_size と IndexedColumnWriterOptions.index_page_size にコピーされ、ページビルダ（例: BinaryPlainPageBuilder::is_page_full およびバッファ予約ロジック）によってページを完了するタイミングや確保するメモリ量の判断に参照されます。値が 0 の場合、ビルダ内のページサイズ制限は無効化されます。この値を変更するとページ数、メタデータのオーバーヘッド、メモリ予約、および I/O/圧縮のトレードオフに影響します（ページを小さくするとページ数とメタデータが増え、ページを大きくするとページ数は減り圧縮効率が向上する可能性があるがメモリのスパイクが大きくなる）。変更はランタイムで反映されないため、完全に有効にするにはプロセスの再起動と再作成された rowset が必要です。
+- 導入バージョン: 3.2.4
+
+##### default_num_rows_per_column_file_block
+
+- デフォルト: 1024
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: BE ノードでのリストアジョブのダウンロードタスクの最大スレッド数。`0` は、BE が存在するマシンの CPU コア数に値を設定することを示します。
+- 説明: 各行ブロックに格納できる最大行数。
 - 導入バージョン: -
 
-##### make_snapshot_worker_count
+##### disk_stat_monitor_interval
 
 - デフォルト: 5
 - タイプ: Int
-- 単位: -
+- 単位: 秒
 - 可変: はい
-- 説明: BE ノードでのスナップショット作成タスクの最大スレッド数。
-- 導入バージョン: -
-
-##### release_snapshot_worker_count
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
-- 導入バージョン: -
-
-##### max_download_speed_kbps
-
-- デフォルト: 50000
-- タイプ: Int
-- 単位: KB/秒
-- 可変: はい
-- 説明: 各 HTTP リクエストの最大ダウンロード速度。この値は、BE ノード間のデータレプリカ同期のパフォーマンスに影響を与えます。
+- 説明: ディスクの健康状態を監視する時間間隔。
 - 導入バージョン: -
 
 ##### download_low_speed_limit_kbps
@@ -1089,23 +1152,365 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: ダウンロード速度が下限より低い状態で動作できる最大時間。この時間内に `download_low_speed_limit_kbps` の値より低い速度で動作し続けると、HTTP リクエストは中止されます。
 - 導入バージョン: -
 
-##### compact_threads
-
-- デフォルト: 4
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 同時コンパクションタスクに使用される最大スレッド数。この設定は v3.1.7 および v3.2.2 以降、動的に変更されました。
-- 導入バージョン: v3.0.0
-
-##### replication_threads
+##### download_worker_count
 
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
-- 導入バージョン: v3.3.5
+- 説明: BE ノードでのリストアジョブのダウンロードタスクの最大スレッド数。`0` は、BE が存在するマシンの CPU コア数に値を設定することを示します。
+- 導入バージョン: -
+
+##### drop_tablet_worker_count
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: タブレットを削除するために使用されるスレッドの数。
+- 導入バージョン: -
+
+##### enable_check_string_lengths
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: 文字列の長さをチェックして、範囲外の VARCHAR データによるコンパクションの失敗を解決するかどうか。
+- 導入バージョン: -
+
+##### enable_event_based_compaction_framework
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: イベントベースのコンパクションフレームワークを有効にするかどうか。`true` はイベントベースのコンパクションフレームワークが有効であることを示し、`false` は無効であることを示します。イベントベースのコンパクションフレームワークを有効にすると、多くのタブレットがある場合や単一のタブレットに大量のデータがある場合のコンパクションのオーバーヘッドを大幅に削減できます。
+- 導入バージョン: -
+
+##### enable_new_load_on_memory_limit_exceeded
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: ハードメモリリソース制限に達したときに新しいロードプロセスを許可するかどうか。`true` は新しいロードプロセスが許可されることを示し、`false` は拒否されることを示します。
+- 導入バージョン: v3.3.2
+
+##### enable_pk_parallel_execution
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Primary Key テーブルの並列実行戦略を有効にするかどうかを決定します。有効化されると、インポートおよびコンパクションの段階で PK インデックスファイルが生成されます。
+- 導入バージョン: -
+
+##### enable_pk_size_tiered_compaction_strategy
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: 主キーテーブルのサイズ階層型コンパクションポリシーを有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。この項目は、共有データクラスタでは v3.2.4 および v3.1.10 以降、共有なしクラスタでは v3.2.5 および v3.1.10 以降で有効になります。
+- 導入バージョン: -
+
+##### enable_rowset_verify
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
+- 導入バージョン: -
+
+##### enable_size_tiered_compaction_strategy
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: サイズ階層型コンパクションポリシー (主キーテーブルを除く) を有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。
+- 導入バージョン: -
+
+##### enable_strict_delvec_crc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
+- 導入バージョン: -
+
+##### enable_transparent_data_encryption
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: N/A
+- 変更可能: No
+- 説明: 有効にすると、StarRocks は新規に書き込まれるストレージオブジェクト（segment files、delete/update files、rowset segments、lake SSTs、persistent index files など）に対してオンディスクの暗号化アーティファクトを作成します。Writers（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex および関連するコードパス）は KeyCache から暗号化情報を要求し、書き込み可能なファイルに encryption_info を付与し、rowset / segment / sstable メタデータ（segment_encryption_metas、delete/update encryption metadata）に encryption_meta を永続化します。Frontend と Backend/CN の暗号化フラグは一致している必要があり、不一致の場合は BE がハートビート時に中止します（LOG(FATAL)）。このフラグはランタイムで変更できないため、デプロイ前に有効化し、鍵管理（KEK）および KeyCache がクラスタ全体で適切に構成・同期されていることを確認してください。
+- 導入バージョン: 3.3.1, 3.4.0, 3.5.0, 4.0.0
+
+##### file_descriptor_cache_clean_interval
+
+- デフォルト: 3600
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 一定期間使用されていないファイルディスクリプタをクリーンアップする時間間隔。
+- 導入バージョン: -
+
+##### inc_rowset_expired_sec
+
+- デフォルト: 1800
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 受信データの有効期限。この設定項目はインクリメンタルクローンで使用されます。
+- 導入バージョン: -
+
+##### load_process_max_memory_hard_limit_ratio
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースのハードリミット (比率)。`enable_new_load_on_memory_limit_exceeded` が `false` に設定されており、すべてのロードプロセスのメモリ消費が `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio` を超える場合、新しいロードプロセスは拒否されます。
+- 導入バージョン: v3.3.2
+
+##### load_process_max_memory_limit_percent
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースのソフトリミット (パーセンテージ)。
+- 導入バージョン: -
+
+##### lz4_acceleration
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: N/A
+- 変更可能: はい
+- 説明: 組み込みの LZ4 圧縮器で使用される LZ4 の "acceleration" パラメータを制御します（LZ4_compress_fast_continue に渡されます）。値を大きくすると圧縮率を犠牲にして圧縮速度を優先し、値を小さく（1）すると圧縮は良くなりますが遅くなります。有効範囲: MIN=1, MAX=65537。この設定は BlockCompression にあるすべての LZ4 ベースのコーデック（例: LZ4 および Hadoop-LZ4）に影響し、圧縮の実行方法のみを変更します — LZ4 フォーマットや復号の互換性は変わりません。出力サイズが許容される CPU バウンドや低レイテンシのワークロードでは上げてチューニングしてください（例: 4、8、...）；ストレージや I/O に敏感なワークロードでは 1 のままにしてください。スループットとサイズのトレードオフはデータ依存性が高いため、変更前に代表的なデータでテストしてください。
+- 導入バージョン: 3.4.1, 3.5.0, 4.0.0
+
+##### lz4_expected_compression_ratio
+
+- デフォルト: 2.1
+- タイプ: double
+- 単位: Dimensionless (compression ratio)
+- 変更可能: はい
+- 説明: シリアライゼーション圧縮戦略が観測された LZ4 圧縮を「良い」と判断するために使用する閾値です。compress_strategy.cpp では、この値が観測された compress_ratio を割る形で lz4_expected_compression_speed_mbps と合わせて報酬メトリクスを計算します；結合した報酬が > 1.0 であれば戦略は正のフィードバックを記録します。この値を上げると期待される圧縮率が高くなり（条件を満たしにくく）、下げると観測された圧縮が満足と見なされやすくなります。典型的なデータの圧縮しやすさに合わせて調整してください。 有効範囲: MIN=1, MAX=65537。
+- 導入バージョン: 3.4.1, 3.5.0, 4.0.0
+
+##### make_snapshot_worker_count
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: BE ノードでのスナップショット作成タスクの最大スレッド数。
+- 導入バージョン: -
+
+##### manual_compaction_threads
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: 手動コンパクションのスレッド数。
+- 導入バージョン: -
+
+##### max_base_compaction_num_singleton_deltas
+
+- デフォルト: 100
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 各ベースコンパクションでコンパクト化できる最大セグメント数。
+- 導入バージョン: -
+
+##### max_compaction_candidate_num
+
+- デフォルト: 40960
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: コンパクションの候補タブレットの最大数。値が大きすぎると、高いメモリ使用量と高い CPU 負荷を引き起こします。
+- 導入バージョン: -
+
+##### max_compaction_concurrency
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: コンパクションの最大同時実行数 (ベースコンパクションと累積コンパクションの両方を含む)。値 `-1` は同時実行数に制限がないことを示します。`0` はコンパクションを無効にすることを示します。このパラメータは、イベントベースのコンパクションフレームワークが有効な場合に可変です。
+- 導入バージョン: -
+
+##### max_cumulative_compaction_num_singleton_deltas
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 単一の累積コンパクションでマージできる最大セグメント数。コンパクション中に OOM が発生した場合、この値を減少させることができます。
+- 導入バージョン: -
+
+##### max_download_speed_kbps
+
+- デフォルト: 50000
+- タイプ: Int
+- 単位: KB/秒
+- 可変: はい
+- 説明: 各 HTTP リクエストの最大ダウンロード速度。この値は、BE ノード間のデータレプリカ同期のパフォーマンスに影響を与えます。
+- 導入バージョン: -
+
+##### max_garbage_sweep_interval
+
+- デフォルト: 3600
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: ストレージボリュームのガーベジコレクションの最大時間間隔。この設定は v3.0 以降、動的に変更されました。
+- 導入バージョン: -
+
+##### max_percentage_of_error_disk
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 対応する BE ノードが終了する前にストレージボリュームで許容されるエラーの最大パーセンテージ。
+- 導入バージョン: -
+
+##### max_row_source_mask_memory_bytes
+
+- デフォルト: 209715200
+- タイプ: Int
+- 単位: バイト
+- 可変: いいえ
+- 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_memory_limit_per_worker` の値よりも低く設定する必要があります。
+- 導入バージョン: -
+
+##### max_update_compaction_num_singleton_deltas
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 主キーテーブルの単一コンパクションでマージできる最大 rowset 数。
+- 導入バージョン: -
+
+##### memory_limitation_per_thread_for_schema_change
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: GB
+- 可変: はい
+- 説明: 各スキーマ変更タスクに許可される最大メモリサイズ。
+- 導入バージョン: -
+
+##### min_base_compaction_num_singleton_deltas
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: ベースコンパクションをトリガーする最小セグメント数。
+- 導入バージョン: -
+
+##### min_compaction_failure_interval_sec
+
+- デフォルト: 120
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 前回のコンパクション失敗からタブレットコンパクションをスケジュールできる最小時間間隔。
+- 導入バージョン: -
+
+##### min_cumulative_compaction_failure_interval_sec
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 累積コンパクションが失敗時にリトライする最小時間間隔。
+- 導入バージョン: -
+
+##### min_cumulative_compaction_num_singleton_deltas
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 累積コンパクションをトリガーする最小セグメント数。
+- 導入バージョン: -
+
+##### min_garbage_sweep_interval
+
+- デフォルト: 180
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: ストレージボリュームのガーベジコレクションの最小時間間隔。この設定は v3.0 以降、動的に変更されました。
+- 導入バージョン: -
+
+##### pending_data_expire_time_sec
+
+- デフォルト: 1800
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: ストレージエンジン内の保留中データの有効期限。
+- 導入バージョン: -
+
+##### pindex_major_compaction_limit_per_disk
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: ディスク上のコンパクションの最大同時実行数。これは、コンパクションによるディスク間の不均一な I/O の問題に対処します。この問題は、特定のディスクに対して過度に高い I/O を引き起こす可能性があります。
+- 導入バージョン: v3.0.9
+
+##### pk_parallel_execution_threshold_bytes
+
+- デフォルト: 314572800
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
+- 導入バージョン: -
+
+##### primary_key_limit_size
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: バイト
+- 可変: はい
+- 説明: 主キーテーブルのキー列の最大サイズ。
+- 導入バージョン: v2.5
+
+##### release_snapshot_worker_count
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: BE ノードでのスナップショットリリースタスクの最大スレッド数。
+- 導入バージョン: -
+
+##### repair_compaction_interval_seconds
+
+- デフォルト: 600
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 修復コンパクションスレッドをポーリングする時間間隔。
+- 導入バージョン: -
 
 ##### replication_max_speed_limit_kbps
 
@@ -1134,494 +1539,14 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: レプリケーションスレッドが最小速度を下回ることが許可される時間。実際の速度が `replication_min_speed_limit_kbps` を下回る時間がこの値を超えると、レプリケーションは失敗します。
 - 導入バージョン: v3.3.5
 
-##### clear_expired_replication_snapshots_interval_seconds
-
-- デフォルト: 3600
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 異常なレプリケーションによって残された期限切れのスナップショットをシステムがクリアする時間間隔。
-- 導入バージョン: v3.3.5
-
-##### lz4_acceleration
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: N/A
-- 変更可能: はい
-- 説明: 組み込みの LZ4 圧縮器で使用される LZ4 の "acceleration" パラメータを制御します（LZ4_compress_fast_continue に渡されます）。値を大きくすると圧縮率を犠牲にして圧縮速度を優先し、値を小さく（1）すると圧縮は良くなりますが遅くなります。有効範囲: MIN=1, MAX=65537。この設定は BlockCompression にあるすべての LZ4 ベースのコーデック（例: LZ4 および Hadoop-LZ4）に影響し、圧縮の実行方法のみを変更します — LZ4 フォーマットや復号の互換性は変わりません。出力サイズが許容される CPU バウンドや低レイテンシのワークロードでは上げてチューニングしてください（例: 4、8、...）；ストレージや I/O に敏感なワークロードでは 1 のままにしてください。スループットとサイズのトレードオフはデータ依存性が高いため、変更前に代表的なデータでテストしてください。
-- 導入バージョン: 3.4.1, 3.5.0, 4.0.0
-
-##### lz4_expected_compression_ratio
-
-- デフォルト: 2.1
-- タイプ: double
-- 単位: Dimensionless (compression ratio)
-- 変更可能: はい
-- 説明: シリアライゼーション圧縮戦略が観測された LZ4 圧縮を「良い」と判断するために使用する閾値です。compress_strategy.cpp では、この値が観測された compress_ratio を割る形で lz4_expected_compression_speed_mbps と合わせて報酬メトリクスを計算します；結合した報酬が > 1.0 であれば戦略は正のフィードバックを記録します。この値を上げると期待される圧縮率が高くなり（条件を満たしにくく）、下げると観測された圧縮が満足と見なされやすくなります。典型的なデータの圧縮しやすさに合わせて調整してください。 有効範囲: MIN=1, MAX=65537。
-- 導入バージョン: 3.4.1, 3.5.0, 4.0.0
-
-##### memory_limitation_per_thread_for_schema_change
-
-- デフォルト: 2
-- タイプ: Int
-- 単位: GB
-- 可変: はい
-- 説明: 各スキーマ変更タスクに許可される最大メモリサイズ。
-- 導入バージョン: -
-
-##### update_cache_expire_sec
-
-- デフォルト: 360
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: Update Cache の有効期限。
-- 導入バージョン: -
-
-##### file_descriptor_cache_clean_interval
-
-- デフォルト: 3600
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 一定期間使用されていないファイルディスクリプタをクリーンアップする時間間隔。
-- 導入バージョン: -
-
-##### disk_stat_monitor_interval
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: ディスクの健康状態を監視する時間間隔。
-- 導入バージョン: -
-
-##### unused_rowset_monitor_interval
-
-- デフォルト: 30
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 期限切れの rowset をクリーンアップする時間間隔。
-- 導入バージョン: -
-
-##### storage_root_path
-
-- デフォルト: `${STARROCKS_HOME}/storage`
-- タイプ: String
-- 単位: -
-- 可変: いいえ
-- 説明: ストレージボリュームのディレクトリと媒体。例: `/data1,medium:hdd;/data2,medium:ssd`。
-  - 複数のボリュームはセミコロン (`;`) で区切られます。
-  - ストレージ媒体が SSD の場合、ディレクトリの末尾に `,medium:ssd` を追加します。
-  - ストレージ媒体が HDD の場合、ディレクトリの末尾に `,medium:hdd` を追加します。
-- 導入バージョン: -
-
-##### enable_transparent_data_encryption
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: N/A
-- 変更可能: No
-- 説明: 有効にすると、StarRocks は新規に書き込まれるストレージオブジェクト（segment files、delete/update files、rowset segments、lake SSTs、persistent index files など）に対してオンディスクの暗号化アーティファクトを作成します。Writers（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex および関連するコードパス）は KeyCache から暗号化情報を要求し、書き込み可能なファイルに encryption_info を付与し、rowset / segment / sstable メタデータ（segment_encryption_metas、delete/update encryption metadata）に encryption_meta を永続化します。Frontend と Backend/CN の暗号化フラグは一致している必要があり、不一致の場合は BE がハートビート時に中止します（LOG(FATAL)）。このフラグはランタイムで変更できないため、デプロイ前に有効化し、鍵管理（KEK）および KeyCache がクラスタ全体で適切に構成・同期されていることを確認してください。
-- 導入バージョン: 3.3.1, 3.4.0, 3.5.0, 4.0.0
-
-##### max_percentage_of_error_disk
+##### replication_threads
 
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 対応する BE ノードが終了する前にストレージボリュームで許容されるエラーの最大パーセンテージ。
-- 導入バージョン: -
-
-##### default_num_rows_per_column_file_block
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 各行ブロックに格納できる最大行数。
-- 導入バージョン: -
-
-##### pending_data_expire_time_sec
-
-- デフォルト: 1800
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: ストレージエンジン内の保留中データの有効期限。
-- 導入バージョン: -
-
-##### inc_rowset_expired_sec
-
-- デフォルト: 1800
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 受信データの有効期限。この設定項目はインクリメンタルクローンで使用されます。
-- 導入バージョン: -
-
-##### tablet_rowset_stale_sweep_time_sec
-
-- デフォルト: 1800
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: タブレット内の古い rowset をスイープする時間間隔。
-- 導入バージョン: -
-
-##### max_garbage_sweep_interval
-
-- デフォルト: 3600
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: ストレージボリュームのガーベジコレクションの最大時間間隔。この設定は v3.0 以降、動的に変更されました。
-- 導入バージョン: -
-
-##### min_garbage_sweep_interval
-
-- デフォルト: 180
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: ストレージボリュームのガーベジコレクションの最小時間間隔。この設定は v3.0 以降、動的に変更されました。
-- 導入バージョン: -
-
-##### snapshot_expire_time_sec
-
-- デフォルト: 172800
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: スナップショットファイルの有効期限。
-- 導入バージョン: -
-
-##### trash_file_expire_time_sec
-
-- デフォルト: 86400
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: ゴミファイルをクリーンアップする時間間隔。デフォルト値は v2.5.17、v3.0.9、v3.1.6 以降、259,200 から 86,400 に変更されました。
-- 導入バージョン: -
-
-##### data_page_size
-
-- デフォルト: 65536
-- タイプ: Int
-- 単位: Bytes
-- 変更可能: No
-- 説明: 列データおよびインデックスページを構築する際に使用されるターゲットの非圧縮ページサイズ（バイト）。この値は ColumnWriterOptions.data_page_size と IndexedColumnWriterOptions.index_page_size にコピーされ、ページビルダ（例: BinaryPlainPageBuilder::is_page_full およびバッファ予約ロジック）によってページを完了するタイミングや確保するメモリ量の判断に参照されます。値が 0 の場合、ビルダ内のページサイズ制限は無効化されます。この値を変更するとページ数、メタデータのオーバーヘッド、メモリ予約、および I/O/圧縮のトレードオフに影響します（ページを小さくするとページ数とメタデータが増え、ページを大きくするとページ数は減り圧縮効率が向上する可能性があるがメモリのスパイクが大きくなる）。変更はランタイムで反映されないため、完全に有効にするにはプロセスの再起動と再作成された rowset が必要です。
-- 導入バージョン: 3.2.4
-
-##### base_compaction_check_interval_seconds
-
-- デフォルト: 60
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: ベースコンパクションのスレッドポーリングの時間間隔。
-- 導入バージョン: -
-
-##### min_base_compaction_num_singleton_deltas
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: ベースコンパクションをトリガーする最小セグメント数。
-- 導入バージョン: -
-
-##### max_base_compaction_num_singleton_deltas
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 各ベースコンパクションでコンパクト化できる最大セグメント数。
-- 導入バージョン: -
-
-##### base_compaction_num_threads_per_disk
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: 各ストレージボリュームでのベースコンパクションに使用されるスレッド数。
-- 導入バージョン: -
-
-##### base_cumulative_delta_ratio
-
-- デフォルト: 0.3
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: 累積ファイルサイズとベースファイルサイズの比率。この比率がこの値に達することがベースコンパクションをトリガーする条件の一つです。
-- 導入バージョン: -
-
-##### base_compaction_interval_seconds_since_last_operation
-
-- デフォルト: 86400
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 最後のベースコンパクションからの時間間隔。この設定項目はベースコンパクションをトリガーする条件の一つです。
-- 導入バージョン: -
-
-##### cumulative_compaction_check_interval_seconds
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 累積コンパクションのスレッドポーリングの時間間隔。
-- 導入バージョン: -
-
-##### min_cumulative_compaction_num_singleton_deltas
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 累積コンパクションをトリガーする最小セグメント数。
-- 導入バージョン: -
-
-##### max_cumulative_compaction_num_singleton_deltas
-
-- デフォルト: 1000
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 単一の累積コンパクションでマージできる最大セグメント数。コンパクション中に OOM が発生した場合、この値を減少させることができます。
-- 導入バージョン: -
-
-##### cumulative_compaction_num_threads_per_disk
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: ディスクごとの累積コンパクションスレッド数。
-- 導入バージョン: -
-
-##### max_compaction_candidate_num
-
-- デフォルト: 40960
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: コンパクションの候補タブレットの最大数。値が大きすぎると、高いメモリ使用量と高い CPU 負荷を引き起こします。
-- 導入バージョン: -
-
-##### update_compaction_check_interval_seconds
-
-- デフォルト: 10
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 主キーテーブルのコンパクションをチェックする時間間隔。
-- 導入バージョン: -
-
-##### update_compaction_num_threads_per_disk
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 主キーテーブルのディスクごとのコンパクションスレッド数。
-- 導入バージョン: -
-
-##### update_compaction_per_tablet_min_interval_seconds
-
-- デフォルト: 120
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 主キーテーブル内の各タブレットに対してコンパクションがトリガーされる最小時間間隔。
-- 導入バージョン: -
-
-##### max_update_compaction_num_singleton_deltas
-
-- デフォルト: 1000
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 主キーテーブルの単一コンパクションでマージできる最大 rowset 数。
-- 導入バージョン: -
-
-##### update_compaction_size_threshold
-
-- デフォルト: 268435456
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 主キーテーブルのコンパクションスコアはファイルサイズに基づいて計算され、他のテーブルタイプとは異なります。このパラメータは、主キーテーブルのコンパクションスコアを他のテーブルタイプのコンパクションスコアに似せるために使用でき、ユーザーが理解しやすくなります。
-- 導入バージョン: -
-
-##### update_compaction_result_bytes
-
-- デフォルト: 1073741824
-- タイプ: Int
-- 単位: バイト
-- 可変: はい
-- 説明: 主キーテーブルの単一コンパクションの最大結果サイズ。
-- 導入バージョン: -
-
-##### update_compaction_delvec_file_io_amp_ratio
-
-- デフォルト: 2
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: 主キーテーブルの Delvec ファイルを含む rowset のコンパクションの優先順位を制御するために使用されます。値が大きいほど優先順位が高くなります。
-- 導入バージョン: -
-
-##### update_compaction_ratio_threshold
-
-- デフォルト: 0.5
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: 共有データクラスタ内の主キーテーブルに対してコンパクションがマージできるデータの最大割合。単一のタブレットが過度に大きくなる場合、この値を縮小することをお勧めします。
-- 導入バージョン: v3.1.5
-
-##### repair_compaction_interval_seconds
-
-- デフォルト: 600
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 修復コンパクションスレッドをポーリングする時間間隔。
-- 導入バージョン: -
-
-##### manual_compaction_threads
-
-- デフォルト: 4
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: 手動コンパクションのスレッド数。
-- 導入バージョン: -
-
-##### min_compaction_failure_interval_sec
-
-- デフォルト: 120
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 前回のコンパクション失敗からタブレットコンパクションをスケジュールできる最小時間間隔。
-- 導入バージョン: -
-
-##### min_cumulative_compaction_failure_interval_sec
-
-- デフォルト: 30
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 累積コンパクションが失敗時にリトライする最小時間間隔。
-- 導入バージョン: -
-
-##### max_compaction_concurrency
-
-- デフォルト: -1
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: コンパクションの最大同時実行数 (ベースコンパクションと累積コンパクションの両方を含む)。値 `-1` は同時実行数に制限がないことを示します。`0` はコンパクションを無効にすることを示します。このパラメータは、イベントベースのコンパクションフレームワークが有効な場合に可変です。
-- 導入バージョン: -
-
-##### compaction_trace_threshold
-
-- デフォルト: 60
-- タイプ: Int
-- 単位: 秒
-- 可変: はい
-- 説明: 各コンパクションの時間しきい値。コンパクションがこの時間しきい値を超えて時間がかかる場合、StarRocks は対応するトレースを出力します。
-- 導入バージョン: -
-
-##### enable_rowset_verify
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
-- 導入バージョン: -
-
-##### vertical_compaction_max_columns_per_group
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: 垂直コンパクションのグループごとの最大列数。
-- 導入バージョン: -
-
-##### enable_event_based_compaction_framework
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: イベントベースのコンパクションフレームワークを有効にするかどうか。`true` はイベントベースのコンパクションフレームワークが有効であることを示し、`false` は無効であることを示します。イベントベースのコンパクションフレームワークを有効にすると、多くのタブレットがある場合や単一のタブレットに大量のデータがある場合のコンパクションのオーバーヘッドを大幅に削減できます。
-- 導入バージョン: -
-
-##### enable_size_tiered_compaction_strategy
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: サイズ階層型コンパクションポリシー (主キーテーブルを除く) を有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。
-- 導入バージョン: -
-
-##### enable_pk_size_tiered_compaction_strategy
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: 主キーテーブルのサイズ階層型コンパクションポリシーを有効にするかどうか。`true` はサイズ階層型コンパクション戦略が有効であることを示し、`false` は無効であることを示します。この項目は、共有データクラスタでは v3.2.4 および v3.1.10 以降、共有なしクラスタでは v3.2.5 および v3.1.10 以降で有効になります。
-- 導入バージョン: -
-
-##### enable_pk_parallel_execution
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: Primary Key テーブルの並列実行戦略を有効にするかどうかを決定します。有効化されると、インポートおよびコンパクションの段階で PK インデックスファイルが生成されます。
-- 導入バージョン: -
-
-##### pk_parallel_execution_threshold_bytes
-
-- デフォルト: 314572800
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。
-- 導入バージョン: -
-
-##### enable_strict_delvec_crc_check
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: enable_strict_delvec_crc_check を true に設定すると、delete vector の CRC32 を厳密にチェックし、一致しない場合はエラーを返します。
-- 導入バージョン: -
-
-##### size_tiered_min_level_size
-
-- デフォルト: 131072
-- タイプ: Int
-- 単位: バイト
-- 可変: はい
-- 説明: サイズ階層型コンパクションポリシーの最小レベルのデータサイズ。この値より小さい rowset はすぐにデータコンパクションをトリガーします。
-- 導入バージョン: -
+- 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
+- 導入バージョン: v3.3.5
 
 ##### size_tiered_level_multiple
 
@@ -1650,85 +1575,22 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: サイズ階層型コンパクションポリシーのレベル数。各レベルには最大で 1 つの rowset が保持されます。したがって、安定した状態では、この設定項目で指定されたレベル数と同じ数の rowset が最大で存在します。
 - 導入バージョン: -
 
-##### enable_check_string_lengths
+##### size_tiered_min_level_size
 
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: 文字列の長さをチェックして、範囲外の VARCHAR データによるコンパクションの失敗を解決するかどうか。
-- 導入バージョン: -
-
-##### max_row_source_mask_memory_bytes
-
-- デフォルト: 209715200
+- デフォルト: 131072
 - タイプ: Int
 - 単位: バイト
-- 可変: いいえ
-- 説明: 行ソースマスクバッファの最大メモリサイズ。この値を超えると、データはディスク上の一時ファイルに保存されます。この値は `compaction_memory_limit_per_worker` の値よりも低く設定する必要があります。
-- 導入バージョン: -
-
-##### load_process_max_memory_limit_percent
-
-- デフォルト: 30
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースのソフトリミット (パーセンテージ)。
-- 導入バージョン: -
-
-##### load_process_max_memory_hard_limit_ratio
-
-- デフォルト: 2
-- タイプ: Int
-- 単位: -
 - 可変: はい
-- 説明: BE ノード上のすべてのロードプロセスが占有できるメモリリソースのハードリミット (比率)。`enable_new_load_on_memory_limit_exceeded` が `false` に設定されており、すべてのロードプロセスのメモリ消費が `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio` を超える場合、新しいロードプロセスは拒否されます。
-- 導入バージョン: v3.3.2
-
-##### enable_new_load_on_memory_limit_exceeded
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: ハードメモリリソース制限に達したときに新しいロードプロセスを許可するかどうか。`true` は新しいロードプロセスが許可されることを示し、`false` は拒否されることを示します。
-- 導入バージョン: v3.3.2
-
-##### compaction_memory_limit_per_worker
-
-- デフォルト: 2147483648
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: 各コンパクションスレッドに許可される最大メモリサイズ。
+- 説明: サイズ階層型コンパクションポリシーの最小レベルのデータサイズ。この値より小さい rowset はすぐにデータコンパクションをトリガーします。
 - 導入バージョン: -
 
-##### tablet_stat_cache_update_interval_second
+##### snapshot_expire_time_sec
 
-- デフォルト: 300
+- デフォルト: 172800
 - タイプ: Int
 - 単位: 秒
 - 可変: はい
-- 説明: タブレット統計キャッシュが更新される時間間隔。
-- 導入バージョン: -
-
-##### sync_tablet_meta
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: タブレットメタデータの同期を有効にするかどうかを制御するブール値。`true` は同期を有効にすることを示し、`false` は無効にすることを示します。
-- 導入バージョン: -
-
-##### storage_flood_stage_usage_percent
-
-- デフォルト: 95
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: すべての BE ディレクトリにおけるストレージ使用率のハードリミット。BE ストレージディレクトリのストレージ使用率 (パーセンテージ) がこの値を超え、残りのストレージスペースが `storage_flood_stage_left_capacity_bytes` より少ない場合、ロードおよびリストアジョブは拒否されます。この項目を FE 設定項目 `storage_usage_hard_limit_percent` と一緒に設定する必要があります。
+- 説明: スナップショットファイルの有効期限。
 - 導入バージョン: -
 
 ##### storage_flood_stage_left_capacity_bytes
@@ -1740,22 +1602,43 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: すべての BE ディレクトリにおける残りのストレージスペースのハードリミット。BE ストレージディレクトリの残りのストレージスペースがこの値より少なく、ストレージ使用率 (パーセンテージ) が `storage_flood_stage_usage_percent` を超える場合、ロードおよびリストアジョブは拒否されます。この項目を FE 設定項目 `storage_usage_hard_limit_reserve_bytes` と一緒に設定する必要があります。
 - 導入バージョン: -
 
-##### tablet_meta_checkpoint_min_new_rowsets_num
+##### storage_flood_stage_usage_percent
 
-- デフォルト: 10
+- デフォルト: 95
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 最後の TabletMeta チェックポイント以降に作成される最小 rowset 数。
+- 説明: すべての BE ディレクトリにおけるストレージ使用率のハードリミット。BE ストレージディレクトリのストレージ使用率 (パーセンテージ) がこの値を超え、残りのストレージスペースが `storage_flood_stage_left_capacity_bytes` より少ない場合、ロードおよびリストアジョブは拒否されます。この項目を FE 設定項目 `storage_usage_hard_limit_percent` と一緒に設定する必要があります。
 - 導入バージョン: -
 
-##### tablet_meta_checkpoint_min_interval_secs
+##### storage_medium_migrate_count
 
-- デフォルト: 600
+- デフォルト: 3
 - タイプ: Int
-- 単位: 秒
+- 単位: -
+- 可変: いいえ
+- 説明: 記憶媒体の移行 (SATA から SSD への移行) に使用されるスレッドの数。
+- 導入バージョン: -
+
+##### storage_root_path
+
+- デフォルト: `${STARROCKS_HOME}/storage`
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: ストレージボリュームのディレクトリと媒体。例: `/data1,medium:hdd;/data2,medium:ssd`。
+  - 複数のボリュームはセミコロン (`;`) で区切られます。
+  - ストレージ媒体が SSD の場合、ディレクトリの末尾に `,medium:ssd` を追加します。
+  - ストレージ媒体が HDD の場合、ディレクトリの末尾に `,medium:hdd` を追加します。
+- 導入バージョン: -
+
+##### sync_tablet_meta
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
 - 可変: はい
-- 説明: TabletMeta チェックポイントのスレッドポーリングの時間間隔。
+- 説明: タブレットメタデータの同期を有効にするかどうかを制御するブール値。`true` は同期を有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: -
 
 ##### tablet_map_shard_size
@@ -1767,15 +1650,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: タブレットマップシャードサイズ。値は 2 の累乗でなければなりません。
 - 導入バージョン: -
 
-##### tablet_max_versions
-
-- デフォルト: 1000
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: タブレットで許可される最大バージョン数。この値を超えると、新しい書き込みリクエストは失敗します。
-- 導入バージョン: -
-
 ##### tablet_max_pending_versions
 
 - デフォルト: 1000
@@ -1785,88 +1659,169 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 主キー タブレットで許容される最大保留バージョン数。保留バージョンは、コミットされているがまだ適用されていないバージョンを指します。
 - 導入バージョン: -
 
-##### pindex_major_compaction_limit_per_disk
+##### tablet_max_versions
 
-- デフォルト: 1
+- デフォルト: 1000
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: ディスク上のコンパクションの最大同時実行数。これは、コンパクションによるディスク間の不均一な I/O の問題に対処します。この問題は、特定のディスクに対して過度に高い I/O を引き起こす可能性があります。
-- 導入バージョン: v3.0.9
-
-##### primary_key_limit_size
-
-- デフォルト: 128
-- タイプ: Int
-- 単位: バイト
-- 可変: はい
-- 説明: 主キーテーブルのキー列の最大サイズ。
-- 導入バージョン: v2.5
-
-##### avro_ignore_union_type_tag
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: Avro の Union データタイプからシリアライズされた JSON 文字列からタイプタグを取り除くかどうか。
-- 導入バージョン: v3.3.7, v3.4
-
-### 共有データ
-
-##### starlet_port
-
-- デフォルト: 9070
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: BE および CN のための追加のエージェントサービスポート。
+- 説明: タブレットで許可される最大バージョン数。この値を超えると、新しい書き込みリクエストは失敗します。
 - 導入バージョン: -
 
-##### starlet_use_star_cache
+##### tablet_meta_checkpoint_min_interval_secs
 
-- デフォルト: v3.1 では false、v3.2.3 以降は true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: 共有データクラスタで Data Cache を有効にするかどうか。`true` はこの機能を有効にすることを示し、`false` は無効にすることを示します。デフォルト値は v3.2.3 以降、`false` から `true` に設定されました。
-- 導入バージョン: v3.1
-
-##### starlet_star_cache_disk_size_percent
-
-- デフォルト: 80
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。
-- 導入バージョン: v3.1
-
-##### starlet_filesystem_instance_cache_capacity
-
-- デフォルト: 10000
+- デフォルト: 600
 - タイプ: Int
 - 単位: 秒
 - 可変: はい
-- 説明: starlet filesystem インスタンスのキャッシュ容量。
-- 導入バージョン: v3.2.16, v3.3.11, v3.4.1
+- 説明: TabletMeta チェックポイントのスレッドポーリングの時間間隔。
+- 導入バージョン: -
 
-##### starlet_filesystem_instance_cache_ttl_sec
+##### tablet_meta_checkpoint_min_new_rowsets_num
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 最後の TabletMeta チェックポイント以降に作成される最小 rowset 数。
+- 導入バージョン: -
+
+##### tablet_rowset_stale_sweep_time_sec
+
+- デフォルト: 1800
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: タブレット内の古い rowset をスイープする時間間隔。
+- 導入バージョン: -
+
+##### tablet_stat_cache_update_interval_second
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: タブレット統計キャッシュが更新される時間間隔。
+- 導入バージョン: -
+
+##### trash_file_expire_time_sec
 
 - デフォルト: 86400
 - タイプ: Int
 - 単位: 秒
 - 可変: はい
-- 説明: starlet filesystem インスタンス キャッシュの有効期限。
-- 導入バージョン: v3.3.15, 3.4.5
+- 説明: ゴミファイルをクリーンアップする時間間隔。デフォルト値は v2.5.17、v3.0.9、v3.1.6 以降、259,200 から 86,400 に変更されました。
+- 導入バージョン: -
 
-##### starlet_write_file_with_tag
+##### unused_rowset_monitor_interval
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 期限切れの rowset をクリーンアップする時間間隔。
+- 導入バージョン: -
+
+##### update_cache_expire_sec
+
+- デフォルト: 360
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: Update Cache の有効期限。
+- 導入バージョン: -
+
+##### update_compaction_check_interval_seconds
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 主キーテーブルのコンパクションをチェックする時間間隔。
+- 導入バージョン: -
+
+##### update_compaction_delvec_file_io_amp_ratio
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 主キーテーブルの Delvec ファイルを含む rowset のコンパクションの優先順位を制御するために使用されます。値が大きいほど優先順位が高くなります。
+- 導入バージョン: -
+
+##### update_compaction_num_threads_per_disk
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 主キーテーブルのディスクごとのコンパクションスレッド数。
+- 導入バージョン: -
+
+##### update_compaction_per_tablet_min_interval_seconds
+
+- デフォルト: 120
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: 主キーテーブル内の各タブレットに対してコンパクションがトリガーされる最小時間間隔。
+- 導入バージョン: -
+
+##### update_compaction_ratio_threshold
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタ内の主キーテーブルに対してコンパクションがマージできるデータの最大割合。単一のタブレットが過度に大きくなる場合、この値を縮小することをお勧めします。
+- 導入バージョン: v3.1.5
+
+##### update_compaction_result_bytes
+
+- デフォルト: 1073741824
+- タイプ: Int
+- 単位: バイト
+- 可変: はい
+- 説明: 主キーテーブルの単一コンパクションの最大結果サイズ。
+- 導入バージョン: -
+
+##### update_compaction_size_threshold
+
+- デフォルト: 268435456
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: 主キーテーブルのコンパクションスコアはファイルサイズに基づいて計算され、他のテーブルタイプとは異なります。このパラメータは、主キーテーブルのコンパクションスコアを他のテーブルタイプのコンパクションスコアに似せるために使用でき、ユーザーが理解しやすくなります。
+- 導入バージョン: -
+
+##### upload_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: BE ノードでのバックアップジョブのアップロードタスクの最大スレッド数。`0` は、BE が存在するマシンの CPU コア数に値を設定することを示します。
+- 導入バージョン: -
+
+##### vertical_compaction_max_columns_per_group
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: 垂直コンパクションのグループごとの最大列数。
+- 導入バージョン: -
+
+### 共有データ
+
+##### graceful_exit_wait_for_frontend_heartbeat
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
-- 可変: はい
-- 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
-- 導入バージョン: v3.5.3
+- 変更可能: Yes
+- 説明: グレースフルシャットダウンを完了する前に、少なくとも1件のフロントエンドからの heartbeat 応答で SHUTDOWN 状態が返されるのを待つかどうかを決定します。有効にすると、heartbeat RPC を介して SHUTDOWN の確認が返されるまでグレースフルシャットダウン処理は継続され、フロントエンドが通常の2回のハートビート間隔内で終了状態を検出するための十分な時間を確保します。
+- 導入バージョン: v3.4.5
 
 ##### lake_compaction_stream_buffer_size_bytes
 
@@ -1895,124 +1850,61 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
 - 導入: v2.5
 
-##### graceful_exit_wait_for_frontend_heartbeat
+##### starlet_filesystem_instance_cache_capacity
 
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: Yes
-- 説明: グレースフルシャットダウンを完了する前に、少なくとも1件のフロントエンドからの heartbeat 応答で SHUTDOWN 状態が返されるのを待つかどうかを決定します。有効にすると、heartbeat RPC を介して SHUTDOWN の確認が返されるまでグレースフルシャットダウン処理は継続され、フロントエンドが通常の2回のハートビート間隔内で終了状態を検出するための十分な時間を確保します。
-- 導入バージョン: v3.4.5
+- デフォルト: 10000
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンスのキャッシュ容量。
+- 導入バージョン: v3.2.16, v3.3.11, v3.4.1
 
-### データレイク
+##### starlet_filesystem_instance_cache_ttl_sec
 
-##### disk_high_level
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 可変: はい
+- 説明: starlet filesystem インスタンス キャッシュの有効期限。
+- 導入バージョン: v3.3.15, 3.4.5
 
-- デフォルト: 90
+##### starlet_port
+
+- デフォルト: 9070
 - タイプ: Int
 - 単位: -
-- 可変: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。この項目はバージョン4.0以降、`datacache_disk_high_level` から `disk_high_level` に名称変更されました。
-- 導入バージョン: v3.3.0
+- 可変: いいえ
+- 説明: BE および CN のための追加のエージェントサービスポート。
+- 導入バージョン: -
 
-##### disk_safe_level
+##### starlet_star_cache_disk_size_percent
 
 - デフォルト: 80
 - タイプ: Int
 - 単位: -
-- 可変: はい
-- 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。この項目はバージョン4.0以降、`datacache_disk_safe_level` から `disk_safe_level` に名称変更されました。
-- 導入バージョン: v3.3.0
-
-##### disk_low_level
-
-- デフォルト: 60
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
-- 導入バージョン: v3.3.0
-
-##### query_max_memory_limit_percent
-
-- デフォルト: 90
-- タイプ: Int
-- 単位: -
 - 可変: いいえ
-- 説明: クエリプールが使用できる最大メモリ。プロセスメモリ制限のパーセンテージとして表されます。
-- 導入バージョン: v3.1.0
+- 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。
+- 導入バージョン: v3.1
 
-##### lake_clear_corrupted_cache_meta
+##### starlet_use_star_cache
 
-- デフォルト: true
+- デフォルト: v3.1 では false、v3.2.3 以降は true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: 共有データクラスタにおいて、システムが破損したメタデータキャッシュをクリアすることを許可するかどうか。
-- 導入バージョン: v3.3
+- 説明: 共有データクラスタで Data Cache を有効にするかどうか。`true` はこの機能を有効にすることを示し、`false` は無効にすることを示します。デフォルト値は v3.2.3 以降、`false` から `true` に設定されました。
+- 導入バージョン: v3.1
 
-##### lake_clear_corrupted_cache_data
+##### starlet_write_file_with_tag
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: 共有データクラスタにおいて、システムが破損したデータキャッシュをクリアすることを許可するかどうか。
-- 導入バージョン: v3.4
+- 説明: 共有データクラスターにおいて、オブジェクトストレージに書き込まれたファイルにオブジェクトストレージタグを付与し、便利なカスタムファイル管理を行うかどうか。
+- 導入バージョン: v3.5.3
 
-##### jdbc_connection_pool_size
-
-- デフォルト: 8
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: JDBC 接続プールのサイズ。各 BE ノードで、同じ `jdbc_url` を持つ外部テーブルにアクセスするクエリは同じ接続プールを共有します。
-- 導入バージョン: -
-
-##### jdbc_minimum_idle_connections
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 可変: いいえ
-- 説明: JDBC 接続プール内の最小アイドル接続数。
-- 導入バージョン: -
-
-##### jdbc_connection_idle_timeout_ms
-
-- デフォルト: 600000
-- タイプ: Int
-- 単位: ミリ秒
-- 可変: いいえ
-- 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。
-- 導入バージョン: -
-
-##### datacache_enable
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: いいえ
-- 説明: Data Cache を有効にするかどうか。`true` は Data Cache が有効であることを示し、`false` は無効であることを示します。デフォルト値は v3.3 から `true` に変更されました。
-- 導入バージョン: -
-
-##### datacache_mem_size
-
-- デフォルト: 0
-- タイプ: String
-- 単位: -
-- 可変: はい
-- 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。
-- 導入バージョン: -
-
-##### datacache_disk_size
-
-- デフォルト: 0
-- タイプ: String
-- 単位: -
-- 可変: はい
-- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
-- 導入バージョン: -
+### データレイク
 
 ##### datacache_block_buffer_enable
 
@@ -2022,15 +1914,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: Data Cache の効率を最適化するために Block Buffer を有効にするかどうか。Block Buffer が有効な場合、システムは Data Cache から Block データを読み取り、一時バッファにキャッシュし、頻繁なキャッシュ読み取りによる余分なオーバーヘッドを削減します。
 - 導入バージョン: v3.2.0
-
-##### enable_datacache_disk_auto_adjust
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
-- 導入バージョン: v3.3.0
 
 ##### datacache_disk_adjust_interval_seconds
 
@@ -2050,23 +1933,23 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Data Cache の自動拡張のための最小待機時間。ディスク使用率がこの期間を超えて `datacache_disk_low_level` を下回る場合にのみ、自動スケーリングがトリガーされます。
 - 導入バージョン: v3.3.0
 
-##### datacache_min_disk_quota_for_adjustment
+##### datacache_disk_size
 
-- デフォルト: 10737418240
-- タイプ: Int
-- 単位: バイト
+- デフォルト: 0
+- タイプ: String
+- 単位: -
 - 可変: はい
-- 説明: Data Cache 自動スケーリングのための最小有効容量。システムがキャッシュ容量をこの値未満に調整しようとする場合、キャッシュ容量は直接 `0` に設定され、キャッシュ容量の不足による頻繁なキャッシュの充填と削除によるパフォーマンスの低下を防ぎます。
-- 導入バージョン: v3.3.0
+- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
+- 導入バージョン: -
 
-##### datacache_inline_item_count_limit
+##### datacache_enable
 
-- デフォルト: 130172
-- タイプ: Int
+- デフォルト: true
+- タイプ: Boolean
 - 単位: -
 - 可変: いいえ
-- 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
-- 導入バージョン: v3.4.0
+- 説明: Data Cache を有効にするかどうか。`true` は Data Cache が有効であることを示し、`false` は無効であることを示します。デフォルト値は v3.3 から `true` に変更されました。
+- 導入バージョン: -
 
 ##### datacache_eviction_policy
 
@@ -2077,41 +1960,59 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Data Cache のエビクションポリシー。有効な値: `lru` (最も最近使用されていない) および `slru` (セグメント化された LRU)。
 - 導入バージョン: v3.4.0
 
-##### rocksdb_write_buffer_memory_percent
+##### datacache_inline_item_count_limit
 
-- デフォルト: 5
-- タイプ: Int64
-- 単位: -
-- 変更可能: No
-- 説明: RocksDB の meta 用 write buffer に割り当てるメモリの割合です。デフォルトはシステムメモリの 5% です。ただし、これに加えて、最終的に算出される write buffer メモリのサイズは 64MB 未満にならず、1G を超えません（rocksdb_max_write_buffer_memory_bytes）。
-- 導入バージョン: v3.5.0
-
-##### rocksdb_max_write_buffer_memory_bytes
-
-- デフォルト: 1073741824
-- タイプ: Int64
-- 単位: -
-- 変更可能: No
-- 説明: RocksDB の meta 用 write buffer の最大サイズです。デフォルトは 1GB です。
-- 導入バージョン: v3.5.0
-
-##### lake_service_max_concurrency
-
-- デフォルト: 0
+- デフォルト: 130172
 - タイプ: Int
 - 単位: -
 - 可変: いいえ
-- 説明: 共有データクラスタにおける RPC リクエストの最大同時実行数。このしきい値に達すると、受信リクエストは拒否されます。この項目が `0` に設定されている場合、同時実行数に制限はありません。
-- 導入バージョン: -
+- 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
+- 導入バージョン: v3.4.0
 
-##### lake_enable_vertical_compaction_fill_data_cache
+##### datacache_mem_size
 
-- デフォルト: true
-- タイプ: Boolean
+- デフォルト: 0
+- タイプ: String
 - 単位: -
 - 可変: はい
-- 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
-- 導入バージョン: v3.1.7, v3.2.3
+- 説明: メモリにキャッシュできるデータの最大量。パーセンテージ (例: `10%`) または物理的な制限 (例: `10G`、`21474836480`) として設定できます。
+- 導入バージョン: -
+
+##### datacache_min_disk_quota_for_adjustment
+
+- デフォルト: 10737418240
+- タイプ: Int
+- 単位: バイト
+- 可変: はい
+- 説明: Data Cache 自動スケーリングのための最小有効容量。システムがキャッシュ容量をこの値未満に調整しようとする場合、キャッシュ容量は直接 `0` に設定され、キャッシュ容量の不足による頻繁なキャッシュの充填と削除によるパフォーマンスの低下を防ぎます。
+- 導入バージョン: v3.3.0
+
+##### disk_high_level
+
+- デフォルト: 90
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の上限。この値を超えると、システムは Data Cache からキャッシュデータを自動的に削除します。v3.4.0 以降、デフォルト値は `80` から `90` に変更されました。この項目はバージョン4.0以降、`datacache_disk_high_level` から `disk_high_level` に名称変更されました。
+- 導入バージョン: v3.3.0
+
+##### disk_low_level
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
+- 導入バージョン: v3.3.0
+
+##### disk_safe_level
+
+- デフォルト: 80
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: Data Cache のディスク使用率 (パーセンテージ) の安全レベル。Data Cache が自動スケーリングを実行する際、システムはディスク使用率をこの値にできるだけ近づけることを目標にキャッシュ容量を調整します。v3.4.0 以降、デフォルト値は `70` から `80` に変更されました。この項目はバージョン4.0以降、`datacache_disk_safe_level` から `disk_safe_level` に名称変更されました。
+- 導入バージョン: v3.3.0
 
 ##### enable_connector_sink_spill
 
@@ -2122,7 +2023,142 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 外部テーブルへの書き込み時にスピリングを有効化するかどうか。この機能を有効にすると、メモリ不足時に外部テーブルへの書き込みによって大量の小さなファイルが生成されるのを防ぎます。現在、この機能は Iceberg テーブルへの書き込みのみをサポートしています。
 - 導入バージョン: v4.0.0
 
+##### enable_datacache_disk_auto_adjust
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Data Cache ディスク容量の自動スケーリングを有効にするかどうか。これを有効にすると、システムは現在のディスク使用率に基づいてキャッシュ容量を動的に調整します。この項目はバージョン4.0以降、`datacache_auto_adjust_enable` から `enable_datacache_disk_auto_adjust` に名称変更されました。
+- 導入バージョン: v3.3.0
+
+##### jdbc_connection_idle_timeout_ms
+
+- デフォルト: 600000
+- タイプ: Int
+- 単位: ミリ秒
+- 可変: いいえ
+- 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。
+- 導入バージョン: -
+
+##### jdbc_connection_pool_size
+
+- デフォルト: 8
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: JDBC 接続プールのサイズ。各 BE ノードで、同じ `jdbc_url` を持つ外部テーブルにアクセスするクエリは同じ接続プールを共有します。
+- 導入バージョン: -
+
+##### jdbc_minimum_idle_connections
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: JDBC 接続プール内の最小アイドル接続数。
+- 導入バージョン: -
+
+##### lake_clear_corrupted_cache_data
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタにおいて、システムが破損したデータキャッシュをクリアすることを許可するかどうか。
+- 導入バージョン: v3.4
+
+##### lake_clear_corrupted_cache_meta
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタにおいて、システムが破損したメタデータキャッシュをクリアすることを許可するかどうか。
+- 導入バージョン: v3.3
+
+##### lake_enable_vertical_compaction_fill_data_cache
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: 共有データクラスタでコンパクションタスクがローカルディスクにデータをキャッシュすることを許可するかどうか。
+- 導入バージョン: v3.1.7, v3.2.3
+
+##### lake_service_max_concurrency
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: 共有データクラスタにおける RPC リクエストの最大同時実行数。このしきい値に達すると、受信リクエストは拒否されます。この項目が `0` に設定されている場合、同時実行数に制限はありません。
+- 導入バージョン: -
+
+##### query_max_memory_limit_percent
+
+- デフォルト: 90
+- タイプ: Int
+- 単位: -
+- 可変: いいえ
+- 説明: クエリプールが使用できる最大メモリ。プロセスメモリ制限のパーセンテージとして表されます。
+- 導入バージョン: v3.1.0
+
+##### rocksdb_max_write_buffer_memory_bytes
+
+- デフォルト: 1073741824
+- タイプ: Int64
+- 単位: -
+- 変更可能: No
+- 説明: RocksDB の meta 用 write buffer の最大サイズです。デフォルトは 1GB です。
+- 導入バージョン: v3.5.0
+
+##### rocksdb_write_buffer_memory_percent
+
+- デフォルト: 5
+- タイプ: Int64
+- 単位: -
+- 変更可能: No
+- 説明: RocksDB の meta 用 write buffer に割り当てるメモリの割合です。デフォルトはシステムメモリの 5% です。ただし、これに加えて、最終的に算出される write buffer メモリのサイズは 64MB 未満にならず、1G を超えません（rocksdb_max_write_buffer_memory_bytes）。
+- 導入バージョン: v3.5.0
+
 ### その他
+
+##### default_mv_resource_group_concurrency_limit
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
+- 導入バージョン: v3.1
+
+##### default_mv_resource_group_cpu_limit
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 可変: はい
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
+- 導入バージョン: v3.1
+
+##### default_mv_resource_group_memory_limit
+
+- デフォルト: 0.8
+- タイプ: Double
+- 単位: 
+- 可変: はい
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
+- 導入バージョン: v3.1
+
+##### default_mv_resource_group_spill_mem_limit_threshold
+
+- デフォルト: 0.8
+- タイプ: Double
+- 単位: -
+- 可変: はい
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
+- 導入バージョン: v3.1
 
 ##### enable_resolve_hostname_to_ip_in_load_error_url
 
@@ -2134,6 +2170,69 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
   - `true`: ホスト名をIPアドレスに変換します。
   - `false` (デフォルト): エラーURLに元のホスト名を保持します。
 - 導入バージョン: v4.0.1
+
+##### enable_token_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: トークンチェックを有効にするかどうかを制御するブール値。`true` はトークンチェックを有効にすることを示し、`false` は無効にすることを示します。
+- 導入バージョン: -
+
+##### load_replica_status_check_interval_ms_on_failure
+
+- デフォルト: 2000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 最後のチェック RPC が失敗した場合に、セカンダリレプリカがプライマリレプリカに対して状態を確認する間隔。
+- 導入バージョン: 3.5.1
+
+##### load_replica_status_check_interval_ms_on_success
+
+- デフォルト: 15000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 最後のチェック RPC が成功した場合に、セカンダリレプリカがプライマリレプリカに対して状態を確認する間隔。
+- 導入バージョン: 3.5.1
+
+##### max_length_for_bitmap_function
+
+- デフォルト: 1000000
+- タイプ: Int
+- 単位: バイト
+- 可変: いいえ
+- 説明: ビットマップ関数の入力値の最大長。
+- 導入バージョン: -
+
+##### max_length_for_to_base64
+
+- デフォルト: 200000
+- タイプ: Int
+- 単位: バイト
+- 可変: いいえ
+- 説明: to_base64() 関数の入力値の最大長。
+- 導入バージョン: -
+
+##### report_exec_rpc_request_retry_num
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: FE に exec RPC リクエストを報告する際の RPC リクエストの再試行回数です。デフォルト値は 10 で、fragment instance finish RPC の場合に限り失敗した際に最大10回再試行されます。Report exec RPC request は load job にとって重要で、もしある fragment instance の finish 報告が失敗すると、load job はタイムアウトするまでハングする可能性があります。
+- 導入バージョン: -
+
+##### small_file_dir
+
+- デフォルト: `${STARROCKS_HOME}/lib/small_file/`
+- タイプ: String
+- 単位: -
+- 可変: いいえ
+- 説明: ファイルマネージャーによってダウンロードされたファイルを保存するために使用されるディレクトリ。
+- 導入バージョン: -
 
 ##### upload_buffer_size
 
@@ -2152,103 +2251,4 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -
-
-##### load_replica_status_check_interval_ms_on_success
-
-- デフォルト: 15000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: 最後のチェック RPC が成功した場合に、セカンダリレプリカがプライマリレプリカに対して状態を確認する間隔。
-- 導入バージョン: 3.5.1
-
-##### load_replica_status_check_interval_ms_on_failure
-
-- デフォルト: 2000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: 最後のチェック RPC が失敗した場合に、セカンダリレプリカがプライマリレプリカに対して状態を確認する間隔。
-- 導入バージョン: 3.5.1
-
-##### enable_token_check
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: トークンチェックを有効にするかどうかを制御するブール値。`true` はトークンチェックを有効にすることを示し、`false` は無効にすることを示します。
-- 導入バージョン: -
-
-##### small_file_dir
-
-- デフォルト: `${STARROCKS_HOME}/lib/small_file/`
-- タイプ: String
-- 単位: -
-- 可変: いいえ
-- 説明: ファイルマネージャーによってダウンロードされたファイルを保存するために使用されるディレクトリ。
-- 導入バージョン: -
-
-##### report_exec_rpc_request_retry_num
-
-- デフォルト: 10
-- タイプ: Int
-- 単位: -
-- 変更可能: Yes
-- 説明: FE に exec RPC リクエストを報告する際の RPC リクエストの再試行回数です。デフォルト値は 10 で、fragment instance finish RPC の場合に限り失敗した際に最大10回再試行されます。Report exec RPC request は load job にとって重要で、もしある fragment instance の finish 報告が失敗すると、load job はタイムアウトするまでハングする可能性があります。
-- 導入バージョン: -
-
-##### max_length_for_to_base64
-
-- デフォルト: 200000
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: to_base64() 関数の入力値の最大長。
-- 導入バージョン: -
-
-##### max_length_for_bitmap_function
-
-- デフォルト: 1000000
-- タイプ: Int
-- 単位: バイト
-- 可変: いいえ
-- 説明: ビットマップ関数の入力値の最大長。
-- 導入バージョン: -
-
-##### default_mv_resource_group_memory_limit
-
-- デフォルト: 0.8
-- タイプ: Double
-- 単位: 
-- 可変: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
-- 導入バージョン: v3.1
-
-##### default_mv_resource_group_cpu_limit
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
-- 導入バージョン: v3.1
-
-##### default_mv_resource_group_concurrency_limit
-
-- デフォルト: 0
-- タイプ: Int
-- 単位: -
-- 可変: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
-- 導入バージョン: v3.1
-
-##### default_mv_resource_group_spill_mem_limit_threshold
-
-- デフォルト: 0.8
-- タイプ: Double
-- 単位: -
-- 可変: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
-- 導入バージョン: v3.1
 
