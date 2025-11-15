@@ -29,6 +29,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -522,6 +523,25 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
 
     SyncPoint::GetInstance()->ClearCallBack("UpdateManager::pick_tablets_to_do_pk_index_major_compaction:1");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_F(LocalPkIndexManagerTest, test_stop_shutdown_thread_pool) {
+    // Derive a testable manager so we can inspect its internal worker thread pool.
+    class TestableLocalPkIndexManager : public LocalPkIndexManager {
+    public:
+        ::starrocks::ThreadPool* worker_pool() { return _worker_thread_pool.get(); }
+    };
+
+    TestableLocalPkIndexManager manager;
+    ASSERT_OK(manager.init());
+    ASSERT_NE(manager.worker_pool(), nullptr);
+    ASSERT_TRUE(manager.worker_pool()->is_pool_status_ok());
+
+    manager.stop();
+
+    // After stop(), the underlying thread pool should be shut down but still valid.
+    ASSERT_NE(manager.worker_pool(), nullptr);
+    ASSERT_FALSE(manager.worker_pool()->is_pool_status_ok());
 }
 
 } // namespace starrocks::lake
