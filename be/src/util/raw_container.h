@@ -129,9 +129,16 @@ public:
 
 // see details about ABI compatibility issue https://github.com/StarRocks/starrocks/issues/233
 #if _GLIBCXX_USE_CXX11_ABI
+// GNU libstdc++ with new CXX11 ABI
+using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
+using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
+#elif defined(_LIBCPP_VERSION)
+// LLVM libc++ (used on macOS and some Linux systems)
+// libc++ never used COW semantics, so RawString optimization is safe
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
 #else
+// Old GNU libstdc++ ABI (COW semantics) - not compatible with RawString optimization
 #error "Cannot use RawString optimization with old CXX11 ABI"
 #endif
 // From cpp reference: "A trivial destructor is a destructor that performs no action. Objects with
