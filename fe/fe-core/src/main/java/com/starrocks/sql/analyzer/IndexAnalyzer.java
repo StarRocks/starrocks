@@ -54,7 +54,9 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 /**
@@ -66,11 +68,15 @@ public class IndexAnalyzer {
     private static final int MAX_INDEX_NAME_LENGTH = 64;
 
     // InvertedIndexUtil constants
+    public static String INVERTED_INDEX_IMP_LIB_KEY = IMP_LIB.name().toLowerCase(Locale.ROOT);
+
     public static String INVERTED_INDEX_PARSER_KEY = PARSER.name().toLowerCase(Locale.ROOT);
     public static String INVERTED_INDEX_PARSER_NONE = "none";
     public static String INVERTED_INDEX_PARSER_STANDARD = "standard";
     public static String INVERTED_INDEX_PARSER_ENGLISH = "english";
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
+
+    public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
 
     // BloomFilterIndexUtil constants
     public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
@@ -161,19 +167,19 @@ public class IndexAnalyzer {
         if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type.");
         }
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The inverted index does not support shared data mode");
-        }
         if (!Config.enable_experimental_gin) {
             throw new SemanticException(
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
-        String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
-        if (properties.containsKey(impLibKey)) {
-            String impValue = properties.get(impLibKey);
-            if (!CLUCENE.name().equalsIgnoreCase(impValue)) {
-                throw new SemanticException("Only support clucene implement for now. ");
+        if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
+            String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+            if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
+                throw new SemanticException("Only support clucene or builtin implement for now. ");
+            }
+
+            if (!BUILTIN.name().equalsIgnoreCase(impValue) && RunMode.isSharedDataMode()) {
+                throw new SemanticException("Clucene inverted index does not support shared data mode");
             }
         }
 
@@ -185,6 +191,7 @@ public class IndexAnalyzer {
         }
 
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
+        checkInvertedIndexNgram(properties);
 
         // add default properties
         addDefaultProperties(properties);
@@ -210,6 +217,22 @@ public class IndexAnalyzer {
         } else if (!parser.equals(INVERTED_INDEX_PARSER_NONE)) {
             throw new SemanticException("INVERTED index with parser: " + parser
                     + " is not supported for column: " + indexColName + " of type " + colType);
+        }
+    }
+
+    public static void checkInvertedIndexNgram(Map<String, String> properties) {
+        String gramNum = properties == null ? null : properties.get(INVERTED_INDEX_DICT_GRAM_NUM_KEY);
+        if (gramNum == null) {
+            return;
+        }
+
+        if (!StringUtils.isNumeric(gramNum)) {
+            throw new SemanticException("INVERTED index dict gram num " + gramNum + " is a invalid number.");
+        }
+
+        String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        if (!BUILTIN.name().equalsIgnoreCase(impValue)) {
+            throw new SemanticException("INVERTED index with " + impValue + " implement is invalid for dict gram.");
         }
     }
 

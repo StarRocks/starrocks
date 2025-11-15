@@ -24,6 +24,8 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
         const auto& imp_type = inverted_imp_prop->second;
         if (boost::algorithm::to_lower_copy(imp_type) == TYPE_CLUCENE) {
             return InvertedImplementType::CLUCENE;
+        } else if (boost::algorithm::to_lower_copy(imp_type) == TYPE_BUILTIN) {
+            return InvertedImplementType::BUILTIN;
         } else {
             return Status::InvalidArgument("Do not support imp_type : " + imp_type);
         }
@@ -69,6 +71,14 @@ std::string get_parser_string_from_properties(const std::map<std::string, std::s
         }
     }
     return INVERTED_INDEX_PARSER_NONE;
+}
+
+int32_t get_gram_num_from_properties(const std::map<std::string, std::string>& properties) {
+    if (const auto it = properties.find(INVERTED_INDEX_DICT_GRAM_NUM_KEY); it != properties.end()) {
+        const std::string& gram_num = it->second;
+        return std::stoi(gram_num);
+    }
+    return -1;
 }
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties) {
