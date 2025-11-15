@@ -330,6 +330,8 @@ public:
     /// Whether there is no ColumnPredicates in the tree.
     bool empty() const;
 
+    bool has_or_predicate() const;
+
     const PredicateAndNode& root() const { return _root; }
     /// Release the ownership of all the nodes.
     PredicateAndNode release_root();

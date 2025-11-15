@@ -824,7 +824,7 @@ CONF_Int32(vector_chunk_size, "4096");
 // Valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.
-CONF_Int32(late_materialization_ratio, "10");
+CONF_mInt32(late_materialization_ratio, "1000");
 
 // Valid range: [0-1000].
 // `0` will disable late materialization select metric type.

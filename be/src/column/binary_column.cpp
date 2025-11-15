@@ -34,6 +34,7 @@
 namespace starrocks {
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
+    if (_is_view) return;
     CHECK_EQ(_bytes.size(), _offsets.back());
     size_t size = this->size();
     for (size_t i = 0; i < size; i++) {
@@ -145,6 +146,62 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
         new_offsets[i] = new_offsets[i - 1] + (new_offsets[i * 2 + 1] - new_offsets[i * 2]);
     }
     _offsets.resize(prev_num_offsets + size);
+
+    invalidate_slice_cache();
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append_with_filter(const Column& src, const uint8_t* filter, size_t count) {
+    if (src.is_binary_view()) {
+        // For binary view, fall back to row-by-row append
+        for (size_t i = 0; i < count; i++) {
+            if (filter[i]) {
+                append(src, i, 1);
+            }
+        }
+        return;
+    }
+
+    const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+    const auto* __restrict src_offsets = src_column.get_offset().data();
+    const auto* __restrict src_bytes = src_column.continuous_data();
+
+    // First pass: count selected rows and calculate total bytes needed
+    size_t selected_count = 0;
+    size_t total_bytes = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (filter[i]) {
+            selected_count++;
+            total_bytes += src_offsets[i + 1] - src_offsets[i];
+        }
+    }
+
+    if (selected_count == 0) {
+        return;
+    }
+
+    // Reserve space
+    const size_t old_size = _offsets.size() - 1;
+    const size_t old_bytes_size = _bytes.size();
+    _offsets.resize(old_size + selected_count + 1);
+    _bytes.resize(old_bytes_size + total_bytes);
+
+    auto* __restrict dest_offsets = _offsets.data() + old_size + 1;
+    auto* __restrict dest_bytes = _bytes.data() + old_bytes_size;
+
+    // Second pass: copy selected data
+    T current_offset = old_bytes_size;
+    for (size_t i = 0; i < count; i++) {
+        if (filter[i]) {
+            const T start = src_offsets[i];
+            const T end = src_offsets[i + 1];
+            const T length = end - start;
+
+            strings::memcpy_inlined(dest_bytes + (current_offset - old_bytes_size), src_bytes + start, length);
+            current_offset += length;
+            *dest_offsets++ = current_offset;
+        }
+    }
 
     invalidate_slice_cache();
 }
@@ -420,7 +477,11 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
 template <typename T>
 void BinaryColumnBase<T>::_build_slices() const {
     if constexpr (std::is_same_v<T, uint32_t>) {
-        DCHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+        if (!_is_view) {
+            DCHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+        } else {
+            DCHECK_LT(_length, (size_t)UINT32_MAX) << "BinaryColumn view size overflow";
+        }
     }
 
     DCHECK(_offsets.size() > 0);
@@ -429,8 +490,18 @@ void BinaryColumnBase<T>::_build_slices() const {
 
     _slices.resize(_offsets.size() - 1);
 
-    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
+    if (_is_view) {
+        // When _is_view is true, use external data pointed by _data
+        const uint8_t* data_ptr = reinterpret_cast<const uint8_t*>(_data);
+        for (size_t i = 0; i < _offsets.size() - 1; ++i) {
+            DCHECK_LE(_offsets[i + 1], _length) << "Offset out of view data range";
+            _slices[i] = {data_ptr + _offsets[i], _offsets[i + 1] - _offsets[i]};
+        }
+    } else {
+        // When _is_view is false, use owned data in _bytes
+        for (size_t i = 0; i < _offsets.size() - 1; ++i) {
+            _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
+        }
     }
 
     _slices_cache = true;

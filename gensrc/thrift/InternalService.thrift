@@ -350,6 +350,8 @@ struct TQueryOptions {
   191: optional i64 column_view_concat_bytes_limit;
 
   200: optional bool enable_full_sort_use_german_string;
+  // whether enable predicate column late materialization
+  201: optional bool enable_predicate_col_late_materialize;
 }
 
 // A scan range plus the parameters needed to execute that scan.
