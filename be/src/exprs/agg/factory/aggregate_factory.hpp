@@ -45,6 +45,7 @@
 #include "exprs/agg/map_agg.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/maxmin_by.h"
+#include "exprs/agg/minmax_n.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
 #include "exprs/agg/percentile_cont.h"
@@ -140,6 +141,12 @@ public:
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
+    template <LogicalType LT>
+    static auto MakeMinNAggregateFunction();
+
+    template <LogicalType LT>
+    static auto MakeMaxNAggregateFunction();
 
     static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() {
         return std::make_shared<AnyValueSemiAggregateFunction>();
@@ -331,6 +338,16 @@ auto AggregateFactory::MakeMinByAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeMinAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<LT, MinAggregateData<LT>, MinElement<LT, MinAggregateData<LT>>>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMinNAggregateFunction() {
+    return std::make_shared<MinMaxNAggregateFunction<LT, true>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMaxNAggregateFunction() {
+    return std::make_shared<MinMaxNAggregateFunction<LT, false>>();
 }
 
 template <LogicalType LT>
