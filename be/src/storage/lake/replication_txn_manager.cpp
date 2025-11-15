@@ -181,33 +181,41 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 
     ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(request.visible_version));
 
-    Status status;
-    for (const auto& src_snapshot_info : request.src_snapshot_infos) {
-        status = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
+    if (request.src_tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        auto status = _lake_replication_txn_manager->replicate_lake_remote_storage(request);
         if (!status.ok()) {
-            LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
-                         << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
-                         << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                         << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", data_version: " << request.data_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            continue;
+            LOG(WARNING) << "Failed to replicate lake remote file, tablet_id: " << request.tablet_id
+                         << ", txn_id: " << request.transaction_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", error: " << status.to_string();
         }
+        return status;
+    } else {
+        Status status;
+        for (const auto& src_snapshot_info : request.src_snapshot_infos) {
+            status = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
+            if (!status.ok()) {
+                LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
+                             << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
+                             << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                             << ", src_tablet_id: " << request.src_tablet_id
+                             << ", visible_version: " << request.visible_version
+                             << ", data_version: " << request.data_version
+                             << ", snapshot_version: " << request.src_visible_version;
+                continue;
+            }
 
-        LOG(INFO) << "Replicated remote snapshot from " << src_snapshot_info.backend.host << ":"
-                  << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << " to "
-                  << _tablet_manager->location_provider()->segment_root_location(request.tablet_id)
-                  << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
-                  << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
-                  << ", data_version: " << request.data_version
-                  << ", snapshot_version: " << request.src_visible_version;
+            LOG(INFO) << "Replicated remote snapshot from " << src_snapshot_info.backend.host << ":"
+                      << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << " to "
+                      << _tablet_manager->location_provider()->segment_root_location(request.tablet_id)
+                      << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
+                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                      << ", snapshot_version: " << request.src_visible_version;
+
+            return status;
+        }
 
         return status;
     }
-
-    return status;
 }
 
 Status ReplicationTxnManager::clear_snapshots(const TxnLogPtr& txn_slog) {
@@ -246,7 +254,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
                                                         const TSnapshotInfo& src_snapshot_info,
                                                         const TabletMetadataPtr& tablet_metadata) {
     auto txn_log = std::make_shared<TxnLog>();
-    std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>> filename_map;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
     const TabletSchemaPB* source_schema_pb = nullptr;
 
     if (!is_primary_key(*tablet_metadata)) { // None-pk table
@@ -342,36 +350,8 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
 
-    auto file_converters = [&](const std::string& file_name,
-                               uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
-        if (request.transaction_id < get_master_info().min_active_txn_id) {
-            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
-                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
-                         << ", visible_version: " << request.visible_version
-                         << ", data_version: " << request.data_version
-                         << ", snapshot_version: " << request.src_visible_version;
-            return Status::InternalError("Transaction is aborted");
-        }
-
-        auto iter = filename_map.find(file_name);
-        if (iter == filename_map.end()) {
-            return nullptr;
-        }
-
-        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second.first);
-        WritableFileOptions opts{.sync_on_close = true,
-                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
-                                 .encryption_info = iter->second.second};
-        ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
-
-        files_to_delete.push_back(std::move(segment_location));
-
-        if (is_segment(file_name) && !column_unique_id_map.empty()) {
-            return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
-                                                            &column_unique_id_map);
-        }
-        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
-    };
+    auto file_converters =
+            build_file_converters(_tablet_manager, request, filename_map, column_unique_id_map, files_to_delete);
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
@@ -407,7 +387,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 
 Status ReplicationTxnManager::convert_rowset_meta(
         const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
-        std::unordered_map<std::string, std::pair<std::string, FileEncryptionInfo>>* filename_map) {
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
     if (rowset_meta.is_column_mode_partial_update()) {
         return Status::NotSupported("Column mode partial update is not supported in shared-data mode");
     }
@@ -431,14 +411,13 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string new_segment_filename = gen_segment_filename(transaction_id);
 
         rowset_metadata->add_segments(new_segment_filename);
-        FileEncryptionInfo encryption_info;
+        FileEncryptionPair encryption_pair;
         if (config::enable_transparent_data_encryption) {
-            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-            rowset_metadata->add_segment_encryption_metas(pair.encryption_meta);
-            encryption_info = std::move(pair.info);
+            ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            rowset_metadata->add_segment_encryption_metas(encryption_pair.encryption_meta);
         }
         auto pair = filename_map->emplace(std::move(old_segment_filename),
-                                          std::pair(std::move(new_segment_filename), std::move(encryption_info)));
+                                          std::pair(std::move(new_segment_filename), std::move(encryption_pair)));
         if (!pair.second) {
             return Status::Corruption("Duplicated segment file: " + pair.first->first);
         }
@@ -456,14 +435,13 @@ Status ReplicationTxnManager::convert_rowset_meta(
         std::string new_del_filename = gen_del_filename(transaction_id);
 
         op_write->add_dels(new_del_filename);
-        FileEncryptionInfo encryption_info;
+        FileEncryptionPair encryption_pair;
         if (config::enable_transparent_data_encryption) {
-            ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-            op_write->add_del_encryption_metas(pair.encryption_meta);
-            encryption_info = std::move(pair.info);
+            ASSIGN_OR_RETURN(encryption_pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+            op_write->add_del_encryption_metas(encryption_pair.encryption_meta);
         }
         auto pair = filename_map->emplace(std::move(old_del_filename),
-                                          std::pair(std::move(new_del_filename), std::move(encryption_info)));
+                                          std::pair(std::move(new_del_filename), std::move(encryption_pair)));
         if (!pair.second) {
             return Status::Corruption("Duplicated del file: " + pair.first->first);
         }
@@ -504,6 +482,46 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
         }
     }
     return Status::OK();
+}
+
+// Helper function to create replication txn log with converted metadata
+FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
+        const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
+        const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
+        std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete) {
+    auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete](
+                                   const std::string& file_name,
+                                   uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        if (request.transaction_id < get_master_info().min_active_txn_id) {
+            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
+                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", visible_version: " << request.visible_version
+                         << ", data_version: " << request.data_version
+                         << ", snapshot_version: " << request.src_visible_version;
+            return Status::InternalError("Transaction is aborted");
+        }
+
+        auto iter = filename_map.find(file_name);
+        if (iter == filename_map.end()) {
+            return nullptr;
+        }
+
+        auto segment_location = tablet_manager->segment_location(request.tablet_id, iter->second.first);
+        WritableFileOptions opts{.sync_on_close = true,
+                                 .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                 .encryption_info = iter->second.second.info};
+
+        ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
+
+        files_to_delete.push_back(std::move(segment_location));
+
+        if (is_segment(file_name) && !column_unique_id_map.empty()) {
+            return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
+                                                            &column_unique_id_map);
+        }
+        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
+    };
+    return file_converters;
 }
 
 } // namespace starrocks::lake
