@@ -37,6 +37,7 @@ Usage: $0 <options>
      --coverage                 run coverage statistic tasks
      --dumpcase [PATH]          run dump case and save to path
      --enable-profiler [0|1]    enable/disable async-profiler for performance profiling
+     --jacoco-diff [0|1]        enable/disable incremental JaCoCo coverage based on git diff (default: 1)
      -j [N]                     build parallel, default is ${FE_UT_PARALLEL:-4}
 
   Eg.
@@ -48,6 +49,8 @@ Usage: $0 <options>
     $0 --dumpcase /home/disk1/                    run dump case and save to path
     $0 --enable-profiler 1                        run tests with async-profiler enabled
     $0 --enable-profiler 0                        run tests with async-profiler disabled
+    $0 --jacoco-diff 1                            enable incremental JaCoCo coverage (default)
+    $0 --jacoco-diff 0                            disable incremental JaCoCo coverage
     $0 -j16 --test com.starrocks.utframe.Demo     run demo test with 16 parallel threads
   "
   exit 1
@@ -63,6 +66,7 @@ OPTS=$(getopt \
   -l 'coverage' \
   -l 'dumpcase' \
   -l 'enable-profiler:' \
+  -l 'jacoco-diff:' \
   -l 'help' \
   -l 'run' \
   -- "$@")
@@ -81,6 +85,7 @@ FILTER_TEST=""
 COVERAGE=0
 DUMPCASE=0
 ENABLE_PROFILER=0
+JACOCO_DIFF=1
 PARALLEL=${FE_UT_PARALLEL:-4}
 while true; do
     case "$1" in
@@ -91,6 +96,7 @@ while true; do
         --dumpcase) DUMPCASE=1; shift ;;
         --dry-run) DRY_RUN=1 ; shift ;;
         --enable-profiler) ENABLE_PROFILER=$2; shift 2;;
+        --jacoco-diff) JACOCO_DIFF=$2; shift 2;;
         --help) HELP=1 ; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
@@ -113,6 +119,16 @@ mkdir -p build/compile
 # Set FE_UT_PARALLEL if -j parameter is provided
 export FE_UT_PARALLEL=$PARALLEL
 echo "Unit test parallel is: $FE_UT_PARALLEL"
+
+# Set JaCoCo configuration based on jacoco-diff parameter
+if [ "${JACOCO_DIFF}" = "1" ]; then
+    export JACOCO_BASE_BRANCH=main
+    export JACOCO_DIFF_ENABLED=true
+    echo "JaCoCo incremental coverage is enabled (base branch: $JACOCO_BASE_BRANCH)"
+else
+    export JACOCO_DIFF_ENABLED=false
+    echo "JaCoCo incremental coverage is disabled (full coverage)"
+fi
 
 # Set ASYNC_PROFILER_ENABLED based on --enable-profiler parameter and platform detection
 if [ "${ENABLE_PROFILER}" = "1" ]; then
