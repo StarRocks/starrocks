@@ -278,7 +278,7 @@ private:
 
     Status _finish_late_materialization(ScanContext* ctx);
 
-    void _build_final_chunk(ScanContext* ctx);
+    Status _build_final_chunk(ScanContext* ctx);
 
     Status _encode_to_global_id(ScanContext* ctx);
 
@@ -1604,6 +1604,19 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     const bool scan_range_normalized = _scan_range.is_sorted();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
+    if (UNLIKELY(_context->_read_chunk == nullptr)) {
+        return Status::InternalError("read_chunk is null in _do_get_next");
+    }
+    if (UNLIKELY(_context->_dict_chunk == nullptr)) {
+        return Status::InternalError("dict_chunk is null in _do_get_next");
+    }
+    if (UNLIKELY(_context->_final_chunk == nullptr)) {
+        return Status::InternalError("final_chunk is null in _do_get_next");
+    }
+    if (UNLIKELY(_context->_adapt_global_dict_chunk == nullptr)) {
+        return Status::InternalError("adapt_global_dict_chunk is null in _do_get_next");
+    }
+
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
@@ -1650,7 +1663,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
 
-    _build_final_chunk(_context);
+    RETURN_IF_ERROR(_build_final_chunk(_context));
     chunk = _context->_final_chunk.get();
 
     bool need_switch_context = false;
@@ -1758,6 +1771,8 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                              ChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
         }
     } else {
+        // When there are no dict columns, _dict_chunk points to the same chunk as _read_chunk
+        DCHECK(to->_read_chunk != nullptr) << "read_chunk should be initialized before this point";
         to->_dict_chunk = to->_read_chunk;
     }
 
@@ -2224,6 +2239,10 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
 Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     const size_t m = ctx->_read_schema.num_fields();
 
+    if (UNLIKELY(ctx->_dict_chunk == nullptr)) {
+        return Status::InternalError("dict_chunk is null in _finish_late_materialization");
+    }
+
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
 
     // last column of |_dict_chunk| is a fake column: it's filled by `RowIdColumnIterator`.
@@ -2261,14 +2280,18 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     return Status::OK();
 }
 
-void SegmentIterator::_build_final_chunk(ScanContext* ctx) {
+Status SegmentIterator::_build_final_chunk(ScanContext* ctx) {
     // trim all use less columns
+    if (UNLIKELY(ctx->_dict_chunk == nullptr)) {
+        return Status::InternalError("dict_chunk is null in _build_final_chunk");
+    }
     Columns& input_columns = ctx->_dict_chunk->columns();
     for (size_t i = 0; i < ctx->_read_index_map.size(); i++) {
         ctx->_final_chunk->get_column_by_index(i).swap(input_columns[ctx->_read_index_map[i]]);
     }
     bool may_has_del_row = ctx->_dict_chunk->delete_state() != DEL_NOT_SATISFIED;
     ctx->_final_chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    return Status::OK();
 }
 
 Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
