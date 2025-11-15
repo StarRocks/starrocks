@@ -999,6 +999,18 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE test_laglead (\n" +
+                "  `ta` int(11) NULL COMMENT \"\",\n" +
+                "  `tb` int(11) NULL COMMENT \"\",\n" +
+                "  `tc` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`ta`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();

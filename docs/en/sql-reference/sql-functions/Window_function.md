@@ -413,7 +413,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 - `expr`: the field you want to compute.
 - `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
-- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`, since version 4.0, default no longer has to be a constant—it can be a column name.
 - `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
 
 **Example 1: IGNORE NULLS is not specified**
@@ -491,6 +491,33 @@ For rows 1 to 4, the system cannot find two non-NULL values for each of them in 
 
 For value 6 in row 7, the value two rows backward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for non-null values and 2 in row 4 is returned.
 
+**Example 3: Setting the default value in LAG() to a column name**
+
+Use the preceding table and parameter settings.
+
+```SQL
+SELECT col_1, col_2, LAG(col_2 ,2,col_1) OVER (ORDER BY col_1)
+FROM test_tbl ORDER BY col_1;
++-------+-------+-------------------------------------------------+
+| col_1 | col_2 | lag(col_2, 2, col_1) OVER (ORDER BY col_1 ASC ) |
++-------+-------+-------------------------------------------------+
+|     1 |  NULL |                                               1 |
+|     2 |     4 |                                               2 |
+|     3 |  NULL |                                            NULL |
+|     4 |     2 |                                               4 |
+|     5 |  NULL |                                            NULL |
+|     6 |     7 |                                               2 |
+|     7 |     6 |                                            NULL |
+|     8 |     5 |                                               7 |
+|     9 |  NULL |                                               6 |
+|    10 |  NULL |                                               5 |
++-------+-------+-------------------------------------------------+
+```
+
+As you can see, for rows 1 and 2 there are not two non-NULL values when scanning backward, so the default returned is the current row’s col_1 value.
+
+All other rows behave the same as in Example 1.
+
 ### LEAD()
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
@@ -508,7 +535,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 - `expr`: the field you want to compute.
 - `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
-- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
+- `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`, since version 4.0, default no longer has to be a constant—it can be a column name.
 - `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
 
 **Example 1: IGNORE NULLS is not specified**
@@ -585,6 +612,33 @@ FROM test_tbl ORDER BY col_1;
 For rows 7 to 10, the system cannot find two non-null values in the subsequent rows and the default value 0 is returned.
 
 For the first row, the value two rows forward is NULL and NULL is ignored because IGNORE NULLS is specified. The system continues to search for the second non-null value and 2 in row 4 is returned.
+
+**Example 3: Setting the default value in LEAD() to a column name**
+
+Use the preceding table and parameter settings.
+
+```SQL
+SELECT col_1, col_2, LEAD(col_2 ,2,col_1) OVER (ORDER BY col_1)
+FROM test_tbl ORDER BY col_1;
++-------+-------+--------------------------------------------------+
+| col_1 | col_2 | lead(col_2, 2, col_1) OVER (ORDER BY col_1 ASC ) |
++-------+-------+--------------------------------------------------+
+|     1 |  NULL |                                             NULL |
+|     2 |     4 |                                                2 |
+|     3 |  NULL |                                             NULL |
+|     4 |     2 |                                                7 |
+|     5 |  NULL |                                                6 |
+|     6 |     7 |                                                5 |
+|     7 |     6 |                                             NULL |
+|     8 |     5 |                                             NULL |
+|     9 |  NULL |                                                9 |
+|    10 |  NULL |                                               10 |
++-------+-------+--------------------------------------------------+
+```
+
+As you can see, for rows 9 and 10 there are not two non-NULL values when scanning forward, so the default returned is the current row’s col_1 value.
+
+All other rows behave the same as in Example 1.
 
 ### MAX()
 

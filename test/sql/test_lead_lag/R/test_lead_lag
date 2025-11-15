@@ -71,7 +71,9 @@ select c0, lag(c1, 5, 1+2+3) over() from common_duplicate;
 -- !result
 select c0, lag(c1, 5, abs(1)) over() from common_duplicate;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type INT.')
+1	None
+2	None
+3	None
 -- !result
 select c0, lead(c2, 5) over() from common_duplicate;
 -- result:
@@ -105,7 +107,9 @@ select c0, lead(c4, 5, 1) over() from common_duplicate;
 -- !result
 select c0, lag(c4, 5, 1+2+3) over() from common_duplicate;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type FLOAT.')
+3	6.0
+2	6.0
+1	6.0
 -- !result
 select c0, lag(c4, 5, 3.456) over() from common_duplicate;
 -- result:
