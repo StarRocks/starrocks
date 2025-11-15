@@ -1368,6 +1368,12 @@ public class ConnectContext {
                         getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0);
     }
 
+    public boolean isSingleNodeWithLargeNumberCpuCores() {
+        return getAliveExecutionNodesNumber() == 1 &&
+                getGlobalStateMgr().getNodeMgr().getClusterInfo().getTotalCpuCores() >
+                        sessionVariable.getSingleNodeLargeCoreNum();
+    }
+
     public void setPending(boolean pending) {
         isPending = pending;
     }
