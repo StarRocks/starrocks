@@ -183,6 +183,14 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
+    protected void unprotectedExecuteCancel(FailMsg failMsg, boolean abortTxn) {
+        super.unprotectedExecuteCancel(failMsg, abortTxn);
+        if (coordinator != null) {
+            coordinator.cancel(failMsg.getMsg());
+        }
+    }
+
+    @Override
     public Set<String> getTableNamesForShow() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (database == null) {
