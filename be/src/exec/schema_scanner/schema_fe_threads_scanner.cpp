@@ -49,7 +49,11 @@ Status SchemaFeThreadsScanner::_get_fe_threads(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaHelper::get_fe_threads(_ss_state, request, &response));
 
     if (response.status.status_code != TStatusCode::OK) {
-        return Status::InternalError(response.status.error_msgs[0]);
+        if (response.status.error_msgs.empty()) {
+            return Status::InternalError("Failed to get FE threads");
+        } else {
+            return Status::InternalError(response.status.error_msgs[0]);
+        }
     }
 
     for (const auto& thread_info : response.threads) {
