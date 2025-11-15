@@ -171,7 +171,6 @@ enum TSchemaTableType {
     SCH_PIPE_FILES,
     SCH_PIPES,
     SCH_FE_METRICS,
-    SCH_FE_THREADS,
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
     SYS_FE_MEMORY_USAGE,
@@ -193,6 +192,8 @@ enum TSchemaTableType {
 
     SCH_DYNAMIC_TABLET_JOBS,
     SCH_RECYCLEBIN_CATALOGS,
+
+    SCH_FE_THREADS,
 }
 
 enum THdfsCompression {
