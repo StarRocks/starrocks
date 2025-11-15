@@ -52,6 +52,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -450,6 +451,14 @@ public class VariableMgr {
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
+            
+            // Check if this is a refresh connections command (empty varNames)
+            if (root.length() == 0 && info.getVarNames() != null && info.getVarNames().isEmpty()) {
+                // This is a refresh connections command
+                refreshConnectionsInternal();
+                return;
+            }
+            
             for (String varName : root.keySet()) {
                 VarContext varContext = getVarContext(varName);
                 if (varContext == null) {
@@ -546,6 +555,124 @@ public class VariableMgr {
         } else {
             return getValue(var, ctx.getField());
         }
+    }
+
+    /**
+     * Refresh all active connections to apply global variables.
+     * Only refreshes variables that haven't been modified by the session itself.
+     */
+    public void refreshConnections() {
+        // Refresh on current node
+        refreshConnectionsInternal();
+        
+        // Write to edit log to distribute to all FE nodes
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            GlobalVarPersistInfo info = new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList());
+            info.setPersistJsonString("{}"); // Empty JSON to indicate refresh connections
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logGlobalVariableV2(info);
+        }
+    }
+
+    /**
+     * Internal method to refresh connections on the current node.
+     */
+    private void refreshConnectionsInternal() {
+        if (ExecuteEnv.getInstance().getScheduler() == null) {
+            LOG.warn("ConnectScheduler is not initialized, skip refresh connections");
+            return;
+        }
+
+        Map<Long, ConnectContext> connectionMap = ExecuteEnv.getInstance().getScheduler().getCurrentConnectionMap();
+        if (connectionMap == null || connectionMap.isEmpty()) {
+            return;
+        }
+
+        // Get a snapshot of default session variables
+        SessionVariable defaultVar;
+        rLock.lock();
+        try {
+            defaultVar = (SessionVariable) defaultSessionVariable.clone();
+        } finally {
+            rLock.unlock();
+        }
+
+        int refreshedCount = 0;
+        for (ConnectContext ctx : connectionMap.values()) {
+            try {
+                if (refreshConnectionVariables(ctx, defaultVar)) {
+                    refreshedCount++;
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to refresh variables for connection {}: {}", 
+                        ctx.getConnectionId(), e.getMessage());
+            }
+        }
+
+        LOG.info("Refreshed {} connections", refreshedCount);
+    }
+
+    /**
+     * Refresh variables for a single connection.
+     * Only refreshes variables that haven't been modified by the session.
+     * 
+     * @param ctx the connection context
+     * @param defaultVar the default session variables (current global defaults)
+     * @return true if any variables were refreshed
+     */
+    private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar) {
+        SessionVariable sessionVar = ctx.getSessionVariable();
+        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
+        
+        boolean refreshed = false;
+        
+        // Iterate through all session variables and refresh those that haven't been modified
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            VarAttr attr = field.getAnnotation(VarAttr.class);
+            if (attr == null) {
+                continue;
+            }
+
+            String varName = attr.name();
+            
+            // Skip variables that have been modified by the session
+            if (modifiedVars != null && modifiedVars.containsKey(varName)) {
+                continue;
+            }
+
+            // Skip variables that are session-only (not affected by global changes)
+            if ((attr.flag() & SESSION_ONLY) != 0) {
+                continue;
+            }
+
+            // Skip variables that don't forward to leader (they're not affected by global changes)
+            if ((attr.flag() & DISABLE_FORWARD_TO_LEADER) != 0) {
+                continue;
+            }
+
+            try {
+                field.setAccessible(true);
+                Object defaultValue = field.get(defaultVar);
+                Object currentValue = field.get(sessionVar);
+                
+                // Only refresh if the value has changed
+                if (!java.util.Objects.equals(defaultValue, currentValue)) {
+                    String valueStr = getValue(defaultVar, field);
+                    try {
+                        setValue(sessionVar, field, valueStr);
+                        refreshed = true;
+                    } catch (DdlException e) {
+                        LOG.warn("Failed to refresh variable {} for connection {}: {}", 
+                                varName, ctx.getConnectionId(), e.getMessage());
+                    }
+                }
+            } catch (IllegalAccessException e) {
+                LOG.warn("Failed to access field {} for connection {}: {}", 
+                        field.getName(), ctx.getConnectionId(), e.getMessage());
+            }
+        }
+
+        return refreshed;
     }
 
     private String getValue(Object obj, Field field) {

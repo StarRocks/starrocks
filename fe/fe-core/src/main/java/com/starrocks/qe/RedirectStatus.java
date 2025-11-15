@@ -131,6 +131,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -1700,6 +1701,11 @@ public class RedirectStatus {
         @Override
         public RedirectStatus visitCallProcedureStatement(CallProcedureStatement statement, Void context) {
             return RedirectStatus.NO_FORWARD;
+        }
+
+        @Override
+        public RedirectStatus visitRefreshConnectionsStatement(RefreshConnectionsStmt statement, Void context) {
+            return RedirectStatus.FORWARD_NO_SYNC;
         }
     }
 }

@@ -654,6 +654,10 @@ public class ConnectContext {
         }
     }
 
+    public Map<String, SystemVariable> getModifiedSessionVariablesMap() {
+        return modifiedSessionVariables;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
