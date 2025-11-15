@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergTable;
@@ -159,6 +160,7 @@ public class IcebergScanNodeTest {
                 new PlanNodeId(0), desc, catalog,
                 tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
         scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
         List<RemoteFileInfo> remoteFileInfos = List.of(remoteFileInfo);
