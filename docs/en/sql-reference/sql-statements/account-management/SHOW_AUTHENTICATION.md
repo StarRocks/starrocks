@@ -31,12 +31,12 @@ SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 +---------------+----------+-------------+-------------------+
 ```
 
-| **Field**         | **Description**                                              |
-| ----------------- | ------------------------------------------------------------ |
-| UserIdentity      | The user identity.                                           |
-| Password          | Whether a password is used to log in to the StarRocks cluster.<ul><li>`Yes`: A password is used.</li><li>`No`: No password is used.</li></ul> |
-| AuthPlugin        | The interface that is used for authentication. Valid values: `MYSQL_NATIVE_PASSWORD` and `AUTHENTICATION_LDAP_SIMPLE`. If no interface is used, `NULL` is returned. |
-| UserForAuthPlugin | The name of the user using the LDAP or Kerberos authentication. If no authentication is used, `NULL` is returned. |
+| **Field**         | **Description**                                                                                                                                                                             |
+| ----------------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| UserIdentity      | The user identity.                                                                                                                                                                          |
+| Password          | Whether a password is used to log in to the StarRocks cluster.<ul><li>`Yes`: A password is used.</li><li>`No`: No password is used.</li></ul>                                               |
+| AuthPlugin        | The interface that is used for authentication. Valid values: `MYSQL_NATIVE_PASSWORD`, `SECURITY_INTEGRATION` and `AUTHENTICATION_LDAP_SIMPLE`. If no interface is used, `NULL` is returned. |
+| UserForAuthPlugin | The name of the user using the LDAP or Kerberos authentication. If no authentication is used, `NULL` is returned.                                                                           |
 
 ## Examples
 
