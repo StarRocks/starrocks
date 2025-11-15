@@ -202,6 +202,7 @@ set(STORAGE_FILES
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
+    lake/tablet_cache_stats_manager.cpp
     lake/tablet_reader.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
