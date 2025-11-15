@@ -246,6 +246,7 @@ def generate_cpp(path):
         "StructFunctions",
         "UtilityFunctions",
         "JsonFunctions",
+        "VariantFunctions",
         "EncryptionFunctions",
         "ESFunctions",
         "GeoFunctions",
