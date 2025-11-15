@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergTable;
@@ -103,7 +104,8 @@ public class IcebergScanNodeTest {
                     Deencapsulation.getField(original, "desc"),
                     Deencapsulation.getField(original, "bucketProperties"),
                     Deencapsulation.getField(original, "partitionIdGenerator"),
-                    Deencapsulation.getField(original, "recordScanFiles")
+                    Deencapsulation.getField(original, "recordScanFiles"),
+                    Deencapsulation.getField(original, "useMinMaxOpt")
             );
         }
 
@@ -158,6 +160,7 @@ public class IcebergScanNodeTest {
                 new PlanNodeId(0), desc, catalog,
                 tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
         scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
         List<RemoteFileInfo> remoteFileInfos = List.of(remoteFileInfo);
@@ -208,7 +211,8 @@ public class IcebergScanNodeTest {
 
         IcebergConnectorScanRangeSource scanSource = new IcebergConnectorScanRangeSource(
                 null, mockSource, null, null, Optional.empty(),
-                PartitionIdGenerator.of(), true  // recordScanFiles = true
+                PartitionIdGenerator.of(), true,  // recordScanFiles = true
+                false
         ) {
             private int callCount = 0;
 
@@ -525,12 +529,12 @@ public class IcebergScanNodeTest {
         DeleteFile eq1 = Mockito.mock(DeleteFile.class);
         DataFile data1 = Mockito.mock(DataFile.class);
         DataFile data2 = Mockito.mock(DataFile.class);
-    
+
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
         Mockito.when(scanNode.getPosAppliedDeleteFiles()).thenReturn(Set.of(pos1, pos2));
         Mockito.when(scanNode.getEqualAppliedDeleteFiles()).thenReturn(Set.of(eq1));
         Mockito.when(scanNode.getScannedDataFiles()).thenReturn(Set.of(data1, data2));
-    
+
         // 3. Mock PlanFragment
         PlanFragment fragment = Mockito.mock(PlanFragment.class);
         Mockito.when(fragment.collectScanNodes())
@@ -618,8 +622,8 @@ public class IcebergScanNodeTest {
                 morParams,
                 tupleDesc,
                 Optional.empty(),
-                PartitionIdGenerator.of()
-                );
+                PartitionIdGenerator.of(), false, false
+        );
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
                 10, // maxSize
@@ -725,7 +729,7 @@ public class IcebergScanNodeTest {
         Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
         Mockito.when(sessVar.clone()).thenReturn(sessVar);
         Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
-    
+
         // --- Mock DataFile ---
         DataFile dataFile = Mockito.mock(DataFile.class);
         Mockito.when(dataFile.fileSizeInBytes()).thenReturn(500L);
@@ -756,8 +760,8 @@ public class IcebergScanNodeTest {
                 morParams,
                 tupleDesc,
                 Optional.empty(),
-                PartitionIdGenerator.of()
-                );
+                PartitionIdGenerator.of(), false, false
+        );
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         new MockUp<StmtExecutor>() {

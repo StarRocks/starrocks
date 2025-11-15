@@ -113,6 +113,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Set<DeleteFile> appliedPosDeleteFiles;
     private final Set<DeleteFile> appliedEqualDeleteFiles;
     private final boolean recordScanFiles;
+    private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
@@ -121,7 +122,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                            TupleDescriptor desc,
                                            Optional<List<BucketProperty>> bucketProperties,
                                            PartitionIdGenerator partitionIdGenerator,
-                                           boolean recordScanFiles) {
+                                           boolean recordScanFiles,
+                                           boolean useMinMaxOpt) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
@@ -133,15 +135,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.appliedPosDeleteFiles = new HashSet<>();
         this.appliedEqualDeleteFiles = new HashSet<>();
         this.partitionIdGenerator = partitionIdGenerator;
-    }
-
-    public IcebergConnectorScanRangeSource(IcebergTable table,
-                                           RemoteFileInfoSource remoteFileInfoSource,
-                                           IcebergMORParams morParams,
-                                           TupleDescriptor desc,
-                                           Optional<List<BucketProperty>> bucketProperties,
-                                           PartitionIdGenerator partitionIdGenerator) {
-        this(table, remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false);
+        this.useMinMaxOpt = useMinMaxOpt;
     }
 
     public void clearScannedFiles() {
@@ -203,7 +197,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                 res.add(fileScanTask);
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
-                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that 
+                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
                             // we can eliminate the equality delete files.
                         }
                     }
@@ -355,7 +349,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
-        if (file.nullValueCounts() != null && file.valueCounts() != null) {
+        if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
             // fill min/max value
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
                     table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
@@ -489,7 +483,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 partitionValues.add(partitionValue);
             } else {
                 partitionValues.add(null);
-            } 
+            }
             cols.add(table.getColumn(field.name()));
         });
 

@@ -68,8 +68,16 @@ public final class IcebergUtil {
                 case BIGINT:
                 case TIME:
                     texpr.setType(TExprNodeType.INT_LITERAL);
-                    texpr.setMin_int_value((Long) minValue);
-                    texpr.setMax_int_value((Long) maxValue);
+                    if (minValue instanceof Integer) {
+                        texpr.setMin_int_value(((Integer) minValue).longValue());
+                    } else {
+                        texpr.setMin_int_value((Long) minValue);
+                    }
+                    if (maxValue instanceof Integer) {
+                        texpr.setMax_int_value(((Integer) maxValue).longValue());
+                    } else {
+                        texpr.setMax_int_value((Long) maxValue);
+                    }
                     break;
                 case FLOAT:
                     texpr.setType(TExprNodeType.FLOAT_LITERAL);
