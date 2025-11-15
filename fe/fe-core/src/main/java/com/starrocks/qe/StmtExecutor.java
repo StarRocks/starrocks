@@ -1426,7 +1426,9 @@ public class StmtExecutor {
             String explainString = buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.SELECT,
                     parsedStmt.getExplainLevel());
             if (executeInFe) {
-                explainString = "EXECUTE IN FE\n" + explainString;
+                if (parsedStmt.getExplainLevel() != StatementBase.ExplainLevel.TYPE) {
+                    explainString = "EXECUTE IN FE\n" + explainString;
+                }
             }
             handleExplainStmt(explainString);
             return;
@@ -2206,6 +2208,13 @@ public class StmtExecutor {
             String resourceGroupStr =
                     resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
             explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
+        }
+        if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.TYPE
+                && execPlan != null) {
+            String columnTypeStr = execPlan.getColumnTypeExplain(context.getQueryId().toString());
+            LOG.info("sql queryId: " + context.getQueryId() + " column type result:" + columnTypeStr);
+            explainString += columnTypeStr;
+            return explainString;
         }
         // marked delete will get execPlan null
         if (execPlan == null) {
