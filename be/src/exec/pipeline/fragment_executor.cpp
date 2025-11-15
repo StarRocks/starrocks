@@ -831,6 +831,32 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
+Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
+    bool prepare_success = false;
+    UnifiedExecPlanFragmentParams request(common_request, common_request);
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+
+    // Set up desc tbl
+    DescriptorTbl* desc_tbl = nullptr;
+    const auto& t_desc_tbl = request.common().desc_tbl;
+
+    DCHECK(t_desc_tbl.__isset.is_cached && !t_desc_tbl.is_cached);
+    // only data lake table need runtime state, and we baned the plan with dla using single node parallel prepare
+    // so it's safe to pass nullptr here
+    RETURN_IF_ERROR(DescriptorTbl::create(nullptr, _query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
+    _query_ctx->set_desc_tbl(desc_tbl);
+
+    // make sure query context can be released
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+        if (!prepare_success) {
+            query_ctx->count_down_fragments();
+        }
+    });
+    prepare_success = true;
+    return Status::OK();
+}
+
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -930,6 +956,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
+
     prepare_success = true;
 
     return Status::OK();
@@ -942,7 +969,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
             _fail_cleanup(true);
         }
     });
-
     auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
     auto* prepare_driver_timer =

@@ -250,6 +250,9 @@ private:
     Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                PExecShortCircuitResult* response);
 
+    Status _prepare_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
+                                              const TExecPlanFragmentParams& t_unique_request);
+
 protected:
     ExecEnv* _exec_env;
 };
