@@ -19,6 +19,8 @@ import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.consistency.LockChecker;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
@@ -38,13 +40,39 @@ import java.util.stream.Collectors;
  * directly calling readLock().lock(), writeLock.lock().
  */
 public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
+    private static final Logger LOG = LogManager.getLogger(QueryableReentrantReadWriteLock.class);
+
     // threadId -> lockTime
     private final Map<Thread, Long> sharedLockThreads = new ConcurrentHashMap<>();
 
     AtomicLong exclusiveLockTime = new AtomicLong(-1L);
 
+    public QueryableReentrantReadWriteLock() {
+        super();
+    }
+
     public QueryableReentrantReadWriteLock(boolean fair) {
         super(fair);
+    }
+
+    public void sharedLockDetectingSlowLock(long slowLockThreshold, TimeUnit unit) {
+        JsonObject currentLockInfo = null;
+        long startTime = System.currentTimeMillis();
+        try {
+            if (this.trySharedLock(slowLockThreshold, unit)) {
+                return;
+            }
+            // Slow lock detected, get lock info before acquiring the lock again.
+            currentLockInfo = this.getLockInfoToJson(null);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+        this.sharedLock();
+        if (currentLockInfo != null) {
+            long waitTime = System.currentTimeMillis() - startTime;
+            LOG.warn("slow lock detected on read lock. waitTime: {}ms, lockInfo: {}",
+                    waitTime, currentLockInfo);
+        }
     }
 
     public void sharedLock() {
@@ -63,6 +91,28 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     public void sharedUnlock() {
         this.readLock().unlock();
         this.sharedLockThreads.remove(Thread.currentThread());
+    }
+
+    public void exclusiveLockDetectingSlowLock(long slowLockThreshold, TimeUnit unit) {
+        JsonObject currentLockInfo = null;
+        long startTime = System.currentTimeMillis();
+        try {
+            if (this.tryExclusiveLock(slowLockThreshold, unit)) {
+                return;
+            }
+            // NOTE: Between checking timeout and calling getLockInfoToJson(), lock state might change.
+            // Current state captured may not match final acquisition state. However, this is acceptable
+            // for debugging purposes (approximately accurate is good enough)
+            currentLockInfo = this.getLockInfoToJson(null);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+        this.exclusiveLock();
+        if (currentLockInfo != null) {
+            long waitTime = System.currentTimeMillis() - startTime;
+            LOG.warn("slow lock detected on write lock. waitTime: {}ms, lockInfo: {}",
+                    waitTime, currentLockInfo);
+        }
     }
 
     public void exclusiveLock() {
