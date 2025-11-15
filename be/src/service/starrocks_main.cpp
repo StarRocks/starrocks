@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
     starrocks::start_be(paths, as_cn);
 
     if (starrocks::process_quick_exit_in_progress()) {
-        LOG(INFO) << "BE is shutting down，will exit quickly";
+        LOG(INFO) << "BE is shutting down, will exit quickly";
         exit(0);
     }
 

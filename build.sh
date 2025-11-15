@@ -668,11 +668,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
 
-    # if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ] ; then
-    #     LIBSTDCXX_DIR=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so))
-    #     cp -r $LIBSTDCXX_DIR/libstdc++.so* ${STARROCKS_OUTPUT}/be/lib/
-    #     cp -r $LIBSTDCXX_DIR/libgcc.so* ${STARROCKS_OUTPUT}/be/lib/
-    # fi
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
