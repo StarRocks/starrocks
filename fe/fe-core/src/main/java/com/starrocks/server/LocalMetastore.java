@@ -5222,6 +5222,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    public void deleteAutoIncrementIdForTable(Long tableId) {
+        tableIdToIncrementId.remove(tableId);
+    }
+
     public void replayAutoIncrementId(AutoIncrementInfo info) throws IOException {
         for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
             Long tableId = entry.getKey();
@@ -5236,37 +5240,39 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public Long allocateAutoIncrementId(Long tableId, Long rows) {
-        Long oldId = tableIdToIncrementId.putIfAbsent(tableId, 1L);
-        if (oldId == null) {
-            oldId = tableIdToIncrementId.get(tableId);
-        }
+        Long endId = tableIdToIncrementId.compute(tableId, (k, val) -> {
+            Long currentVal = val;
+            if (currentVal == null) {
+                currentVal = 1L;
+            }
 
-        Long newId = oldId + rows;
-        // AUTO_INCREMENT counter overflow
-        if (newId < oldId) {
-            throw new RuntimeException("AUTO_INCREMENT counter overflow");
-        }
-
-        while (!tableIdToIncrementId.replace(tableId, oldId, newId)) {
-            oldId = tableIdToIncrementId.get(tableId);
-            newId = oldId + rows;
-
-            // AUTO_INCREMENT counter overflow
-            if (newId < oldId) {
+            Long newVal = currentVal + rows;
+            if (newVal < currentVal) {
                 throw new RuntimeException("AUTO_INCREMENT counter overflow");
             }
-        }
 
-        return oldId;
+            // log the delta result.
+            ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
+            deltaMap.put(tableId, newVal);
+            AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveAutoIncrementId(info, wal -> {
+                // noting to do, tableIdToIncrementId will be updated after the compute end.
+            });
+            return newVal;
+        });
+
+        return endId - rows;
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
-        Long id = tableIdToIncrementId.remove(tableId);
-        if (!isReplay && id != null) {
+    public void removeAutoIncrementIdByTableId(Long tableId) {
+        Long id = tableIdToIncrementId.get(tableId);
+
+        if (id != null) {
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(tableId, 0L);
             AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
-            GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logSaveDeleteAutoIncrementId(info, wal -> tableIdToIncrementId.remove(tableId));
         }
     }
 
@@ -5421,12 +5427,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Failed to drop auto increment cache in CN/BE");
         }
 
-        addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue);
-
         ConcurrentHashMap<Long, Long> idMap = new ConcurrentHashMap<>();
         idMap.put(tableId, newAutoIncrementValue);
         AutoIncrementInfo info = new AutoIncrementInfo(idMap);
-        stateMgr.getEditLog().logSaveAutoIncrementId(info);
+        stateMgr.getEditLog().logSaveAutoIncrementId(
+                info, wal -> addOrReplaceAutoIncrementIdByTableId(tableId, newAutoIncrementValue));
 
         LOG.info("Set auto_increment value for table {}.{} to {}", dbName, tableName, newAutoIncrementValue);
     }

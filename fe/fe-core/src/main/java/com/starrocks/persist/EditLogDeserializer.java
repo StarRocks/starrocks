@@ -265,6 +265,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
             .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)

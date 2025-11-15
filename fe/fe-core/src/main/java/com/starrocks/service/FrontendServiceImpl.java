@@ -131,7 +131,6 @@ import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -392,7 +391,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -1751,11 +1749,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Long nextId = null;
         try {
             nextId = GlobalStateMgr.getCurrentState().getLocalMetastore().allocateAutoIncrementId(request.table_id, rows);
-            // log the delta result.
-            ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
-            deltaMap.put(request.table_id, nextId + rows);
-            AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
-            GlobalStateMgr.getCurrentState().getEditLog().logSaveAutoIncrementId(info);
         } catch (Exception e) {
             result.setAuto_increment_id(0);
             result.setAllocated_rows(0);

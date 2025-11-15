@@ -25,7 +25,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -623,10 +622,10 @@ public class AuthenticationMgr {
 
         GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
         groupProvider.init();
-        this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER,
-                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateGroupProvider(
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()),
+                wal -> nameToGroupProviderMap.put(stmt.getName(), groupProvider));
     }
 
     public void replayCreateGroupProvider(String name, Map<String, String> properties) {
@@ -650,11 +649,11 @@ public class AuthenticationMgr {
             }
         }
 
-        this.nameToGroupProviderMap.remove(stmt.getName());
         groupProvider.destroy();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
-                new GroupProviderLog(stmt.getName(), null));
+        GlobalStateMgr.getCurrentState().getEditLog().logDropGroupProvider(
+                new GroupProviderLog(stmt.getName(), null),
+                wal -> nameToGroupProviderMap.remove(stmt.getName()));
     }
 
     public void replayDropGroupProvider(String name) {
