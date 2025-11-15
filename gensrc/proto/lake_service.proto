@@ -359,6 +359,39 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
+message FindSplitPointRequest {
+    message TabletSplitRequest {
+        optional int64 tablet_id = 1;
+        optional int32 split_count = 2;
+        optional int32 colocate_column_count = 3;
+        repeated TabletRangePB colocate_ranges = 4;
+    }
+
+    repeated TabletSplitRequest tablet_split_requests = 1;
+}
+
+message FindSplitPointResponse {
+    enum SplitPointType {
+        LOWER_EXCLUDED_UPPER_INCLUDED = 0; // )[ for common range
+        LOWER_INCLUDED_UPPER_EXCLUDED = 1; // ]( for dup table only
+        LOWRE_INCLUDED_UPPER_INCLUDED = 2; // ][ for overlapping range, dup table only
+        LOWRE_EXCLUDED_UPPER_EXCLUDED = 3; // )( not used
+    }
+
+    message SplitPoint {
+        optional SplitPointType type = 1;
+        optional TuplePB value = 2;
+    }
+
+    message TabletSplitResponse {
+        optional int64 tablet_id = 1;
+        repeated SplitPoint split_points = 2;
+    }
+
+    optional StatusPB status = 1;
+    repeated TabletSplitResponse tablet_split_responses = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc aggregate_publish_version(AggregatePublishVersionRequest) returns (PublishVersionResponse);
@@ -379,5 +412,6 @@ service LakeService {
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
+    rpc find_split_point(FindSplitPointRequest) returns (FindSplitPointResponse);
 }
 
