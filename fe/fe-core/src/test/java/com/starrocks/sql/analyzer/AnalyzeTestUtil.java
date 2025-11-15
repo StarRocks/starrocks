@@ -349,7 +349,6 @@ public class AnalyzeTestUtil {
                 " DUPLICATE KEY(id) PROPERTIES ( \n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
-
         starRocksAssert.withTable("CREATE TABLE test_auto_increment (" +
                 "id BIGINT NOT NULL AUTO_INCREMENT," +
                 "name VARCHAR(100)" +
@@ -357,6 +356,18 @@ public class AnalyzeTestUtil {
                 "PRIMARY KEY (`id`) " +
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 1 " +
                 "PROPERTIES(\"replication_num\" = \"1\");");
+        starRocksAssert.withTable("CREATE TABLE test_laglead (\n" +
+                "  `ta` int(11) NULL COMMENT \"\",\n" +
+                "  `tb` int(11) NULL COMMENT \"\",\n" +
+                "  `tc` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`ta`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
 
         starRocksAssert.withTable("CREATE TABLE test_using (" +
                 "v1 bigint," +

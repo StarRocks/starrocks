@@ -1429,7 +1429,11 @@ None
 -- !result
 SELECT LEAD(c25, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LEAD(c25 IGNORE NULLS) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1449,7 +1453,11 @@ None
 -- !result
 SELECT LEAD(c25 IGNORE NULLS, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LEAD(c25) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1469,7 +1477,11 @@ None
 -- !result
 SELECT LEAD(c25, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LEAD(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1489,7 +1501,11 @@ None
 -- !result
 SELECT LEAD(c25 IGNORE NULLS, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LAG(c0) OVER(ORDER BY k1) wv FROM t1;
 -- result:
@@ -1717,7 +1733,11 @@ None
 -- !result
 SELECT LAG(c25, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LAG(c25 IGNORE NULLS) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1737,7 +1757,11 @@ None
 -- !result
 SELECT LAG(c25 IGNORE NULLS, 5, -1) OVER(ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LAG(c25) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1757,7 +1781,11 @@ None
 -- !result
 SELECT LAG(c25, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result
 SELECT LAG(c25 IGNORE NULLS) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
@@ -1777,5 +1805,9 @@ None
 -- !result
 SELECT LAG(c25 IGNORE NULLS, 5, -1) OVER(PARTITION BY k1 ORDER BY k1) AS wv FROM t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The type of the third parameter of LEAD/LAG not match the type JSON.')
+None
+None
+None
+None
+None
 -- !result

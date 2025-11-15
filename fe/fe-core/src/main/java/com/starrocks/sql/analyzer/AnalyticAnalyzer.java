@@ -31,12 +31,16 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.math.BigDecimal;
 
 import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
 
 public class AnalyticAnalyzer {
+    private static final Logger LOG = LogManager.getLogger(AnalyticAnalyzer.class);
+
     public static void verifyAnalyticExpression(AnalyticExpr analyticExpr) {
         for (Expr e : analyticExpr.getPartitionExprs()) {
             if (e.isConstant()) {
@@ -96,7 +100,6 @@ public class AnalyticAnalyzer {
                                 ExprToSql.toSql(analyticFunction), analyticFunction.getPos());
             }
 
-            // TODO: remove this check when the backend can handle non-constants
             if (analyticFunction.getChildren().size() == 2) {
                 // do nothing
             } else if (analyticFunction.getChildren().size() == 3) {
@@ -104,13 +107,6 @@ public class AnalyticAnalyzer {
 
                 if (analyticFunction.getChild(0) instanceof NullLiteral) {
                     firstType = analyticFunction.getFn().getArgs()[0];
-                }
-
-                try {
-                    analyticFunction.uncheckedCastChild(firstType, 2);
-                } catch (AnalysisException e) {
-                    throw new SemanticException("The third parameter of LEAD/LAG can't convert to " + firstType,
-                            analyticFunction.getChild(2).getPos());
                 }
 
                 // When the parameter is const and nullable in lead/lag, BE use create_const_null_column to store it.
@@ -121,10 +117,14 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (!theThirdChild.isLiteral() && theThirdChild.isNullable()) {
-                    throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
+
+                try {
+                    analyticFunction.uncheckedCastChild(firstType, 2);
+                } catch (AnalysisException e) {
+                    throw new SemanticException("The third parameter of LEAD/LAG can't convert to " + firstType,
                             analyticFunction.getChild(2).getPos());
                 }
+
             } else {
                 throw new SemanticException("The number of parameter in LEAD/LAG is uncorrected", analyticFunction.getPos());
             }
