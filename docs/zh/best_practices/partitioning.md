@@ -68,7 +68,7 @@ CREATE TABLE click_stream (
   ...
 )
 DUPLICATE KEY(user_id, event_time)
-PARTITION BY date_trunc('day', event_time)
+PARTITION BY date_trunc('DAY', event_time)
 DISTRIBUTED BY HASH(user_id) BUCKETS xxx;
 ```
 
