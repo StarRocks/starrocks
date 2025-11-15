@@ -40,7 +40,6 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -49,6 +48,7 @@ import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.BooleanType;
@@ -62,6 +62,8 @@ import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -347,7 +349,8 @@ public class ColumnDefTest {
     public void testColumnWithAggStateDesc() throws AnalysisException {
         AggregateFunction sum = AggregateFunction.createBuiltin(FunctionSet.SUM,
                 Lists.<Type>newArrayList(IntegerType.INT), IntegerType.BIGINT, IntegerType.BIGINT, false, true, false);
-        AggStateDesc aggStateDesc = new AggStateDesc(sum);
+        AggStateDesc aggStateDesc = new AggStateDesc(sum.functionName(), sum.getReturnType(), 
+                Arrays.asList(sum.getArgs()), AggStateDesc.isAggFuncResultNullable(sum.functionName()));
         ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, AggregateType.AGG_STATE_UNION,
                 aggStateDesc, Boolean.FALSE, DefaultValueDef.NOT_SET, Boolean.TRUE, null, "");
         ColumnDefAnalyzer.analyze(column, true);

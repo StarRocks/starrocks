@@ -23,7 +23,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -43,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.AggStateDesc;
 
 import java.util.List;
 import java.util.Map;
