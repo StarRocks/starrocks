@@ -16,3 +16,7 @@ The following fields are provided in `tasks`:
 | DATABASE    | Database where the task belongs.                             |
 | DEFINITION  | SQL definition of the task.                                  |
 | EXPIRE_TIME | Time when the task expires.                                  |
+
+## Syntax
+
+[StarRocks SUBMIT_TASK Documentation](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK/)
