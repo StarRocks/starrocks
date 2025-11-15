@@ -29,6 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LogicalFilterOperator extends LogicalOperator {
+    // The filter has been visited by PushDownPredicateProjectRule.
+    // Used to avoid an infinite loop.
+    public boolean pushdownVisited = false;
     public LogicalFilterOperator(ScalarOperator predicate) {
         super(OperatorType.LOGICAL_FILTER);
         this.predicate = predicate;

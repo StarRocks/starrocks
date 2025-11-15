@@ -201,6 +201,17 @@ public class JoinPredicatePushdown {
 
         pushDownPredicate(joinOptExpression, leftPushDown, rightPushDown);
 
+        boolean replace = optimizerContext.getSessionVariable().getReplacePredicateWithFilter();
+        if (replace && !remainingFilter.isEmpty()) {
+            // the remaining filter can be a very long predicate
+            // Build a new logical filter operator that contains the remaining filter.
+            LogicalFilterOperator fo = new LogicalFilterOperator(Utils.compoundAnd(remainingFilter));
+            fo.pushdownVisited = true;
+            OptExpression je = OptExpression.create(join, joinOptExpression.getInputs());
+            OptExpression fe = OptExpression.create(fo, Lists.newArrayList(je));
+            return fe;
+        }
+
         LogicalJoinOperator newJoinOperator;
         if (!remainingFilter.isEmpty()) {
             if (join.getJoinType().isAnyInnerJoin()) {
@@ -236,6 +247,16 @@ public class JoinPredicatePushdown {
         if (!join.getJoinType().isSemiAntiJoin() || CollectionUtils.isNotEmpty(eqConjuncts)) {
             conjunctList.removeAll(leftPushDown);
             conjunctList.removeAll(rightPushDown);
+        }
+
+        boolean replace = optimizerContext.getSessionVariable().getReplacePredicateWithFilter();
+        if (replace && !conjunctList.isEmpty()) {
+            LogicalFilterOperator fo = new LogicalFilterOperator(Utils.compoundAnd(conjunctList));
+            fo.pushdownVisited = true;
+            OptExpression je = OptExpression.create(join, joinOptExpression.getInputs());
+            OptExpression fe = OptExpression.create(fo, Lists.newArrayList(je));
+            pushDownPredicate(je, leftPushDown, rightPushDown);
+            return fe;
         }
 
         ScalarOperator joinEqPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
