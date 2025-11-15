@@ -197,6 +197,11 @@ public class PaimonTable extends Table {
     }
 
     @Override
+    public boolean isTemporal() {
+        return true;
+    }
+
+    @Override
     public int hashCode() {
         return Objects.hash(catalogName, databaseName, tableName, getTableIdentifier());
     }
