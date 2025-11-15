@@ -57,6 +57,11 @@ public class ProductFeature {
                 "privilege system with full RBAC functionalities, supporting role inheritance and default roles.",
                 "https://docs.starrocks.io/en-us/latest/administration/privilege_overview"
         ));
+        features.add(new ProductFeature(
+                "multi-warehouse",
+                "support multiple warehouses, each with its own worker group and configuration.",
+                "https://docs.starrocks.io/en-us/latest/administration/multi-warehouse"
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 
