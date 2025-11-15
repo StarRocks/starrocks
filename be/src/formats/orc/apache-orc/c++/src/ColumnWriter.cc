@@ -556,7 +556,7 @@ void ByteColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
             if (enableBloomFilter) {
                 bloomFilter->addLong(data[i]);
             }
-            intStats->update(static_cast<int64_t>(byteData[i]), 1);
+            intStats->update(data[i], 1);
         }
     }
     intStats->increase(count);
