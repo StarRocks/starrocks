@@ -47,6 +47,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'debug' \
   -l 'logconsole' \
   -l 'failpoint' \
+  -l 'extra_java_opts:' \
+  -l 'extra_classpath:' \
   -- "$@")
 
 eval set -- "$OPTS"
@@ -60,6 +62,8 @@ FAILPOINT=
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
 # min jdk version required
 MIN_JDK_VERSION=17
+EXTRA_JAVA_OPTS=
+EXTRA_CLASSPATH=
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
@@ -69,6 +73,8 @@ while true; do
         --debug) ENABLE_DEBUGGER=1 ; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --failpoint) FAILPOINT="--failpoint" ; shift ;;
+        --extra_java_opts) EXTRA_JAVA_OPTS=$2 ; shift 2 ;;
+        --extra_classpath) EXTRA_CLASSPATH=$2 ; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -203,6 +209,10 @@ if [ x"$FAILPOINT" != x"" ]; then
     final_java_opt="${final_java_opt} -javaagent:${failpoint_lib}=script:${failpoint_conf}"
 fi
 
+if [ x"$EXTRA_JAVA_OPTS" != x"" ]; then
+  final_java_opt="${final_java_opt} ${EXTRA_JAVA_OPTS}"
+fi
+
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
@@ -222,6 +232,9 @@ done
 # might be loaded instead of StarRocks' version (which uses the correct new paths
 # like org.apache.thrift.transport.layered.TFramedTransport).
 export CLASSPATH=${STARROCKS_HOME}/lib/fe-core-main.jar:${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
+if [ x"$EXTRA_CLASSPATH" != x"" ]; then
+  export CLASSPATH="${CLASSPATH}:${EXTRA_CLASSPATH}"
+fi
 
 pidfile=$PID_DIR/fe.pid
 
