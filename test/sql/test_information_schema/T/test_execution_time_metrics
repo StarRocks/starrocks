@@ -1,0 +1,3 @@
+-- name: test_execution_time_metrics
+
+select distinct name, labels from information_schema.be_metrics where name in ('pipe_connector_scan_execution_time', 'pipe_scan_execution_time', 'pipe_driver_execution_time') order  by name, labels;

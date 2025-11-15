@@ -504,6 +504,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     };
 
+    task.set_query_type(state->query_options().query_type);
+
     bool submit_success;
     {
         SCOPED_TIMER(_submit_io_task_timer);

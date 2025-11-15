@@ -113,6 +113,7 @@ void GlobalDriverExecutor::_worker_thread() {
         }
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
+        const TQueryType::type query_type = fragment_ctx->query_type();
 
         driver->increment_schedule_times();
         _metrics->driver_schedule_count.increment(1);
@@ -167,7 +168,7 @@ void GlobalDriverExecutor::_worker_thread() {
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
             int64_t end_time = driver->get_active_time();
-            _metrics->driver_execution_time.increment(end_time - start_time);
+            _metrics->driver_execution_time.increment(query_type, end_time - start_time);
             _metrics->exec_running_tasks.increment(-1);
             _metrics->exec_finished_tasks.increment(1);
 

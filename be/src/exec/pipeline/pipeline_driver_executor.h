@@ -122,8 +122,6 @@ private:
     std::atomic_int64_t _driver_execution_ns = 0;
 
     // metrics
-    std::unique_ptr<UIntGauge> _driver_queue_len;
-    std::unique_ptr<UIntGauge> _driver_poller_block_queue_len;
     DriverExecutorMetrics* _metrics;
 };
 

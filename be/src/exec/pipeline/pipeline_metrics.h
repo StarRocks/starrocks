@@ -16,6 +16,7 @@
 
 #include <mutex>
 
+#include "gen_cpp/InternalService_types.h"
 #include "util/metrics.h"
 
 namespace starrocks {
@@ -23,8 +24,21 @@ class MetricRegistry;
 class ThreadPool;
 namespace pipeline {
 
+class QueryTypeTimeMetric {
+public:
+    void register_metrics(MetricRegistry* registry, const std::string& metric_name);
+    void increment(TQueryType::type query_type, int64_t delta);
+
+private:
+    IntCounter* counter(TQueryType::type query_type);
+
+    METRIC_DEFINE_INT_COUNTER(_query_counter, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(_load_counter, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(_unknown_counter, MetricUnit::NANOSECONDS);
+};
+
 struct ScanExecutorMetrics {
-    METRIC_DEFINE_INT_COUNTER(execution_time, MetricUnit::NANOSECONDS);
+    QueryTypeTimeMetric execution_time;
     METRIC_DEFINE_INT_COUNTER(finished_tasks, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(running_tasks, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(pending_tasks, MetricUnit::NOUNIT);
@@ -79,7 +93,7 @@ struct PollerMetrics {
 
 struct DriverExecutorMetrics {
     METRIC_DEFINE_INT_COUNTER(driver_schedule_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_COUNTER(driver_execution_time, MetricUnit::NANOSECONDS);
+    QueryTypeTimeMetric driver_execution_time;
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(exec_running_tasks, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(exec_finished_tasks, MetricUnit::NOUNIT);
     void register_all_metrics(MetricRegistry* registry);
