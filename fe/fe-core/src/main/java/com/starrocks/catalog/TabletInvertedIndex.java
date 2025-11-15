@@ -40,7 +40,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +56,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /*
@@ -71,7 +73,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public static final TabletMeta NOT_EXIST_TABLET_META = new TabletMeta(NOT_EXIST_VALUE, NOT_EXIST_VALUE,
             NOT_EXIST_VALUE, NOT_EXIST_VALUE, TStorageMedium.HDD);
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock();
 
     // tablet id -> tablet meta
     private final Map<Long, TabletMeta> tabletMetaMap = new Long2ObjectOpenHashMap<>();
@@ -92,19 +94,19 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     public void readLock() {
-        this.lock.readLock().lock();
+        lock.sharedLockDetectingSlowLock(Config.slow_lock_threshold_ms, TimeUnit.MILLISECONDS);
     }
 
     public void readUnlock() {
-        this.lock.readLock().unlock();
+        lock.sharedUnlock();
     }
 
     private void writeLock() {
-        this.lock.writeLock().lock();
+        lock.exclusiveLockDetectingSlowLock(Config.slow_lock_threshold_ms, TimeUnit.MILLISECONDS);
     }
 
     private void writeUnlock() {
-        this.lock.writeLock().unlock();
+        lock.exclusiveUnlock();
     }
 
     public Long getTabletIdByReplica(long replicaId) {
