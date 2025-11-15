@@ -828,13 +828,14 @@ struct EncodeColumnToDigest {
                        std::vector<SHA256Digest>& digests) {
         if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
             // String/Binary types
-            auto* col = down_cast<const ColumnType*>(data_col);
+            auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
             const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
                     digests[row].update(&marker, 1);
                 } else {
+                    DCHECK(col != nullptr);
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::String);
                     digests[row].update(&marker, 1);
                     Slice value = col->get_slice(row);
@@ -844,7 +845,7 @@ struct EncodeColumnToDigest {
         } else if constexpr (lt_is_arithmetic<LT> || lt_is_date_or_datetime<LT> || lt_is_decimal<LT> ||
                              lt_is_largeint<LT>) {
             // Fixed-length types: numerics, dates, decimals
-            auto* data = reinterpret_cast<const CppType*>(data_col->raw_data());
+            auto* data = data_col ? reinterpret_cast<const CppType*>(data_col->raw_data()) : nullptr;
             RowFingerprintValueType marker_type;
 
             if constexpr (sizeof(CppType) == 1) {
@@ -872,6 +873,7 @@ struct EncodeColumnToDigest {
                     uint8_t null_marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
                     digests[row].update(&null_marker, 1);
                 } else {
+                    DCHECK(data != nullptr);
                     digests[row].update(&marker, 1);
                     digests[row].update(&data[row], sizeof(CppType));
                 }
@@ -884,13 +886,14 @@ struct EncodeColumnToDigest {
         } else {
             // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
             // Cast to string representation and encode
-            auto* col = down_cast<const ColumnType*>(data_col);
+            auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
             const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
                     digests[row].update(&marker, 1);
                 } else {
+                    DCHECK(col != nullptr);
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::String);
                     digests[row].update(&marker, 1);
                     // Convert the value to string and encode
@@ -909,7 +912,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
     // Process each column using template dispatch
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
         const ColumnPtr& col = columns[col_idx];
-        const Column* data_col = ColumnHelper::get_data_column(col.get());
+        const Column* data_col = col->only_null() ? nullptr : ColumnHelper::get_data_column(col.get());
         const NullColumn* null_col = ColumnHelper::get_null_column(col.get());
 
         // Get logical type from FunctionContext
