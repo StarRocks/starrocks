@@ -179,12 +179,13 @@ public class InformationSchemaBeFeTableTest {
         Statement stmt = connection.createStatement();
         try {
             // Test that common JVM threads exist
+            // Query all threads and check for common patterns
             Assertions.assertTrue(stmt.execute(
-                    "select thread_name from information_schema.fe_threads " +
-                            "where thread_name like '%main%' or thread_name like '%GC%' " +
-                            "or thread_name like '%RMI%' limit 10"));
+                    "select thread_name from information_schema.fe_threads limit 100"));
             boolean foundCommonThread = false;
+            int rowCount = 0;
             while (stmt.getResultSet().next()) {
+                rowCount++;
                 String threadName = stmt.getResultSet().getString("thread_name");
                 if (threadName != null && (
                         threadName.contains("main") ||
@@ -196,9 +197,9 @@ public class InformationSchemaBeFeTableTest {
                     break;
                 }
             }
-            // At least one common thread should exist
-            Assertions.assertTrue(foundCommonThread || stmt.getResultSet().getRow() > 0,
-                    "Should find some common JVM threads");
+            // At least one common thread should exist in a JVM
+            Assertions.assertTrue(foundCommonThread,
+                    "Should find some common JVM threads (main, GC, RMI, Finalizer, or Reference Handler). Found " + rowCount + " threads total.");
 
             // Test that we can query by FE_ADDRESS
             Assertions.assertTrue(stmt.execute(
