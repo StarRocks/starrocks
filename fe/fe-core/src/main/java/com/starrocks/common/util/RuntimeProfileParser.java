@@ -15,6 +15,7 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.common.profile.Counter;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
