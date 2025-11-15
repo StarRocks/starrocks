@@ -37,4 +37,6 @@ std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch);
 
 void update_logging();
 
+void update_verbose_logging();
+
 } // namespace starrocks
