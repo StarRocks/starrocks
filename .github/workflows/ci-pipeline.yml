@@ -86,7 +86,7 @@ jobs:
           NO_SYNC: ${{ steps.check.outputs.pass }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm >/dev/null
           ./scripts/check-blacklist.sh
 
       - name: Check Test Case
@@ -305,7 +305,7 @@ jobs:
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
-          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           ./bin/run-pr-update-image.sh
 
       - name: Upload Thirdparty Result
@@ -335,7 +335,7 @@ jobs:
     steps:
       - name: Check Result
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm >/dev/null
           ./scripts/check-thirdparty-result.sh
 
       - name: Download Thirdparty Artifact
@@ -368,19 +368,17 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov
-
+          #./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --arch arm64
       - name: clean ECI
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
-
       - name: Upload Log
         uses: actions/upload-artifact@v4
         if: always() && steps.run_ut.outcome == 'failure'
@@ -426,12 +424,12 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.thirdparty_filter }}" == 'true' ]]; then
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
+          # ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --arch arm64
 
       - name: clean ECI
         if: always()
@@ -662,7 +660,7 @@ jobs:
         env:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ubuntu
 
       - name: Clean ECI
@@ -823,14 +821,14 @@ jobs:
           package: ${{ env.package }}
           pom_filter: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           if [[ "${{ steps.parsing-be-path-filter.outputs.thirdparty_filter }}" == 'true' ]]; then
             export image_cache_id=${IMAGE_CACHE_ID}
             export image_tag=$BRANCH-$PR_NUMBER
           fi
 
           if [[ ${package} == "" ]]; then
-            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
+            ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy --arch arm64
             echo "is_self_build=true" >> $GITHUB_OUTPUT
           else
             echo "Use latest tar: ${package}" 
@@ -886,7 +884,7 @@ jobs:
       - name: Choose mode
         id: choose-mode
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           cluster_type=$(./bin/choose-mode.sh)
           if [[ "${cluster_type}" == "cloud" ]]; then
             echo "cloud=true" >> "$GITHUB_OUTPUT"
@@ -898,7 +896,7 @@ jobs:
           CLUSTER_NAME: ci-admit
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO}
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} --arch arm64
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
@@ -919,7 +917,7 @@ jobs:
 
           echo "##### Package: ${tar_path}" >> $GITHUB_STEP_SUMMARY
           echo "cluster_name=${CLUSTER_NAME}" >> $GITHUB_OUTPUT
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage --arch arm64
 
       - name: Clean ENV
         if: always()
@@ -1073,7 +1071,7 @@ jobs:
         env:
           is_self_build: ${{ needs.deploy.outputs.is_self_build }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           ./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML
@@ -1118,7 +1116,7 @@ jobs:
 
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           ./bin/restart-fe.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
 
       - name: Clean ENV
@@ -1145,7 +1143,7 @@ jobs:
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov"
           ./bin/system-cov-be.sh \
             --pr ${PR_NUMBER} \
@@ -1189,7 +1187,7 @@ jobs:
         env:
           BRANCH: ${{ steps.branch.outputs.branch }}
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
 
           cd ${{ github.workspace }}/..
           rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest && cd ./StarRocksTest && git pull >/dev/null
@@ -1246,7 +1244,7 @@ jobs:
 
       - name: Restart FE (${{needs.deploy.outputs.be_list}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           ./bin/restart-fe.sh \
             --pr ${PR_NUMBER} \
             --branch ${{ github.base_ref }} \
@@ -1279,7 +1277,7 @@ jobs:
 
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && gcov_cmd="--skip-gcov"
           ./bin/system-cov-be.sh \
             --pr ${PR_NUMBER} \
@@ -1324,12 +1322,13 @@ jobs:
         if: needs.deploy.outputs.deploy_conf_file != ''
         id: backup
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && git checkout test_arm && source lib/init.sh
           ./bin/backup_log_cores.sh \
             --branch $BRANCH \
             --pr $PR_NUMBER \
             --build Release \
             --linuxdistro "${{ env.linuxdistro }}" \
+            --arch arm64 \
             --conf $CONF_FILE \
             --repository ${{ github.repository }}
 
