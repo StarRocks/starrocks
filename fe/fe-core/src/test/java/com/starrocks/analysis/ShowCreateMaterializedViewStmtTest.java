@@ -109,8 +109,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"foreign_key_constraints\" = \"default_catalog.test.tbl1(k1) REFERENCES default_catalog.test.tbl2(k1)\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `tbl1`.`k1`, `tbl2`.`k2`\n" +
-                "FROM `test`.`tbl1` INNER JOIN `test`.`tbl2` ON `tbl1`.`k1` = `tbl2`.`k1`;", createTableStmt.get(0));
+                "AS select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1;", createTableStmt.get(0));
     }
 
     @Test
@@ -137,8 +136,7 @@ public class ShowCreateMaterializedViewStmtTest {
                         "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
-                        "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
+                        "AS select t2.c1, t1.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2;",
                 createTableStmt.get(0));
     }
 
@@ -165,8 +163,7 @@ public class ShowCreateMaterializedViewStmtTest {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `lineitem`.`l_orderkey`, `lineitem`.`l_partkey`, `lineitem`.`l_shipdate`\n" +
-                        "FROM `hive0`.`tpch`.`lineitem`;");
+                        "AS select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;");
         ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
