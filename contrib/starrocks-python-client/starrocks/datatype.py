@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import date
+from datetime import date, datetime
 from inspect import isclass
+import re
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import sqlalchemy.dialects.mysql.types as mysql_types
@@ -83,6 +84,21 @@ class VARBINARY(sqltypes.VARBINARY):
 class DATETIME(mysql_types.DATETIME):
     __visit_name__ = "DATETIME"
 
+    _reg = re.compile(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)\.?(\d+)?")
+
+    def result_processor(self, dialect: Dialect, coltype: object):
+        def process(value):
+            if isinstance(value, str):
+                m = self._reg.match(value)
+                if not m:
+                    raise ValueError(
+                        "could not parse %r as a datetime value" % (value,)
+                    )
+                return datetime(*[int(x or 0) for x in m.groups()])
+            else:
+                return value
+
+        return process
 
 class DATE(sqltypes.DATE):
     __visit_name__ = "DATE"
@@ -90,6 +106,20 @@ class DATE(sqltypes.DATE):
     def literal_processor(self, dialect: Dialect) -> Callable[[date], str]:
         def process(value: date) -> str:
             return f"TO_DATE('{value}')"
+
+        return process
+
+    _reg = re.compile(r"(\d+)-(\d+)-(\d+)")
+
+    def result_processor(self, dialect: Dialect, coltype: object):
+        def process(value):
+            if isinstance(value, str):
+                m = self._reg.match(value)
+                if not m:
+                    raise ValueError("could not parse %r as a date value" % (value,))
+                return date(*[int(x or 0) for x in m.groups()])
+            else:
+                return value
 
         return process
 

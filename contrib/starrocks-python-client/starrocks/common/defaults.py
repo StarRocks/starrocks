@@ -78,8 +78,8 @@ class ReflectionTableDefaults:
         return ReflectedTableKeyInfo(type=cls.key(), columns=None)
 
     @classmethod
-    def table_comment(cls) -> str:
-        return ""
+    def table_comment(cls) -> dict:
+        return {'text': None}
 
     @classmethod
     def partition_by(cls) -> Optional[str]:
