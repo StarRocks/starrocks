@@ -64,6 +64,7 @@ from lib import data_delete_lib
 from lib import data_insert_lib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
+from lib.mysql_prepared_stmt_lib import MysqlPreparedStmtLib
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
@@ -156,6 +157,7 @@ class StarrocksSQLApiLib(object):
         self.db = list()
         self.resource = list()
         self.mysql_lib = MysqlLib()
+        self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
         self.hive_lib = HiveLib()
@@ -589,6 +591,7 @@ class StarrocksSQLApiLib(object):
             "password": self.mysql_password,
         }
         self.mysql_lib.connect(mysql_dict)
+        self.mysql_prepared_stmt_lib.connect(mysql_dict)
 
     def create_starrocks_conn_pool(self):
         self.connection_pool = PooledDB(
@@ -619,6 +622,7 @@ class StarrocksSQLApiLib(object):
 
     def close_starrocks(self):
         self.mysql_lib.close()
+        self.mysql_prepared_stmt_lib.close()
 
     def close_trino(self):
         self.trino_lib.close()
@@ -3089,6 +3093,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             cursor.close()
             conn.close()
 
+    def execute_prepared_sql(self, sql, params):
+        return self.mysql_prepared_stmt_lib.execute_prepared(sql, params)
+
+    def execute_with_prepared_connection(self, sql):
+        return self.mysql_prepared_stmt_lib.execute(sql)
+
     def assert_trace_times_contains(self, query, *expects):
         """
         assert trace times result contains expect string
@@ -3323,82 +3333,88 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         # print(f"Last query id: {query_id}")
         return query_id
 
-    def get_query_detail_by_api(self, timestamp_ms, query_id):
-        """
-        Get query detail information through API
-        """
-        import json
-        import subprocess
+    def get_query_details(self):
+        url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time=0"
+        result = self.get_http_request(url)
+        query_details = json.loads(result)
+        return query_details
 
-        # Build API URL and curl command
-        api_url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time={timestamp_ms}"
-        # print(f"API URL: {api_url}")
-        # print(f"Looking for query_id: {query_id}")
+    def _find_query_detail(self, filter_func):
+        query_details = self.get_query_details()
 
-        try:
-            # Use curl command to send HTTP request
-            cmd = f"curl -s --location-trusted -u {self.mysql_user}:{self.mysql_password} '{api_url}'"
-            # print(f"Curl command: {cmd}")
+        # Find matching query_id, prioritize records with FINISHED state
+        finished_detail = None
+        unfinished_detail = None
 
-            result = subprocess.run(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8", timeout=30, shell=True
-            )
+        for detail in query_details:
+            if filter_func(detail):
+                state = detail.get("state", "")
+                if state == "FINISHED":
+                    finished_detail = detail
+                else:
+                    unfinished_detail = detail
 
-            if result.returncode != 0:
-                # print(
-                #     f"Curl command failed with return code {result.returncode}")
-                # print(f"Stderr: {result.stderr}")
-                return None
-
-            if not result.stdout.strip():
-                # print("Empty response from API")
-                return None
-
-            # print(f"Raw API response: {result.stdout[:500]}...")  # Only show first 500 characters
-
-            query_details = json.loads(result.stdout)
-            # print(f"Retrieved {len(query_details)} query details")
-            # print(
-            #     f"Available query_ids: {[detail.get('queryId') for detail in query_details]}")
-
-            # Find matching query_id, prioritize records with FINISHED state
-            finished_detail = None
-            other_detail = None
-
-            for detail in query_details:
-                if detail.get("queryId") == query_id:
-                    state = detail.get("state", "")
-                    # print(
-                    #     f"Found query detail for query_id: {query_id}, state: {state}")
-                    if state == "FINISHED":
-                        finished_detail = detail
-                    else:
-                        other_detail = detail
-
-            # Return FINISHED state record first, otherwise return other state record
-            if finished_detail:
-                # print(f"Using FINISHED query detail for query_id: {query_id}")
-                return finished_detail
-            elif other_detail:
-                # print(
-                #     f"Using non-FINISHED query detail for query_id: {query_id}, state: {other_detail.get('state')}")
-                return other_detail
-            else:
-                # print(f"No query detail found for query_id: {query_id}")
-                # print(
-                #     f"Available query_ids: {[detail.get('queryId') for detail in query_details]}")
-                return None
-
-        except json.JSONDecodeError as e:
-            # print(f"Failed to parse JSON response: {e}")
-            # print(
-            #     f"Response: {result.stdout if 'result' in locals() else 'No response'}")
+        # Prioritize records with FINISHED state.
+        if finished_detail:
+            return finished_detail
+        elif unfinished_detail:
+            return unfinished_detail
+        else:
             return None
-        except Exception as e:
-            # print(f"Failed to get query detail: {e}")
-            # print(f"API URL: {api_url}")
-            # print(f"Query ID: {query_id}")
-            return None
+
+    def _wait_for_query_detail(self, filter_func, raw_result=False):
+        timeout_sec = 5
+        for retry_count in range(timeout_sec):
+            query_detail = self._find_query_detail(filter_func)
+            if query_detail is None:
+                if retry_count + 1 < timeout_sec:  # Not the last retry
+                    time.sleep(1)
+                continue
+
+            if raw_result:
+                return query_detail
+
+            # To ensure that the output string is in a JSON-compatible format that can be processed by the
+            # function `parse_json()` in StarRocks, escaping is required.
+            def escaped_str(s):
+                return s.replace('\n', r'\n').replace('"', r'\"')
+
+            escaped_detail = {}
+            for key, value in query_detail.items():
+                key = escaped_str(key)
+                if type(value) is str:
+                    value = escaped_str(value)
+                escaped_detail[key] = value
+            escaped_detail_str = json.dumps(escaped_detail)
+            return escaped_detail_str
+
+        tools.assert_true(False, "Failed to get query detail after 3 retries")
+
+    def wait_for_query_detail(self, query_id, raw_result=False):
+        return self._wait_for_query_detail(lambda detail: detail.get("queryId") == query_id, raw_result)
+
+    def wait_for_prepared_stmt_detail(self, prepared_stmt_id):
+        def is_prepared_stmt_detail(detail):
+            return 'preparedStmtId' in detail and detail['preparedStmtId'] == prepared_stmt_id \
+                and 'command' in detail and detail['command'] == 'MySQL.COM_STMT_PREPARE'
+
+        return self._wait_for_query_detail(is_prepared_stmt_detail)
+
+    def assert_prepared_stmt_details(self):
+        query_details = self.get_query_details()
+        for detail in query_details:
+            if 'command' not in detail or detail['command'] != 'MySQL.COM_STMT_PREPARE':
+                continue
+            query_id = detail['queryId']
+
+            if 'profile' not in detail:
+                continue
+            profile_query_id_res = re.match(r'[\w\W]*Query ID: (.*)[\w\W]*', detail['profile'])
+            if not profile_query_id_res:
+                continue
+            profile_query_id = profile_query_id_res.group(1)
+
+            tools.assert_equals(query_id, profile_query_id)
 
     def assert_query_detail_field(self, query_detail, field_name, expected_value=None):
         """
@@ -3438,8 +3454,6 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         import time
 
         # 1. Get timestamp
-        timestamp_ms = self.get_timestamp_ms()
-        # print(f"Test started with timestamp: {timestamp_ms}")
 
         # 2. Execute SQL statement
         # print(f"Executing SQL: {sql}")
@@ -3459,19 +3473,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         time.sleep(1)
 
         # 5. Get query detail, retry up to 3 times
-        query_detail = None
-        for retry_count in range(3):
-            query_detail = self.get_query_detail_by_api(timestamp_ms, query_id)
-            if query_detail is not None:
-                break
-            # print(f"Failed to get query detail, retry {retry_count + 1}/3")
-            if retry_count < 2:  # Not the last retry
-                time.sleep(1)
-
-        if query_detail is None:
-            # print("Failed to get query detail after 3 retries")
-            tools.assert_true(
-                False, "Failed to get query detail after 3 retries")
+        query_detail = self.wait_for_query_detail(query_id, raw_result=True)
 
         # 6. Validate each field and assert
         # print("=== Query Detail API Test Results ===")

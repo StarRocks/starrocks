@@ -320,7 +320,7 @@ public class StmtExecutor {
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
-    private PrepareStmtContext prepareStmtContext;
+    private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
 
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
@@ -525,6 +525,26 @@ public class StmtExecutor {
 
     public StatementBase getParsedStmt() {
         return parsedStmt;
+    }
+
+    public String getPreparedStmtId() {
+        // For EXECUTE, either `parsedStmt` is an `ExecuteStmt`, or `prepareStmtContext` has already been set.
+        // Initially, `parsedStmt` is an `ExecuteStmt`. After it matches the corresponding `PrepareStmt`, `parsedStmt` is replaced
+        // with a `QueryStatement`, while `prepareStmtContext` stores the associated `PrepareStmt` information.
+        if (parsedStmt != null && parsedStmt instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
+            return executeStmt.getStmtName();
+        }
+        if (prepareStmtContext != null) {
+            return prepareStmtContext.getStmt().getName();
+        }
+
+        // For PREPARE.
+        if (parsedStmt != null && parsedStmt instanceof PrepareStmt) {
+            PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
+            return prepareStmt.getName();
+        }
+        return null;
     }
 
     public int getExecTimeout() {
@@ -3192,7 +3212,9 @@ public class StmtExecutor {
                 context.getQualifiedUser(),
                 Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
                 context.getCurrentWarehouseName(),
-                context.getCurrentCatalog());
+                context.getCurrentCatalog(),
+                context.getCommandStr(),
+                getPreparedStmtId());
         // Set query source from context
         queryDetail.setQuerySource(context.getQuerySource());
         context.setQueryDetail(queryDetail);

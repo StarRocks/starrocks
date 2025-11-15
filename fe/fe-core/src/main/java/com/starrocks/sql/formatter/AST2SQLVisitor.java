@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.type.Type;
@@ -668,5 +669,13 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         output.append(options.indent()).append("END");
         
         return output.toString();
+    }
+
+    @Override
+    public String visitParameterExpr(Parameter node, Void context) {
+        if (node.getExpr() == null) {
+            return super.visitParameterExpr(node, context);
+        }
+        return visit(node.getExpr(), context);
     }
 }
