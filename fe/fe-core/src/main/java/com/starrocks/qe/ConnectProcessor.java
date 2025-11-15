@@ -828,8 +828,15 @@ public class ConnectProcessor {
         channel.sendAndFlush(packet);
 
         // only change lastQueryId when current command is COM_QUERY
+        // but exclude AnalyzeProfileStmt to allow repeated execution with the same lastQueryId
         if (ctx.getCommand() == MysqlCommand.COM_QUERY) {
-            ctx.setLastQueryId(ctx.queryId);
+            boolean shouldUpdateLastQueryId = true;
+            if (executor != null && executor.getParsedStmt() instanceof com.starrocks.sql.ast.AnalyzeProfileStmt) {
+                shouldUpdateLastQueryId = false;
+            }
+            if (shouldUpdateLastQueryId) {
+                ctx.setLastQueryId(ctx.queryId);
+            }
             ctx.setQueryId(null);
         }
     }

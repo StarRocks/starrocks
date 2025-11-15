@@ -1690,8 +1690,25 @@ public class StmtExecutor {
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
+
+        // Handle last_query_id() function
+        // Note: We need to get lastQueryId before execution, because the current query
+        // will update it after completion
+        if ("last_query_id()".equals(queryId)) {
+            UUID lastQueryId = context.getLastQueryId();
+            if (lastQueryId == null) {
+                throw new StarRocksException("No previous query found. last_query_id() requires a previous query execution.");
+            }
+            // ProfileManager uses executionId as key, which is converted from queryId
+            // Since DebugUtil.printId(toTUniqueId(uuid)) equals uuid.toString(), we can use it directly
+            queryId = lastQueryId.toString();
+        }
+
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
-        Preconditions.checkNotNull(profileElement, "query not exists");
+        if (profileElement == null) {
+            throw new StarRocksException("Query profile not found for query_id: " + queryId +
+                ". The query may not have generated a profile, or the profile has been evicted from memory.");
+        }
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
