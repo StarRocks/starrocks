@@ -133,7 +133,7 @@ ENDFUNCTION()
 
 include(cmake_modules/ThirdParty.cmake)
 
-include(cmake_modules/ConfPreBuildModule.cmake)
+include(cmake_modules/PreBuildModule.cmake)
 
 # LLVM
 include(cmake_modules/FindLLVM.cmake)
