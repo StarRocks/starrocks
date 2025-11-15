@@ -786,25 +786,25 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         assertContains(plan, "day-->[1.0, 31.0, 0.0, 1.0, 31.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT hour(P_PARTKEY) AS hour FROM part GROUP BY hour ORDER BY hour DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, " hour-->[0.0, 23.0, 0.0, 1.0, 24.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT minute(P_PARTKEY) AS minute FROM part GROUP BY minute ORDER BY minute DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "minute-->[0.0, 59.0, 0.0, 1.0, 60.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT second(P_PARTKEY) AS second FROM part GROUP BY second ORDER BY second DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "* second-->[0.0, 59.0, 0.0, 1.0, 60.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
     }
 
     @Test
