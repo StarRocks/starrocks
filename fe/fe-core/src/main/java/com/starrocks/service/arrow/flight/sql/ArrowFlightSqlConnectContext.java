@@ -45,6 +45,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.ReentrantLock;
 
 // one connection will create one ArrowFlightSqlConnectContext
 public class ArrowFlightSqlConnectContext extends ConnectContext {
@@ -55,6 +56,8 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     private StatementBase statement;
 
     private String query;
+
+    private final ReentrantLock queryLock = new ReentrantLock();
 
     private CompletableFuture<Coordinator> coordinatorFuture;
 
@@ -85,15 +88,35 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         this.returnResultFromFE = true;
     }
 
-    public void reset(String query) {
-        removeAllResults();
-        statement = null;
-        coordinatorFuture.complete(null);
-        coordinatorFuture = new CompletableFuture<>();
-        returnResultFromFE = true;
-        this.query = query;
-        this.setQueryId(UUIDUtil.genUUID());
-        this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
+    public void initWithStatement(String query) {
+        queryLock.lock(); 
+        try {
+            if (!this.query.isEmpty()) {
+                throw new IllegalStateException(
+                        "Query already in progress on this connection"
+                );
+            }
+            this.query = query;
+            this.setQueryId(UUIDUtil.genUUID());
+            this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
+        } finally {
+            queryLock.unlock();
+        }
+    }
+
+    public void reset() {
+        queryLock.lock(); 
+        try {
+            this.query = ""; 
+            this.statement = null; 
+
+            coordinatorFuture.complete(null);
+            coordinatorFuture = new CompletableFuture<>();
+            returnResultFromFE = true; 
+            removeAllResults();
+        } finally {
+            queryLock.unlock();
+        }
     }
 
     public StatementBase getStatement() {
@@ -123,7 +146,12 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     }
 
     public String getQuery() {
-        return query;
+        queryLock.lock(); 
+        try {
+            return query;
+        } finally {
+            queryLock.unlock();
+        }
     }
 
     public boolean returnFromFE() {
@@ -153,6 +181,7 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     public void cancelQuery() {
         if (executor != null) {
             executor.cancel("Arrow Flight SQL client disconnected");
+            reset();
         }
     }
 
