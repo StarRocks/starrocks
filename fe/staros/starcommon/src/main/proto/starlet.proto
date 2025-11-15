@@ -1,0 +1,92 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "star_status.proto";
+import "file_store.proto";
+import "shard.proto";
+import "worker.proto";
+
+package staros;
+
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+message RemoveShardRequest {
+    string service_id = 1;
+    uint64 worker_id = 2;
+    repeated uint64 shard_ids = 3;
+}
+
+message RemoveShardResponse {
+    StarStatus status = 1;
+}
+
+message AddShardInfo {
+    uint64 group_id = 1;
+    uint64 shard_id = 2;
+    FilePathInfo file_path_info = 3;
+    FileCacheInfo file_cache_info = 4;
+    map<string, string> shard_properties = 5;
+    int32 hash_code = 6;
+    repeated ReplicaInfoLite replica_info = 7;
+}
+
+message AddShardRequest {
+    string service_id = 1;
+    uint64 worker_id = 2;
+    repeated AddShardInfo shard_info = 3;
+}
+
+message AddShardResponse {
+    StarStatus status = 1;
+}
+
+message WorkerGroupProperty {
+    ReplicationType replication_type = 1;
+    WarmupLevel warmup_level = 2;
+}
+
+message StarletHeartbeatRequest {
+    string star_mgr_leader = 1;
+    string service_id = 2;
+    uint64 worker_group_id = 3;
+    uint64 worker_id = 4;
+    WorkerGroupProperty worker_group_property = 5;
+}
+
+message StarletHeartbeatResponse {
+    StarStatus status = 1;
+}
+
+message WriteCacheRequest {
+    string service_id = 1;
+    uint64 shard_id = 2;
+    bytes cache_key = 3;
+    uint64 offset = 4;
+    bytes data = 5;
+    bool eof = 6; // if set to true, it means this is the last piece of data for this cache_key
+}
+
+message WriteCacheResponse {
+    StarStatus status = 1;
+}
+
+service Starlet {
+    rpc AddShard(AddShardRequest) returns (AddShardResponse) {}
+    rpc RemoveShard(RemoveShardRequest) returns (RemoveShardResponse) {}
+    rpc StarletHeartbeat(StarletHeartbeatRequest) returns (StarletHeartbeatResponse) {}
+    rpc WriteCache(WriteCacheRequest) returns (WriteCacheResponse) {}
+}

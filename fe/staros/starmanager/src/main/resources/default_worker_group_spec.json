@@ -1,0 +1,62 @@
+{
+  "x1": {
+    "num_of_nodes": "1",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x2": {
+    "num_of_nodes": "2",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x3": {
+    "num_of_nodes": "3",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x4": {
+    "num_of_nodes": "4",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x6": {
+    "num_of_nodes": "6",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x8": {
+    "num_of_nodes": "8",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x12": {
+    "num_of_nodes": "12",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x16": {
+    "num_of_nodes": "16",
+    "cpus": "4",
+    "memories": "16G",
+    "image": ""
+  },
+  "x32": {
+    "num_of_nodes": "16",
+    "cpus": "8",
+    "memories": "32G",
+    "image": ""
+  },
+  "x64": {
+    "num_of_nodes": "32",
+    "cpus": "8",
+    "memories": "32G",
+    "image": ""
+  }
+}
