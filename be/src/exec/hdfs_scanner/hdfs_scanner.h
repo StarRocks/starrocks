@@ -200,6 +200,8 @@ struct HdfsScanProfile {
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
     const THdfsScanRange* scan_range = nullptr;
+    // only used in global late materialization
+    int32_t scan_range_id = -1;
 
     bool enable_split_tasks = false;
     const HdfsSplitContext* split_context = nullptr;
@@ -323,6 +325,7 @@ struct HdfsScannerContext {
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
+    int32_t scan_range_id = -1;
     bool enable_split_tasks = false;
     const HdfsSplitContext* split_context = nullptr;
     std::vector<HdfsSplitContextPtr> split_tasks;
@@ -410,9 +413,9 @@ struct HdfsScannerContext {
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
-    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
-
+    // for iceberg reserved fields
     std::vector<SlotDescriptor*> reserved_field_slots;
+    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;

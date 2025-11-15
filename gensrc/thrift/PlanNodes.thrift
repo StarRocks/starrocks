@@ -85,7 +85,9 @@ enum TPlanNodeType {
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
   CAPTURE_VERSION_NODE,
-  RAW_VALUES_NODE
+  RAW_VALUES_NODE,
+  FETCH_NODE,
+  LOOKUP_NODE,
 }
 
 // phases of an execution node
@@ -1374,6 +1376,17 @@ struct TPlanNodeCommon {
   // it is evaluated by ScanNode's ChunkSource in io threads.
   1: optional map<Types.TSlotId, Exprs.TExpr> heavy_exprs
 }
+
+struct TFetchNode {
+  1: optional i32 target_node_id
+  2: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
+  3: optional Descriptors.TNodesInfo nodes_info
+}
+
+struct TLookUpNode {
+  1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
+}
+
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -1451,7 +1464,9 @@ struct TPlanNode {
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
 
-  81: optional TSelectNode select_node;
+  81: optional TSelectNode select_node; 
+  82: optional TFetchNode fetch_node;
+  83: optional TLookUpNode look_up_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
