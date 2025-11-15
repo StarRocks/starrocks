@@ -395,6 +395,7 @@ inline void encode_float64(double v, std::string* dest) {
 
 struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     bool is_last_field = false;
+    bool write_null_markers = true; // Control whether to write NULL markers
     std::vector<std::string>* buffs;
     const ImmBuffer<uint8_t>* null_mask = nullptr; // Track null rows to skip processing
 
@@ -404,11 +405,14 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
     Status do_visit(const NullableColumn& column) {
         const auto nulls = column.immutable_null_column_data();
 
-        for (size_t i = 0; i < column.size(); i++) {
-            if (nulls[i]) {
-                (*buffs)[i].append("\0", 1);
-            } else {
-                (*buffs)[i].append("\1", 1);
+        // Write NULL markers only if requested
+        if (write_null_markers) {
+            for (size_t i = 0; i < column.size(); i++) {
+                if (nulls[i]) {
+                    (*buffs)[i].append("\0", 1);
+                } else {
+                    (*buffs)[i].append("\1", 1);
+                }
             }
         }
 
@@ -524,6 +528,7 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     std::vector<std::string> buffs(num_rows);
     detail::EncoderVisitor visitor;
     visitor.buffs = &buffs;
+    visitor.write_null_markers = true; // Enable NULL markers for sort key encoding
     for (int j = 0; j < num_args; ++j) {
         // Insert NOT_NULL markers for all rows.
         // This is necessary because the function may receive columns whose nullability
@@ -551,6 +556,127 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
         result.append(std::move(buffs[i]));
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// Usage: zorder_encode(col1, col2, ...)
+// zorder_encode builds a composite key for each row by interleaving the bits of the input columns' values (Morton order).
+// This encoding preserves spatial locality for multi-dimensional data, which is useful for indexing and sorting.
+// The function works as follows:
+// - Each input column is encoded using the same logic as encode_sort_key to get order-preserving byte sequences.
+// - For each row, the bits from all encoded sequences are interleaved in z-order (Morton order).
+// - The resulting byte sequence forms the final Z-order encoded key for that row.
+// - The output is a VARBINARY column, where each entry is the Z-order encoded key for the corresponding row.
+StatusOr<ColumnPtr> UtilityFunctions::encode_zorder_key(FunctionContext* context, const Columns& columns) {
+    int num_args = columns.size();
+    RETURN_IF(num_args < 1, Status::InvalidArgument("encode_zorder_key requires at least 1 argument"));
+
+    size_t num_rows = columns[0]->size();
+    for (int i = 1; i < num_args; ++i) {
+        RETURN_IF(columns[i]->size() != num_rows,
+                  Status::InvalidArgument("all arguments must have the same number of rows"));
+    }
+
+    // Use EncoderVisitor to get encoded sequences for each dimension (without NULL markers)
+    std::vector<std::vector<std::string>> dim_encodings;
+    dim_encodings.reserve(num_args);
+
+    // Collect NULL flags for each dimension
+    std::vector<std::vector<uint8_t>> null_flags;
+    null_flags.reserve(num_args);
+
+    for (int j = 0; j < num_args; ++j) {
+        std::vector<std::string> buffs(num_rows);
+        std::vector<uint8_t> nulls(num_rows, 0);
+
+        detail::EncoderVisitor visitor;
+        visitor.buffs = &buffs;
+        visitor.write_null_markers = false; // Disable NULL markers for z-order encoding
+        visitor.is_last_field = true;
+        RETURN_IF_ERROR(columns[j]->accept(&visitor));
+
+        // Collect NULL flags for this dimension
+        if (columns[j]->is_nullable()) {
+            auto nullable_col = down_cast<const NullableColumn*>(columns[j].get());
+            auto& null_data = nullable_col->immutable_null_column_data();
+            for (size_t i = 0; i < num_rows; ++i) {
+                nulls[i] = null_data[i] ? 1 : 0;
+            }
+        } else {
+            // Non-nullable column, all values are non-null
+            std::fill(nulls.begin(), nulls.end(), 0);
+        }
+
+        dim_encodings.emplace_back(std::move(buffs));
+        null_flags.emplace_back(std::move(nulls));
+    }
+
+    // Calculate total bits needed for z-order interleaving
+    // For z-order encoding, we need to interleave bits from all dimensions
+    // Each dimension contributes up to its maximum bit width
+    // For mixed data types, we use the maximum bit width (64 bits) for all dimensions
+    const size_t max_bit_width = 64; // Maximum bit width for any data type
+    const size_t num_dims = dim_encodings.size();
+    const size_t total_bits = max_bit_width * num_dims;
+    const size_t interleaved_bytes = (total_bits + 7) / 8;
+    const size_t null_markers_size = num_dims;
+    const size_t total_bytes = null_markers_size + interleaved_bytes;
+
+    ColumnBuilder<TYPE_VARBINARY> builder(num_rows);
+
+    // Pre-compute bit position mappings for better cache locality
+    std::vector<std::pair<size_t, int>> bit_positions;
+    bit_positions.reserve(total_bits);
+    for (size_t bit_idx = 0; bit_idx < max_bit_width; ++bit_idx) {
+        for (size_t dim = 0; dim < num_dims; ++dim) {
+            size_t ob = bit_idx * num_dims + dim;
+            size_t byte = ob >> 3;
+            int bit_in_byte = 7 - (ob & 7);
+            bit_positions.emplace_back(byte, bit_in_byte);
+        }
+    }
+
+    std::string zorder_buffer;
+    zorder_buffer.reserve(total_bytes);
+    for (size_t i = 0; i < num_rows; ++i) {
+        std::fill(zorder_buffer.begin(), zorder_buffer.end(), 0);
+
+        // Prepend NULL markers for each dimension (same as original zorder_encode)
+        size_t marker_offset = 0;
+        for (size_t dim = 0; dim < null_flags.size(); ++dim) {
+            zorder_buffer[marker_offset++] = null_flags[dim][i] ? 0 : 1;
+        }
+
+        // Optimized bit interleaving using pre-computed positions
+        size_t bit_pos_idx = 0;
+        bool has_data = false;
+
+        for (size_t bit_idx = 0; bit_idx < max_bit_width; ++bit_idx) {
+            for (size_t dim = 0; dim < dim_encodings.size(); ++dim) {
+                const auto& encoding = dim_encodings[dim][i];
+                size_t byte_pos = bit_idx / 8;
+                size_t bit_in_byte = 7 - (bit_idx % 8);
+
+                if (byte_pos < encoding.size()) {
+                    uint8_t bit = (encoding[byte_pos] >> bit_in_byte) & 1;
+                    if (bit) {
+                        const auto& pos = bit_positions[bit_pos_idx];
+                        zorder_buffer[marker_offset + pos.first] |= (1 << pos.second);
+                        has_data = true;
+                    }
+                }
+                bit_pos_idx++;
+            }
+
+            // Early exit: if we've processed all significant bits and found no data, stop
+            if (bit_idx > 8 && !has_data) {
+                break;
+            }
+        }
+
+        builder.append(Slice(zorder_buffer.data(), zorder_buffer.size()));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks
