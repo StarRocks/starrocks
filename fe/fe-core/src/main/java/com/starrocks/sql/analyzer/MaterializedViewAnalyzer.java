@@ -2165,14 +2165,14 @@ public class MaterializedViewAnalyzer {
         if (retentionCondtiionExpr == null) {
             return Optional.empty();
         }
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
-                refBaseTable.getBaseSchema().stream()
-                        .map(col -> new Field(col.getName(), col.getType(), null, null))
-                        .collect(Collectors.toList())));
-        ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
+        List<Field> fields = new ArrayList<>();
+        mv.getBaseSchema().forEach(col ->
+                fields.add(new Field(col.getName(), col.getType(), null, null)));
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
         Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
         retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
                 scope, connectContext);
+        ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
         return Optional.of(retentionCondtiionExpr);
     }
 
@@ -2185,7 +2185,7 @@ public class MaterializedViewAnalyzer {
         }
         Expr retentionCondtiionExpr = exprOpt.get();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        List<ColumnRefOperator> columnRefOperators = refBaseTable.getBaseSchema()
+        List<ColumnRefOperator> columnRefOperators = mv.getBaseSchema()
                 .stream()
                 .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
                 .collect(Collectors.toList());
