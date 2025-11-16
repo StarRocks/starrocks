@@ -98,16 +98,16 @@ public class CredentialUtilTest {
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY, "AKIAIOSFODNN7EXAMPLE");
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY));
-        Assert.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY));
+        Assertions.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY));
+        Assertions.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY));
         
         // Test dot format
         properties.clear();
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT, "AKIAIOSFODNN7EXAMPLE");
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         CredentialUtil.maskCredential(properties);
-        Assert.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT));
-        Assert.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT));
+        Assertions.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT));
+        Assertions.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT));
     }
 
     @Test
