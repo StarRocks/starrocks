@@ -12,7 +12,7 @@ After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5
 
 ## 4.0.1
 
-Release Date: November xx, 2025
+Release Date: November 17, 2025
 
 ### Improvements
 
