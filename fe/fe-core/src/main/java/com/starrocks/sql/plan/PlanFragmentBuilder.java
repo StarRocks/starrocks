@@ -571,28 +571,9 @@ public class PlanFragmentBuilder {
             // ------------------------------------------------------------------------------------
             // Get predicate use columns
             // ------------------------------------------------------------------------------------
-<<<<<<< HEAD
-            Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
-            Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
-            for (ScalarOperator predicate : predicates) {
-                ColumnRefSet usedColumns = predicate.getUsedColumns();
-                boolean isPushdown =
-                        DecodeVisitor.isSimpleStrictPredicate(predicate, sessionVariable.isEnablePushdownOrPredicate())
-                                && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
-                if (isPushdown) {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        pushdownPredUsedColumnIds.add(cid);
-                    }
-                } else {
-                    for (int cid : usedColumns.getColumnIds()) {
-                        nonPushdownPredUsedColumnIds.add(cid);
-                    }
-                }
-=======
             ColumnRefSet predicateColumns = new ColumnRefSet();
             for (ScalarOperator predicate : predicates) {
                 predicateColumns.union(predicate.getUsedColumns());
->>>>>>> df099e035a ([Enhancement] compute unused column by be (#60462))
             }
 
 
