@@ -29,6 +29,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -132,10 +133,23 @@ public class OlapPartitionTraits extends DefaultTraits {
      */
     public static boolean isBaseTableChanged(Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
-        return mvRefreshedPartitionInfo.getId() != partition.getId()
-                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
-                > mvRefreshedPartitionInfo.getLastRefreshTime();
+        if (mvRefreshedPartitionInfo.getId() != partition.getId()) {
+            return true;
+        }
+        long lastRefreshTime = mvRefreshedPartitionInfo.getLastRefreshTime();
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        if (subPartitions != null && !subPartitions.isEmpty()) {
+            for (PhysicalPartition subPartition : subPartitions) {
+                if (subPartition.getVisibleVersionTime() > lastRefreshTime) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            PhysicalPartition defaultPartition = partition.getDefaultPhysicalPartition();
+            return defaultPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                    || defaultPartition.getVisibleVersionTime() > lastRefreshTime;
+        }
     }
 
     public List<Column> getPartitionColumns() {
