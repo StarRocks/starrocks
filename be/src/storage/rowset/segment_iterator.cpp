@@ -187,8 +187,9 @@ private:
         // for inverted index.
         std::unordered_set<size_t> _prune_cols;
         bool _prune_column_after_index_filter = false;
-
         bool _enable_predicate_col_late_materialize = false;
+        bool _only_output_one_predicate_col_with_filter_push_down = false;
+        bool _support_push_down_predicate = false;
         std::vector<ColumnId> _predicate_order;
         ColumnPredicateMap _column_predicate_map;
         bool _is_filtered = false;
@@ -296,8 +297,6 @@ private:
 
     void _init_column_predicates();
 
-    void _init_compound_and_predicates_for_predicate_col_late_material();
-
     StatusOr<size_t> trigger_sample_if_necessary(vector<rowid_t>* rowid);
 
     // Sample and measure all predicate columns to update selectivity and read time
@@ -385,6 +384,8 @@ private:
     StatusOr<size_t> _predicate_evaluate_without_late_materialize(vector<rowid_t>* rowid);
 
     StatusOr<size_t> _predicate_evaluate_late_materialize(vector<rowid_t>* rowid);
+
+    void _build_context_for_predicate(ScanContext* ctx);
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -744,9 +745,8 @@ Status SegmentIterator::_init() {
     // rewrite stage
     // Rewriting predicates using segment dictionary codes
     RETURN_IF_ERROR(_rewrite_predicates());
-    RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
-    _init_compound_and_predicates_for_predicate_col_late_material();
+    RETURN_IF_ERROR(_init_context());
 
     // reverse scan_range
     if (!_opts.asc_hint) {
@@ -1185,103 +1185,11 @@ void SegmentIterator::_init_column_predicates() {
     _runtime_filter_preds = _opts.runtime_filter_preds;
 }
 
-void SegmentIterator::_init_compound_and_predicates_for_predicate_col_late_material() {
-    // don't support or predicate late materialize
-    if (_non_expr_pred_tree.has_or_predicate() || _expr_pred_tree.has_or_predicate()) {
-        _enable_predicate_col_late_materialize = false;
-    }
-
-    if (!_context->_late_materialize && !(_context->_predicate_order.size() == 1 && _schema.num_fields() == 1)) {
-        _enable_predicate_col_late_materialize = false;
-    }
-
-    _context->_enable_predicate_col_late_materialize = _enable_predicate_col_late_materialize;
-    if (!_enable_predicate_col_late_materialize) return;
-
-    const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
-    _context->_column_predicate_map.reserve(column_predicate_map.size());
-    _context->_predicate_order.reserve(column_predicate_map.size());
-
-    for (const auto& pair : column_predicate_map) {
-        _context->_predicate_order.emplace_back(pair.first);
-        _context->_column_predicate_map.emplace(pair.first, pair.second);
-    }
-
-    // if column predicate is always true for string column or already used by bitmap index
-    // it will be removed from predicate tree
-    // but we still need to read it
-    // so we add the columnId into column_predicate_map with empty ColumnPredicates, so it will only read without filter
-    if (_context->_predicate_order.size() + 1 < _context->_column_iterators.size()) {
-        DCHECK(_context->_column_ids_to_column_iterators.size() + 1 == _context->_column_iterators.size());
-        for (auto pair : _context->_column_ids_to_column_iterators) {
-            if (!_context->_column_predicate_map.contains(pair.first)) {
-                _context->_predicate_order.emplace_back(pair.first);
-                _context->_column_predicate_map.emplace(pair.first, std::vector<const ColumnPredicate*>());
-            }
-        }
-    }
-
-    // Build column-specific RuntimeFilterPredicates for late materialization
-    // Group runtime filter predicates by ColumnId
-    if (!_runtime_filter_preds.empty() && _opts.enable_join_runtime_filter_pushdown) {
-        // First, collect predicates by column id
-        std::unordered_map<ColumnId, std::vector<RuntimeFilterPredicate*>> column_rf_map;
-        for (auto* rf_pred : _runtime_filter_preds.rf_predicates()) {
-            ColumnId cid = rf_pred->get_column_id();
-            column_rf_map[cid].push_back(rf_pred);
-        }
-
-        // Create a RuntimeFilterPredicates object for each column
-        for (const auto& [cid, rf_pred_list] : column_rf_map) {
-            RuntimeFilterPredicates rf_preds(_runtime_filter_preds.driver_sequence());
-            for (auto* rf_pred : rf_pred_list) {
-                rf_preds.add_predicate(rf_pred);
-            }
-            _column_to_runtime_filters_map.emplace(cid, std::move(rf_preds));
-        }
-    }
-
-    // Ensure columns with only runtime filters are also added to predicate_order and _column_predicate_map
-    // These columns may not have regular predicates but have runtime filters
-    if (_opts.enable_join_runtime_filter_pushdown) {
-        for (const auto& [cid, rf_preds] : _column_to_runtime_filters_map) {
-            // If this column is not in column_predicate_map, add it with empty predicates
-            if (!_context->_column_predicate_map.contains(cid)) {
-                // Check if the column has a column iterator
-                DCHECK(_context->_column_ids_to_column_iterators.contains(cid));
-                if (_context->_column_ids_to_column_iterators.contains(cid)) {
-                    _context->_predicate_order.emplace_back(cid);
-                    _context->_column_predicate_map.emplace(cid, std::vector<const ColumnPredicate*>());
-                }
-            }
-        }
-    }
-
-    // all predicate columns + rowId column == _column_iterators size
-    DCHECK(_context->_predicate_order.size() + 1 == _context->_column_iterators.size());
-
-    const ColumnId first_column_id = _context->_predicate_order.front();
-    _context->_column_iterators_for_predicate_late_materialize.clear();
-
-    _context->_column_iterators_for_predicate_late_materialize.emplace_back(
-            _context->_column_ids_to_column_iterators[first_column_id]);
-    _context->_column_id_for_predicate_late_materialize.emplace_back(first_column_id);
-
-    // if only one predicate, and only need read this column, we do not need to use rowid Column
-    // but we may need to push down predicate into page level
-    if (_context->_predicate_order.size() == 1 && _schema.num_fields() == 1) {
-        return;
-    }
-    // add row id iterator
-    _context->_column_iterators_for_predicate_late_materialize.emplace_back(_context->_column_iterators.back());
-    _context->_column_id_for_predicate_late_materialize.emplace_back(_context->_row_id_column_id);
-}
-
 StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
     // Check every 32 chunks if we should trigger sampling based on selectivity
     // if only have one predicate column, do not sample
-    const bool should_check_selectivity =
-            (_context->_evaluated_chunk_nums++ & 16) == 0 && (!(_context->_predicate_order.size() == 1));
+    const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ & 16) == 0 &&
+                                          (!_context->_only_output_one_predicate_col_with_filter_push_down);
     if (should_check_selectivity && _context->_enable_predicate_col_late_materialize &&
         _context->_first_column_total_rows_read > 0) {
         // // Calculate accumulated selectivity
@@ -2048,7 +1956,8 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 }
 
 StatusOr<size_t> SegmentIterator::_predicate_evaluate(vector<rowid_t>* rowid) {
-    if (_enable_predicate_col_late_materialize) {
+    if (_context->_enable_predicate_col_late_materialize ||
+        _context->_only_output_one_predicate_col_with_filter_push_down) {
         return _predicate_evaluate_late_materialize(rowid);
     } else {
         return _predicate_evaluate_without_late_materialize(rowid);
@@ -2077,7 +1986,8 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     const ColumnPredicateMap& expr_column_predicate_map = _expr_pred_tree.get_immediate_column_predicate_map();
 
     current_columns.emplace_back(first_col);
-    if (!(_context->_predicate_order.size() == 1 && _schema.num_fields() == 1)) {
+    if (_context->_enable_predicate_col_late_materialize) {
+        DCHECK(!_context->_only_output_one_predicate_col_with_filter_push_down);
         ColumnPtr rowid_column = chunk->get_column_by_id(_context->_row_id_column_id);
         current_columns.emplace_back(rowid_column);
     }
@@ -2600,7 +2510,6 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_late_materialize = true;
         ctx->_skip_dict_decode_indexes.push_back(false);
         ctx->_row_id_column_id = cid;
-        ctx->_enable_predicate_col_late_materialize = _enable_predicate_col_late_materialize;
     }
 
     for (size_t i = 0; i < num_fields; ++i) {
@@ -2639,6 +2548,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
     VLOG(2) << "SegmentIterator::_build_context late_materialization=" << late_materialization << " "
             << ctx->to_string();
+
+    _build_context_for_predicate(ctx);
 
     return Status::OK();
 }
@@ -2680,6 +2591,101 @@ Status SegmentIterator::_init_context() {
         }
     }
     return _switch_context(&_context_list[0]);
+}
+
+void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
+    bool has_or_predicates = _non_expr_pred_tree.has_or_predicate() || _expr_pred_tree.has_or_predicate();
+    ctx->_enable_predicate_col_late_materialize =
+            !has_or_predicates && _context->_late_materialize && _opts.enable_predicate_col_late_materialize;
+
+    // For case like : select col from table where col like "%jerry%"
+    // we only need output one predicate column, so context's _late_materialize is always false
+    // but we still can push down predicate into page level
+    const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
+    ctx->_only_output_one_predicate_col_with_filter_push_down =
+            !has_or_predicates && (_predicate_columns == 1 && _schema.num_fields() == 1) &&
+            ctx->_column_iterators[0]->support_push_down_predicate(column_predicate_map.begin()->second);
+
+    if (!ctx->_enable_predicate_col_late_materialize || !ctx->_only_output_one_predicate_col_with_filter_push_down) {
+        return;
+    }
+
+    ctx->_column_predicate_map.reserve(column_predicate_map.size());
+    ctx->_predicate_order.reserve(column_predicate_map.size());
+
+    for (const auto& pair : column_predicate_map) {
+        ctx->_predicate_order.emplace_back(pair.first);
+        ctx->_column_predicate_map.emplace(pair.first, pair.second);
+    }
+
+    // if column predicate is always true for string column or already used by bitmap index
+    // it will be removed from predicate tree
+    // but we still need to read it
+    // so we add the columnId into column_predicate_map with empty ColumnPredicates, so it will only read without filter
+    if (ctx->_predicate_order.size() + 1 < ctx->_column_iterators.size()) {
+        DCHECK(ctx->_column_ids_to_column_iterators.size() + 1 == ctx->_column_iterators.size());
+        for (auto pair : ctx->_column_ids_to_column_iterators) {
+            if (!ctx->_column_predicate_map.contains(pair.first)) {
+                ctx->_predicate_order.emplace_back(pair.first);
+                ctx->_column_predicate_map.emplace(pair.first, std::vector<const ColumnPredicate*>());
+            }
+        }
+    }
+
+    // Build column-specific RuntimeFilterPredicates for late materialization
+    // Group runtime filter predicates by ColumnId
+    if (!_runtime_filter_preds.empty() && _opts.enable_join_runtime_filter_pushdown) {
+        // First, collect predicates by column id
+        std::unordered_map<ColumnId, std::vector<RuntimeFilterPredicate*>> column_rf_map;
+        for (auto* rf_pred : _runtime_filter_preds.rf_predicates()) {
+            ColumnId cid = rf_pred->get_column_id();
+            column_rf_map[cid].push_back(rf_pred);
+        }
+
+        // Create a RuntimeFilterPredicates object for each column
+        for (const auto& [cid, rf_pred_list] : column_rf_map) {
+            RuntimeFilterPredicates rf_preds(_runtime_filter_preds.driver_sequence());
+            for (auto* rf_pred : rf_pred_list) {
+                rf_preds.add_predicate(rf_pred);
+            }
+            _column_to_runtime_filters_map.emplace(cid, std::move(rf_preds));
+        }
+    }
+
+    // Ensure columns with only runtime filters are also added to predicate_order and _column_predicate_map
+    // These columns may not have regular predicates but have runtime filters
+    if (_opts.enable_join_runtime_filter_pushdown) {
+        for (const auto& [cid, rf_preds] : _column_to_runtime_filters_map) {
+            // If this column is not in column_predicate_map, add it with empty predicates
+            if (!ctx->_column_predicate_map.contains(cid)) {
+                // Check if the column has a column iterator
+                DCHECK(ctx->_column_ids_to_column_iterators.contains(cid));
+                if (ctx->_column_ids_to_column_iterators.contains(cid)) {
+                    ctx->_predicate_order.emplace_back(cid);
+                    ctx->_column_predicate_map.emplace(cid, std::vector<const ColumnPredicate*>());
+                }
+            }
+        }
+    }
+
+    // all predicate columns + rowId column == _column_iterators size
+    DCHECK(ctx->_predicate_order.size() + 1 == ctx->_column_iterators.size() ||
+           ctx->_only_output_one_predicate_col_with_filter_push_down);
+
+    const ColumnId first_column_id = ctx->_predicate_order.front();
+    ctx->_column_iterators_for_predicate_late_materialize.clear();
+
+    ctx->_column_iterators_for_predicate_late_materialize.emplace_back(
+            ctx->_column_ids_to_column_iterators[first_column_id]);
+    ctx->_column_id_for_predicate_late_materialize.emplace_back(first_column_id);
+
+    // if only one predicate, and only need read this column, we do not need to use rowid Column
+    if (ctx->_only_output_one_predicate_col_with_filter_push_down) {
+        return;
+    }
+    // add row id iterator
+    ctx->_column_iterators_for_predicate_late_materialize.emplace_back(ctx->_column_iterators.back());
+    ctx->_column_id_for_predicate_late_materialize.emplace_back(ctx->_row_id_column_id);
 }
 
 Status SegmentIterator::_init_global_dict_decoder() {
