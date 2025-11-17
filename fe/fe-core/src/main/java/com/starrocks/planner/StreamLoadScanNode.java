@@ -74,9 +74,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
-
+import com.starrocks.type.HLLType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -349,7 +348,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH
                             + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=hll_empty()");
                 }
-                expr.setType(Type.HLL);
+                expr.setType(HLLType.HLL);
             }
 
             checkBitmapCompatibility(dstSlotDesc, expr);

@@ -30,10 +30,12 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +55,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     public void testMapElementAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        Type keyType = TypeFactory.createType(PrimitiveType.INT);
+        Type keyType = IntegerType.INT;
         Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
         slot.setType(mapType);
@@ -84,7 +86,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         Type keyTypeChar = TypeFactory.createCharType(10);
-        Type valueTypeInt = TypeFactory.createType(PrimitiveType.INT);
+        Type valueTypeInt = IntegerType.INT;
         mapType = new MapType(keyTypeChar, valueTypeInt);
         slot.setType(mapType);
         StringLiteral subString = new StringLiteral("aaa");
@@ -140,7 +142,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     public void testNoSubscriptAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        slot.setType(TypeFactory.createType(PrimitiveType.INT));
+        slot.setType(IntegerType.INT);
 
         IntLiteral sub = new IntLiteral(10);
 
@@ -152,7 +154,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
     @Test
     public void testMapFunctionsAnalyzer() {
-        Type keyType = TypeFactory.createType(PrimitiveType.INT);
+        Type keyType = IntegerType.INT;
         Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
 
@@ -176,7 +178,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Function fnMapSize =
                 ExprUtils.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapSize.functionName(), "map_size");
-        Assertions.assertEquals(fnMapSize.getReturnType(), Type.INT);
+        Assertions.assertEquals(fnMapSize.getReturnType(), IntegerType.INT);
 
         Type[] argumentTypesErrorNum = {mapType, keyType};
         Function fnKeysErrorNum = ExprUtils.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
@@ -201,8 +203,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
     @Test
     public void testDateCoalesceAnalyzer() {
-        Type dateType = TypeFactory.createType(PrimitiveType.DATE);
-        Type dateTimeType = TypeFactory.createType(PrimitiveType.DATETIME);
+        Type dateType = DateType.DATE;
+        Type dateTimeType = DateType.DATETIME;
 
         {
             Type[] argumentTypes = {dateType, dateTimeType};
@@ -234,9 +236,9 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     @Test
     public void testLikePatternSyntaxException() {
         StringLiteral e1 = new StringLiteral("a");
-        e1.setType(Type.VARCHAR);
+        e1.setType(VarcharType.VARCHAR);
         StringLiteral e2 = new StringLiteral("([A-Za-z0-9]+[\\u4e00-\\u9fa5]{2}[A-Za-z0-9]+)");
-        e2.setType(Type.VARCHAR);
+        e2.setType(VarcharType.VARCHAR);
         LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, e1, e2);
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         Assertions.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,

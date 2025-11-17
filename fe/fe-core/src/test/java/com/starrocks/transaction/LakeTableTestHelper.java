@@ -26,7 +26,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +51,7 @@ public class LakeTableTestHelper {
         Partition partition = new Partition(partitionId, physicalPartitionId, "p0", index, null);
         LakeTable table = new LakeTable(
                 tableId, "t0",
-                Lists.newArrayList(new Column("c0", Type.BIGINT)),
+                Lists.newArrayList(new Column("c0", IntegerType.BIGINT)),
                 KeysType.DUP_KEYS, null, null);
         table.addPartition(partition);
         return table;

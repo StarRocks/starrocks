@@ -24,15 +24,16 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
-import static com.starrocks.type.Type.ARRAY_BIGINT;
-import static com.starrocks.type.Type.ARRAY_INT;
-import static com.starrocks.type.TypeFactory.createType;
+import static com.starrocks.type.ArrayType.ARRAY_BIGINT;
+import static com.starrocks.type.ArrayType.ARRAY_INT;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.VarbinaryType.VARBINARY;
 
 public class IcebergFilesTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_files_table";
@@ -49,23 +50,22 @@ public class IcebergFilesTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("content", createType(PrimitiveType.INT))
-                        .column("file_path", Type.VARCHAR)
-                        .column("file_format", Type.VARCHAR)
-                        .column("spec_id", createType(PrimitiveType.INT))
-                        .column("record_count", createType(PrimitiveType.BIGINT))
-                        .column("file_size_in_bytes", createType(PrimitiveType.BIGINT))
-                        .column("column_sizes", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("value_counts", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("null_value_counts", new MapType(
-                                createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("nan_value_counts", new MapType(createType(PrimitiveType.INT), createType(PrimitiveType.BIGINT)))
-                        .column("lower_bounds", new MapType(createType(PrimitiveType.INT), Type.VARCHAR))
-                        .column("upper_bounds", new MapType(createType(PrimitiveType.INT), Type.VARCHAR))
+                        .column("content", INT)
+                        .column("file_path", VarcharType.VARCHAR)
+                        .column("file_format", VarcharType.VARCHAR)
+                        .column("spec_id", INT)
+                        .column("record_count", BIGINT)
+                        .column("file_size_in_bytes", BIGINT)
+                        .column("column_sizes", new MapType(INT, BIGINT))
+                        .column("value_counts", new MapType(INT, BIGINT))
+                        .column("null_value_counts", new MapType(INT, BIGINT))
+                        .column("nan_value_counts", new MapType(INT, BIGINT))
+                        .column("lower_bounds", new MapType(INT, VarcharType.VARCHAR))
+                        .column("upper_bounds", new MapType(INT, VarcharType.VARCHAR))
                         .column("split_offsets", ARRAY_BIGINT)
-                        .column("sort_id", createType(PrimitiveType.INT))
+                        .column("sort_id", INT)
                         .column("equality_ids", ARRAY_INT)
-                        .column("key_metadata", createType(PrimitiveType.VARBINARY))
+                        .column("key_metadata", VARBINARY)
                         .build(),
                 originDb,
                 originTable,

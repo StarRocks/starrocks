@@ -28,7 +28,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -73,8 +74,8 @@ public class ExternalProcDirTest {
         new MockUp<HiveTable>() {
             public List<Column> getFullSchema() {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT);
-                Column columnName = new Column("name", Type.VARCHAR);
+                Column columnId = new Column("id", IntegerType.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 return fullSchema;
@@ -146,8 +147,8 @@ public class ExternalProcDirTest {
     public void testExternalScemaFetchResultNormal() throws AnalysisException {
         Table table = new HiveTable();
         List<Column> fullSchema = new ArrayList<>();
-        Column columnId = new Column("id", Type.INT, false, "id");
-        Column columnName = new Column("name", Type.VARCHAR, false, "name");
+        Column columnId = new Column("id", IntegerType.INT, false, "id");
+        Column columnName = new Column("name", VarcharType.VARCHAR, false, "name");
         fullSchema.add(columnId);
         fullSchema.add(columnName);
         table.setNewFullSchema(fullSchema);

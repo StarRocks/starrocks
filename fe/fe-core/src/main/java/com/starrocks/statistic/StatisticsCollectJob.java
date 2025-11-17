@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -249,14 +250,14 @@ public abstract class StatisticsCollectJob {
 
     public static Expr hllDeserialize(byte[] hll) {
         String str = new String(hll, StandardCharsets.UTF_8);
-        Function unhex = ExprUtils.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
+        Function unhex = ExprUtils.getBuiltinFunction("unhex", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
 
         FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
         unhexExpr.setFn(unhex);
         unhexExpr.setType(unhex.getReturnType());
 
-        Function fn = ExprUtils.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+        Function fn = ExprUtils.getBuiltinFunction("hll_deserialize", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
         fe.setFn(fn);

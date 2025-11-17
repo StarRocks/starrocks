@@ -37,7 +37,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -58,10 +60,10 @@ public class TimeGranuleTest {
     private final TableName tableName = new TableName("default_catalog", "test_db", "t0");
     private final ColumnRefToIdConverter idConverter = new ColumnRefToIdConverter();
     private final List<ColumnRefOperator> columnRefs = Arrays.asList(
-            new ColumnRefOperator(1, Type.DATE, "eventDate", true),
-            new ColumnRefOperator(2, Type.DATETIME, "eventTime", true),
-            new ColumnRefOperator(3, Type.VARCHAR, "eventDateS", true),
-            new ColumnRefOperator(4, Type.VARCHAR, "eventTimeS", true)
+            new ColumnRefOperator(1, DateType.DATE, "eventDate", true),
+            new ColumnRefOperator(2, DateType.DATETIME, "eventTime", true),
+            new ColumnRefOperator(3, VarcharType.VARCHAR, "eventDateS", true),
+            new ColumnRefOperator(4, VarcharType.VARCHAR, "eventTimeS", true)
     );
 
     private final List<Var> vars = columnRefs.stream()
@@ -153,61 +155,61 @@ public class TimeGranuleTest {
     @Test
     public void testBasicOps() {
         // date(eventDate)
-        CallOperator dateFun = new CallOperator(FunctionSet.DATE, Type.DATE, ImmutableList.of(eventDate));
-        CallOperator toDateFun = new CallOperator(FunctionSet.TO_DATE, Type.DATE, ImmutableList.of(eventDateS));
+        CallOperator dateFun = new CallOperator(FunctionSet.DATE, DateType.DATE, ImmutableList.of(eventDate));
+        CallOperator toDateFun = new CallOperator(FunctionSet.TO_DATE, DateType.DATE, ImmutableList.of(eventDateS));
         // date_format(eventTime, '%%%d')
-        CallOperator dateFormatFun = new CallOperator(FunctionSet.DATE_FORMAT, Type.VARCHAR,
+        CallOperator dateFormatFun = new CallOperator(FunctionSet.DATE_FORMAT, VarcharType.VARCHAR,
                 ImmutableList.of(eventTime, varchar("%%%d")));
         // date_slice(eventDate, INTERVAL 5 day, ceil)
-        CallOperator dateSliceFun = new CallOperator(FunctionSet.DATE_SLICE, Type.DATETIME,
+        CallOperator dateSliceFun = new CallOperator(FunctionSet.DATE_SLICE, DateType.DATETIME,
                 ImmutableList.of(eventDateS, integer(5), varchar("day"), varchar("floor")));
-        CallOperator timeSliceFun = new CallOperator(FunctionSet.TIME_SLICE, Type.DATETIME,
+        CallOperator timeSliceFun = new CallOperator(FunctionSet.TIME_SLICE, DateType.DATETIME,
                 ImmutableList.of(eventDateS, integer(5), varchar("minute"), varchar("ceil")));
         CallOperator dataTruncFun =
-                new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE, ImmutableList.of(varchar("day"), eventTimeS));
+                new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATE, ImmutableList.of(varchar("day"), eventTimeS));
         CallOperator dayNameFun =
-                new CallOperator(FunctionSet.DAYNAME, Type.VARCHAR, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.DAYNAME, VarcharType.VARCHAR, ImmutableList.of(eventTime));
         CallOperator dayOfMonthFun =
-                new CallOperator(FunctionSet.DAYOFMONTH, Type.TINYINT, ImmutableList.of(eventDate));
+                new CallOperator(FunctionSet.DAYOFMONTH, IntegerType.TINYINT, ImmutableList.of(eventDate));
         CallOperator dayOfWeekFun =
-                new CallOperator(FunctionSet.DAYOFWEEK, Type.INT, ImmutableList.of(eventDateS));
+                new CallOperator(FunctionSet.DAYOFWEEK, IntegerType.INT, ImmutableList.of(eventDateS));
         CallOperator dayOfYearFun =
-                new CallOperator(FunctionSet.DAYOFYEAR, Type.INT, ImmutableList.of(eventTimeS));
+                new CallOperator(FunctionSet.DAYOFYEAR, IntegerType.INT, ImmutableList.of(eventTimeS));
         CallOperator yearFun =
-                new CallOperator(FunctionSet.YEAR, Type.SMALLINT, ImmutableList.of(eventDate));
+                new CallOperator(FunctionSet.YEAR, IntegerType.SMALLINT, ImmutableList.of(eventDate));
         CallOperator quarterFun =
-                new CallOperator(FunctionSet.QUARTER, Type.TINYINT, ImmutableList.of(eventDate));
+                new CallOperator(FunctionSet.QUARTER, IntegerType.TINYINT, ImmutableList.of(eventDate));
         CallOperator monthFun =
-                new CallOperator(FunctionSet.MONTH, Type.TINYINT, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.MONTH, IntegerType.TINYINT, ImmutableList.of(eventTime));
         CallOperator weekFun =
-                new CallOperator(FunctionSet.WEEK, Type.TINYINT, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.WEEK, IntegerType.TINYINT, ImmutableList.of(eventTime));
         CallOperator weekOfYearFun =
-                new CallOperator(FunctionSet.WEEKOFYEAR, Type.TINYINT, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.WEEKOFYEAR, IntegerType.TINYINT, ImmutableList.of(eventTime));
         CallOperator dayFun =
-                new CallOperator(FunctionSet.DAY, Type.TINYINT, ImmutableList.of(eventDateS));
+                new CallOperator(FunctionSet.DAY, IntegerType.TINYINT, ImmutableList.of(eventDateS));
         CallOperator hourFun =
-                new CallOperator(FunctionSet.HOUR, Type.TINYINT, ImmutableList.of(eventTimeS));
+                new CallOperator(FunctionSet.HOUR, IntegerType.TINYINT, ImmutableList.of(eventTimeS));
         CallOperator minuteFun =
-                new CallOperator(FunctionSet.MINUTE, Type.TINYINT, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.MINUTE, IntegerType.TINYINT, ImmutableList.of(eventTime));
         CallOperator secondFun =
-                new CallOperator(FunctionSet.SECOND, Type.TINYINT, ImmutableList.of(eventTimeS));
+                new CallOperator(FunctionSet.SECOND, IntegerType.TINYINT, ImmutableList.of(eventTimeS));
         CallOperator lastDayFun =
-                new CallOperator(FunctionSet.LAST_DAY, Type.DATE, ImmutableList.of(eventDate));
+                new CallOperator(FunctionSet.LAST_DAY, DateType.DATE, ImmutableList.of(eventDate));
         CallOperator monthNameFun =
-                new CallOperator(FunctionSet.MONTHNAME, Type.VARCHAR, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.MONTHNAME, VarcharType.VARCHAR, ImmutableList.of(eventTime));
         CallOperator nextDayFun =
-                new CallOperator(FunctionSet.NEXT_DAY, Type.DATE, ImmutableList.of(eventDateS, varchar("Monday")));
+                new CallOperator(FunctionSet.NEXT_DAY, DateType.DATE, ImmutableList.of(eventDateS, varchar("Monday")));
         CallOperator previousDayFun =
-                new CallOperator(FunctionSet.PREVIOUS_DAY, Type.DATE, ImmutableList.of(eventTimeS, varchar("TuesDay")));
+                new CallOperator(FunctionSet.PREVIOUS_DAY, DateType.DATE, ImmutableList.of(eventTimeS, varchar("TuesDay")));
         // str2date(column, '%Y-%m-%d %H:%i:%s')
         CallOperator str2DateFun =
-                new CallOperator(FunctionSet.STR2DATE, Type.DATE,
+                new CallOperator(FunctionSet.STR2DATE, DateType.DATE,
                         ImmutableList.of(eventTimeS, varchar("'%Y-%m-%d %H:%i:%s'")));
         CallOperator strToDateFun =
-                new CallOperator(FunctionSet.STR_TO_DATE, Type.DATE,
+                new CallOperator(FunctionSet.STR_TO_DATE, DateType.DATE,
                         ImmutableList.of(eventTimeS, varchar("'%Y-%m-%d %H:%i:%s'")));
         CallOperator toDaysFun =
-                new CallOperator(FunctionSet.TO_DAYS, Type.INT, ImmutableList.of(eventTime));
+                new CallOperator(FunctionSet.TO_DAYS, IntegerType.INT, ImmutableList.of(eventTime));
 
         List<ScalarOperator> timeGranuleFunList = Lists.newArrayList(
                 dateFun,
@@ -290,26 +292,26 @@ public class TimeGranuleTest {
         List<ScalarOperator> whenThens = Arrays.asList(
                 new LikePredicateOperator(LikePredicateOperator.LikeType.REGEXP, eventTimeS,
                         varchar("XX\\\\d{4}-\\\\d{2}-\\\\d{2}")),
-                new CallOperator(FunctionSet.SUBSTR, Type.VARCHAR,
+                new CallOperator(FunctionSet.SUBSTR, VarcharType.VARCHAR,
                         ImmutableList.of(eventTimeS, integer(3), integer(10))),
                 new LikePredicateOperator(LikePredicateOperator.LikeType.REGEXP, eventTimeS,
                         varchar("YYYY\\\\d{4}-\\\\d{2}-\\\\d{2}")),
-                new CallOperator(FunctionSet.SUBSTR, Type.VARCHAR,
+                new CallOperator(FunctionSet.SUBSTR, VarcharType.VARCHAR,
                         ImmutableList.of(eventTimeS, integer(5), integer(10)))
         );
         CaseWhenOperator caseWhen =
-                new CaseWhenOperator(Type.VARCHAR, null, eventTimeS, whenThens);
-        CastOperator castOp = new CastOperator(Type.DATE, caseWhen);
+                new CaseWhenOperator(VarcharType.VARCHAR, null, eventTimeS, whenThens);
+        CastOperator castOp = new CastOperator(DateType.DATE, caseWhen);
 
         CallOperator dataTruncFun =
-                new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE, ImmutableList.of(varchar("month"), castOp));
+                new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATE, ImmutableList.of(varchar("month"), castOp));
 
         CallOperator daysAddFun =
-                new CallOperator(FunctionSet.DAYS_ADD, Type.DATE, ImmutableList.of(castOp, integer(1)));
+                new CallOperator(FunctionSet.DAYS_ADD, DateType.DATE, ImmutableList.of(castOp, integer(1)));
         CallOperator concatFun =
-                new CallOperator(FunctionSet.CONCAT, Type.VARCHAR, ImmutableList.of(daysAddFun, varchar(" 00:00:00")));
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR, ImmutableList.of(daysAddFun, varchar(" 00:00:00")));
         CallOperator str2DateFun =
-                new CallOperator(FunctionSet.STR2DATE, Type.DATE,
+                new CallOperator(FunctionSet.STR2DATE, DateType.DATE,
                         ImmutableList.of(concatFun, varchar("'%Y-%m-%d %H:%i:%s'")));
 
         List<ScalarOperator> timeGranuleFunList = Lists.newArrayList(
@@ -357,7 +359,7 @@ public class TimeGranuleTest {
     }
 
     private ScalarOperator str2Date(ScalarOperator s, String format) {
-        return new CallOperator(FunctionSet.STR2DATE, Type.DATE, ImmutableList.of(s, varchar(format)));
+        return new CallOperator(FunctionSet.STR2DATE, DateType.DATE, ImmutableList.of(s, varchar(format)));
     }
 
     private ScalarOperator dt(String s) {
@@ -390,14 +392,14 @@ public class TimeGranuleTest {
                 {str2Date(varchar("2022-01-31 12:40:46"), "%Y-%m-%d %H:%i:%s"), partitionColumnIds, false},
 
                 {dateTrunc("day",
-                        new CallOperator(FunctionSet.DAYS_ADD, Type.DATE, ImmutableList.of(eventDate, integer(1)))),
+                        new CallOperator(FunctionSet.DAYS_ADD, DateType.DATE, ImmutableList.of(eventDate, integer(1)))),
                         partitionColumnIds, false},
-                {new CallOperator(FunctionSet.DAYS_SUB, Type.DATE, ImmutableList.of(
+                {new CallOperator(FunctionSet.DAYS_SUB, DateType.DATE, ImmutableList.of(
                         dateTrunc("month", eventTime), integer(1))), partitionColumnIds, false},
-                {str2Date(new CallOperator(FunctionSet.SUBSTR, Type.VARCHAR,
+                {str2Date(new CallOperator(FunctionSet.SUBSTR, VarcharType.VARCHAR,
                         ImmutableList.of(eventDateS, integer(4), integer(10))), "%Y-%m-%d %H:%i:%s"),
                         partitionColumnIds, false},
-                {new CallOperator(FunctionSet.MONTHS_ADD, Type.DATE,
+                {new CallOperator(FunctionSet.MONTHS_ADD, DateType.DATE,
                         ImmutableList.of(str2Date(eventTimeS, "%Y-%m-%d %H:%i:%s"), integer(1))),
                         partitionColumnIds, false},
         };

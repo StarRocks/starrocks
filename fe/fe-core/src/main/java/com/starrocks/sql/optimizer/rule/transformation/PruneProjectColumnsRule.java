@@ -28,7 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 
 import java.util.Collections;
 import java.util.List;
@@ -65,7 +65,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
 
         if (newMap.isEmpty()) {
             ColumnRefOperator constCol = context.getColumnRefFactory()
-                    .create("auto_fill_col", Type.TINYINT, false);
+                    .create("auto_fill_col", IntegerType.TINYINT, false);
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
         } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.getOptimizerOptions().isShortCircuit()) {
             // Change the requiredOutputColumns in context

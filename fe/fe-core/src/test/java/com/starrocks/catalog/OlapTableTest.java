@@ -49,9 +49,9 @@ import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -162,11 +162,11 @@ public class OlapTableTest {
         PeriodDuration duration1 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
+        p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), DateType.DATE), PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
         OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
@@ -198,11 +198,11 @@ public class OlapTableTest {
         PeriodDuration duration2 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration2).toString(), Type.DATE),
+        p2.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration2).toString(), DateType.DATE),
                 PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 

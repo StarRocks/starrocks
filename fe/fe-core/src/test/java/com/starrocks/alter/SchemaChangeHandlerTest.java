@@ -52,7 +52,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.thrift.TTabletMetaType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.TestWithFeService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
@@ -151,8 +151,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LinkedList<Column> schemaList = new LinkedList<>();
         String colName1 = "__starrocks_shadow_c1";
         String colName2 = "__starrocks_shadow_c2";
-        Column col1 = new Column(colName1, Type.INT);
-        Column col2 = new Column(colName2, Type.INT);
+        Column col1 = new Column(colName1, IntegerType.INT);
+        Column col2 = new Column(colName2, IntegerType.INT);
         schemaList.add(col1);
         schemaList.add(col2);
 

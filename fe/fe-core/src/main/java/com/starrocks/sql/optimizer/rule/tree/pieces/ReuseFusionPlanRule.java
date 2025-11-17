@@ -62,6 +62,8 @@ import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -212,7 +214,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             cteRefsMapping.put(originHitRef, fusedHitRef);
         }
 
-        ScalarOperator gate = (fusedHitRef.getType() == Type.BOOLEAN)
+        ScalarOperator gate = (fusedHitRef.getType() == BooleanType.BOOLEAN)
                 ? new IsNullPredicateOperator(true, originHitRef)
                 : BinaryPredicateOperator.gt(originHitRef, ConstantOperator.createBigint(0));
 
@@ -414,11 +416,11 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                         extraOutputRefs.add(pieceRowCountRef[0]);
                     } else {
                         Function anyFn = ExprUtils.getBuiltinFunction(FunctionSet.ANY_VALUE,
-                                new Type[] {Type.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
-                        CallOperator anyTrue = new CallOperator(FunctionSet.ANY_VALUE, Type.BOOLEAN,
+                                new Type[] {BooleanType.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
+                        CallOperator anyTrue = new CallOperator(FunctionSet.ANY_VALUE, BooleanType.BOOLEAN,
                                 List.of(ConstantOperator.createBoolean(true)), anyFn);
                         CallOperator anyIfCall = addFilterAggCall(anyTrue, filter, aggFilterProject, false);
-                        ColumnRefOperator hitRef = factory.create("row_hit", Type.BOOLEAN, true);
+                        ColumnRefOperator hitRef = factory.create("row_hit", BooleanType.BOOLEAN, true);
                         aggToRefs.put(anyIfCall, hitRef);
                         originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, hitRef);
                         extraOutputRefs.add(hitRef);
@@ -469,7 +471,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 Preconditions.checkState(FunctionSet.COUNT.equalsIgnoreCase(call.getFnName()));
                 child = ConstantOperator.createInt(1);
                 aggFunc = ExprUtils.getBuiltinFunction(call.getFunction().getFunctionName().getFunction(),
-                        new Type[] {Type.INT}, Function.CompareMode.IS_IDENTICAL);
+                        new Type[] {IntegerType.INT}, Function.CompareMode.IS_IDENTICAL);
             } else {
                 child = call.getChild(0);
                 aggFunc = call.getFunction();
@@ -477,7 +479,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
 
             java.util.function.Function<CallOperator, CallOperator> fallbackAggIfBuilder = aggCall -> {
                 Function f = ExprUtils.getBuiltinFunction(FunctionSet.IF,
-                        new Type[] {Type.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
+                        new Type[] {BooleanType.BOOLEAN, child.getType(), child.getType()}, Function.CompareMode.IS_IDENTICAL);
                 CallOperator ifNull = new CallOperator("if", child.getType(),
                         List.of(filter, child, ConstantOperator.createNull(child.getType())), f);
                 if (!filterProject.containsKey(ifNull)) {
@@ -491,7 +493,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 return fallbackAggIfBuilder.apply(call);
             } else {
                 Preconditions.checkState(aggFunc instanceof AggregateFunction);
-                Type[] argTypes = new Type[] {child.getType(), Type.BOOLEAN};
+                Type[] argTypes = new Type[] {child.getType(), BooleanType.BOOLEAN};
                 Function aggStateIf = ExprUtils.getBuiltinFunction(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX,
                         argTypes, Function.CompareMode.IS_IDENTICAL);
                 // set precision and scale for decimal
@@ -504,7 +506,7 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 }
 
                 if (!filterProject.containsKey(filter)) {
-                    filterProject.put(filter, factory.create(filter, Type.BOOLEAN, true));
+                    filterProject.put(filter, factory.create(filter, BooleanType.BOOLEAN, true));
                 }
 
                 if (!filterProject.containsKey(child) && !child.isConstant()) {

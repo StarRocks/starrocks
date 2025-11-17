@@ -34,7 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
@@ -119,10 +119,10 @@ public class AnalyzeUpdateTest {
                 long tabletId = 10L;
                 // Schema
                 List<Column> columns = Lists.newArrayList();
-                Column k1 = new Column("k1", Type.INT, true, null, "0", "");
+                Column k1 = new Column("k1", IntegerType.INT, true, null, "0", "");
                 columns.add(k1);
-                columns.add(new Column("k2", Type.BIGINT, true, null, "0", ""));
-                columns.add(new Column("v2", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+                columns.add(new Column("k2", IntegerType.BIGINT, true, null, "0", ""));
+                columns.add(new Column("v2", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
                 // Tablet
                 Tablet tablet = new LakeTablet(tabletId);

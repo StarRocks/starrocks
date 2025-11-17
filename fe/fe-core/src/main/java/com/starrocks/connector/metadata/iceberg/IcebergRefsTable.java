@@ -23,13 +23,13 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.IntegerType.INT;
 
 public class IcebergRefsTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_refs_table";
@@ -45,12 +45,12 @@ public class IcebergRefsTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("name", Type.VARCHAR)
-                        .column("type", Type.VARCHAR)
-                        .column("snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("max_reference_age_in_ms", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("min_snapshots_to_keep", TypeFactory.createType(PrimitiveType.INT))
-                        .column("max_snapshot_age_in_ms", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("name", VarcharType.VARCHAR)
+                        .column("type", VarcharType.VARCHAR)
+                        .column("snapshot_id", BIGINT)
+                        .column("max_reference_age_in_ms", BIGINT)
+                        .column("min_snapshots_to_keep", INT)
+                        .column("max_snapshot_age_in_ms", BIGINT)
                         .build(),
                 originDb,
                 originTable,

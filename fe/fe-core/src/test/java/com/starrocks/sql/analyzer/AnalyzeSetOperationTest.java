@@ -20,7 +20,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -89,9 +90,9 @@ public class AnalyzeSetOperationTest {
         List<ColumnRefOperator> outColumns = logicalPlan.getOutputColumn();
 
         Assertions.assertEquals(2, outColumns.size());
-        Assertions.assertEquals(Type.VARCHAR, outColumns.get(0).getType());
+        Assertions.assertEquals(VarcharType.VARCHAR, outColumns.get(0).getType());
         Assertions.assertFalse(outColumns.get(0).isNullable());
-        Assertions.assertEquals(Type.TINYINT, outColumns.get(1).getType());
+        Assertions.assertEquals(IntegerType.TINYINT, outColumns.get(1).getType());
         Assertions.assertTrue(outColumns.get(1).isNullable());
     }
 

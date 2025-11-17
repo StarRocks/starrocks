@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -526,8 +527,8 @@ public class Utils {
      */
     public static Optional<ScalarOperator> tryCastConstant(ScalarOperator op, Type descType) {
         // Forbidden cast float, because behavior isn't same with before
-        if (!op.isConstantRef() || op.getType().matchesType(descType) || Type.FLOAT.equals(op.getType())
-                || descType.equals(Type.FLOAT)) {
+        if (!op.isConstantRef() || op.getType().matchesType(descType) || FloatType.FLOAT.equals(op.getType())
+                || descType.equals(FloatType.FLOAT)) {
             return Optional.empty();
         }
 

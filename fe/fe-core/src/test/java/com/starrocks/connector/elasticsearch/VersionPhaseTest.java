@@ -37,7 +37,7 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.jupiter.api.Test;
@@ -52,7 +52,7 @@ public class VersionPhaseTest extends EsTestCase {
     @Test
     public void testWorkFlow(@Injectable EsRestClient client) throws Exception {
         List<Column> columns = new ArrayList<>();
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
         EsTable esTableBefore7X = fakeEsTable("fake", "test", "doc", columns);
         SearchContext context = new SearchContext(esTableBefore7X);

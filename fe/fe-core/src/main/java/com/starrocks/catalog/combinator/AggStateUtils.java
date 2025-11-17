@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.List;
@@ -284,7 +285,7 @@ public class AggStateUtils {
                 // but we can still get the agg state function from its name
                 Function dsHllCountDistinctAgg = FunctionAnalyzer.getAnalyzedAggregateFunction(session,
                         FunctionSet.DS_HLL_COUNT_DISTINCT, new FunctionParams(false, Lists.newArrayList()),
-                        new Type[] {Type.VARCHAR}, new Boolean[] {false}, pos);
+                        new Type[] {VarcharType.VARCHAR}, new Boolean[] {false}, pos);
                 if (dsHllCountDistinctAgg != null && dsHllCountDistinctAgg instanceof AggregateFunction) {
                     return (AggregateFunction) dsHllCountDistinctAgg.copy();
                 }

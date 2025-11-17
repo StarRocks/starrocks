@@ -120,6 +120,9 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -228,7 +231,7 @@ public class AnalyzerUtils {
             return null;
         }
 
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function search = new Function(fnName, argTypes, InvalidType.INVALID, false);
         Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         if (fn != null) {
@@ -246,7 +249,7 @@ public class AnalyzerUtils {
     }
 
     private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function search = new Function(fnName, argTypes, InvalidType.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
@@ -1699,7 +1702,7 @@ public class AnalyzerUtils {
 
     public static Type replaceNullType2Boolean(Type type) {
         if (type.isNull()) {
-            return Type.BOOLEAN;
+            return BooleanType.BOOLEAN;
         } else if (type.isArrayType()) {
             Type childType = ((ArrayType) type).getItemType();
             Type newType = replaceNullType2Boolean(childType);
@@ -1930,7 +1933,7 @@ public class AnalyzerUtils {
             if (partitionDef == null) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
-            if (partitionDef.getType() != Type.DATETIME) {
+            if (partitionDef.getType() != DateType.DATETIME) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(ExprToSql.toSql(expr),
                         "PARTITION BY", "The hour/minute parameter only supports datetime type"), pos);
             }

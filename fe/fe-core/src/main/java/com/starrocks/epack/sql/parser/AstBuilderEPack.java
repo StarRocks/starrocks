@@ -73,7 +73,7 @@ import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.StarRocksParser;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
 import org.antlr.v4.runtime.ParserRuleContext;
 
 import java.util.ArrayList;
@@ -423,7 +423,7 @@ public class AstBuilderEPack extends AstBuilder {
         String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
 
         return new CreatePolicyStmt(context.IF() != null,
-                PolicyType.ROW_ACCESS, policyName, argNames, argTypes, new TypeDef(Type.BOOLEAN),
+                PolicyType.ROW_ACCESS, policyName, argNames, argTypes, new TypeDef(BooleanType.BOOLEAN),
                 (Expr) visit(context.expression()), comment, createPos(context));
     }
 

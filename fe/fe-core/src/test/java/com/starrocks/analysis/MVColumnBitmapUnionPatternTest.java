@@ -46,7 +46,9 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.type.Type;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
 import mockit.Injectable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -59,7 +61,7 @@ public class MVColumnBitmapUnionPatternTest {
     public void testCorrectExpr1() {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef, "type", Type.INT);
+        Deencapsulation.setField(slotRef, "type", IntegerType.INT);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(slotRef);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP, child0Params);
@@ -74,7 +76,7 @@ public class MVColumnBitmapUnionPatternTest {
     public void testCorrectExpr2(@Injectable CastExpr castExpr) {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef, "type", Type.INT);
+        Deencapsulation.setField(slotRef, "type", IntegerType.INT);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(castExpr);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP, child0Params);
@@ -89,7 +91,7 @@ public class MVColumnBitmapUnionPatternTest {
     public void testUpperCaseOfFunction() {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef, "type", Type.INT);
+        Deencapsulation.setField(slotRef, "type", IntegerType.INT);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(slotRef);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP.toUpperCase(), child0Params);
@@ -134,7 +136,7 @@ public class MVColumnBitmapUnionPatternTest {
     public void testIncorrectDecimalSlotRef() {
         TableName tableName = new TableName("db", "table");
         SlotRef slotRef1 = new SlotRef(tableName, "c1");
-        Deencapsulation.setField(slotRef1, "type", Type.DECIMALV2);
+        Deencapsulation.setField(slotRef1, "type", DecimalType.DECIMALV2);
         List<Expr> child0Params = Lists.newArrayList();
         child0Params.add(slotRef1);
         FunctionCallExpr child0 = new FunctionCallExpr(FunctionSet.TO_BITMAP, child0Params);
@@ -154,7 +156,7 @@ public class MVColumnBitmapUnionPatternTest {
         List<Expr> params = Lists.newArrayList();
         params.add(slotRef1);
         FunctionCallExpr expr = new FunctionCallExpr(FunctionSet.BITMAP_UNION, params);
-        slotRef1.setType(Type.BITMAP);
+        slotRef1.setType(BitmapType.BITMAP);
         slotRef1.setDesc(desc);
         MVColumnBitmapUnionPattern pattern = new MVColumnBitmapUnionPattern();
         Assertions.assertTrue(pattern.match(expr));

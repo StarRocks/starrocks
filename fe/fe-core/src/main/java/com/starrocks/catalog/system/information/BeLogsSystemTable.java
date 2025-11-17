@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,10 +31,10 @@ public class BeLogsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", IntegerType.BIGINT)
                         .column("LEVEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TIMESTAMP", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("TID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TIMESTAMP", IntegerType.BIGINT)
+                        .column("TID", IntegerType.BIGINT)
                         .column("LOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_BE_LOGS);
     }

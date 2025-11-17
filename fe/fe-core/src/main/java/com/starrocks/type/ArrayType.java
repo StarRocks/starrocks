@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.type;
 
 import com.google.common.base.Objects;
@@ -23,6 +22,25 @@ import com.google.gson.annotations.SerializedName;
  * Describes an ARRAY type.
  */
 public class ArrayType extends Type {
+
+    public static final Type ARRAY_NULL = new ArrayType(NullType.NULL);
+    public static final Type ARRAY_BOOLEAN = new ArrayType(BooleanType.BOOLEAN);
+    public static final Type ARRAY_TINYINT = new ArrayType(IntegerType.TINYINT);
+    public static final Type ARRAY_SMALLINT = new ArrayType(IntegerType.SMALLINT);
+    public static final Type ARRAY_INT = new ArrayType(IntegerType.INT);
+    public static final Type ARRAY_BIGINT = new ArrayType(IntegerType.BIGINT);
+    public static final Type ARRAY_LARGEINT = new ArrayType(IntegerType.LARGEINT);
+    public static final Type ARRAY_FLOAT = new ArrayType(FloatType.FLOAT);
+    public static final Type ARRAY_DOUBLE = new ArrayType(FloatType.DOUBLE);
+    public static final Type ARRAY_DECIMALV2 = new ArrayType(DecimalType.DECIMALV2);
+    public static final Type ARRAY_DATE = new ArrayType(DateType.DATE);
+    public static final Type ARRAY_DATETIME = new ArrayType(DateType.DATETIME);
+    public static final Type ARRAY_VARCHAR = new ArrayType(VarcharType.VARCHAR);
+    public static final Type ARRAY_JSON = new ArrayType(JsonType.JSON);
+    public static final Type ARRAY_DECIMAL32 = new ArrayType(DecimalType.DECIMAL32);
+    public static final Type ARRAY_DECIMAL64 = new ArrayType(DecimalType.DECIMAL64);
+    public static final Type ARRAY_DECIMAL128 = new ArrayType(DecimalType.DECIMAL128);
+
     @SerializedName(value = "itemType")
     private Type itemType;
 

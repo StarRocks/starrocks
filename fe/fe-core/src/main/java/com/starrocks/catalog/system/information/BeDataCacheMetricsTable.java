@@ -19,8 +19,8 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.TypeFactory;
@@ -36,22 +36,23 @@ public class BeDataCacheMetricsTable {
     public static SystemTable create() {
         ArrayList<StructField> dirSpacesFields = new ArrayList<>();
         dirSpacesFields.add(new StructField("path", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH)));
-        dirSpacesFields.add(new StructField("quota_bytes", TypeFactory.createType(PrimitiveType.BIGINT)));
+        dirSpacesFields.add(new StructField("quota_bytes", IntegerType.BIGINT));
         StructType dirSpacesType = new StructType(dirSpacesFields);
         ArrayType dirSpacesArrayType = new ArrayType(dirSpacesType);
 
         MapType usedBytesDetailType =
-                new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.BIGINT));
+                new MapType(IntegerType.INT,
+                        IntegerType.BIGINT);
 
         return new SystemTable(SystemId.BE_DATACACHE_METRICS, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", IntegerType.BIGINT)
                         .column("STATUS", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DISK_QUOTA_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("DISK_USED_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("MEM_QUOTA_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("MEM_USED_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("META_USED_BYTES", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("DISK_QUOTA_BYTES", IntegerType.BIGINT)
+                        .column("DISK_USED_BYTES", IntegerType.BIGINT)
+                        .column("MEM_QUOTA_BYTES", IntegerType.BIGINT)
+                        .column("MEM_USED_BYTES", IntegerType.BIGINT)
+                        .column("META_USED_BYTES", IntegerType.BIGINT)
                         .column("DIR_SPACES", dirSpacesArrayType)
                         .column("USED_BYTES_DETAIL", usedBytesDetailType)
                         .build(),

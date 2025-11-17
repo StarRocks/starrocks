@@ -15,6 +15,8 @@
 package com.starrocks.type;
 
 public class AnyStructType extends PseudoType {
+    public static final AnyStructType ANY_STRUCT = new AnyStructType();
+
     @Override
     public boolean equals(Object obj) {
         return obj instanceof AnyStructType;

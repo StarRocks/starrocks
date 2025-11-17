@@ -30,7 +30,7 @@ import com.starrocks.sql.automv.qe.TypePlus;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TestUtil;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
@@ -199,7 +199,7 @@ public class PlanPieceTest {
     public void testTypePlus() {
         Type type = TypeFactory.createDecimalV3NarrowestType(21, 3);
         TypePlus typePlus = TypePlus.of(type, -1, 21, 3);
-        Assert.assertEquals(typePlus.getDecayedType(), ScalarType.DECIMAL128);
+        Assert.assertEquals(typePlus.getDecayedType(), DecimalType.DECIMAL128);
         Assert.assertEquals(typePlus.getLen(), -1);
         Assert.assertEquals(typePlus.getPrecision(), 21);
         Assert.assertEquals(typePlus.getScale(), 3);

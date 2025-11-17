@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -373,7 +374,7 @@ public class ColumnFilterConverter {
 
             if (type.isFixedPointType() && columnType.isFixedPointType()) {
                 // LargeIntLiteral getHashValue method is different with IntLiteral
-                return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
+                return type == columnType || (type != IntegerType.LARGEINT && columnType != IntegerType.LARGEINT);
             }
 
             return type.equals(columnType);

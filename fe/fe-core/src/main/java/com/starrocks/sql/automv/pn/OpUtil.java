@@ -41,6 +41,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.Type;
 
 import java.math.BigInteger;
@@ -244,7 +248,7 @@ public class OpUtil {
             return Optional.empty();
         }
 
-        Op bitmapAggOp = Apply.apply(Type.BITMAP, FunctionSet.BITMAP_AGG, true, args);
+        Op bitmapAggOp = Apply.apply(BitmapType.BITMAP, FunctionSet.BITMAP_AGG, true, args);
         EitherOr<OpPlus> bitmapAggOpPlus = Optional.ofNullable(alreadyExists.get(bitmapAggOp.strict()))
                 .map(id -> EitherOr.either(OpPlus.of(bitmapAggOp, id)))
                 .orElseGet(() -> EitherOr.or(OpPlus.of(bitmapAggOp, idGen.get())));
@@ -271,8 +275,8 @@ public class OpUtil {
         Preconditions.checkArgument(!args.isEmpty());
         Type argType = args.get(0).getType();
 
-        Op hllHashOp = Apply.apply(Type.HLL, FunctionSet.HLL_HASH, true, args);
-        Op hllAggOp = Apply.apply(Type.HLL, FunctionSet.HLL_UNION, true, hllHashOp);
+        Op hllHashOp = Apply.apply(HLLType.HLL, FunctionSet.HLL_HASH, true, args);
+        Op hllAggOp = Apply.apply(HLLType.HLL, FunctionSet.HLL_UNION, true, hllHashOp);
         EitherOr<OpPlus> hllAggOpPlus = Optional.ofNullable(alreadyExists.get(hllAggOp.strict()))
                 .map(id -> EitherOr.either(OpPlus.of(hllAggOp, id)))
                 .orElseGet(() -> EitherOr.or(OpPlus.of(hllAggOp, idGen.get())));
@@ -427,9 +431,9 @@ public class OpUtil {
         Op bitmap = bitmapPlus.getOp();
         Op arg;
         if (bitmap.isFun(FunctionSet.BITMAP_UNION_INT)) {
-            arg = Apply.apply(Type.BITMAP, FunctionSet.BITMAP_AGG, true, bitmap.getArgs());
+            arg = Apply.apply(BitmapType.BITMAP, FunctionSet.BITMAP_AGG, true, bitmap.getArgs());
         } else if (bitmap.isFun(FunctionSet.BITMAP_UNION_COUNT)) {
-            arg = Apply.apply(Type.BITMAP, FunctionSet.BITMAP_UNION, true, bitmap.getArgs());
+            arg = Apply.apply(BitmapType.BITMAP, FunctionSet.BITMAP_UNION, true, bitmap.getArgs());
         } else {
             return Optional.empty();
         }
@@ -472,7 +476,7 @@ public class OpUtil {
         Op b = addOp.arg(1);
         Function<Op, List<EitherOr<OpPlus>>> newArgsMaker = op -> {
             Op sumAgg = Apply.apply(sum.getType(), FunctionSet.SUM, true, op);
-            Op countAgg = Apply.apply(Type.BIGINT, FunctionSet.COUNT, true, op);
+            Op countAgg = Apply.apply(IntegerType.BIGINT, FunctionSet.COUNT, true, op);
             return Stream.of(sumAgg, countAgg).map(o ->
                     Optional.ofNullable(alreadyExists.get(o.strict()))
                             .map(id -> EitherOr.either(OpPlus.of(o, id)))
@@ -515,8 +519,8 @@ public class OpUtil {
         Preconditions.checkArgument(percentile.isFun(FunctionSet.PERCENTILE_APPROX));
         Op arg = percentile.arg(0);
         Op rate = percentile.arg(1);
-        Op percentileHash = Op.apply(Type.PERCENTILE, FunctionSet.PERCENTILE_HASH, true, arg);
-        Op percentileUnion = Op.apply(Type.PERCENTILE, FunctionSet.PERCENTILE_UNION, true, percentileHash);
+        Op percentileHash = Op.apply(PercentileType.PERCENTILE, FunctionSet.PERCENTILE_HASH, true, arg);
+        Op percentileUnion = Op.apply(PercentileType.PERCENTILE, FunctionSet.PERCENTILE_UNION, true, percentileHash);
         EitherOr<OpPlus> argPlus = Optional.ofNullable(alreadyExists.get(percentileUnion.strict()))
                 .map(id -> EitherOr.either(OpPlus.of(percentileUnion, id)))
                 .orElseGet(() -> EitherOr.or(OpPlus.of(percentileUnion, idGen.get())));
@@ -559,7 +563,7 @@ public class OpUtil {
 
         Apply apply = avg.cast();
         Op sumOp = Op.apply(avg.arg(0).getType(), FunctionSet.SUM, true, apply.getArgs());
-        Op countOp = Op.apply(Type.BIGINT, FunctionSet.COUNT, true, apply.getArgs());
+        Op countOp = Op.apply(IntegerType.BIGINT, FunctionSet.COUNT, true, apply.getArgs());
         List<EitherOr<OpPlus>> argPlusList =
                 Stream.of(sumOp, countOp)
                         .map(arg -> Optional.ofNullable(alreadyExists.get(arg.strict()))
@@ -592,9 +596,9 @@ public class OpUtil {
         Op op = hllOp.getOp();
         Op arg;
         if (op.isFun(FunctionSet.NDV) || op.isFun(FunctionSet.APPROX_COUNT_DISTINCT)) {
-            arg = Op.apply(Type.HLL, FunctionSet.HLL_RAW, true, op.getArgs());
+            arg = Op.apply(HLLType.HLL, FunctionSet.HLL_RAW, true, op.getArgs());
         } else if (op.isFun(FunctionSet.HLL_UNION_AGG)) {
-            arg = Op.apply(Type.HLL, FunctionSet.HLL_UNION, true, op.getArgs());
+            arg = Op.apply(HLLType.HLL, FunctionSet.HLL_UNION, true, op.getArgs());
         } else {
             return Optional.empty();
         }
@@ -873,24 +877,24 @@ public class OpUtil {
 
     public static Op createOneSampleConjunct(Var var, int n, int ub) {
         // murmur_hash3_32(c)
-        Op hash = Apply.apply(Type.INT, FunctionKind.of(FunctionSet.MURMUR_HASH3_32), true, ImmutableList.of(var));
+        Op hash = Apply.apply(IntegerType.INT, FunctionKind.of(FunctionSet.MURMUR_HASH3_32), true, ImmutableList.of(var));
         // n
         Op constN = Apply.val(ConstantOperator.createBigint(n));
 
         // murmur_hash3_32(c)%n
         List<Op> modArgs = ImmutableList.of(hash, constN);
         String modFunc = ArithmeticExpr.Operator.MOD.getName();
-        Op modOp = Apply.apply(Type.BIGINT, FunctionKind.of(modFunc), true, modArgs);
+        Op modOp = Apply.apply(IntegerType.BIGINT, FunctionKind.of(modFunc), true, modArgs);
 
         // murmur_hash3_32(c)%n+n
         String addFunc = ArithmeticExpr.Operator.ADD.getName();
         List<Op> addArgs = ImmutableList.of(modOp, constN);
-        Op addOp = Apply.apply(Type.BIGINT, FunctionKind.of(addFunc), true, addArgs);
+        Op addOp = Apply.apply(IntegerType.BIGINT, FunctionKind.of(addFunc), true, addArgs);
 
         // coalesce(murmur_hash3_32(c)%n+n, 0)
         Op const0 = Apply.val(ConstantOperator.createBigint(0));
         List<Op> coalesceArgs = ImmutableList.of(addOp, const0);
-        Op coalesceOp = Apply.apply(Type.BIGINT, FunctionKind.of(FunctionSet.COALESCE), true, coalesceArgs);
+        Op coalesceOp = Apply.apply(IntegerType.BIGINT, FunctionKind.of(FunctionSet.COALESCE), true, coalesceArgs);
 
         // coalesce(murmur_hash3_32(c)%n+n, 0) between lb and ub
         Op constUb = Apply.val(ConstantOperator.createBigint(ub));

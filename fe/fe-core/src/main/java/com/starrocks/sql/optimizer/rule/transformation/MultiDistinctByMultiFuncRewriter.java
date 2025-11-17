@@ -33,8 +33,8 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
 import java.util.HashMap;
@@ -171,7 +171,7 @@ public class MultiDistinctByMultiFuncRewriter {
 
     private CallOperator buildMultiCountDistinct(CallOperator oldFunctionCall) {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
-                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
+                oldFunctionCall.getFunction().getArgs(), InvalidType.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
         return (CallOperator) scalarRewriter.rewrite(
@@ -182,7 +182,7 @@ public class MultiDistinctByMultiFuncRewriter {
 
     private CallOperator buildArrayAggDistinct(CallOperator oldFunctionCall) {
         Function searchDesc = new Function(new FunctionName(FunctionSet.ARRAY_AGG_DISTINCT),
-                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
+                oldFunctionCall.getFunction().getArgs(), InvalidType.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
         return (CallOperator) scalarRewriter.rewrite(

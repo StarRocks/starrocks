@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,20 +31,20 @@ public class BeTxnsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", IntegerType.BIGINT)
                         .column("LOAD_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TXN_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("PARTITION_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("TABLET_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("COMMIT_TIME", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("PUBLISH_TIME", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TXN_ID", IntegerType.BIGINT)
+                        .column("PARTITION_ID", IntegerType.BIGINT)
+                        .column("TABLET_ID", IntegerType.BIGINT)
+                        .column("CREATE_TIME", IntegerType.BIGINT)
+                        .column("COMMIT_TIME", IntegerType.BIGINT)
+                        .column("PUBLISH_TIME", IntegerType.BIGINT)
                         .column("ROWSET_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("NUM_SEGMENT", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NUM_DELFILE", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("NUM_ROW", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("DATA_SIZE", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("NUM_SEGMENT", IntegerType.BIGINT)
+                        .column("NUM_DELFILE", IntegerType.BIGINT)
+                        .column("NUM_ROW", IntegerType.BIGINT)
+                        .column("DATA_SIZE", IntegerType.BIGINT)
+                        .column("VERSION", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_BE_TXNS);
     }
 }

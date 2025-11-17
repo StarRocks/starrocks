@@ -24,12 +24,13 @@ import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
 
 public class IcebergSnapshotsTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_snapshots_table";
@@ -45,13 +46,12 @@ public class IcebergSnapshotsTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("committed_at", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("snapshot_id", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("parent_id", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("operation", TypeFactory.createType(PrimitiveType.VARCHAR))
-                        .column("manifest_list", TypeFactory.createType(PrimitiveType.VARCHAR))
-                        .column("summary", new MapType(
-                                TypeFactory.createType(PrimitiveType.VARCHAR), TypeFactory.createType(PrimitiveType.VARCHAR)))
+                        .column("committed_at", DATETIME)
+                        .column("snapshot_id", BIGINT)
+                        .column("parent_id", BIGINT)
+                        .column("operation", VarcharType.VARCHAR)
+                        .column("manifest_list", VarcharType.VARCHAR)
+                        .column("summary", new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR))
                         .build(),
                 originDb,
                 originTable,

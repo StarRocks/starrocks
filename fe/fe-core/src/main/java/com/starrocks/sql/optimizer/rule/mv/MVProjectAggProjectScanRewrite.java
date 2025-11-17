@@ -32,6 +32,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.Type;
 
 import java.util.HashMap;
@@ -89,10 +91,10 @@ public class MVProjectAggProjectScanRewrite {
                                            Pair<ColumnRefOperator, ColumnRefOperator> aggUsedColumn,
                                            CallOperator queryAgg) {
         CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
-                Type.DOUBLE, Lists.newArrayList(aggUsedColumn.second, queryAgg.getChild(1)),
+                FloatType.DOUBLE, Lists.newArrayList(aggUsedColumn.second, queryAgg.getChild(1)),
                 ExprUtils.getBuiltinFunction(
                         FunctionSet.PERCENTILE_APPROX_RAW,
-                        new Type[] {Type.PERCENTILE, Type.DOUBLE},
+                        new Type[] {PercentileType.PERCENTILE, FloatType.DOUBLE},
                         Function.CompareMode.IS_IDENTICAL));
 
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = new HashMap<>();
@@ -178,7 +180,7 @@ public class MVProjectAggProjectScanRewrite {
 
     private CallOperator getPercentileFunction(CallOperator oldAgg) {
         Function fn = ExprUtils.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
-                new Type[] {Type.PERCENTILE}, IS_IDENTICAL);
+                new Type[] {PercentileType.PERCENTILE}, IS_IDENTICAL);
         ScalarOperator child = oldAgg.getChildren().get(0);
         if (child instanceof CastOperator) {
             child = child.getChild(0);

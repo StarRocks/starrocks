@@ -25,7 +25,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
+import com.starrocks.type.StringType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -39,14 +40,14 @@ import java.util.Optional;
 
 public class RecommendationsTaskStatus implements Writable {
     private static final ShowResultSetMetaData TASK_METADATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("TaskName", Type.STRING))
-            .addColumn(new Column("Tunespace", Type.STRING))
-            .addColumn(new Column("ResultTable", Type.STRING))
-            .addColumn(new Column("StartTime", Type.DATETIME))
-            .addColumn(new Column("EndTime", Type.DATETIME))
-            .addColumn(new Column("LastTime", Type.STRING))
-            .addColumn(new Column("Status", Type.STRING))
-            .addColumn(new Column("ErrorMsg", Type.STRING))
+            .addColumn(new Column("TaskName", StringType.STRING))
+            .addColumn(new Column("Tunespace", StringType.STRING))
+            .addColumn(new Column("ResultTable", StringType.STRING))
+            .addColumn(new Column("StartTime", DateType.DATETIME))
+            .addColumn(new Column("EndTime", DateType.DATETIME))
+            .addColumn(new Column("LastTime", StringType.STRING))
+            .addColumn(new Column("Status", StringType.STRING))
+            .addColumn(new Column("ErrorMsg", StringType.STRING))
             .build();
     @SerializedName(value = "taskName")
     private String taskName;

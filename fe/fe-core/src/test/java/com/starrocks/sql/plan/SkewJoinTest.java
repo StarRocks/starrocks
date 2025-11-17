@@ -18,7 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -317,7 +317,7 @@ public class SkewJoinTest extends PlanTestBase {
     public void testIntSkewColumnVarchar() throws Exception {
         connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0);
         ((MockHistogramStatisticStorage) connectContext.getGlobalStateMgr()
-                .getStatisticStorage()).addHistogramStatistis("c_nationkey", Type.INT, 100);
+                .getStatisticStorage()).addHistogramStatistis("c_nationkey", IntegerType.INT, 100);
 
         String sql = "select * from test.customer join test.part on P_SIZE = C_NATIONKEY and p_partkey = c_custkey";
         String sqlPlan = getFragmentPlan(sql);

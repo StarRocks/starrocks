@@ -49,8 +49,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -85,9 +84,9 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
         UtFrameUtils.createMinStarRocksCluster();
 
-        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        columns.add(new Column("k2", IntegerType.SMALLINT, true, null, "", ""));
+        columns.add(new Column("v1", IntegerType.INT, false, AggregateType.SUM, "", ""));
 
         super.before();
 

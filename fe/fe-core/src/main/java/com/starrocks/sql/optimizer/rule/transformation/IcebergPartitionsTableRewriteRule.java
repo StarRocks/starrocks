@@ -32,6 +32,8 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -77,7 +79,7 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                     break;
                 case "spec_id":
                     fun = ExprUtils.getBuiltinFunction("any_value", argTypes, Function.CompareMode.IS_IDENTICAL);
-                    agg = new CallOperator("any_value", Type.INT, Lists.newArrayList(columnRefOperator), fun);
+                    agg = new CallOperator("any_value", IntegerType.INT, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 case "record_count":
                 case "total_data_file_size_in_bytes":
@@ -87,11 +89,11 @@ public class IcebergPartitionsTableRewriteRule extends TransformationRule {
                 case "position_delete_file_count":
                 case "equality_delete_file_count":
                     fun = ExprUtils.getBuiltinFunction("sum", argTypes, Function.CompareMode.IS_IDENTICAL);
-                    agg = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(columnRefOperator), fun);
+                    agg = new CallOperator("sum", IntegerType.BIGINT, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 case "last_updated_at":
                     fun = ExprUtils.getBuiltinFunction("max", argTypes, Function.CompareMode.IS_IDENTICAL);
-                    agg = new CallOperator("max", Type.DATETIME, Lists.newArrayList(columnRefOperator), fun);
+                    agg = new CallOperator("max", DateType.DATETIME, Lists.newArrayList(columnRefOperator), fun);
                     break;
                 default:
                     throw new StarRocksConnectorException("Unknown column name %s when rewriting " +

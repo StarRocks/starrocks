@@ -42,7 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -167,11 +167,11 @@ public class UtilsTest {
                         ConstantOperator.createBoolean(false),
                         new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                                 new BinaryPredicateOperator(BinaryType.EQ,
-                                        new ColumnRefOperator(3, Type.INT, "hello", true),
+                                        new ColumnRefOperator(3, IntegerType.INT, "hello", true),
                                         ConstantOperator.createInt(1)),
                                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                                        new ColumnRefOperator(1, Type.INT, "name", true),
-                                        new ColumnRefOperator(2, Type.INT, "age", true))));
+                                        new ColumnRefOperator(1, IntegerType.INT, "name", true),
+                                        new ColumnRefOperator(2, IntegerType.INT, "age", true))));
 
         List<ColumnRefOperator> list = Utils.extractColumnRef(root);
 
@@ -269,11 +269,11 @@ public class UtilsTest {
                 new ColumnStatistic(1, 1, 0, 1, 1));
 
         Map<ColumnRefOperator, Column> columnRefMap = new HashMap<>();
-        columnRefMap.put(new ColumnRefOperator(1, Type.BIGINT, "v1", true),
+        columnRefMap.put(new ColumnRefOperator(1, IntegerType.BIGINT, "v1", true),
                 t0.getBaseColumn("v1"));
-        columnRefMap.put(new ColumnRefOperator(2, Type.BIGINT, "v2", true),
+        columnRefMap.put(new ColumnRefOperator(2, IntegerType.BIGINT, "v2", true),
                 t0.getBaseColumn("v2"));
-        columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
+        columnRefMap.put(new ColumnRefOperator(3, IntegerType.BIGINT, "v3", true),
                 t0.getBaseColumn("v3"));
 
         OptExpression opt =
@@ -395,13 +395,13 @@ public class UtilsTest {
             ColumnRefOperator midColRef;
             {
                 String colName = "v" + (i + 1);
-                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
-                midColRef = new ColumnRefOperator(i + 50, Type.BIGINT, colName, true);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
+                midColRef = new ColumnRefOperator(i + 50, IntegerType.BIGINT, colName, true);
                 columnRefMap1.put(colRef, midColRef);
             }
             {
                 String colName = "v" + (i + 100);
-                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
                 columnRefMap2.put(midColRef, colRef);
             }
         }
@@ -410,7 +410,7 @@ public class UtilsTest {
         Projection mergedProjection = Utils.mergeWithProject(projection1, projection2);
         Assertions.assertEquals(10, mergedProjection.getColumnRefMap().size());
         for (int i = 0; i < 10; i++) {
-            ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, "v" + (i + 1), true);
+            ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, "v" + (i + 1), true);
             Assertions.assertTrue(mergedProjection.getColumnRefMap().containsKey(colRef));
             ScalarOperator scalarOperator = mergedProjection.getColumnRefMap().get(colRef);
             Assertions.assertTrue(scalarOperator instanceof ColumnRefOperator);
@@ -425,13 +425,13 @@ public class UtilsTest {
             ColumnRefOperator midColRef;
             {
                 String colName = "v" + (i + 1);
-                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
-                midColRef = new ColumnRefOperator(i + 50, Type.BIGINT, colName, true);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
+                midColRef = new ColumnRefOperator(i + 50, IntegerType.BIGINT, colName, true);
                 columnRefMap1.put(colRef, midColRef);
             }
             {
                 String colName = "v" + (i + 100);
-                ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, colName, true);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
                 columnRefMap2.put(midColRef, colRef);
             }
         }
@@ -439,7 +439,7 @@ public class UtilsTest {
         Map<ColumnRefOperator, ScalarOperator> mergedColRefMap = Utils.mergeWithProject(columnRefMap1, projection2);
         Assertions.assertEquals(10, mergedColRefMap.size());
         for (int i = 0; i < 10; i++) {
-            ColumnRefOperator colRef = new ColumnRefOperator(i, Type.BIGINT, "v" + (i + 1), true);
+            ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, "v" + (i + 1), true);
             Assertions.assertTrue(mergedColRefMap.containsKey(colRef));
             ScalarOperator scalarOperator = mergedColRefMap.get(colRef);
             Assertions.assertTrue(scalarOperator instanceof ColumnRefOperator);

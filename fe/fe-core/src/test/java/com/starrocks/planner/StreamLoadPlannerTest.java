@@ -54,7 +54,7 @@ import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -94,9 +94,9 @@ public class StreamLoadPlannerTest {
     @Test
     public void testNormalPlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, false);
+        Column c1 = new Column("c1", IntegerType.BIGINT, false);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
         columns.add(c2);
         new Expectations() {
             {
@@ -133,9 +133,9 @@ public class StreamLoadPlannerTest {
     @Test
     public void testPartialUpdatePlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, false);
+        Column c1 = new Column("c1", IntegerType.BIGINT, false);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
         columns.add(c2);
         new Expectations() {
             {

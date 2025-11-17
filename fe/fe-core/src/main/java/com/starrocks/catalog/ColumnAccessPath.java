@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -201,14 +202,14 @@ public class ColumnAccessPath {
     public void clearUnusedValueType() {
         // only save leaf's value type
         if (!children.isEmpty()) {
-            this.valueType = Type.INVALID;
+            this.valueType = InvalidType.INVALID;
             children.forEach(ColumnAccessPath::clearUnusedValueType);
         }
     }
 
     private void explainImpl(String parent, List<String> allPaths) {
         boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
-        boolean hasType = valueType != Type.INVALID;
+        boolean hasType = valueType != InvalidType.INVALID;
         String cur = parent + "/" + (hasName ? path : type.name())
                 + (hasType ? "(" + valueType.toSql() + ")" : "");
         if (children.isEmpty()) {

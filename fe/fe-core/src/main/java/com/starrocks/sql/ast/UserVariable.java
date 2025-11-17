@@ -35,6 +35,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -127,7 +128,7 @@ public class UserVariable extends SetListItem {
 
         // process null value
         if (lengthOffset == -1) {
-            return NullLiteral.create(Type.VARCHAR);
+            return NullLiteral.create(VarcharType.VARCHAR);
         }
 
         String value;
@@ -140,7 +141,7 @@ public class UserVariable extends SetListItem {
 
         //JSON type will be stored as string type
         if (targetType.isJsonType()) {
-            targetType = Type.VARCHAR;
+            targetType = VarcharType.VARCHAR;
         }
 
         if (targetType.isScalarType()) {

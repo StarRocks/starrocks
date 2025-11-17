@@ -22,7 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -330,7 +330,7 @@ public class RegisterTableProcedureTest {
     public void testRegisterTableProcedureNullArguments(@Mocked ConnectContext context) {
         // Test exception when arguments contain null values
         Map<String, ConstantOperator> args = new HashMap<>();
-        args.put("database_name", ConstantOperator.createNull(Type.VARCHAR));
+        args.put("database_name", ConstantOperator.createNull(VarcharType.VARCHAR));
         args.put("table_name", ConstantOperator.createVarchar("test_table"));
         args.put("metadata_file", ConstantOperator.createVarchar("/path/to/table/metadata.json"));
 

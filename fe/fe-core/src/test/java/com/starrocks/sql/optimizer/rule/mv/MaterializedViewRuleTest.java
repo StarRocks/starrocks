@@ -33,7 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -91,15 +91,15 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     @Test
     public void testCount1Rewrite() {
         ColumnRefFactory tmpRefFactory = new ColumnRefFactory();
-        ColumnRefOperator queryColumnRef = tmpRefFactory.create("count", Type.INT, false);
-        ColumnRefOperator mvColumnRef = tmpRefFactory.create("count", Type.INT, false);
-        Column mvColumn = new Column("k1", Type.INT);
+        ColumnRefOperator queryColumnRef = tmpRefFactory.create("count", IntegerType.INT, false);
+        ColumnRefOperator mvColumnRef = tmpRefFactory.create("count", IntegerType.INT, false);
+        Column mvColumn = new Column("k1", IntegerType.INT);
         List<ScalarOperator> arguments = Lists.newArrayList();
         arguments.add(queryColumnRef);
-        CallOperator aggCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT, arguments);
+        CallOperator aggCall = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, arguments);
         MaterializedViewRule.RewriteContext rewriteContext =
                     new MaterializedViewRule.RewriteContext(aggCall, queryColumnRef, mvColumnRef, mvColumn);
-        ColumnRefOperator dsColumnRef = tmpRefFactory.create("ds", Type.INT, false);
+        ColumnRefOperator dsColumnRef = tmpRefFactory.create("ds", IntegerType.INT, false);
         List<ColumnRefOperator> groupKeys = Lists.newArrayList();
         groupKeys.add(dsColumnRef);
 
@@ -107,8 +107,8 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         ConstantOperator one = ConstantOperator.createInt(1);
         List<ScalarOperator> countAgruments = Lists.newArrayList();
         countAgruments.add(one);
-        CallOperator countOne = new CallOperator(FunctionSet.COUNT, Type.BIGINT, countAgruments);
-        ColumnRefOperator countOneKey = tmpRefFactory.create("countKey", Type.BIGINT, false);
+        CallOperator countOne = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, countAgruments);
+        ColumnRefOperator countOneKey = tmpRefFactory.create("countKey", IntegerType.BIGINT, false);
         aggregates.put(countOneKey, countOne);
         LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
         OptExpression aggExpr = OptExpression.create(aggregationOperator);
@@ -119,9 +119,9 @@ public class MaterializedViewRuleTest extends PlanTestBase {
             Assertions.assertTrue(false);
         }
 
-        CallOperator countStar = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList());
+        CallOperator countStar = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList());
         aggregates.clear();
-        ColumnRefOperator countStarkey = tmpRefFactory.create("countStar", Type.BIGINT, false);
+        ColumnRefOperator countStarkey = tmpRefFactory.create("countStar", IntegerType.BIGINT, false);
         aggregates.put(countStarkey, countStar);
         LogicalAggregationOperator aggregationOperator2 = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
         OptExpression aggExpr2 = OptExpression.create(aggregationOperator2);
@@ -132,9 +132,9 @@ public class MaterializedViewRuleTest extends PlanTestBase {
             Assertions.assertTrue(false);
         }
 
-        CallOperator sumDs = new CallOperator(FunctionSet.SUM, Type.BIGINT, arguments);
+        CallOperator sumDs = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, arguments);
         aggregates.clear();
-        ColumnRefOperator sumKey = tmpRefFactory.create("sumKey", Type.BIGINT, false);
+        ColumnRefOperator sumKey = tmpRefFactory.create("sumKey", IntegerType.BIGINT, false);
         aggregates.put(sumKey, sumDs);
         LogicalAggregationOperator aggregationOperator3 = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
         OptExpression aggExpr3 = OptExpression.create(aggregationOperator3);

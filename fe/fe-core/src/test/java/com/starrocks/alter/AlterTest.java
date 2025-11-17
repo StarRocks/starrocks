@@ -105,6 +105,7 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -730,7 +731,7 @@ public class AlterTest {
 
         // batch update storage_medium and storage_cool_down properties
         stmt = "alter table test.tbl4 modify partition (p2, p3, p4) set ('storage_medium' = 'HDD')";
-        DateLiteral dateLiteral = new DateLiteral("9999-12-31 00:00:00", Type.DATETIME);
+        DateLiteral dateLiteral = new DateLiteral("9999-12-31 00:00:00", DateType.DATETIME);
         long coolDownTimeMs = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
         DataProperty oldDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeMs);
         partitionList = Lists.newArrayList(p2, p3, p4);
@@ -2579,7 +2580,7 @@ public class AlterTest {
         OlapTable olapTable = (OlapTable) table;
 
         // We use reflection to create a new ScalarType instance for DATETIME.
-        // This intentionally bypasses the normal static singleton returned by Type.DATETIME.
+        // This intentionally bypasses the normal static singleton returned by DateType.DATETIME.
         // The goal is to simulate a scenario where type identity (==) fails—demonstrating
         // that reference equality is unsafe for type checks, and .isDatetime() must be used for correctness.
         Constructor<ScalarType> ctor = ScalarType.class.getDeclaredConstructor(PrimitiveType.class);

@@ -65,7 +65,9 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TTypeNode;
-import com.starrocks.type.Type;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -113,7 +115,7 @@ public class StreamLoadScanNodeTest {
     List<Column> getBaseSchema() {
         List<Column> columns = Lists.newArrayList();
 
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         k1.setIsKey(true);
         k1.setIsAllowNull(false);
         columns.add(k1);
@@ -123,7 +125,7 @@ public class StreamLoadScanNodeTest {
         k2.setIsAllowNull(true);
         columns.add(k2);
 
-        Column v1 = new Column("v1", Type.BIGINT);
+        Column v1 = new Column("v1", IntegerType.BIGINT);
         v1.setIsKey(false);
         v1.setIsAllowNull(true);
         v1.setAggregationType(AggregateType.SUM, false);
@@ -142,12 +144,12 @@ public class StreamLoadScanNodeTest {
     List<Column> getHllSchema() {
         List<Column> columns = Lists.newArrayList();
 
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         k1.setIsKey(true);
         k1.setIsAllowNull(false);
         columns.add(k1);
 
-        Column v1 = new Column("v1", Type.HLL);
+        Column v1 = new Column("v1", HLLType.HLL);
         v1.setIsKey(false);
         v1.setIsAllowNull(true);
         v1.setAggregationType(AggregateType.HLL_UNION, false);
@@ -160,15 +162,15 @@ public class StreamLoadScanNodeTest {
     List<Column> getDecimalSchema() {
         List<Column> columns = Lists.newArrayList();
 
-        Column c0 = new Column("c0", Type.DEFAULT_DECIMAL32);
+        Column c0 = new Column("c0", DecimalType.DEFAULT_DECIMAL32);
         c0.setIsKey(false);
         columns.add(c0);
 
-        Column c1 = new Column("c1", Type.DEFAULT_DECIMAL64);
+        Column c1 = new Column("c1", DecimalType.DEFAULT_DECIMAL64);
         c0.setIsKey(false);
         columns.add(c1);
 
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL128);
+        Column c2 = new Column("c2", DecimalType.DEFAULT_DECIMAL128);
         c0.setIsKey(false);
         columns.add(c2);
 
@@ -380,7 +382,7 @@ public class StreamLoadScanNodeTest {
 
         new Expectations() {{
             globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH), Lists.newArrayList(), Type.BIGINT,
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH), Lists.newArrayList(), IntegerType.BIGINT,
                     false);
         }};
 
@@ -432,7 +434,7 @@ public class StreamLoadScanNodeTest {
             new Expectations() {
                 {
                     globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-                    result = new ScalarFunction(new FunctionName("hll_hash1"), Lists.newArrayList(), Type.BIGINT, false);
+                    result = new ScalarFunction(new FunctionName("hll_hash1"), Lists.newArrayList(), IntegerType.BIGINT, false);
                     minTimes = 0;
                 }
             };
@@ -783,7 +785,7 @@ public class StreamLoadScanNodeTest {
             new Expectations() {
                 {
                     globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-                    result = new ScalarFunction(new FunctionName(FunctionSet.ADD), Lists.newArrayList(), Type.BIGINT,
+                    result = new ScalarFunction(new FunctionName(FunctionSet.ADD), Lists.newArrayList(), IntegerType.BIGINT,
                             false);
                 }
             };
@@ -800,7 +802,7 @@ public class StreamLoadScanNodeTest {
     public void testLoadInitColumnsMappingColumnNotExist() {
         assertThrows(DdlException.class, () -> {
             List<Column> columns = Lists.newArrayList();
-            columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
+            columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
             columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
             Table table = new Table(1L, "table0", TableType.OLAP, columns);
             List<ImportColumnDesc> columnExprs = Lists.newArrayList();

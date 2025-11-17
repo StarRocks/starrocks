@@ -34,8 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static com.starrocks.type.Type.INT;
-import static com.starrocks.type.Type.VARCHAR;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.VarcharType.VARCHAR;
 
 /**
  * Test cases for IcebergConnectorScanRangeSource focusing on initBucketInfo and extractBucketId methods

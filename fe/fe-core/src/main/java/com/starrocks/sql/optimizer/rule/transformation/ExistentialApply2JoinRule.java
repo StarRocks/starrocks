@@ -38,7 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 
 import java.util.List;
 import java.util.Map;
@@ -93,7 +93,7 @@ public class ExistentialApply2JoinRule extends TransformationRule {
 
         CallOperator countOperator = SubqueryUtils.createCountRowsOperator();
         ColumnRefOperator countRef =
-                context.getColumnRefFactory().create(countOperator, Type.BIGINT, countOperator.isNullable());
+                context.getColumnRefFactory().create(countOperator, IntegerType.BIGINT, countOperator.isNullable());
         aggregateFunctionMap.put(countRef, countOperator);
 
         OptExpression aggExpression = new OptExpression(

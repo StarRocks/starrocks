@@ -43,7 +43,7 @@ import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -145,7 +145,7 @@ public class PartitionPlus {
                 case HOUR:
                     Op timeUnit = Op.val(ConstantOperator.createChar(transform.name().toLowerCase()));
                     List<Op> args = ImmutableList.of(timeUnit, var);
-                    Op dateTruncOp = Op.apply(Type.DATE, FunctionKind.of(FunctionSet.DATE_TRUNC), true, args);
+                    Op dateTruncOp = Op.apply(DateType.DATE, FunctionKind.of(FunctionSet.DATE_TRUNC), true, args);
                     partitionOps.add(dateTruncOp);
                     break;
                 case IDENTITY:
@@ -256,7 +256,7 @@ public class PartitionPlus {
                     .findFirst()
                     .map(fmt -> Op.val(ConstantOperator.createChar(fmt)))
                     .map(fmt -> ImmutableList.of(var, fmt))
-                    .map(args -> Op.apply(ScalarType.DATE, FunctionKind.of(FunctionSet.STR2DATE), true, args));
+                    .map(args -> Op.apply(DateType.DATE, FunctionKind.of(FunctionSet.STR2DATE), true, args));
             if (optStr2dateOp.isPresent()) {
                 return optStr2dateOp;
             }

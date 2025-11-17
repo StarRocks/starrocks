@@ -41,7 +41,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -57,7 +59,7 @@ public class StringLiteral extends LiteralExpr {
 
     public StringLiteral() {
         super(NodePosition.ZERO);
-        type = Type.VARCHAR;
+        type = VarcharType.VARCHAR;
     }
 
     public StringLiteral(String value) {
@@ -67,7 +69,7 @@ public class StringLiteral extends LiteralExpr {
     public StringLiteral(String value, NodePosition pos) {
         super(pos);
         this.value = value;
-        type = Type.VARCHAR;
+        type = VarcharType.VARCHAR;
         analysisDone();
     }
 
@@ -171,8 +173,8 @@ public class StringLiteral extends LiteralExpr {
             newLiteral = new DateLiteral(value, targetType);
         } catch (AnalysisException e) {
             if (targetType.isDatetime()) {
-                newLiteral = new DateLiteral(value, Type.DATE);
-                newLiteral.setType(Type.DATETIME);
+                newLiteral = new DateLiteral(value, DateType.DATE);
+                newLiteral.setType(DateType.DATETIME);
             } else {
                 throw e;
             }

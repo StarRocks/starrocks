@@ -41,7 +41,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 
 import java.util.HashMap;
 import java.util.List;
@@ -117,8 +118,9 @@ public class ReplayMetadataMgr extends MetadataMgr {
                     List<String> partitionNames = hiveMetaStoreTableDumpInfo.getPartitionNames();
 
                     Map<String, ColumnStatistic> columnStatistics = identifyToColumnStats.get(dbName + "." + tableName);
-                    Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = columnStatistics.entrySet().stream().collect(
-                            toImmutableMap(entry -> new ColumnRefOperator((int) idGen++, Type.INT, entry.getKey(), false),
+                    Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = columnStatistics.entrySet().stream()
+                            .collect(toImmutableMap(
+                                    entry -> new ColumnRefOperator((int) idGen++, IntegerType.INT, entry.getKey(), false),
                                     Map.Entry::getValue));
                     double rowCount = hiveMetaStoreTableDumpInfo.getScanRowCount();
                     Statistics statistics = Statistics.builder()
@@ -135,8 +137,8 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     private List<Column> mockColumns(List<String> partitionColumns, List<String> dataColumns) {
-        List<Column> res = dataColumns.stream().map(x -> new Column(x, Type.STRING)).collect(Collectors.toList());
-        res.addAll(partitionColumns.stream().map(x -> new Column(x, Type.STRING)).collect(Collectors.toList()));
+        List<Column> res = dataColumns.stream().map(x -> new Column(x, StringType.STRING)).collect(Collectors.toList());
+        res.addAll(partitionColumns.stream().map(x -> new Column(x, StringType.STRING)).collect(Collectors.toList()));
         return res;
     }
 

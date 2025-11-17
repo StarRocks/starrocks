@@ -44,6 +44,11 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
@@ -155,18 +160,18 @@ public class SetExecutorTest {
 
     @Test
     public void testUserDefineVariable() throws Exception {
-        testUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.TINYINT);
-        testUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.SMALLINT);
-        testUserVariableImp(new IntLiteral(1, Type.INT), Type.INT);
-        testUserVariableImp(new IntLiteral(1, Type.BIGINT), Type.BIGINT);
-        testUserVariableImp(new LargeIntLiteral("1"), Type.LARGEINT);
-        testUserVariableImp(new FloatLiteral(1D, Type.FLOAT), Type.FLOAT);
-        testUserVariableImp(new FloatLiteral(1D, Type.DOUBLE), Type.DOUBLE);
-        testUserVariableImp(new DateLiteral("2020-01-01", Type.DATE), Type.DATE);
-        testUserVariableImp(new DateLiteral("2020-01-01 00:00:00", Type.DATETIME), Type.DATETIME);
-        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
-        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
-        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
+        testUserVariableImp(new IntLiteral(1, IntegerType.TINYINT), IntegerType.TINYINT);
+        testUserVariableImp(new IntLiteral(1, IntegerType.TINYINT), IntegerType.SMALLINT);
+        testUserVariableImp(new IntLiteral(1, IntegerType.INT), IntegerType.INT);
+        testUserVariableImp(new IntLiteral(1, IntegerType.BIGINT), IntegerType.BIGINT);
+        testUserVariableImp(new LargeIntLiteral("1"), IntegerType.LARGEINT);
+        testUserVariableImp(new FloatLiteral(1D, FloatType.FLOAT), FloatType.FLOAT);
+        testUserVariableImp(new FloatLiteral(1D, FloatType.DOUBLE), FloatType.DOUBLE);
+        testUserVariableImp(new DateLiteral("2020-01-01", DateType.DATE), DateType.DATE);
+        testUserVariableImp(new DateLiteral("2020-01-01 00:00:00", DateType.DATETIME), DateType.DATETIME);
+        testUserVariableImp(new DecimalLiteral("1", DecimalType.DECIMAL32_INT), DecimalType.DECIMAL32_INT);
+        testUserVariableImp(new DecimalLiteral("1", DecimalType.DECIMAL64_INT), DecimalType.DECIMAL64_INT);
+        testUserVariableImp(new DecimalLiteral("1", DecimalType.DECIMAL128_INT), DecimalType.DECIMAL128_INT);
         testUserVariableImp(new StringLiteral("xxx"), TypeFactory.createVarcharType(10));
     }
 
@@ -211,9 +216,9 @@ public class SetExecutorTest {
         UserVariable userVariableA = ctx.getUserVariable("aVar");
         UserVariable userVariableB = ctx.getUserVariable("bVar");
         UserVariable userVariableC = ctx.getUserVariable("cVar");
-        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
-        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
-        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(IntegerType.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(IntegerType.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(IntegerType.INT));
 
         LiteralExpr literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
         Assertions.assertEquals("5", literalExprA.getStringValue());
@@ -231,9 +236,9 @@ public class SetExecutorTest {
         userVariableA = ctx.getUserVariable("aVar");
         userVariableB = ctx.getUserVariable("bVar");
         userVariableC = ctx.getUserVariable("cVar");
-        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
-        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
-        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(Type.INT));
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(IntegerType.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(IntegerType.SMALLINT));
+        Assertions.assertTrue(userVariableC.getEvaluatedExpression().getType().matchesType(IntegerType.INT));
         literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
         Assertions.assertEquals("6", literalExprA.getStringValue());
 
@@ -251,8 +256,8 @@ public class SetExecutorTest {
         userVariableA = ctx.getUserVariable("aVar");
         userVariableB = ctx.getUserVariable("bVar");
         userVariableC = ctx.getUserVariable("cVar");
-        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(Type.TINYINT));
-        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(Type.SMALLINT));
+        Assertions.assertTrue(userVariableA.getEvaluatedExpression().getType().matchesType(IntegerType.TINYINT));
+        Assertions.assertTrue(userVariableB.getEvaluatedExpression().getType().matchesType(IntegerType.SMALLINT));
         Assertions.assertTrue(userVariableC.getEvaluatedExpression() instanceof NullLiteral);
 
         literalExprA = (LiteralExpr) userVariableA.getEvaluatedExpression();
@@ -297,7 +302,7 @@ public class SetExecutorTest {
     @Test
     public void testJSONVariable() throws Exception {
         String json = "'{\"xxx\" : 1}'";
-        Type type = Type.JSON;
+        Type type = JsonType.JSON;
         String sql = String.format("set @var = cast(%s as %s)", json, type.toSql());
         UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
     }

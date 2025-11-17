@@ -24,7 +24,9 @@ import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -72,9 +74,9 @@ public class UDFTest extends PlanTestBase {
             List<String> colNames = new ArrayList<>();
             colNames.add("table_function");
             List<Type> argTypes = new ArrayList<>();
-            argTypes.add(Type.VARCHAR);
+            argTypes.add(VarcharType.VARCHAR);
             List<Type> retTypes = new ArrayList<>();
-            retTypes.add(Type.VARCHAR);
+            retTypes.add(VarcharType.VARCHAR);
             final TableFunction tableFunction = new TableFunction(functionName, colNames, argTypes, retTypes);
             functionSet.addBuiltin(tableFunction);
         }
@@ -131,11 +133,11 @@ public class UDFTest extends PlanTestBase {
     @Test
     public void testFunctionSerialized() {
         FunctionName functionName = new FunctionName("db", "fn");
-        List<Type> argList = Lists.newArrayList(Type.INT);
+        List<Type> argList = Lists.newArrayList(IntegerType.INT);
 
         TableFunction tableFunction = new TableFunction(functionName,
                 Lists.newArrayList(functionName.getFunction()),
-                argList, Lists.newArrayList(Type.INT));
+                argList, Lists.newArrayList(IntegerType.INT));
         tableFunction.setBinaryType(TFunctionBinaryType.SRJAR);
         tableFunction.setChecksum("abc");
         tableFunction.setLocation(new HdfsURI("file://"));

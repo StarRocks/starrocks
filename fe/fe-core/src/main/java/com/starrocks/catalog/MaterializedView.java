@@ -89,6 +89,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
@@ -982,7 +983,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionExpr == null) {
             return Optional.empty();
         }
-        if (partitionExpr.getType() == Type.INVALID) {
+        if (partitionExpr.getType() == InvalidType.INVALID) {
             Optional<Column> partitionColOpt = getRangePartitionFirstColumn();
             if (partitionColOpt.isEmpty()) {
                 return Optional.empty();

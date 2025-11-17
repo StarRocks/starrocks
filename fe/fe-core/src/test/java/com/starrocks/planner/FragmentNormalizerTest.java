@@ -30,9 +30,11 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -81,7 +83,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForDate() throws AnalysisException {
-        Column partitionColumn = new Column("dt", TypeFactory.createType(PrimitiveType.DATE));
+        Column partitionColumn = new Column("dt", DateType.DATE);
         LiteralExpr lower = new DateLiteral(2022, 1, 1);
         LiteralExpr lowerSucc = new DateLiteral(2022, 1, 2);
         LiteralExpr upper = new DateLiteral(2022, 1, 10);
@@ -91,7 +93,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForDatetime() throws AnalysisException {
-        Column partitionColumn = new Column("ts", TypeFactory.createType(PrimitiveType.DATETIME));
+        Column partitionColumn = new Column("ts", DateType.DATETIME);
         LiteralExpr lower = new DateLiteral(2022, 1, 1, 11, 23, 59, 0);
         LiteralExpr lowerSucc = new DateLiteral(2022, 1, 1, 11, 24, 0, 0);
         LiteralExpr upper = new DateLiteral(2022, 1, 10, 23, 59, 59, 0);
@@ -122,7 +124,7 @@ public class FragmentNormalizerTest {
 
     @Test
     public void testToClosedAndOpenRangeForLargeInt() throws AnalysisException {
-        Column partitionColumn = new Column("k0", TypeFactory.createType(PrimitiveType.LARGEINT));
+        Column partitionColumn = new Column("k0", IntegerType.LARGEINT);
         LiteralExpr lower = new LargeIntLiteral("1");
         LiteralExpr lowerSucc = new LargeIntLiteral("2");
         LiteralExpr upper =

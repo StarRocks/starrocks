@@ -41,6 +41,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,7 +123,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             // generate a placeholder column for scan node.
             // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
-            Column c = new Column(metaColumnName, Type.NULL);
+            Column c = new Column(metaColumnName, NullType.NULL);
             c.setIsAllowNull(true);
             ColumnRefOperator placeholderColumn =
                     columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());
@@ -129,9 +131,10 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
             newScanColumnRefs.put(placeholderColumn, c);
 
-            CallOperator sumCall = new CallOperator(FunctionSet.SUM, Type.BIGINT,
+            CallOperator sumCall = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT,
                     Collections.singletonList(placeholderColumn),
-                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL));
+                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
+                            Function.CompareMode.IS_IDENTICAL));
             newAggCalls.put(sumOutputColumnRef, sumCall);
         }
 
@@ -170,9 +173,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         newAggOperator.setProjection(aggregationOperator.getProjection());
 
         // ifnull(sum(__count__)), 0) to avoid null result
-        CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
+        CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
                 Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
-                ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
+                ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {IntegerType.BIGINT, IntegerType.BIGINT},
                         Function.CompareMode.IS_IDENTICAL));
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         newProjectMap.putAll(newAggOperator.getColumnRefMap());

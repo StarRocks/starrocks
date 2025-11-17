@@ -24,7 +24,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.statistic.base.ColumnStats;
 import com.starrocks.thrift.TStatisticData;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.Arrays;
@@ -65,12 +65,12 @@ public abstract class MultiColumnQueryJob extends HyperQueryJob {
 
     public List<Expr> createInsertValueExpr(TStatisticData data, String tableName) {
         List<Expr> row = Lists.newArrayList();
-        row.add(new IntLiteral(table.getId(), Type.BIGINT));
+        row.add(new IntLiteral(table.getId(), IntegerType.BIGINT));
         row.add(new StringLiteral(data.getColumnName()));
-        row.add(new IntLiteral(db.getId(), Type.BIGINT));
+        row.add(new IntLiteral(db.getId(), IntegerType.BIGINT));
         row.add(new StringLiteral(tableName));
         row.add(new StringLiteral(getColumnNames(data.getColumnName())));
-        row.add(new IntLiteral(data.getCountDistinct(), Type.BIGINT));
+        row.add(new IntLiteral(data.getCountDistinct(), IntegerType.BIGINT));
         row.add(nowFn());
         return row;
     }

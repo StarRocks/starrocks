@@ -50,6 +50,7 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTypeDesc;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
@@ -342,7 +343,7 @@ public class Function implements Writable {
 
     public Type getVarArgsType() {
         if (!hasVarArgs) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         Preconditions.checkState(argTypes.length > 0);
         return argTypes[argTypes.length - 1];

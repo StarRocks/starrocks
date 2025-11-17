@@ -17,8 +17,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -30,14 +30,14 @@ public class BeCompactionsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("CANDIDATES_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("BASE_COMPACTION_CONCURRENCY", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("CUMULATIVE_COMPACTION_CONCURRENCY", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("LATEST_COMPACTION_SCORE", TypeFactory.createType(PrimitiveType.DOUBLE))
-                        .column("CANDIDATE_MAX_SCORE", TypeFactory.createType(PrimitiveType.DOUBLE))
-                        .column("MANUAL_COMPACTION_CONCURRENCY", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("MANUAL_COMPACTION_CANDIDATES_NUM", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", IntegerType.BIGINT)
+                        .column("CANDIDATES_NUM", IntegerType.BIGINT)
+                        .column("BASE_COMPACTION_CONCURRENCY", IntegerType.BIGINT)
+                        .column("CUMULATIVE_COMPACTION_CONCURRENCY", IntegerType.BIGINT)
+                        .column("LATEST_COMPACTION_SCORE", FloatType.DOUBLE)
+                        .column("CANDIDATE_MAX_SCORE", FloatType.DOUBLE)
+                        .column("MANUAL_COMPACTION_CONCURRENCY", IntegerType.BIGINT)
+                        .column("MANUAL_COMPACTION_CANDIDATES_NUM", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_BE_COMPACTIONS);
     }
 }

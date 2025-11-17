@@ -53,7 +53,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 
 import java.util.LinkedList;
@@ -80,7 +81,7 @@ public class AccessTestUtil {
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         Partition partition = new Partition(20000L, 20001L,"testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
-        Column column = new Column("k1", Type.INT);
+        Column column = new Column("k1", IntegerType.INT);
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                 KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);
@@ -93,8 +94,8 @@ public class AccessTestUtil {
     }
 
     public static OlapTable mockTable(String name) {
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
 
         MaterializedIndex index = new MaterializedIndex();
         new Expectations(index) {

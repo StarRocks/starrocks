@@ -124,6 +124,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -2077,7 +2078,7 @@ public class MaterializedViewAnalyzer {
         }
         // date_trunc('day', dt) -> date_trunc('day', date_sub(dt, interval 8 hour))
         {
-            IntLiteral interval = new IntLiteral(zoneHourOffset, Type.INT);
+            IntLiteral interval = new IntLiteral(zoneHourOffset, IntegerType.INT);
             Type[] argTypes = {slotRef.getType(), interval.getType()};
             Function dateSubFn = ExprUtils.getBuiltinFunction(FunctionSet.DATE_SUB,
                     argTypes, Function.CompareMode.IS_IDENTICAL);
@@ -2091,7 +2092,7 @@ public class MaterializedViewAnalyzer {
 
         // date_trunc('day', date_sub(dt, interval 8 hour)) -> date_add(date_trunc('day', date_sub(dt, interval 8 hour)), 8)
         {
-            IntLiteral interval = new IntLiteral(zoneHourOffset, Type.INT);
+            IntLiteral interval = new IntLiteral(zoneHourOffset, IntegerType.INT);
             Type[] argTypes = {slotRef.getType(), interval.getType()};
             Function dateAddFn = ExprUtils.getBuiltinFunction(FunctionSet.DATE_ADD,
                     argTypes, Function.CompareMode.IS_IDENTICAL);

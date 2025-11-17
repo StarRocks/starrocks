@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -163,9 +164,9 @@ public class SyncPartitionUtils {
     public static PartitionKey toPartitionKey(LocalDateTime dateTime, PrimitiveType type) throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         if (type == PrimitiveType.DATE) {
-            partitionKey.pushColumn(new DateLiteral(dateTime, Type.DATE), type);
+            partitionKey.pushColumn(new DateLiteral(dateTime, DateType.DATE), type);
         } else {
-            partitionKey.pushColumn(new DateLiteral(dateTime, Type.DATETIME), type);
+            partitionKey.pushColumn(new DateLiteral(dateTime, DateType.DATETIME), type);
         }
         return partitionKey;
     }
@@ -181,8 +182,8 @@ public class SyncPartitionUtils {
         try {
             PartitionKey lowerPartitionKey = new PartitionKey();
             PartitionKey upperPartitionKey = new PartitionKey();
-            lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
-            upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
+            lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, DateType.DATE), PrimitiveType.DATE);
+            upperPartitionKey.pushColumn(new DateLiteral(upperDate, DateType.DATE), PrimitiveType.DATE);
             return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
         } catch (AnalysisException e) {
             throw new SemanticException("Convert to DateLiteral failed:", e);
@@ -246,7 +247,7 @@ public class SyncPartitionUtils {
         if (literalExpr == null) {
             return null;
         }
-        if (literalExpr.getType() != Type.DATE && literalExpr.getType() != Type.DATETIME) {
+        if (literalExpr.getType() != DateType.DATE && literalExpr.getType() != DateType.DATETIME) {
             throw new SemanticException("Do not support date_trunc for type: %s", literalExpr.getType());
         }
         DateLiteral dateLiteral = (DateLiteral) literalExpr;
@@ -516,7 +517,7 @@ public class SyncPartitionUtils {
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
-        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(DateType.DATETIME);
         if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
             return upperDateTime;
         }
@@ -555,7 +556,7 @@ public class SyncPartitionUtils {
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
-        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(DateType.DATETIME);
         if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
             return upperDateTime;
         }

@@ -39,8 +39,8 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.mv.MVEagerRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVLazyRangePartitionMapper;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
@@ -66,7 +66,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         slotRef = new SlotRef(TABLE_NAME, "k1");
-        partitionColumn = new Column("k1", Type.DATETIME);
+        partitionColumn = new Column("k1", DateType.DATETIME);
     }
 
     private static Range<PartitionKey> createRangeImpl(PartitionValue lowerValue, PartitionValue upperValue)
@@ -476,7 +476,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
     @Test
     public void testMappingRangeRollupWithMaxValue() throws AnalysisException {
         String maxValueDate =
-                new DateLiteral(Type.DATE, true).toLocalDateTime().format(DateTimeFormatter.ISO_DATE_TIME);
+                new DateLiteral(DateType.DATE, true).toLocalDateTime().format(DateTimeFormatter.ISO_DATE_TIME);
         // minute
         Range<PartitionKey> baseRange = createMaxValueRange("2020-05-03 12:34:56");
         PartitionMapping mappedRange = toPartitionMapping(baseRange, "minute");
@@ -902,7 +902,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
     private DateLiteral plusDay(DateLiteral dateLiteral, int diff) {
         try {
             LocalDateTime date = dateLiteral.toLocalDateTime().plusDays(diff);
-            return new DateLiteral(date, Type.DATE);
+            return new DateLiteral(date, DateType.DATE);
         } catch (Exception e) {
             Assertions.fail();
             return null;
@@ -911,7 +911,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
 
     @Test
     public void transferRangeHandlesMinValue() throws AnalysisException {
-        final DateLiteral minValue = DateLiteral.createMinValue(Type.DATE);
+        final DateLiteral minValue = DateLiteral.createMinValue(DateType.DATE);
         Range<PartitionKey> range = createRange(minValue, plusDay(minValue, 1));
         {
             Expr partitionExpr = new SlotRef(TABLE_NAME, "column");
@@ -933,7 +933,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
 
     @Test
     public void transferRangeHandlesMaxValue() throws AnalysisException {
-        final DateLiteral maxValue = DateLiteral.createMaxValue(Type.DATE);
+        final DateLiteral maxValue = DateLiteral.createMaxValue(DateType.DATE);
         Range<PartitionKey> range = createRange(plusDay(maxValue, -1), maxValue);
         {
             Expr partitionExpr = new SlotRef(TABLE_NAME, "column");
@@ -986,7 +986,7 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
 
     @Test
     public void transferRangeHandlesMaxValueRange() throws AnalysisException {
-        final DateLiteral maxValue = DateLiteral.createMaxValue(Type.DATE);
+        final DateLiteral maxValue = DateLiteral.createMaxValue(DateType.DATE);
         final Range<PartitionKey> maxValueRange = createRange(plusDay(maxValue, -1), maxValue);
         FunctionCallExpr dateTruncFunction = createDateTruncFunc("year", PrimitiveType.DATE);
         Range<PartitionKey> result = SyncPartitionUtils.transferRange(maxValueRange, dateTruncFunction);

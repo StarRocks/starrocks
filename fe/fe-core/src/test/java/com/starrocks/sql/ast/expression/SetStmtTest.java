@@ -54,7 +54,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.Assertions;
@@ -103,7 +103,7 @@ public class SetStmtTest {
     @Test
     public void testNonConstantExpr() {
         SlotDescriptor descriptor = new SlotDescriptor(new SlotId(1), "x",
-                Type.INT, false);
+                IntegerType.INT, false);
         Expr lhsExpr = new SlotRef(descriptor);
         Expr rhsExpr = new IntLiteral(100L);
         ArithmeticExpr addExpr = new ArithmeticExpr(

@@ -57,6 +57,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -349,7 +350,7 @@ public class StatisticExecutor {
         }
         ColumnId realColumnId = ColumnId.create(pieces.get(0));
         Column column = MetaUtils.getColumnByColumnId(dbId, tableId, realColumnId);
-        if (!column.getType().equals(Type.JSON)) {
+        if (!column.getType().equals(JsonType.JSON)) {
             throw new SemanticException("Column '%s' is not a JSON type", column.getName());
         }
         String fullPath = String.join(".", pieces);

@@ -47,7 +47,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -98,16 +101,16 @@ public class ColumnFilterConverterTest {
     @Test
     public void convertColumnFilterNormal() {
         ScalarOperator root1 = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, Type.INT, "age", true),
+                new ColumnRefOperator(1, IntegerType.INT, "age", true),
                 ConstantOperator.createInt(1));
 
-        ScalarOperator root2 = new InPredicateOperator(new ColumnRefOperator(2, Type.INT, "name", true),
+        ScalarOperator root2 = new InPredicateOperator(new ColumnRefOperator(2, IntegerType.INT, "name", true),
                 ConstantOperator.createVarchar("1"),
                 ConstantOperator.createVarchar("2"),
                 ConstantOperator.createVarchar("3"),
                 ConstantOperator.createVarchar("4"));
 
-        ScalarOperator root3 = new IsNullPredicateOperator(new ColumnRefOperator(3, Type.BOOLEAN, "sex", true));
+        ScalarOperator root3 = new IsNullPredicateOperator(new ColumnRefOperator(3, BooleanType.BOOLEAN, "sex", true));
 
         ScalarOperator root4 = ConstantOperator.createBoolean(true);
 
@@ -116,8 +119,8 @@ public class ColumnFilterConverterTest {
                 ConstantOperator.createInt(1));
 
         ScalarOperator root6 = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(4, Type.INT, "value1", true),
-                new ColumnRefOperator(5, Type.INT, "value2", true));
+                new ColumnRefOperator(4, IntegerType.INT, "value1", true),
+                new ColumnRefOperator(5, IntegerType.INT, "value2", true));
 
         List<ScalarOperator> list = Lists.newArrayList(root1, root2, root3, root4, root5, root6);
 
@@ -147,7 +150,7 @@ public class ColumnFilterConverterTest {
         {
             // cast(c0 as smallint) is null.
             IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(false,
-                    new CastOperator(Type.SMALLINT, new ColumnRefOperator(1, Type.INT, "c0", true)));
+                    new CastOperator(IntegerType.SMALLINT, new ColumnRefOperator(1, IntegerType.INT, "c0", true)));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 0);
@@ -155,7 +158,7 @@ public class ColumnFilterConverterTest {
         {
             // c0 is null.
             IsNullPredicateOperator isNullPredicate =
-                    new IsNullPredicateOperator(false, new ColumnRefOperator(1, Type.INT, "c0", true));
+                    new IsNullPredicateOperator(false, new ColumnRefOperator(1, IntegerType.INT, "c0", true));
             List<ScalarOperator> list = Lists.newArrayList(isNullPredicate);
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 1);
@@ -225,8 +228,8 @@ public class ColumnFilterConverterTest {
     private List<ScalarOperator> buildOperator(String timeKey, BinaryType binaryType) {
         List<ScalarOperator> arguments = new ArrayList<>(2);
         arguments.add(ConstantOperator.createVarchar(timeKey));
-        arguments.add(new ColumnRefOperator(2, Type.INT, "date_col", true));
-        ScalarOperator callOperator = new CallOperator("date_trunc", Type.DATE, arguments);
+        arguments.add(new ColumnRefOperator(2, IntegerType.INT, "date_col", true));
+        ScalarOperator callOperator = new CallOperator("date_trunc", DateType.DATE, arguments);
 
         ScalarOperator root1 = new BinaryPredicateOperator(binaryType,
                 callOperator,
@@ -243,12 +246,12 @@ public class ColumnFilterConverterTest {
         params.add(stringLiteral);
         TableName tableName = new TableName("testdb", "testtbl");
         SlotRef slotRefDate = new SlotRef(tableName, "date_col");
-        slotRefDate.setType(Type.DATE);
+        slotRefDate.setType(DateType.DATE);
         params.add(slotRefDate);
         FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
                 params);
         exprList.add(ColumnIdExpr.create(zdtestCallExpr));
-        columns.add(new Column("date_col", Type.DATE));
+        columns.add(new Column("date_col", DateType.DATE));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList, columns,
                 PartitionType.RANGE);
 
@@ -259,8 +262,8 @@ public class ColumnFilterConverterTest {
     @Test
     public void testConvertPredicate() {
         List<ScalarOperator> argument = Lists.newArrayList();
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "bill_code", false);
-        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, VarcharType.VARCHAR, "bill_code", false);
+        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", VarcharType.VARCHAR);
         argument.add(columnRefOperator);
         argument.add(constantOperator);
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, argument);
@@ -284,7 +287,7 @@ public class ColumnFilterConverterTest {
                 ");");
 
         // Test INT constant (this would cause ClassCastException before the fix)
-        ColumnRefOperator intColumnRef = new ColumnRefOperator(1, Type.INT, "collect_api_receive_time", false);
+        ColumnRefOperator intColumnRef = new ColumnRefOperator(1, IntegerType.INT, "collect_api_receive_time", false);
         ConstantOperator intConstant = ConstantOperator.createInt(0);  // INT type constant
         ScalarOperator intPredicate = new BinaryPredicateOperator(BinaryType.GT, intColumnRef, intConstant);
 
@@ -316,7 +319,7 @@ public class ColumnFilterConverterTest {
         List<Expr> args = Lists.newArrayList(timeSlotRef);
         FunctionCallExpr fromUnixtimeCall = new FunctionCallExpr(FunctionSet.FROM_UNIXTIME, args);
         
-        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.INT, "collect_api_receive_time", false);
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, IntegerType.INT, "collect_api_receive_time", false);
         
         ConstantOperator intConstant = ConstantOperator.createInt(1000);
         boolean result1 = ColumnFilterConverter.rewritePredicate(fromUnixtimeCall, columnRef, intConstant);
@@ -346,7 +349,7 @@ public class ColumnFilterConverterTest {
         List<Expr> args = Lists.newArrayList(timeSlotRef);
         FunctionCallExpr fromUnixtimeMsCall = new FunctionCallExpr(FunctionSet.FROM_UNIXTIME_MS, args);
         
-        ColumnRefOperator columnRef = new ColumnRefOperator(1, Type.BIGINT, "collect_api_receive_time", false);
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, IntegerType.BIGINT, "collect_api_receive_time", false);
         
         ConstantOperator bigintConstant = ConstantOperator.createBigint(1640995200000L);
         boolean result = ColumnFilterConverter.rewritePredicate(fromUnixtimeMsCall, columnRef, bigintConstant);

@@ -17,7 +17,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,18 +32,18 @@ public class DynamicTabletJobsTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("JOB_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("DB_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("JOB_ID", IntegerType.BIGINT)
+                        .column("DB_ID", IntegerType.BIGINT)
                         .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("TABLE_ID", IntegerType.BIGINT)
                         .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("JOB_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("JOB_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRANSACTION_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("PARALLEL_PARTITIONS", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("PARALLEL_TABLETS", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("CREATED_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("FINISHED_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("TRANSACTION_ID", IntegerType.BIGINT)
+                        .column("PARALLEL_PARTITIONS", IntegerType.BIGINT)
+                        .column("PARALLEL_TABLETS", IntegerType.BIGINT)
+                        .column("CREATED_TIME", DateType.DATETIME)
+                        .column("FINISHED_TIME", DateType.DATETIME)
                         .column("ERROR_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_DYNAMIC_TABLET_JOBS);
     }

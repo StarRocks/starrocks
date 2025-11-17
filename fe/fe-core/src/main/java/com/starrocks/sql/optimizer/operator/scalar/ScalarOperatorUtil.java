@@ -23,6 +23,8 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -36,7 +38,7 @@ import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT
 public class ScalarOperatorUtil {
     public static CallOperator buildMultiCountDistinct(CallOperator oldFunctionCall) {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
-                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
+                oldFunctionCall.getFunction().getArgs(), InvalidType.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         if (fn == null) {
             return null;
@@ -50,7 +52,7 @@ public class ScalarOperatorUtil {
     }
 
     public static CallOperator buildSum(ColumnRefOperator arg) {
-        Preconditions.checkArgument(arg.getType() == Type.BIGINT);
+        Preconditions.checkArgument(arg.getType() == IntegerType.BIGINT);
         Function searchDesc = new Function(new FunctionName(FunctionSet.SUM),
                 new Type[] {arg.getType()}, arg.getType(), false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);

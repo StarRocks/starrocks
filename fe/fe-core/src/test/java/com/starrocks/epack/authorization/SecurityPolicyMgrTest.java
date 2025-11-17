@@ -9,7 +9,7 @@ import com.starrocks.epack.persist.CreatePolicyLog;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -37,7 +37,7 @@ public class SecurityPolicyMgrTest {
         SecurityPolicyMgr securityPolicyMgr = new SecurityPolicyMgr();
         securityPolicyMgr.replayCreatePolicy(new CreatePolicyLog(new Policy(PolicyType.ROW_ACCESS, 3L, "policy1",
                 new DbUID("1111"), List.of("a"),
-                List.of(Type.INT), Type.INT, "add(a, 1)", "")));
+                List.of(IntegerType.INT), IntegerType.INT, "add(a, 1)", "")));
 
         securityPolicyMgr.registerMaskingPolicyContext(new ApplyOrRevokeMaskingPolicyLog(
                 new TableUID("test", "test"), ColumnId.create("a"), new MaskingPolicyContext(4L, List.of(ColumnId.create("a")))));

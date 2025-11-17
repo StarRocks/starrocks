@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -156,7 +157,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Only for persist
     public Column() {
         this.name = "";
-        this.type = Type.NULL;
+        this.type = NullType.NULL;
         this.isAggregationTypeImplicit = false;
         this.isKey = false;
         this.uniqueId = -1;
@@ -212,7 +213,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.columnId = ColumnId.create(this.name);
         this.type = type;
         if (this.type == null) {
-            this.type = Type.NULL;
+            this.type = NullType.NULL;
         }
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);

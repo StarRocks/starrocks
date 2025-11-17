@@ -44,7 +44,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -70,7 +71,7 @@ public class AlterTableOperationStmtTest {
                       @Mocked CatalogMgr catalogMgr) throws Exception {
         Table icebergTable = new IcebergTable(1, "test_table", "iceberg_catalog", "iceberg_catalog",
                 "iceberg_db", "test_table", "",
-                List.of(new Column("k1", Type.INT, true), new Column("partition_date", Type.DATE, true)),
+                List.of(new Column("k1", IntegerType.INT, true), new Column("partition_date", DateType.DATE, true)),
                 null, Maps.newHashMap());
 
         new Expectations() {
@@ -208,7 +209,7 @@ public class AlterTableOperationStmtTest {
             @Mock
             public ScalarOperator translate(Expr expr, ExpressionMapping expressionMapping,
                                             ColumnRefFactory columnRefFactory) {
-                return new BinaryPredicateOperator(BinaryType.GE, new ColumnRefOperator(1, Type.DATE, "partition_date",
+                return new BinaryPredicateOperator(BinaryType.GE, new ColumnRefOperator(1, DateType.DATE, "partition_date",
                         true),
                         ConstantOperator.createVarchar("2024-01-01"));
             }
@@ -221,8 +222,8 @@ public class AlterTableOperationStmtTest {
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnsIncludeTransformed();
-                result = List.of(new Column("k1", Type.INT, true),
-                        new Column("partition_date", Type.DATE, true));
+                result = List.of(new Column("k1", IntegerType.INT, true),
+                        new Column("partition_date", DateType.DATE, true));
                 minTimes = 0;
             }
         };

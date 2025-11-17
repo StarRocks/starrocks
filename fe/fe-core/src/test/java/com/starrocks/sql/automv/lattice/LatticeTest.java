@@ -38,7 +38,7 @@ import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.TestUtil;
 import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.automv.util.Util;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -274,8 +274,8 @@ public class LatticeTest {
         TableName tableName = new TableName("default_catalog", "tpch", "lineitem");
         TieredMap.Builder<Integer, ColumnAlias> aliasesBuilder = TieredMap.<Integer, ColumnAlias>newGenesisTier();
         for (int i = 0; i < 3; ++i) {
-            vars.add(Apply.var(Type.BIGINT, i));
-            Column column = new Column("col_" + i, Type.BIGINT);
+            vars.add(Apply.var(IntegerType.BIGINT, i));
+            Column column = new Column("col_" + i, IntegerType.BIGINT);
             aliasesBuilder.put(i, ColumnAlias.of(tableName.toSql(), column.getName()));
             vars.get(i).getSymbol().tenured(GenericColumn.original(tableName, column));
         }

@@ -97,6 +97,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
@@ -323,7 +324,7 @@ public class PropertyAnalyzer {
                 }
             } else if (!hasCooldownTime && key.equalsIgnoreCase(coolDownTimeKey)) {
                 hasCooldownTime = true;
-                DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
+                DateLiteral dateLiteral = new DateLiteral(value, DateType.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
             } else if (!hasCoolDownTTL && key.equalsIgnoreCase(coolDownTTLKey)) {
                 hasCoolDownTTL = true;

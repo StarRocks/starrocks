@@ -32,6 +32,9 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -48,7 +51,7 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateIsNullPredicate() {
-        SlotRef kSlotRef = mockSlotRef("k", Type.BOOLEAN);
+        SlotRef kSlotRef = mockSlotRef("k", BooleanType.BOOLEAN);
         IsNullPredicate isNullPredicate = new IsNullPredicate(kSlotRef, false);
         IsNullPredicate isNotNullPredicate = new IsNullPredicate(kSlotRef, true);
         Assertions.assertEquals("{\"bool\":{\"must_not\":{\"exists\":{\"field\":\"k\"}}}}",
@@ -59,7 +62,7 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateInPredicate() {
-        SlotRef codeSlotRef = mockSlotRef("code", Type.INT);
+        SlotRef codeSlotRef = mockSlotRef("code", IntegerType.INT);
         List<Expr> codeLiterals = new ArrayList<>();
         IntLiteral codeLiteral1 = new IntLiteral(1);
         IntLiteral codeLiteral2 = new IntLiteral(2);
@@ -76,7 +79,7 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateRawQuery() {
-        SlotRef serviceSlotRef = mockSlotRef("service", Type.STRING);
+        SlotRef serviceSlotRef = mockSlotRef("service", StringType.STRING);
         // normal test
         String normalValue = "{\"term\":{\"service\":{\"value\":\"starrocks\"}}}";
         StringLiteral normalValueLiteral = new StringLiteral(normalValue);
@@ -97,7 +100,7 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateLikePredicate() {
-        SlotRef name = mockSlotRef("name", Type.STRING);
+        SlotRef name = mockSlotRef("name", StringType.STRING);
         StringLiteral nameLiteral1 = new StringLiteral("%1%");
         StringLiteral nameLiteral2 = new StringLiteral("*1*");
         StringLiteral nameLiteral3 = new StringLiteral("1_2");
@@ -112,7 +115,7 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateRangePredicate() {
-        SlotRef valueSlotRef = mockSlotRef("value", Type.INT);
+        SlotRef valueSlotRef = mockSlotRef("value", IntegerType.INT);
         IntLiteral intLiteral = new IntLiteral(1000);
         Expr leExpr = new BinaryPredicate(BinaryType.LE, valueSlotRef, intLiteral);
         Expr ltExpr = new BinaryPredicate(BinaryType.LT, valueSlotRef, intLiteral);
@@ -136,9 +139,9 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateCompoundPredicate() {
-        SlotRef col1SlotRef = mockSlotRef("col1", Type.INT);
+        SlotRef col1SlotRef = mockSlotRef("col1", IntegerType.INT);
         IntLiteral intLiteral1 = new IntLiteral(100);
-        SlotRef col2SlotRef = mockSlotRef("col2", Type.INT);
+        SlotRef col2SlotRef = mockSlotRef("col2", IntegerType.INT);
 
         IntLiteral intLiteral2 = new IntLiteral(200);
         BinaryPredicate bp1 = new BinaryPredicate(BinaryType.EQ, col1SlotRef, intLiteral1);

@@ -38,7 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -97,9 +97,9 @@ public class MvUtilsTest {
     @Test
     public void testGetAllPredicate() {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
-        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
-        ColumnRefOperator columnRef3 = columnRefFactory.create("col3", Type.INT, false);
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", IntegerType.INT, false);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", IntegerType.INT, false);
+        ColumnRefOperator columnRef3 = columnRefFactory.create("col3", IntegerType.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef2);
 

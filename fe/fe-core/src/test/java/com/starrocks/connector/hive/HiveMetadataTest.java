@@ -62,7 +62,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -188,8 +188,8 @@ public class HiveMetadataTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(Type.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(Type.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 
@@ -270,8 +270,8 @@ public class HiveMetadataTest {
     public void testGetTableStatisticsWithUnknown() throws AnalysisException {
         optimizerContext.getSessionVariable().setEnableHiveColumnStats(false);
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
-        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
-        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
@@ -306,8 +306,8 @@ public class HiveMetadataTest {
     @Test
     public void testGetTableStatisticsNormal() throws AnalysisException {
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
-        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
-        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(

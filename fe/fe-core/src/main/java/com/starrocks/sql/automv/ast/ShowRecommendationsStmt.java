@@ -21,7 +21,9 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 
 import java.util.Optional;
 
@@ -42,21 +44,21 @@ public class ShowRecommendationsStmt extends ShowStmt {
     private static final String TOTAL_BENEFIT = "TotalBenefit";
     private static final String ACCELERATED_QUERIES = "AcceleratedQueries";
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column(ID, Type.INT))
-            .addColumn(new Column(MV_NAME, Type.STRING))
-            .addColumn(new Column(RECOMMENDED_MV, Type.STRING))
-            .addColumn(new Column(HALT_REASON, Type.STRING))
-            .addColumn(new Column(TIME_USAGE, Type.BIGINT))
-            .addColumn(new Column(SAMPLING_RATIO, Type.DOUBLE))
-            .addColumn(new Column(CALC_STEPS, Type.INT))
-            .addColumn(new Column(CARD_QUALITY, Type.STRING))
-            .addColumn(new Column(ROW_COUNT, Type.BIGINT))
-            .addColumn(new Column(CARDINALITY, Type.BIGINT))
-            .addColumn(new Column(CARD_ROW_COUNT_RATIO, Type.DOUBLE))
-            .addColumn(new Column(BENEFIT, Type.DOUBLE))
-            .addColumn(new Column(NUM_QUERIES_ACCELERATED, Type.INT))
-            .addColumn(new Column(TOTAL_BENEFIT, Type.DOUBLE))
-            .addColumn(new Column(ACCELERATED_QUERIES, Type.STRING))
+            .addColumn(new Column(ID, IntegerType.INT))
+            .addColumn(new Column(MV_NAME, StringType.STRING))
+            .addColumn(new Column(RECOMMENDED_MV, StringType.STRING))
+            .addColumn(new Column(HALT_REASON, StringType.STRING))
+            .addColumn(new Column(TIME_USAGE, IntegerType.BIGINT))
+            .addColumn(new Column(SAMPLING_RATIO, FloatType.DOUBLE))
+            .addColumn(new Column(CALC_STEPS, IntegerType.INT))
+            .addColumn(new Column(CARD_QUALITY, StringType.STRING))
+            .addColumn(new Column(ROW_COUNT, IntegerType.BIGINT))
+            .addColumn(new Column(CARDINALITY, IntegerType.BIGINT))
+            .addColumn(new Column(CARD_ROW_COUNT_RATIO, FloatType.DOUBLE))
+            .addColumn(new Column(BENEFIT, FloatType.DOUBLE))
+            .addColumn(new Column(NUM_QUERIES_ACCELERATED, IntegerType.INT))
+            .addColumn(new Column(TOTAL_BENEFIT, FloatType.DOUBLE))
+            .addColumn(new Column(ACCELERATED_QUERIES, StringType.STRING))
             .build();
 
     private TableName tableName;

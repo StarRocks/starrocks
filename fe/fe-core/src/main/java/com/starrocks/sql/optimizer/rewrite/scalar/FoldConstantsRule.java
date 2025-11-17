@@ -40,6 +40,8 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -351,7 +353,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         ScalarOperator c1 = predicate.getChild(0);
         if (c1.isConstantRef() && ((ConstantOperator) c1).isNull()) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
 
         if (notAllConstant(predicate.getChildren())) {
@@ -366,7 +368,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         if (hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
 
         return ConstantOperator.createBoolean(predicate.isNotIn());
@@ -397,7 +399,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        if (predicate.getChild(0).getType().equals(Type.NULL)) {
+        if (predicate.getChild(0).getType().equals(NullType.NULL)) {
             return ConstantOperator.createBoolean(!predicate.isNotNull());
         }
 
@@ -490,7 +492,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                                                ScalarOperatorRewriteContext context) {
         if (!BinaryType.EQ_FOR_NULL.equals(predicate.getBinaryType())
                 && hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
 
         if (notAllConstant(predicate.getChildren())) {
@@ -531,7 +533,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
                                                      ScalarOperatorRewriteContext context) {
         if (hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
         if (notAllConstant(predicate.getChildren()) || predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
             return predicate;

@@ -42,7 +42,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
@@ -295,8 +296,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
-                    .add(new Column("col1", Type.INT))
-                    .add(new Column("col2", Type.STRING))
+                    .add(new Column("col1", IntegerType.INT))
+                    .add(new Column("col2", StringType.STRING))
                     .build();
 
             StructType structType = new StructType(List.of(new StructField("col1",

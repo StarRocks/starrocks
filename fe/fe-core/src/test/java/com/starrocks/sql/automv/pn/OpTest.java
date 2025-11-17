@@ -49,9 +49,18 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -75,13 +84,13 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
 public class OpTest {
     private final TableName tableName = new TableName("default_catalog", "test_db", "t");
     private final List<ColumnRefOperator> columnRefs =
-            Stream.of(
-                            IntStream.range(0, 3).boxed().map(i -> Pair.create(i, Type.VARCHAR)),
-                            IntStream.range(3, 6).boxed().map(i -> Pair.create(i, Type.INT)),
+            Stream.<Stream<Pair<Integer, Type>>>of(
+                            IntStream.range(0, 3).boxed().map(i -> Pair.create(i, VarcharType.VARCHAR)),
+                            IntStream.range(3, 6).boxed().map(i -> Pair.create(i, IntegerType.INT)),
                             Stream.of(Pair.create(6, TypeFactory.createDecimalV3NarrowestType(38, 9))),
                             Stream.of(Pair.create(7, TypeFactory.createDecimalV3NarrowestType(15, 3))),
                             Stream.of(Pair.create(8, TypeFactory.createDecimalV3NarrowestType(7, 2))),
-                            Stream.of(Pair.create(9, Type.DOUBLE)))
+                            Stream.of(Pair.create(9, FloatType.DOUBLE)))
                     .flatMap(Function.identity())
                     .map(p -> new ColumnRefOperator(p.first, p.second, "c" + p.first, false))
                     .collect(Collectors.toList());
@@ -90,7 +99,7 @@ public class OpTest {
             .map(colRef -> Op.var(colRef.getType(), colRef.getId()))
             .collect(Collectors.toList());
     private final TieredMap<Integer, GenericColumn> inputColumns = IntStream.range(0, 10)
-            .mapToObj(i -> Pair.create(i + 1, GenericColumn.original(tableName, new Column("c" + i, Type.VARCHAR))))
+            .mapToObj(i -> Pair.create(i + 1, GenericColumn.original(tableName, new Column("c" + i, VarcharType.VARCHAR))))
             .collect(TieredMap.toMap(p -> p.first, p -> p.second));
 
     private final TieredMap<Integer, ColumnAlias> columnAliases = inputColumns.entrySet().stream()
@@ -126,7 +135,7 @@ public class OpTest {
                 columnRefs.get(1)
         );
         CaseWhenOperator caseWhen =
-                new CaseWhenOperator(Type.VARCHAR, null, null, whenThens);
+                new CaseWhenOperator(VarcharType.VARCHAR, null, null, whenThens);
         testHelper(caseWhen, "(CASE WHEN `test_db`.`t`.c0 in (\"A\") THEN \"a\" " +
                 "WHEN `test_db`.`t`.c0 in (\"B\", \"C\") THEN \"b\" " +
                 "WHEN (`test_db`.`t`.c0 like \"%E%\") THEN `test_db`.`t`.c1 " +
@@ -144,26 +153,26 @@ public class OpTest {
                 new LikePredicateOperator(columnRefs.get(0), ConstantOperator.createVarchar("%E%")),
                 columnRefs.get(1)
         );
-        ScalarOperator elseClause = new CallOperator("IF", Type.VARCHAR,
+        ScalarOperator elseClause = new CallOperator("IF", VarcharType.VARCHAR,
                 Arrays.asList(
                         CompoundPredicateOperator.or(
                                 new IsNullPredicateOperator(false, columnRefs.get(2)),
                                 new IsNullPredicateOperator(true, columnRefs.get(3))
                         ),
-                        new CastOperator(Type.VARCHAR,
-                                new CallOperator("add", Type.INT,
+                        new CastOperator(VarcharType.VARCHAR,
+                                new CallOperator("add", IntegerType.INT,
                                         Arrays.asList(
-                                                new CastOperator(Type.INT, columnRefs.get(4)),
-                                                new CastOperator(Type.INT, columnRefs.get(5))), null)),
-                        new CastOperator(Type.VARCHAR,
-                                new CallOperator("mod", Type.INT,
+                                                new CastOperator(IntegerType.INT, columnRefs.get(4)),
+                                                new CastOperator(IntegerType.INT, columnRefs.get(5))), null)),
+                        new CastOperator(VarcharType.VARCHAR,
+                                new CallOperator("mod", IntegerType.INT,
                                         Arrays.asList(
-                                                new CastOperator(Type.INT, columnRefs.get(6)),
-                                                new CastOperator(Type.INT, columnRefs.get(7))), null))
+                                                new CastOperator(IntegerType.INT, columnRefs.get(6)),
+                                                new CastOperator(IntegerType.INT, columnRefs.get(7))), null))
 
                 ));
         CaseWhenOperator caseWhen =
-                new CaseWhenOperator(Type.VARCHAR, null, elseClause, whenThens);
+                new CaseWhenOperator(VarcharType.VARCHAR, null, elseClause, whenThens);
         testHelper(caseWhen, "(CASE WHEN `test_db`.`t`.c0 in (\"A\") THEN \"a\" " +
                 "WHEN `test_db`.`t`.c0 in (\"B\", \"C\") THEN \"b\" " +
                 "WHEN (`test_db`.`t`.c0 like \"%E%\") THEN `test_db`.`t`.c1 " +
@@ -178,11 +187,11 @@ public class OpTest {
     public void testCaseWhenNoCaseHasElse2() {
         List<ScalarOperator> whenThens = Arrays.asList(
                 new BinaryPredicateOperator(BinaryType.EQ, columnRefs.get(0), ConstantOperator.createVarchar("A")),
-                ConstantOperator.createNull(Type.VARCHAR)
+                ConstantOperator.createNull(VarcharType.VARCHAR)
         );
         ScalarOperator elseClause = columnRefs.get(1);
         CaseWhenOperator caseWhen =
-                new CaseWhenOperator(Type.VARCHAR, null, elseClause, whenThens);
+                new CaseWhenOperator(VarcharType.VARCHAR, null, elseClause, whenThens);
 
         testHelper(caseWhen, "(CASE `test_db`.`t`.c0 WHEN \"A\" THEN NULL ELSE `test_db`.`t`.c1 END)");
     }
@@ -192,12 +201,12 @@ public class OpTest {
         List<ScalarOperator> whenThens = Arrays.asList(
                 ConstantOperator.createVarchar("A"),
                 ConstantOperator.createVarchar("a"),
-                new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
                         Arrays.asList(
                                 ConstantOperator.createVarchar("B"),
                                 ConstantOperator.createVarchar("C"))),
                 ConstantOperator.createVarchar("b"),
-                new CallOperator(FunctionSet.COALESCE, Type.VARCHAR,
+                new CallOperator(FunctionSet.COALESCE, VarcharType.VARCHAR,
                         Arrays.asList(
                                 columnRefs.get(1),
                                 columnRefs.get(2),
@@ -207,26 +216,26 @@ public class OpTest {
                                 ConstantOperator.createVarchar("GOOD"))),
                 columnRefs.get(1)
         );
-        ScalarOperator caseClause = new CallOperator("IF", Type.VARCHAR,
+        ScalarOperator caseClause = new CallOperator("IF", VarcharType.VARCHAR,
                 Arrays.asList(
                         CompoundPredicateOperator.or(
                                 new IsNullPredicateOperator(false, columnRefs.get(2)),
                                 new IsNullPredicateOperator(true, columnRefs.get(3))
                         ),
-                        new CastOperator(Type.VARCHAR,
-                                new CallOperator("add", Type.INT,
+                        new CastOperator(VarcharType.VARCHAR,
+                                new CallOperator("add", IntegerType.INT,
                                         Arrays.asList(
-                                                new CastOperator(Type.INT, columnRefs.get(4)),
-                                                new CastOperator(Type.INT, columnRefs.get(5))), null)),
-                        new CastOperator(Type.VARCHAR,
-                                new CallOperator("mod", Type.INT,
+                                                new CastOperator(IntegerType.INT, columnRefs.get(4)),
+                                                new CastOperator(IntegerType.INT, columnRefs.get(5))), null)),
+                        new CastOperator(VarcharType.VARCHAR,
+                                new CallOperator("mod", IntegerType.INT,
                                         Arrays.asList(
-                                                new CastOperator(Type.INT, columnRefs.get(6)),
-                                                new CastOperator(Type.INT, columnRefs.get(7))), null))
+                                                new CastOperator(IntegerType.INT, columnRefs.get(6)),
+                                                new CastOperator(IntegerType.INT, columnRefs.get(7))), null))
 
                 ));
         CaseWhenOperator caseWhen =
-                new CaseWhenOperator(Type.VARCHAR, caseClause, null, whenThens);
+                new CaseWhenOperator(VarcharType.VARCHAR, caseClause, null, whenThens);
         testHelper(caseWhen, "(CASE IF(((`test_db`.`t`.c3 IS NOT NULL) OR (`test_db`.`t`.c2 IS NULL)), " +
                 "CAST((CAST(`test_db`.`t`.c4 AS int) + CAST(`test_db`.`t`.c5 AS int)) AS varchar), " +
                 "CAST((CAST(`test_db`.`t`.c6 AS int) % CAST(`test_db`.`t`.c7 AS int)) AS varchar)) " +
@@ -243,12 +252,12 @@ public class OpTest {
         List<ScalarOperator> whenThens = Arrays.asList(
                 ConstantOperator.createVarchar("A"),
                 ConstantOperator.createVarchar("a"),
-                new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+                new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
                         Arrays.asList(
                                 ConstantOperator.createVarchar("B"),
                                 ConstantOperator.createVarchar("C"))),
                 ConstantOperator.createVarchar("b"),
-                new CallOperator(FunctionSet.SUBSTR, Type.VARCHAR,
+                new CallOperator(FunctionSet.SUBSTR, VarcharType.VARCHAR,
                         Arrays.asList(
                                 columnRefs.get(8),
                                 ConstantOperator.createInt(2),
@@ -256,26 +265,26 @@ public class OpTest {
                 columnRefs.get(1)
         );
         ScalarOperator caseClause = columnRefs.get(9);
-        ScalarOperator elseClause = new CallOperator("IF", Type.VARCHAR,
+        ScalarOperator elseClause = new CallOperator("IF", VarcharType.VARCHAR,
                 Arrays.asList(
                         CompoundPredicateOperator.or(
                                 new IsNullPredicateOperator(false, columnRefs.get(2)),
                                 new IsNullPredicateOperator(true, columnRefs.get(3))
                         ),
-                        new CastOperator(Type.VARCHAR,
-                                new CallOperator("add", Type.INT,
+                        new CastOperator(VarcharType.VARCHAR,
+                                new CallOperator("add", IntegerType.INT,
                                         Arrays.asList(
-                                                new CastOperator(Type.INT, columnRefs.get(4)),
-                                                new CastOperator(Type.INT, columnRefs.get(5))), null)),
-                        new CastOperator(Type.VARCHAR,
-                                new CallOperator("mod", Type.INT,
+                                                new CastOperator(IntegerType.INT, columnRefs.get(4)),
+                                                new CastOperator(IntegerType.INT, columnRefs.get(5))), null)),
+                        new CastOperator(VarcharType.VARCHAR,
+                                new CallOperator("mod", IntegerType.INT,
                                         Arrays.asList(
-                                                new CastOperator(Type.INT, columnRefs.get(6)),
-                                                new CastOperator(Type.INT, columnRefs.get(7))), null))
+                                                new CastOperator(IntegerType.INT, columnRefs.get(6)),
+                                                new CastOperator(IntegerType.INT, columnRefs.get(7))), null))
 
                 ));
         CaseWhenOperator caseWhen =
-                new CaseWhenOperator(Type.VARCHAR, caseClause, elseClause, whenThens);
+                new CaseWhenOperator(VarcharType.VARCHAR, caseClause, elseClause, whenThens);
         testHelper(caseWhen, "(CASE `test_db`.`t`.c9 WHEN \"A\" THEN \"a\" " +
                 "WHEN concat(\"B\", \"C\") THEN \"b\" " +
                 "WHEN substr(`test_db`.`t`.c8, 2, 4) THEN `test_db`.`t`.c1 " +
@@ -293,47 +302,47 @@ public class OpTest {
                 columnRefs.get(0),
                 ConstantOperator.createVarchar("defg"),
                 columnRefs.get(1));
-        ArrayOperator arrayOp = new ArrayOperator(Type.ARRAY_VARCHAR, true, lst);
+        ArrayOperator arrayOp = new ArrayOperator(ArrayType.ARRAY_VARCHAR, true, lst);
 
         ArraySliceOperator arraySliceOp =
-                new ArraySliceOperator(Type.VARCHAR,
+                new ArraySliceOperator(VarcharType.VARCHAR,
                         Arrays.asList(arrayOp, ConstantOperator.createInt(1), ConstantOperator.createInt(3)));
 
-        MapOperator mapOp = new MapOperator(Type.MAP_VARCHAR_VARCHAR, lst);
+        MapOperator mapOp = new MapOperator(MapType.MAP_VARCHAR_VARCHAR, lst);
 
         CollectionElementOperator arrayElem =
-                new CollectionElementOperator(Type.VARCHAR, arrayOp, ConstantOperator.createInt(3), true);
+                new CollectionElementOperator(VarcharType.VARCHAR, arrayOp, ConstantOperator.createInt(3), true);
         SubfieldOperator subFieldOp =
-                new SubfieldOperator(columnRefs.get(0), Type.VARCHAR, Arrays.asList("a", "b", "c"));
+                new SubfieldOperator(columnRefs.get(0), VarcharType.VARCHAR, Arrays.asList("a", "b", "c"));
 
-        ColumnRefOperator argx = new ColumnRefOperator(101, Type.VARCHAR, "x", true);
-        ColumnRefOperator argy = new ColumnRefOperator(102, Type.VARCHAR, "y", true);
+        ColumnRefOperator argx = new ColumnRefOperator(101, VarcharType.VARCHAR, "x", true);
+        ColumnRefOperator argy = new ColumnRefOperator(102, VarcharType.VARCHAR, "y", true);
         List<ColumnRefOperator> lambdaArgs = Arrays.asList(argx, argy);
-        ScalarOperator lambdaBody = new CallOperator(ArithmeticExpr.Operator.ADD.getName(), Type.INT,
+        ScalarOperator lambdaBody = new CallOperator(ArithmeticExpr.Operator.ADD.getName(), IntegerType.INT,
                 Arrays.asList(
-                        new CastOperator(Type.INT, argx),
-                        new CastOperator(Type.INT, argy))
+                        new CastOperator(IntegerType.INT, argx),
+                        new CastOperator(IntegerType.INT, argy))
         );
-        LambdaFunctionOperator simpleLambda = new LambdaFunctionOperator(lambdaArgs, lambdaBody, Type.INT);
-        CallOperator arrayMapSimpleLambda = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_INT,
+        LambdaFunctionOperator simpleLambda = new LambdaFunctionOperator(lambdaArgs, lambdaBody, IntegerType.INT);
+        CallOperator arrayMapSimpleLambda = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
                 Arrays.asList(
                         simpleLambda,
-                        new ArrayOperator(Type.ARRAY_VARCHAR, true, ImmutableList.of(columnRefs.get(0))),
-                        new ArrayOperator(Type.ARRAY_VARCHAR, true, ImmutableList.of(columnRefs.get(1)))
+                        new ArrayOperator(ArrayType.ARRAY_VARCHAR, true, ImmutableList.of(columnRefs.get(0))),
+                        new ArrayOperator(ArrayType.ARRAY_VARCHAR, true, ImmutableList.of(columnRefs.get(1)))
                 ));
-        ColumnRefOperator argz = new ColumnRefOperator(103, Type.VARCHAR, "x", true);
-        ScalarOperator outerLambdaBody = new CallOperator(FunctionSet.LEFT, Type.VARCHAR,
+        ColumnRefOperator argz = new ColumnRefOperator(103, VarcharType.VARCHAR, "x", true);
+        ScalarOperator outerLambdaBody = new CallOperator(FunctionSet.LEFT, VarcharType.VARCHAR,
                 Arrays.asList(
-                        new CallOperator(FunctionSet.CONCAT, Type.VARCHAR,
+                        new CallOperator(FunctionSet.CONCAT, VarcharType.VARCHAR,
                                 Arrays.asList(argz, ConstantOperator.createVarchar("0000000"))),
                         ConstantOperator.createInt(10)));
 
         LambdaFunctionOperator outerLambda =
-                new LambdaFunctionOperator(Arrays.asList(argz), outerLambdaBody, Type.VARCHAR);
-        CallOperator arrayMapOuterLambda = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_VARCHAR,
+                new LambdaFunctionOperator(Arrays.asList(argz), outerLambdaBody, VarcharType.VARCHAR);
+        CallOperator arrayMapOuterLambda = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_VARCHAR,
                 Arrays.asList(outerLambda, arrayMapSimpleLambda));
-        CallOperator ndvOp = new CallOperator(FunctionSet.NDV, Type.BIGINT, Arrays.asList(
-                new CollectionElementOperator(Type.VARCHAR, arrayMapOuterLambda, ConstantOperator.createInt(1), true)));
+        CallOperator ndvOp = new CallOperator(FunctionSet.NDV, IntegerType.BIGINT, Arrays.asList(
+                new CollectionElementOperator(VarcharType.VARCHAR, arrayMapOuterLambda, ConstantOperator.createInt(1), true)));
         IsNullPredicateOperator isNullOp = new IsNullPredicateOperator(false, columnRefs.get(0));
         IsNullPredicateOperator isNotNullOp = new IsNullPredicateOperator(true, columnRefs.get(0));
         LikePredicateOperator likeOp = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE,
@@ -342,18 +351,18 @@ public class OpTest {
                 Arrays.asList(columnRefs.get(0), ConstantOperator.createVarchar("\\d+(\\.\\d+)?")));
         com.starrocks.catalog.Function searchDesc =
                 new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
-                        new Type[] {Type.VARCHAR}, Type.BIGINT, false);
+                        new Type[] {VarcharType.VARCHAR}, IntegerType.BIGINT, false);
         com.starrocks.catalog.Function fn =
                 GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
-        CallOperator countOp = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Arrays.asList(columnRefs.get(1)), fn);
+        CallOperator countOp = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(columnRefs.get(1)), fn);
         CallOperator countDistinctOp =
-                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Arrays.asList(columnRefs.get(1)), fn, true);
+                new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(columnRefs.get(1)), fn, true);
         CallOperator countMultiDistinctOp =
-                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Arrays.asList(columnRefs.get(1), columnRefs.get(2)),
+                new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(columnRefs.get(1), columnRefs.get(2)),
                         fn, true);
         Object[][] cases = new Object[][] {
-                {ConstantOperator.createNull(Type.INT), "NULL"},
+                {ConstantOperator.createNull(IntegerType.INT), "NULL"},
                 {ConstantOperator.createBoolean(true), "true"},
                 {ConstantOperator.createBoolean(false), "false"},
                 {ConstantOperator.createDouble(2.125), "2.125"},
@@ -416,11 +425,11 @@ public class OpTest {
 
             String addFunc = ArithmeticExpr.Operator.ADD.getName();
 
-            Op add13 = Apply.apply(Type.INT, addFunc, false, vars.get(1), vars.get(3));
-            Op add24 = Apply.apply(Type.INT, addFunc, false, vars.get(2), vars.get(4));
-            Op op5 = Apply.apply(Type.VARCHAR, FunctionSet.CONCAT, true, vars.get(1), vars.get(6), add13, vars.get(5),
+            Op add13 = Apply.apply(IntegerType.INT, addFunc, false, vars.get(1), vars.get(3));
+            Op add24 = Apply.apply(IntegerType.INT, addFunc, false, vars.get(2), vars.get(4));
+            Op op5 = Apply.apply(VarcharType.VARCHAR, FunctionSet.CONCAT, true, vars.get(1), vars.get(6), add13, vars.get(5),
                     vars.get(3));
-            Op op6 = Apply.apply(Type.VARCHAR, FunctionSet.CONCAT, true, vars.get(2), vars.get(6), add24, vars.get(5),
+            Op op6 = Apply.apply(VarcharType.VARCHAR, FunctionSet.CONCAT, true, vars.get(2), vars.get(6), add24, vars.get(5),
                     vars.get(4));
 
             Op[][] testCases = {
@@ -460,7 +469,7 @@ public class OpTest {
     @Test
     public void testGetRangePredicate() {
         {
-            Var a = Op.var(Type.DATE, 1);
+            Var a = Op.var(DateType.DATE, 1);
             TieredList<Op> conjuncts = Stream.of(
                     Op.le(a, dt("2022-12-02")),
                     Op.le(a, dt("2022-12-03")),
@@ -474,7 +483,7 @@ public class OpTest {
             Assert.assertFalse(rangeOp.isPresent());
         }
         {
-            Var a = Op.var(Type.DATE, 1);
+            Var a = Op.var(DateType.DATE, 1);
             List<Op> conjuncts = Arrays.asList(
                     //Op.le(a, dt("2022-12-01")),
                     Op.le(dt("2022-12-02"), a),
@@ -496,14 +505,14 @@ public class OpTest {
 
         Function<Op, String> opToSql = OpUtil.toOpToSqlConverter(aliases);
         {
-            Var a = Op.var(Type.DATE, 1);
+            Var a = Op.var(DateType.DATE, 1);
             List<Op> conjuncts = Arrays.asList(
                     Op.le(dt("2022-12-02"), a),
                     Op.le(dt("2022-12-03"), a),
                     Op.le(dt("2022-12-04"), a),
                     Op.in(a, dt("2022-12-28"), dt("2022-12-11"), dt("2022-12-13"))
             );
-            Var a2 = Op.var(Type.DATE, 2);
+            Var a2 = Op.var(DateType.DATE, 2);
             List<Op> conjuncts2 = Arrays.asList(
                     Op.le(dt("2022-11-02"), a),
                     Op.le(dt("2022-11-03"), a),
@@ -524,16 +533,16 @@ public class OpTest {
         }
 
         {
-            Var a = Op.var(Type.DATE, 1);
+            Var a = Op.var(DateType.DATE, 1);
             List<Op> conjuncts = Arrays.asList(
                     Op.le(dt("2022-06-04"), a)
             );
-            Var a2 = Op.var(Type.DATE, 2);
+            Var a2 = Op.var(DateType.DATE, 2);
             List<Op> conjuncts2 = Arrays.asList(
                     Op.le(dt("2022-06-06"), a2)
             );
 
-            Var a3 = Op.var(Type.DATE, 3);
+            Var a3 = Op.var(DateType.DATE, 3);
             List<Op> conjuncts3 = Arrays.asList(
                     Op.in(a3, dt("2022-06-02"), dt("2022-06-09"))
             );
@@ -633,10 +642,10 @@ public class OpTest {
 
     @Test
     public void testRewriteAvg() {
-        CallOperator avgCallOp = new CallOperator(FunctionSet.AVG, Type.DOUBLE, ImmutableList.of(columnRefs.get(9)));
-        CallOperator sumCallOp = new CallOperator(FunctionSet.SUM, Type.DOUBLE, ImmutableList.of(columnRefs.get(9)));
+        CallOperator avgCallOp = new CallOperator(FunctionSet.AVG, FloatType.DOUBLE, ImmutableList.of(columnRefs.get(9)));
+        CallOperator sumCallOp = new CallOperator(FunctionSet.SUM, FloatType.DOUBLE, ImmutableList.of(columnRefs.get(9)));
         CallOperator countCallOp =
-                new CallOperator(FunctionSet.COUNT, Type.BIGINT, ImmutableList.of(columnRefs.get(9)));
+                new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, ImmutableList.of(columnRefs.get(9)));
 
         Object[][] testCases = new Object[][] {
                 {Arrays.asList(),
@@ -669,7 +678,7 @@ public class OpTest {
                 new CallOperator(FunctionSet.SUM, type, ImmutableList.of(exprAddConstantCallOp));
         CallOperator sumCallOp = new CallOperator(FunctionSet.SUM, type, ImmutableList.of(colRef));
         CallOperator countCallOp =
-                new CallOperator(FunctionSet.COUNT, Type.BIGINT, ImmutableList.of(colRef));
+                new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, ImmutableList.of(colRef));
 
         Object[][] testCases = new Object[][] {
                 {Arrays.asList(),
@@ -702,13 +711,13 @@ public class OpTest {
         Type type = colRef.getType();
         com.starrocks.catalog.Function searchDesc =
                 new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
-                        new Type[] {type}, Type.BIGINT, false);
+                        new Type[] {type}, IntegerType.BIGINT, false);
         com.starrocks.catalog.Function
                 fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator countDistinctCallOp = new CallOperator(
-                FunctionSet.COUNT, Type.BIGINT, Arrays.asList(colRef), fn, true);
+                FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(colRef), fn, true);
 
-        CallOperator bitmapAggCallOp = new CallOperator(FunctionSet.BITMAP_AGG, Type.BITMAP, ImmutableList.of(colRef));
+        CallOperator bitmapAggCallOp = new CallOperator(FunctionSet.BITMAP_AGG, BitmapType.BITMAP, ImmutableList.of(colRef));
 
         Object[][] testCases = new Object[][] {
                 {Arrays.asList(),
@@ -730,14 +739,14 @@ public class OpTest {
         Type type = colRef.getType();
         com.starrocks.catalog.Function searchDesc =
                 new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
-                        new Type[] {type}, Type.BIGINT, false);
+                        new Type[] {type}, IntegerType.BIGINT, false);
         com.starrocks.catalog.Function
                 fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator countDistinctCallOp = new CallOperator(
-                FunctionSet.COUNT, Type.BIGINT, Arrays.asList(colRef), fn, true);
+                FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(colRef), fn, true);
 
-        CallOperator hllHashCallOp = new CallOperator(FunctionSet.HLL_HASH, Type.HLL, ImmutableList.of(colRef));
-        CallOperator hllAggCallOp = new CallOperator(FunctionSet.HLL_UNION, Type.HLL, ImmutableList.of(hllHashCallOp));
+        CallOperator hllHashCallOp = new CallOperator(FunctionSet.HLL_HASH, HLLType.HLL, ImmutableList.of(colRef));
+        CallOperator hllAggCallOp = new CallOperator(FunctionSet.HLL_UNION, HLLType.HLL, ImmutableList.of(hllHashCallOp));
 
         Object[][] testCases = new Object[][] {
                 {Arrays.asList(),
@@ -759,20 +768,20 @@ public class OpTest {
         Type type = colRef.getType();
         com.starrocks.catalog.Function searchDesc =
                 new com.starrocks.catalog.Function(new FunctionName(FunctionSet.COUNT),
-                        new Type[] {type}, Type.BIGINT, false);
+                        new Type[] {type}, IntegerType.BIGINT, false);
         com.starrocks.catalog.Function
                 fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator countDistinctCallOp = new CallOperator(
-                FunctionSet.COUNT, Type.BIGINT, Arrays.asList(colRef), fn, true);
+                FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(colRef), fn, true);
         com.starrocks.catalog.Function searchDesc2 =
                 new com.starrocks.catalog.Function(new FunctionName(FunctionSet.ARRAY_AGG),
-                        new Type[] {type}, Type.ARRAY_INT, false);
+                        new Type[] {type}, ArrayType.ARRAY_INT, false);
         com.starrocks.catalog.Function
                 arrayAggDistinctFn =
                 GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
         CallOperator arrayAggDistinctCallOp =
-                new CallOperator(FunctionSet.ARRAY_AGG, Type.ARRAY_INT, ImmutableList.of(colRef),
+                new CallOperator(FunctionSet.ARRAY_AGG, ArrayType.ARRAY_INT, ImmutableList.of(colRef),
                         arrayAggDistinctFn, true);
 
         Object[][] testCases = new Object[][] {
@@ -797,14 +806,14 @@ public class OpTest {
         ColumnRefOperator colRef = columnRefs.get(3);
         Type type = colRef.getType();
         CallOperator bitmapUnionIntAggCall = new CallOperator(
-                FunctionSet.BITMAP_UNION_INT, Type.BIGINT, Arrays.asList(colRef));
+                FunctionSet.BITMAP_UNION_INT, IntegerType.BIGINT, Arrays.asList(colRef));
         CallOperator bitmapUnionCountAggCall = new CallOperator(
-                FunctionSet.BITMAP_UNION_COUNT, Type.BIGINT, Arrays.asList(colRef));
+                FunctionSet.BITMAP_UNION_COUNT, IntegerType.BIGINT, Arrays.asList(colRef));
 
         CallOperator bitmapAggCall = new CallOperator(
-                FunctionSet.BITMAP_AGG, Type.BITMAP, Arrays.asList(colRef));
+                FunctionSet.BITMAP_AGG, BitmapType.BITMAP, Arrays.asList(colRef));
         CallOperator bitmapUnionCall = new CallOperator(
-                FunctionSet.BITMAP_UNION, Type.BITMAP, Arrays.asList(colRef));
+                FunctionSet.BITMAP_UNION, BitmapType.BITMAP, Arrays.asList(colRef));
 
         Object[][] testCases = new Object[][] {
                 {bitmapUnionIntAggCall, Arrays.asList(),
@@ -829,16 +838,16 @@ public class OpTest {
     public void testRewriteHll() {
         ColumnRefOperator colRef = columnRefs.get(3);
         CallOperator ndvAggCall = new CallOperator(
-                FunctionSet.NDV, Type.BIGINT, Arrays.asList(colRef));
+                FunctionSet.NDV, IntegerType.BIGINT, Arrays.asList(colRef));
         CallOperator approxCountDistinctAggCall = new CallOperator(
-                FunctionSet.APPROX_COUNT_DISTINCT, Type.BIGINT, Arrays.asList(colRef));
+                FunctionSet.APPROX_COUNT_DISTINCT, IntegerType.BIGINT, Arrays.asList(colRef));
         CallOperator hllUnionAggCall = new CallOperator(
-                FunctionSet.HLL_UNION_AGG, Type.BIGINT, Arrays.asList(colRef));
+                FunctionSet.HLL_UNION_AGG, IntegerType.BIGINT, Arrays.asList(colRef));
 
         CallOperator hllRawCall = new CallOperator(
-                FunctionSet.HLL_RAW, Type.HLL, Arrays.asList(colRef));
+                FunctionSet.HLL_RAW, HLLType.HLL, Arrays.asList(colRef));
         CallOperator hllUnionCall = new CallOperator(
-                FunctionSet.HLL_UNION, Type.HLL, Arrays.asList(colRef));
+                FunctionSet.HLL_UNION, HLLType.HLL, Arrays.asList(colRef));
 
         Object[][] testCases = new Object[][] {
                 {ndvAggCall, Arrays.asList(),
@@ -870,9 +879,9 @@ public class OpTest {
         CallOperator percentileApproxAggCall = new CallOperator(
                 FunctionSet.PERCENTILE_APPROX, type, Arrays.asList(colRef, ConstantOperator.createDouble(0.5)));
         CallOperator percentileHashCall = new CallOperator(
-                FunctionSet.PERCENTILE_HASH, Type.PERCENTILE, Arrays.asList(colRef));
+                FunctionSet.PERCENTILE_HASH, PercentileType.PERCENTILE, Arrays.asList(colRef));
         CallOperator percentileUnionCall = new CallOperator(
-                FunctionSet.PERCENTILE_UNION, Type.PERCENTILE, Arrays.asList(percentileHashCall));
+                FunctionSet.PERCENTILE_UNION, PercentileType.PERCENTILE, Arrays.asList(percentileHashCall));
 
         Object[][] testCases = new Object[][] {
                 {percentileApproxAggCall, Arrays.asList(),

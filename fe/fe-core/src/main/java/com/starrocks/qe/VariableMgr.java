@@ -55,7 +55,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.VariableExpr;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -484,39 +487,39 @@ public class VariableMgr {
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
-                    desc.setType(Type.BOOLEAN);
+                    desc.setType(BooleanType.BOOLEAN);
                     desc.setValue(field.getBoolean(obj));
                     break;
                 case "byte":
-                    desc.setType(Type.TINYINT);
+                    desc.setType(IntegerType.TINYINT);
                     desc.setValue(field.getByte(obj));
                     break;
                 case "short":
-                    desc.setType(Type.SMALLINT);
+                    desc.setType(IntegerType.SMALLINT);
                     desc.setValue(field.getShort(obj));
                     break;
                 case "int":
-                    desc.setType(Type.INT);
+                    desc.setType(IntegerType.INT);
                     desc.setValue(field.getInt(obj));
                     break;
                 case "long":
-                    desc.setType(Type.BIGINT);
+                    desc.setType(IntegerType.BIGINT);
                     desc.setValue(field.getLong(obj));
                     break;
                 case "float":
-                    desc.setType(Type.FLOAT);
+                    desc.setType(FloatType.FLOAT);
                     desc.setValue(field.getFloat(obj));
                     break;
                 case "double":
-                    desc.setType(Type.DOUBLE);
+                    desc.setType(FloatType.DOUBLE);
                     desc.setValue(field.getDouble(obj));
                     break;
                 case "String":
-                    desc.setType(Type.VARCHAR);
+                    desc.setType(VarcharType.VARCHAR);
                     desc.setValue((String) field.get(obj));
                     break;
                 default:
-                    desc.setType(Type.VARCHAR);
+                    desc.setType(VarcharType.VARCHAR);
                     desc.setValue("");
                     break;
             }

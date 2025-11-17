@@ -31,6 +31,10 @@ import com.starrocks.sql.automv.util.Box;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 
 import java.util.Arrays;
@@ -142,7 +146,7 @@ public abstract class Op {
     public static Op inRange(Op item, List<Op> values) {
         Preconditions.checkArgument(item.isVar() && !values.isEmpty());
         Preconditions.checkArgument(values.stream().allMatch(Op::isRangeOf));
-        return apply(Type.BOOLEAN, BuiltinKind.IN_RANGE, true, Lists.newArrayList(item, setOf(values)));
+        return apply(BooleanType.BOOLEAN, BuiltinKind.IN_RANGE, true, Lists.newArrayList(item, setOf(values)));
     }
 
     public static Op inRange(Op item, Op... values) {
@@ -184,16 +188,16 @@ public abstract class Op {
                 Preconditions.checkArgument(optOrEqNonVals.isPresent());
                 return optOrEqNonVals.get();
             } else {
-                Op inOp = apply(Type.BOOLEAN, BuiltinKind.IN, true, Lists.newArrayList(item, setOf(vals)));
+                Op inOp = apply(BooleanType.BOOLEAN, BuiltinKind.IN, true, Lists.newArrayList(item, setOf(vals)));
                 return optOrEqNonVals.map(op -> or(inOp, op)).orElse(inOp);
             }
         } else {
-            return apply(Type.BOOLEAN, BuiltinKind.IN, true, Lists.newArrayList(item, setOf(values)));
+            return apply(BooleanType.BOOLEAN, BuiltinKind.IN, true, Lists.newArrayList(item, setOf(values)));
         }
     }
 
     public static Op eq(Op a, Op b) {
-        return apply(Type.BOOLEAN, BuiltinKind.EQ, false, Lists.newArrayList(a, b));
+        return apply(BooleanType.BOOLEAN, BuiltinKind.EQ, false, Lists.newArrayList(a, b));
     }
 
     public static Op eqOrInRange(Op a, Op b) {
@@ -207,7 +211,7 @@ public abstract class Op {
     }
 
     public static Op ne(Op a, Op b) {
-        return apply(Type.BOOLEAN, BuiltinKind.NE, false, Lists.newArrayList(a, b));
+        return apply(BooleanType.BOOLEAN, BuiltinKind.NE, false, Lists.newArrayList(a, b));
     }
 
     public static Op neOrInRange(Op a, Op b) {
@@ -216,12 +220,12 @@ public abstract class Op {
         } else if (a.isVal() && b.isVar()) {
             return inRange(b, openClosedRangeOf(Val.NULL_VAL, a), closedOpenRangeOf(a, Val.NULL_VAL));
         } else {
-            return apply(Type.BOOLEAN, BuiltinKind.NE, false, Lists.newArrayList(a, b));
+            return apply(BooleanType.BOOLEAN, BuiltinKind.NE, false, Lists.newArrayList(a, b));
         }
     }
 
     public static Op le(Op a, Op b) {
-        return apply(Type.BOOLEAN, BuiltinKind.LE, true, Lists.newArrayList(a, b));
+        return apply(BooleanType.BOOLEAN, BuiltinKind.LE, true, Lists.newArrayList(a, b));
     }
 
     public static Op leOrInRange(Op a, Op b) {
@@ -235,7 +239,7 @@ public abstract class Op {
     }
 
     public static Op lt(Op a, Op b) {
-        return apply(Type.BOOLEAN, BuiltinKind.LT, true, Lists.newArrayList(a, b));
+        return apply(BooleanType.BOOLEAN, BuiltinKind.LT, true, Lists.newArrayList(a, b));
     }
 
     public static Op ltOrInRange(Op a, Op b) {
@@ -249,7 +253,7 @@ public abstract class Op {
     }
 
     public static Op nullSafeEq(List<Op> args) {
-        return apply(Type.BOOLEAN, BuiltinKind.NULL_SAFE_EQ, false, args);
+        return apply(BooleanType.BOOLEAN, BuiltinKind.NULL_SAFE_EQ, false, args);
     }
 
     public static Op apply(Type type, String name, boolean ordered, Op... args) {
@@ -286,12 +290,12 @@ public abstract class Op {
     public static Op setOf(List<Op> args) {
         // TODO: args deduplication
         Optional<Op> notNullOp = args.stream().filter(arg -> !arg.isNullVal()).findFirst();
-        return apply(notNullOp.map(Op::getType).orElse(Type.NULL), BuiltinKind.SET_OF, false, args);
+        return apply(notNullOp.map(Op::getType).orElse(NullType.NULL), BuiltinKind.SET_OF, false, args);
     }
 
     private static Op buildLocal(int id) {
         Preconditions.checkArgument(0 <= id);
-        return apply(Type.INT, BuiltinKind.LOCAL, true, Collections.singletonList(val(ConstantOperator.createInt(id))));
+        return apply(IntegerType.INT, BuiltinKind.LOCAL, true, Collections.singletonList(val(ConstantOperator.createInt(id))));
     }
 
     private static int getMaxLocal(Op op) {
@@ -342,7 +346,7 @@ public abstract class Op {
         ImmutableList.Builder<Op> argsBuilder = ImmutableList.builderWithExpectedSize(locals.size() + 1);
         argsBuilder.add(lambda);
         argsBuilder.addAll(locals);
-        return apply(Type.FUNCTION, BuiltinKind.LAMBDA, true, argsBuilder.build());
+        return apply(FunctionType.FUNCTION, BuiltinKind.LAMBDA, true, argsBuilder.build());
     }
 
     public static List<Op> getLocals(int i, int len) {
@@ -400,7 +404,7 @@ public abstract class Op {
         } else if (args.stream().anyMatch(Op::isTrueVal)) {
             return Val.TRUE_VAL;
         } else {
-            return Op.apply(Type.BOOLEAN, BuiltinKind.OR, false, args);
+            return Op.apply(BooleanType.BOOLEAN, BuiltinKind.OR, false, args);
         }
     }
 
@@ -419,7 +423,7 @@ public abstract class Op {
         } else if (args.stream().anyMatch(Op::isFalseVal)) {
             return Val.FALSE_VAL;
         } else {
-            return Op.apply(Type.BOOLEAN, BuiltinKind.AND, false, args);
+            return Op.apply(BooleanType.BOOLEAN, BuiltinKind.AND, false, args);
         }
     }
 
@@ -468,7 +472,7 @@ public abstract class Op {
         } else if (existsBottom) {
             return bottom;
         }
-        return Op.apply(Type.BOOLEAN, builtin, false, args);
+        return Op.apply(BooleanType.BOOLEAN, builtin, false, args);
     }
 
     private static Op reduceOrComponents(List<Op> components) {
@@ -524,7 +528,7 @@ public abstract class Op {
 
         Op arg0 = val(ConstantOperator.createVarchar(newModifier.name()));
         List<Op> newArgs = Lists.newArrayList(arg0, arg1);
-        return apply(Type.BOOLEAN, BuiltinKind.MODIFY, true, newArgs);
+        return apply(BooleanType.BOOLEAN, BuiltinKind.MODIFY, true, newArgs);
     }
 
     private static List<Op> rangeNot(Op r) {

@@ -45,7 +45,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 
 import java.util.List;
 
@@ -98,8 +98,8 @@ public class DeletePlanner {
             }
             SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
             slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(Type.TINYINT);
-            slotDescriptor.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
+            slotDescriptor.setType(IntegerType.TINYINT);
+            slotDescriptor.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
             slotDescriptor.setIsNullable(false);
             olapTuple.computeMemLayout();
 

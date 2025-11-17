@@ -26,9 +26,14 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -57,11 +62,11 @@ public class TypeDeserializerTest {
 
         // Set default lengths for types that require them
         if (primitiveType == TPrimitiveType.VARCHAR) {
-            scalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            scalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         } else if (primitiveType == TPrimitiveType.CHAR) {
             scalarType.setLen(1);
         } else if (primitiveType == TPrimitiveType.VARBINARY) {
-            scalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            scalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         }
 
         node.setScalar_type(scalarType);
@@ -101,11 +106,11 @@ public class TypeDeserializerTest {
 
         // Set default lengths for types that require them
         if (elementType == TPrimitiveType.VARCHAR) {
-            scalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            scalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         } else if (elementType == TPrimitiveType.CHAR) {
             scalarType.setLen(1);
         } else if (elementType == TPrimitiveType.VARBINARY) {
-            scalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            scalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         }
 
         elementNode.setScalar_type(scalarType);
@@ -131,11 +136,11 @@ public class TypeDeserializerTest {
 
         // Set default lengths for key type
         if (keyType == TPrimitiveType.VARCHAR) {
-            keyScalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            keyScalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         } else if (keyType == TPrimitiveType.CHAR) {
             keyScalarType.setLen(1);
         } else if (keyType == TPrimitiveType.VARBINARY) {
-            keyScalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            keyScalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         }
 
         keyNode.setScalar_type(keyScalarType);
@@ -149,11 +154,11 @@ public class TypeDeserializerTest {
 
         // Set default lengths for value type
         if (valueType == TPrimitiveType.VARCHAR) {
-            valueScalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            valueScalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         } else if (valueType == TPrimitiveType.CHAR) {
             valueScalarType.setLen(1);
         } else if (valueType == TPrimitiveType.VARBINARY) {
-            valueScalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+            valueScalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         }
 
         valueNode.setScalar_type(valueScalarType);
@@ -190,11 +195,11 @@ public class TypeDeserializerTest {
 
             // Set default lengths for types that require them
             if (fieldType == TPrimitiveType.VARCHAR) {
-                scalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+                scalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
             } else if (fieldType == TPrimitiveType.CHAR) {
                 scalarType.setLen(1);
             } else if (fieldType == TPrimitiveType.VARBINARY) {
-                scalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+                scalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
             }
 
             fieldNode.setScalar_type(scalarType);
@@ -217,7 +222,7 @@ public class TypeDeserializerTest {
         if (primitiveType == TPrimitiveType.VARCHAR ||
                 primitiveType == TPrimitiveType.CHAR ||
                 primitiveType == TPrimitiveType.VARBINARY) {
-            node.scalarType.len = ScalarType.DEFAULT_STRING_LENGTH;
+            node.scalarType.len = StringType.DEFAULT_STRING_LENGTH;
         }
 
         typeDesc.types.add(node);
@@ -243,7 +248,7 @@ public class TypeDeserializerTest {
         if (elementType == TPrimitiveType.VARCHAR ||
                 elementType == TPrimitiveType.CHAR ||
                 elementType == TPrimitiveType.VARBINARY) {
-            elementNode.scalarType.len = ScalarType.DEFAULT_STRING_LENGTH;
+            elementNode.scalarType.len = StringType.DEFAULT_STRING_LENGTH;
         }
 
         typeDesc.types.add(elementNode);
@@ -270,7 +275,7 @@ public class TypeDeserializerTest {
         if (keyType == TPrimitiveType.VARCHAR ||
                 keyType == TPrimitiveType.CHAR ||
                 keyType == TPrimitiveType.VARBINARY) {
-            keyNode.scalarType.len = ScalarType.DEFAULT_STRING_LENGTH;
+            keyNode.scalarType.len = StringType.DEFAULT_STRING_LENGTH;
         }
 
         typeDesc.types.add(keyNode);
@@ -285,7 +290,7 @@ public class TypeDeserializerTest {
         if (valueType == TPrimitiveType.VARCHAR ||
                 valueType == TPrimitiveType.CHAR ||
                 valueType == TPrimitiveType.VARBINARY) {
-            valueNode.scalarType.len = ScalarType.DEFAULT_STRING_LENGTH;
+            valueNode.scalarType.len = StringType.DEFAULT_STRING_LENGTH;
         }
 
         typeDesc.types.add(valueNode);
@@ -320,7 +325,7 @@ public class TypeDeserializerTest {
             if (fieldType == TPrimitiveType.VARCHAR ||
                     fieldType == TPrimitiveType.CHAR ||
                     fieldType == TPrimitiveType.VARBINARY) {
-                fieldNode.scalarType.len = ScalarType.DEFAULT_STRING_LENGTH;
+                fieldNode.scalarType.len = StringType.DEFAULT_STRING_LENGTH;
             }
 
             typeDesc.types.add(fieldNode);
@@ -383,12 +388,12 @@ public class TypeDeserializerTest {
 
     @Test
     public void testFromThriftHllType() {
-        TTypeDesc hllTypeDesc = buildThriftScalarTypeWithLength(TPrimitiveType.HLL, ScalarType.MAX_HLL_LENGTH);
+        TTypeDesc hllTypeDesc = buildThriftScalarTypeWithLength(TPrimitiveType.HLL, HLLType.MAX_HLL_LENGTH);
         Type hllType = TypeDeserializer.fromThrift(hllTypeDesc);
 
         Assertions.assertTrue(hllType.isScalarType());
         Assertions.assertEquals(PrimitiveType.HLL, ((ScalarType) hllType).getPrimitiveType());
-        Assertions.assertEquals(ScalarType.MAX_HLL_LENGTH, ((ScalarType) hllType).getLength());
+        Assertions.assertEquals(HLLType.MAX_HLL_LENGTH, ((ScalarType) hllType).getLength());
     }
 
     @Test
@@ -528,7 +533,7 @@ public class TypeDeserializerTest {
         keyNode.setType(TTypeNodeType.SCALAR);
         TScalarType keyScalarType = new TScalarType();
         keyScalarType.setType(TPrimitiveType.VARCHAR);
-        keyScalarType.setLen(ScalarType.DEFAULT_STRING_LENGTH);
+        keyScalarType.setLen(StringType.DEFAULT_STRING_LENGTH);
         keyNode.setScalar_type(keyScalarType);
         nestedTypeDesc.types.add(keyNode);
 
@@ -602,7 +607,7 @@ public class TypeDeserializerTest {
             Type type = TypeDeserializer.fromProtobuf(typeDesc);
 
             Assertions.assertTrue(type.isScalarType());
-            // Note: TypeFactory.createType(PScalarType) method handles the conversion
+            // Note: StandardTypes.getStandardType(PScalarType) method handles the conversion
         }
     }
 
@@ -673,7 +678,7 @@ public class TypeDeserializerTest {
         valueNode.type = TTypeNodeType.SCALAR.getValue();
         valueNode.scalarType = new PScalarType();
         valueNode.scalarType.type = TPrimitiveType.VARCHAR.getValue();
-        valueNode.scalarType.len = ScalarType.DEFAULT_STRING_LENGTH;
+        valueNode.scalarType.len = StringType.DEFAULT_STRING_LENGTH;
         nestedTypeDesc.types.add(valueNode);
 
         Type nestedType = TypeDeserializer.fromProtobuf(nestedTypeDesc);
@@ -747,19 +752,19 @@ public class TypeDeserializerTest {
     public void testThriftSerializationRoundTrip() {
         // Test round trip for various types
         Type[] testTypes = {
-                Type.BOOLEAN,
-                Type.INT,
-                Type.BIGINT,
-                Type.DOUBLE,
+                BooleanType.BOOLEAN,
+                IntegerType.INT,
+                IntegerType.BIGINT,
+                FloatType.DOUBLE,
                 TypeFactory.createVarcharType(255), // Use explicit length for VARCHAR
                 TypeFactory.createCharType(10),
                 TypeFactory.createVarcharType(255),
                 TypeFactory.createDecimalV2Type(10, 4),
                 TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6),
-                new ArrayType(Type.INT),
-                new MapType(TypeFactory.createVarcharType(100), Type.BIGINT), // Use explicit length for VARCHAR key
+                new ArrayType(IntegerType.INT),
+                new MapType(TypeFactory.createVarcharType(100), IntegerType.BIGINT), // Use explicit length for VARCHAR key
                 new StructType(Lists.newArrayList(
-                        new StructField("f1", Type.INT),
+                        new StructField("f1", IntegerType.INT),
                         new StructField("f2", TypeFactory.createVarcharType(200), "test comment") // Use explicit length
                 ))
         };

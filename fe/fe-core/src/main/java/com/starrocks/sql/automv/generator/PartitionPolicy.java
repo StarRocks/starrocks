@@ -32,7 +32,7 @@ import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.TieredMap;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -203,7 +203,7 @@ public class PartitionPolicy {
         // create a dummy granule for multi-column partition or non-date-type single-column partition to avoid
         // recommending a MV with too many tablets.
         TimeGranule granule =
-                optGranule.orElseGet(() -> Objects.requireNonNull(TimeGranule.of(Op.var(Type.DATETIME, 1))));
+                optGranule.orElseGet(() -> Objects.requireNonNull(TimeGranule.of(Op.var(DateType.DATETIME, 1))));
 
         if (partitionExprs.size() == 1) {
             String alias = Objects.requireNonNull(partitionExprs.get(0));

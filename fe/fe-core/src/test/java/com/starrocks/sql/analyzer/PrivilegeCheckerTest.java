@@ -121,7 +121,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
-import com.starrocks.type.Type;
+import com.starrocks.type.StringType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1705,7 +1705,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         // Test `use database` : check any privilege on any function in db
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(fn,
+                Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);
         } catch (Throwable e) {
@@ -2797,7 +2798,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testFunc() throws Exception {
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(fn,
+                Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);
         } catch (Throwable e) {
@@ -2860,7 +2862,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
 
         FunctionName fn = FunctionName.createFnName("my_udf_json_get");
         fn.setAsGlobalFunction();
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(fn,
+                Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2910,7 +2913,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
 
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(fn,
+                Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);
         } catch (Throwable e) {
@@ -2939,7 +2943,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testShowGlobalFunc() throws Exception {
         FunctionName fn = FunctionName.createFnName("my_udf_json_get");
         fn.setAsGlobalFunction();
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(fn,
+                Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2956,7 +2961,8 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testUseGlobalFunc() throws Exception {
         FunctionName fn = FunctionName.createFnName("my_udf_json_get");
         fn.setAsGlobalFunction();
-        Function function = new Function(1, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(1, fn,
+                Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -3005,7 +3011,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
 
         fn = FunctionName.createFnName("my_udf_json_get2");
         fn.setAsGlobalFunction();
-        function = new Function(2, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        function = new Function(2, fn, Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
