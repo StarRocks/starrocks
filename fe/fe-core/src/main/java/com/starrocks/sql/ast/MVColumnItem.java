@@ -37,8 +37,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.Type;
 
 import java.util.Set;

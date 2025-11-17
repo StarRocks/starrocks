@@ -38,7 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
@@ -60,6 +59,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -454,7 +454,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             tColumn.setAggregation_type(toThrift(aggregationType));
         }
         if (null != this.aggStateDesc) {
-            TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
+            TAggStateDesc tAggStateDesc = TypeSerializer.toThrift(this.aggStateDesc);
             tColumn.setAgg_state_desc(tAggStateDesc);
         }
         tColumn.setIs_key(this.isKey);

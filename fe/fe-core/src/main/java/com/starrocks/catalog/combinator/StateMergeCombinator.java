@@ -19,6 +19,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,7 +58,8 @@ public final class StateMergeCombinator extends ScalarFunction  {
             aggStateFunc.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateFunc.setPolymorphic(aggFunc.isPolymorphic());
 
-            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc);
+            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType(),
+                    Arrays.asList(aggFunc.getArgs()), AggStateDesc.isAggFuncResultNullable(aggFunc.functionName()));
             aggStateFunc.setAggStateDesc(aggStateDesc);
             // `agg_state` function's type will contain agg state desc.
             intermediateType.setAggStateDesc(aggStateDesc);

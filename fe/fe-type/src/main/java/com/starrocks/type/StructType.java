@@ -21,7 +21,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -56,7 +55,7 @@ public class StructType extends Type {
         for (StructField field : structFields) {
             String lowerFieldName = field.getName().toLowerCase();
             if (fieldMap.containsKey(lowerFieldName)) {
-                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+                throw new UnsupportedOperationException("struct contains duplicate subfield name: " + lowerFieldName);
             } else {
                 field.setPosition(fields.size());
                 fields.add(field);
@@ -182,7 +181,7 @@ public class StructType extends Type {
         for (StructField field : structFields) {
             String lowerFieldName = field.getName().toLowerCase();
             if (fieldMap.containsKey(lowerFieldName)) {
-                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
+                throw new UnsupportedOperationException("struct contains duplicate subfield name: " + lowerFieldName);
             } else {
                 field.setPosition(fields.size());
                 fields.add(field);

@@ -35,7 +35,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -44,6 +43,7 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 

@@ -122,6 +122,11 @@ under the License.
 
         <dependency>
             <groupId>com.starrocks</groupId>
+            <artifactId>fe-type</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
             <artifactId>fe-parser</artifactId>
         </dependency>
 

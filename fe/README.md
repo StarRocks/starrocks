@@ -19,6 +19,7 @@ The Frontend (FE) is the Java layer of StarRocks that provides the SQL interface
     - `qe/` — Query execution coordination and session management
     - `privilege/` — Authentication and authorization
     - `scheduler/`, `load/`, `backup/` — Scheduling, data loading, backup/restore
+- `fe/fe-type/` — Type system definitions (scalar, complex, aggregate state types)
 - `fe/fe-grammar/` — ANTLR grammars (.g4) for StarRocks SQL
 - `fe/fe-parser/` — StarRocks SQL parser and full AST definitions
 - `fe/fe-spi/` — FE Service Provider Interfaces (contracts for connectors/plugins)
@@ -67,6 +68,7 @@ Related:
 ## References
 - Grammar: `fe/fe-grammar/`
 - Parser and AST: `fe/fe-parser/`
+- Type system: `fe/fe-type/`
 - SPI contracts: `fe/fe-spi/`
 - Connectors: `fe/connector/`
 - Plugins: `fe/plugin/`
