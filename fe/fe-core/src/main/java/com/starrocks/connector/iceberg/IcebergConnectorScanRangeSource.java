@@ -137,29 +137,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.appliedPosDeleteFiles = new HashSet<>();
         this.appliedEqualDeleteFiles = new HashSet<>();
         this.partitionIdGenerator = partitionIdGenerator;
-<<<<<<< HEAD
-    }
-
-    public IcebergConnectorScanRangeSource(IcebergTable table,
-                                           RemoteFileInfoSource remoteFileInfoSource,
-                                           IcebergMORParams morParams,
-                                           TupleDescriptor desc,
-                                           Optional<List<BucketProperty>> bucketProperties,
-                                           PartitionIdGenerator partitionIdGenerator) {
-        this.table = table;
-        this.remoteFileInfoSource = remoteFileInfoSource;
-        this.morParams = morParams;
-        this.desc = desc;
-        this.bucketProperties = bucketProperties;
-        initBucketInfo();
-        this.recordScanFiles = false;
-        this.scannedDataFiles = new HashSet<>();
-        this.appliedPosDeleteFiles = new HashSet<>();
-        this.appliedEqualDeleteFiles = new HashSet<>();
-        this.partitionIdGenerator = partitionIdGenerator;
-=======
         this.useMinMaxOpt = useMinMaxOpt;
->>>>>>> fcdee3650d ([BugFix] fix iceberg min/max value type (#65551))
     }
 
     public void clearScannedFiles() {
@@ -221,13 +199,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                 res.add(fileScanTask);
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
-<<<<<<< HEAD
-                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure
-                            // that we can eliminate the equality delete files.
-=======
                             // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
                             // we can eliminate the equality delete files.
->>>>>>> fcdee3650d ([BugFix] fix iceberg min/max value type (#65551))
                         }
                     }
                 }
