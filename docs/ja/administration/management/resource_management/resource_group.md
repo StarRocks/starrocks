@@ -92,7 +92,7 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 
 ##### `mem_pool`
 
-v3.5 以降、共有メモリプール識別子を指定します。同じ `mem_pool` 識別子を持つリソースグループは共有メモリプールからメモリを取得し、`mem_limit` によってまとめて制限されます。指定しない場合、リソースグループは `default_mem_pool` に割り当てられ、そのメモリ使用量は自身の `mem_limit` のみによって制限されます。
+v4.0 以降、共有メモリプール識別子を指定します。同じ `mem_pool` 識別子を持つリソースグループは共有メモリプールからメモリを取得し、`mem_limit` によってまとめて制限されます。指定しない場合、リソースグループは `default_mem_pool` に割り当てられ、そのメモリ使用量は自身の `mem_limit` のみによって制限されます。
 
 同じ `mem_pool` を共有するすべてのリソースグループは、同一の `mem_limit` で設定する必要があります。
 

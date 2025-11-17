@@ -92,7 +92,7 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 
 ##### `mem_pool`
 
-自 v3.5 起，该参数用于指定一个共享内存池标识符。具有相同 `mem_pool` 标识符的资源组会从同一个共享内存池中获取内存，并共同受到 `mem_limit` 的限制。如果未指定，资源组将被分配给 `default_mem_pool`，其内存使用仅受其自身的 `mem_limit` 限制。
+自 v4.0 起，该参数用于指定一个共享内存池标识符。具有相同 `mem_pool` 标识符的资源组会从同一个共享内存池中获取内存，并共同受到 `mem_limit` 的限制。如果未指定，资源组将被分配给 `default_mem_pool`，其内存使用仅受其自身的 `mem_limit` 限制。
 
 所有共享同一个 `mem_pool` 的资源组必须配置相同的 `mem_limit`。
 
