@@ -71,7 +71,7 @@ StatusOr<ChunkPtr> ExchangeParallelMergeSourceOperator::pull_chunk(RuntimeState*
 
 std::string ExchangeParallelMergeSourceOperator::get_name() const {
     std::string finished = is_finished() ? "X" : "O";
-    return fmt::format("{}_{}_{}({}) {{ has_output:{}}}", _name, _plan_node_id, (void*)this, finished, has_output());
+    return fmt::format("{}_{}_{}({})", _name, _plan_node_id, static_cast<const void*>(this), finished);
 }
 
 Status ExchangeParallelMergeSourceOperatorFactory::prepare(RuntimeState* state) {
