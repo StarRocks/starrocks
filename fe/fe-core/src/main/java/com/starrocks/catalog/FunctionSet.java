@@ -560,7 +560,7 @@ public class FunctionSet {
 
     // VARIANT functions
     public static final Function VARIANT_QUERY_FUNC = new Function(
-            new FunctionName(VARIANT_QUERY), new Type[] {Type.VARIANT, Type.VARCHAR}, Type.VARIANT, false);
+            new FunctionName(VARIANT_QUERY), new Type[] {VariantType.VARIANT, VarcharType.VARCHAR}, VariantType.VARIANT, false);
 
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
