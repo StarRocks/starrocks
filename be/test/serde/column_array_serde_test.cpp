@@ -24,11 +24,7 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
-<<<<<<< HEAD
-=======
-#include "column/variant_column.h"
 #include "common/statusor.h"
->>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 #include "gutil/strings/substitute.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
