@@ -17,26 +17,26 @@ BASE TABLE	None	None
 -- !result
 [UC]select * from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
 -- result:
-def	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_view_with_null	VIEW	None	None	None	None	None	None	None	None	None	None	2025-11-14 15:28:09	None	1970-01-01 08:00:00	utf8_general_ci	None	None		db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
-def	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	BASE TABLE	StarRocks	None	None	0	0	0	None	None	None	None	2025-11-14 15:28:09	2025-11-14 15:28:09	1970-01-01 08:00:00	utf8_general_ci	None	None	OLAP	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
+def	db_1b289bc796044317a138ee5a6c79b56a	unique_view_with_null	VIEW	None	None	None	None	None	None	None	None	None	None	2025-11-17 10:39:50	None	1970-01-01 08:00:00	utf8_general_ci	None	None		db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11003
+def	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	BASE TABLE	StarRocks	None	None	0	0	0	None	None	None	None	2025-11-17 10:39:50	2025-11-17 10:39:50	1970-01-01 08:00:00	utf8_general_ci	None	None	OLAP	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11003
 -- !result
 [UC]select a.TABLE_NAME, b.* from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null';
 -- result:
-unique_view_with_null	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
-unique_table_with_null	db_d98bf82a6f4e4d5891e95a3d4a407e06	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11517
+unique_view_with_null	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11003
+unique_table_with_null	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11003
 -- !result
 set enable_evaluate_schema_scan_rule=true;
 -- result:
 -- !result
-select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
+select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}' ORDER BY a.TABLE_NAME;
 -- result:
-unique_view_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
+unique_view_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 -- !result
 set enable_evaluate_schema_scan_rule=false;
 -- result:
 -- !result
-select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}';
+select a.TABLE_NAME, b.TABLE_MODEL, b.PRIMARY_KEY, b.PARTITION_KEY, b.DISTRIBUTE_KEY from information_schema.tables a full join information_schema.tables_config b on a.TABLE_SCHEMA=b.TABLE_SCHEMA where b.TABLE_NAME='unique_table_with_null' and a.TABLE_SCHEMA='db_${uuid0}' ORDER BY a.TABLE_NAME;
 -- result:
 unique_table_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`
 unique_view_with_null	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`

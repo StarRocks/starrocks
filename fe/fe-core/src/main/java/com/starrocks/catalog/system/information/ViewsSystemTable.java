@@ -117,6 +117,14 @@ public class ViewsSystemTable extends SystemTable {
         return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
+    /**
+     * Get the information_schema.views's result.
+     * @param dbName db's name of the current view
+     * @param status the view's status info
+     */
+    public record GetViewResult(String dbName, TTableStatus status) {
+    }
+
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
@@ -142,9 +150,9 @@ public class ViewsSystemTable extends SystemTable {
         }
 
         try {
-            TListTableStatusResult result = query(params, context);
-            return result.getTables().stream()
-                    .map(t -> infoToScalar(this, t, params.db))
+            return queryImpl(params, context)
+                    .stream()
+                    .map(t -> infoToScalar(this, t))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("Failed to query views ", e);
@@ -168,8 +176,7 @@ public class ViewsSystemTable extends SystemTable {
     );
 
     public static List<ScalarOperator> infoToScalar(SystemTable systemTable,
-                                                    TTableStatus status,
-                                                    String dbName) {
+                                                    GetViewResult viewResult) {
         List<ScalarOperator> result = Lists.newArrayList();
         for (Column column : systemTable.getBaseSchema()) {
             String name = column.getName().toLowerCase();
@@ -186,7 +193,7 @@ public class ViewsSystemTable extends SystemTable {
             }
             if ("table_schema".equals(name)) {
                 // For TABLE_SCHEMA, we return the database name
-                ConstantOperator scalar = ConstantOperator.createNullableObject(dbName, column.getType());
+                ConstantOperator scalar = ConstantOperator.createNullableObject(viewResult.dbName, column.getType());
                 result.add(scalar);
                 continue;
             }
@@ -196,7 +203,7 @@ public class ViewsSystemTable extends SystemTable {
             TTableStatus._Fields field = TTableStatus._Fields.findByName(name);
             Preconditions.checkArgument(field != null, "Unknown field: " + name);
             FieldValueMetaData meta = TTableStatus.metaDataMap.get(field).valueMetaData;
-            Object obj = status.getFieldValue(field);
+            Object obj = viewResult.status.getFieldValue(field);
             Type valueType = thriftToScalarType(meta.type);
             if (valueType.isStringType() && obj == null) {
                 obj = ""; // Convert null string to empty string
@@ -216,10 +223,15 @@ public class ViewsSystemTable extends SystemTable {
 
     public static TListTableStatusResult query(TGetTablesParams params,
                                                ConnectContext context) throws TException {
-        LOG.debug("get list table request: {}", params);
         TListTableStatusResult result = new TListTableStatusResult();
-        List<TTableStatus> tablesResult = Lists.newArrayList();
-        result.setTables(tablesResult);
+        List<GetViewResult> views = queryImpl(params, context);
+        result.setTables(views.stream().map(GetViewResult::status).collect(Collectors.toList()));
+        return result;
+    }
+
+    private static List<GetViewResult> queryImpl(TGetTablesParams params,
+                                                 ConnectContext context) throws TException {
+        LOG.debug("get list table request: {}", params);
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
@@ -247,19 +259,25 @@ public class ViewsSystemTable extends SystemTable {
         }
 
         long limit = params.isSetLimit() ? params.getLimit() : -1;
+        List<GetViewResult> result = Lists.newArrayList();
         for (Database db : databases) {
-            collectViewsInDb(context, db, currentUser, tableNameParam,
-                    pattern, matcher, limit, listingViews, caseSensitive, tablesResult);
+            if (!collectViewsInDb(context, db, currentUser, tableNameParam, pattern, matcher,
+                    limit, listingViews, caseSensitive, result)) {
+                break;
+            }
         }
         return result;
     }
 
-    private static void collectViewsInDb(ConnectContext context, Database db, UserIdentity currentUser,
-                                         String paramTableName, String paramPattern, PatternMatcher matcher,
-                                         long limit, boolean listingViews, boolean caseSensitive,
-                                         List<TTableStatus> tablesResult) {
+    /**
+     * if the limit is reached, false is returned, otherwise true will be returned.
+     */
+    private static boolean collectViewsInDb(ConnectContext context, Database db, UserIdentity currentUser,
+                                            String paramTableName, String paramPattern, PatternMatcher matcher,
+                                            long limit, boolean listingViews, boolean caseSensitive,
+                                            List<GetViewResult> result) {
         if (db == null) {
-            return;
+            return true;
         }
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -322,14 +340,15 @@ public class ViewsSystemTable extends SystemTable {
                     status.setDdl_sql(ddlSql);
                 }
 
-                tablesResult.add(status);
+                result.add(new GetViewResult(dbName, status));
                 // if user set limit, then only return limit size result
-                if (limit > 0 && tablesResult.size() >= limit) {
-                    break;
+                if (limit > 0 && result.size() >= limit) {
+                    return false;
                 }
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
+        return true;
     }
 }
