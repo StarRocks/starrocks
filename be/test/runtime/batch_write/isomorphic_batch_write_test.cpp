@@ -89,7 +89,7 @@ public:
         ctx->load_parameters = batch_write_id.load_params;
         auto buf = ByteBuffer::allocate_with_tracker(64).value();
         buf->put_bytes(data.c_str(), data.size());
-        buf->flip();
+        buf->flip_to_read();
         ctx->buffer = buf;
         _to_release_contexts.emplace(ctx);
         return ctx;
