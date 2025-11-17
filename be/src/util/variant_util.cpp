@@ -15,6 +15,7 @@
 #include "variant_util.h"
 
 #include <arrow/util/endian.h>
+#include <gutil/strings/numbers.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -192,7 +193,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
     case VariantType::FLOAT: {
         const float f = *variant.get_float();
         if (std::isfinite(f)) {
-            json_str << std::defaultfloat << std::setprecision(std::numeric_limits<float>::max_digits10) << f;
+            json_str << SimpleFtoa(f);
         } else {
             append_quoted_string(json_str, std::to_string(f));
         }
@@ -201,7 +202,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
     case VariantType::DOUBLE: {
         const double d = *variant.get_double();
         if (std::isfinite(d)) {
-            json_str << std::defaultfloat << std::setprecision(std::numeric_limits<double>::max_digits10) << d;
+            json_str << SimpleDtoa(d);
         } else {
             append_quoted_string(json_str, std::to_string(d));
         }

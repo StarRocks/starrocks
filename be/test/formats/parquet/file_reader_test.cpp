@@ -4375,7 +4375,7 @@ TEST_F(FileReaderTest, test_read_variant) {
             R"(['primitive_boolean_false', false, 'false'])",
             R"(['primitive_date', "2025-04-16", '"2025-04-16"'])",
             R"(['primitive_int32', 123456, '123456'])",
-            R"(['primitive_float', 1.23456794E9, '1.23456794E9'])",
+            R"(['primitive_float', 1.23456794e+09, '1.23456794E9'])",
             R"(['primitive_int16', 1234, '1234'])",
             R"(['primitive_int8', 42, '42'])",
             R"(['object_empty', {}, '{}'])",
