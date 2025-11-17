@@ -50,7 +50,8 @@ Status OlapMetaScanner::_init_meta_reader_params() {
                                                 ? _parent->_meta_scan_node.low_cardinality_threshold
                                                 : DICT_DECODE_MAX_SIZE;
     if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
-        (_parent->_meta_scan_node.columns[0].col_unique_id > 0 || _version > _tablet->tablet_schema()->schema_version())) {
+        (_parent->_meta_scan_node.columns[0].col_unique_id > 0 ||
+         _version > _tablet->tablet_schema()->schema_version())) {
         _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
     } else {
         _reader_params.tablet_schema = _tablet->tablet_schema();
