@@ -81,6 +81,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
 
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
+    REGISTER_STARROCKS_METRIC(memtable_finalize_task_total);
     REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
