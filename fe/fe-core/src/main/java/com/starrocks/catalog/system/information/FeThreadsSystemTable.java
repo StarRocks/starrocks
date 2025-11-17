@@ -14,11 +14,18 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.thrift.TFeThreadInfo;
 import com.starrocks.thrift.TGetFeThreadsRequest;
 import com.starrocks.thrift.TGetFeThreadsResponse;
@@ -62,6 +69,17 @@ public class FeThreadsSystemTable {
     }
 
     public static TGetFeThreadsResponse generateFeThreadsResponse(TGetFeThreadsRequest request) throws TException {
+        // Check OPERATE privilege for fe_threads system table (same as be_threads)
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, request.getAuth_info());
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE.name(),
+                    ObjectType.SYSTEM.name(), null);
+        }
+
         TGetFeThreadsResponse response = new TGetFeThreadsResponse();
         TStatus status = new TStatus(TStatusCode.OK);
         response.setStatus(status);
