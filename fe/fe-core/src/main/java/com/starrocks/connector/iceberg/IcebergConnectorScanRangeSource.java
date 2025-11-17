@@ -208,21 +208,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
         hdfsScanRange.setLength(file.content() == FileContent.DATA ? task.length() : file.fileSizeInBytes());
 
-<<<<<<< HEAD
         boolean isFirstSplit = (hdfsScanRange.getOffset() == 0);
         // But sometimes first task offset is 4. For example, the first four bytes are magic bytes in parquet file.
         if (file.splitOffsets() != null && !file.splitOffsets().isEmpty()) {
             isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
         }
 
-        if (!partitionSlotIdsCache.containsKey(file.specId())) {
-            hdfsScanRange.setPartition_id(-1);
-        } else {
-=======
         ConnectContext context = ConnectContext.get();
         if (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
                 partitionSlotIdsCache.containsKey(file.specId())) {
->>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
             hdfsScanRange.setPartition_id(partitionId);
             hdfsScanRange.setIdentity_partition_slot_ids(partitionSlotIdsCache.get(file.specId()));
         } else {
