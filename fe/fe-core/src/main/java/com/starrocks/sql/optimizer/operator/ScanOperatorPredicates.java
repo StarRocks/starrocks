@@ -34,6 +34,8 @@ import java.util.stream.Collectors;
 public class ScanOperatorPredicates {
     // id -> partition key
     private Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
+    // id -> partition name (optional, mainly used by connectors that require the original hive partition name)
+    private Map<Long, String> idToPartitionName = Maps.newHashMap();
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();
 
     // partitionConjuncts contains partition filters.
@@ -51,6 +53,10 @@ public class ScanOperatorPredicates {
 
     public Map<Long, PartitionKey> getIdToPartitionKey() {
         return idToPartitionKey;
+    }
+
+    public Map<Long, String> getIdToPartitionName() {
+        return idToPartitionName;
     }
 
     public Collection<Long> getSelectedPartitionIds() {
@@ -105,6 +111,7 @@ public class ScanOperatorPredicates {
 
     public void clear() {
         idToPartitionKey.clear();
+        idToPartitionName.clear();
         selectedPartitionIds.clear();
         partitionConjuncts.clear();
         noEvalPartitionConjuncts.clear();
@@ -117,6 +124,7 @@ public class ScanOperatorPredicates {
     public ScanOperatorPredicates clone() {
         ScanOperatorPredicates other = new ScanOperatorPredicates();
         other.idToPartitionKey.putAll(this.idToPartitionKey);
+        other.idToPartitionName.putAll(this.idToPartitionName);
         other.selectedPartitionIds.addAll(this.selectedPartitionIds);
         other.partitionConjuncts.addAll(this.partitionConjuncts);
         other.noEvalPartitionConjuncts.addAll(this.noEvalPartitionConjuncts);
@@ -138,6 +146,7 @@ public class ScanOperatorPredicates {
         }
         ScanOperatorPredicates that = (ScanOperatorPredicates) o;
         return Objects.equals(idToPartitionKey, that.idToPartitionKey) &&
+                Objects.equals(idToPartitionName, that.idToPartitionName) &&
                 Objects.equals(selectedPartitionIds, that.selectedPartitionIds) &&
                 Objects.equals(partitionConjuncts, that.partitionConjuncts) &&
                 Objects.equals(noEvalPartitionConjuncts, that.noEvalPartitionConjuncts) &&
@@ -148,8 +157,8 @@ public class ScanOperatorPredicates {
 
     @Override
     public int hashCode() {
-        return Objects.hash(idToPartitionKey, selectedPartitionIds, partitionConjuncts, noEvalPartitionConjuncts,
-                nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
+        return Objects.hash(idToPartitionKey, idToPartitionName, selectedPartitionIds, partitionConjuncts,
+                noEvalPartitionConjuncts, nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
     }
 
     @Override

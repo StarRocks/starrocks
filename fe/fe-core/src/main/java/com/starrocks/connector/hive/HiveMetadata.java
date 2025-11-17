@@ -328,7 +328,7 @@ public class HiveMetadata implements ConnectorMetadata {
             // in most cases, we use partition keys. but in some cases,  we use partition names.
             // so partition keys has higher priority than partition names.
             List<String> partitionNames = params.getPartitionNames();
-            if (params.getPartitionKeys() != null) {
+            if ((partitionNames == null || partitionNames.isEmpty()) && params.getPartitionKeys() != null) {
                 partitionNames =
                         params.getPartitionKeys().stream().map(x -> toHivePartitionName(table.getPartitionColumnNames(), x))
                                 .collect(

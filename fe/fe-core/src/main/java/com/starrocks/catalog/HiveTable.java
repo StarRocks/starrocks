@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -57,6 +58,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.THdfsTable;
@@ -306,9 +308,10 @@ public class HiveTable extends Table {
         // columns and partition columns
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
+        List<Column> partitionColumns = getPartitionColumns();
         List<TColumn> tColumns = Lists.newArrayList();
 
-        for (Column column : getPartitionColumns()) {
+        for (Column column : partitionColumns) {
             tPartitionColumns.add(column.toThrift());
             partitionColumnNames.add(column.getName());
         }
@@ -349,6 +352,24 @@ public class HiveTable extends Table {
             tPartition.setPartition_key_exprs(keys.stream()
                     .map(ExprToThrift::treeToThrift)
                     .collect(Collectors.toList()));
+            List<TExpr> partitionKeyExprs = Lists.newArrayListWithCapacity(keys.size());
+            for (int j = 0; j < keys.size(); j++) {
+                LiteralExpr literal = keys.get(j);
+                if (j < partitionColumns.size()) {
+                    Type targetType = partitionColumns.get(j).getType();
+                    if (!literal.getType().equals(targetType)) {
+                        try {
+                            literal = (LiteralExpr) literal.castTo(targetType);
+                        } catch (AnalysisException e) {
+                            throw new StarRocksConnectorException(
+                                    String.format("Failed to cast partition column %s literal %s to %s",
+                                            partitionColumns.get(j).getName(), literal.toSql(), targetType), e);
+                        }
+                    }
+                }
+                partitionKeyExprs.add(literal.treeToThrift());
+            }
+            tPartition.setPartition_key_exprs(partitionKeyExprs);
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);
