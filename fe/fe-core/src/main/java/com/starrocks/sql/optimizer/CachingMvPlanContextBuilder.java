@@ -202,10 +202,10 @@ public class CachingMvPlanContextBuilder {
         try {
             result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            LOG.warn("get mv plan cache timeout: {}", mv.getName());
+            LOG.warn("get mv plan cache timeout: {}, timeout(ms):{}", mv.getName(), timeoutMs);
             return null;
         } catch (Throwable e) {
-            LOG.warn("get mv plan cache failed: {}", mv.getName(), e);
+            LOG.warn("get mv plan cache failed: {}, timeout(ms):{}", mv.getName(), timeoutMs, e);
             return null;
         }
         if (LOG.isDebugEnabled()) {

@@ -46,6 +46,10 @@ public final class TvrTableSnapshot extends TvrVersionRange {
         super(TvrVersion.MIN, to);
     }
 
+    public long getSnapshotId() {
+        return to.getVersion();
+    }
+
     @Override
     public boolean isEmpty() {
         return to.isMinOrMax();
