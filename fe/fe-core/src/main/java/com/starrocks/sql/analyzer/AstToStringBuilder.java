@@ -46,6 +46,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MatchExpr;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -1510,9 +1511,17 @@ public class AstToStringBuilder {
         protected String printWithParentheses(ParseNode node) {
             if (node instanceof SlotRef || node instanceof LiteralExpr) {
                 return visit(node);
-            } else {
-                return "(" + visit(node) + ")";
             }
+
+            if (node instanceof Parameter) {
+                Parameter parameter = (Parameter) node;
+                Expr expr = parameter.getExpr();
+                if ((expr instanceof SlotRef || expr instanceof LiteralExpr)) {
+                    return visit(node);
+                }
+            }
+
+            return "(" + visit(node) + ")";
         }
 
         // --------------------------------------------Storage volume Statement ----------------------------------------
