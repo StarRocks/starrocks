@@ -102,15 +102,10 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeSource.hasMoreOutput();
     }
 
-<<<<<<< HEAD
-    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
-            throws UserException {
-=======
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
                                      PartitionIdGenerator partitionIdGenerator,
                                      boolean enableIncrementalScanRanges)
             throws StarRocksException {
->>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();

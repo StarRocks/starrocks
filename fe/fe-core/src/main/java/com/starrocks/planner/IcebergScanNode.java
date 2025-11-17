@@ -68,12 +68,7 @@ public class IcebergScanNode extends ScanNode {
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
-<<<<<<< HEAD
-=======
-    private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
     private PartitionIdGenerator partitionIdGenerator = null;
-    private IcebergMetricsReporter icebergScanMetricsReporter;
->>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -82,12 +77,7 @@ public class IcebergScanNode extends ScanNode {
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
-<<<<<<< HEAD
-=======
-        this.icebergScanMetricsReporter = new IcebergMetricsReporter();
-        this.icebergTable.setIcebergMetricsReporter(icebergScanMetricsReporter);
         this.partitionIdGenerator = partitionIdGenerator;
->>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         setupCloudCredential();
     }
 
@@ -112,44 +102,7 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getOutputs((int) maxScanRangeLength);
     }
 
-<<<<<<< HEAD
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws UserException {
-=======
-    public IcebergConnectorScanRangeSource getSourceRange() {
-        return scanRangeSource;
-    }
-
-    public void rebuildScanRange(List<RemoteFileInfo> splits) throws StarRocksException {
-        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
-        if (snapshotId.isEmpty()) {
-            LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
-            return;
-        }
-
-        if (splits.isEmpty()) {
-            LOG.warn("There is no scan tasks after splits",
-                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
-            return;
-        }
-        if (getSourceRange() != null) {
-            getSourceRange().clearScannedFiles();
-        }
-        RemoteFileInfoSource remoteFileInfoSource;
-        remoteFileInfoSource = new RemoteFileInfoDefaultSource(splits);
-        if (morParams != IcebergMORParams.EMPTY) {
-            boolean needToCheckEqualityIds = tableFullMORParams.size() != 3;
-            IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(
-                    remoteFileInfoSource, morParams, needToCheckEqualityIds);
-            Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
-            remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
-        }
-
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true);
-    }
-
-    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
->>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         Preconditions.checkNotNull(snapshotId, "snapshot id is null");
         if (snapshotId.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
@@ -184,12 +137,7 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
-<<<<<<< HEAD
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc);
-=======
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator);
->>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc, partitionIdGenerator);
     }
 
     private void setupCloudCredential() {

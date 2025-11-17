@@ -1458,14 +1458,7 @@ public class PlanFragmentBuilder {
             if (!isEqDeleteScan) {
                 PhysicalIcebergScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-<<<<<<< HEAD
-                        op.getTableFullMORParams(), op.getMORParams());
-=======
                         op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
-                icebergScanNode.updateAppliedDictStringColumns(
-                        ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
-                                .map(entry -> entry.first).collect(Collectors.toSet()));
->>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
