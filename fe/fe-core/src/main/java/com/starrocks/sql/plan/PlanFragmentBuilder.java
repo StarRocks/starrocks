@@ -1404,6 +1404,7 @@ public class PlanFragmentBuilder {
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             paimonScanNode.computeStatistics(optExpression.getStatistics());
+            paimonScanNode.setTvrVersionRange(node.getTvrVersionRange());
             currentExecGroup.add(paimonScanNode, true);
             try {
                 // set predicate

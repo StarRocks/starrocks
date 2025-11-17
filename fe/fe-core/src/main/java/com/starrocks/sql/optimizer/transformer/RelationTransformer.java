@@ -748,6 +748,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
         }
+        if (tableVersionRange != null) {
+            scanOperator.setTvrVersionRange(tableVersionRange);
+        }
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
         if (isAddExtraFilterOperator(session.getSessionVariable(), node)) {
