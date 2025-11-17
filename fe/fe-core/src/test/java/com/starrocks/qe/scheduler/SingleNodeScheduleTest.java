@@ -51,7 +51,7 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
     @BeforeEach
     public void beforeEach() {
         // Clear blacklist to ensure backend is available for tests
-        SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
+        SimpleScheduler.getHostBlacklist().clear();
     }
 
     @Test
