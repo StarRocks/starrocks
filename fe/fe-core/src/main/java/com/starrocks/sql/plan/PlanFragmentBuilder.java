@@ -104,6 +104,7 @@ import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -1269,6 +1270,8 @@ public class PlanFragmentBuilder {
 
             prepareContextSlots(node, context, tupleDescriptor);
 
+            PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
+
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
             deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
@@ -1287,7 +1290,7 @@ public class PlanFragmentBuilder {
                 List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
                         .map(ColumnRefOperator::getName)
                         .collect(Collectors.toList());
-                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames,
+                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames, partitionIdGenerator,
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
@@ -1473,20 +1476,26 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
+
             boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
             IcebergScanNode icebergScanNode;
             String planNodeName = isEqDeleteScan ? "IcebergEqualityDeleteScanNode" : "IcebergScanNode";
             if (!isEqDeleteScan) {
                 PhysicalIcebergScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+<<<<<<< HEAD
                         op.getTableFullMORParams(), op.getMORParams());
                 icebergScanNode.updateAppliedDictStringColumns(
                         ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
                                 .map(entry -> entry.first).collect(Collectors.toSet()));
+=======
+                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
+>>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
-                        op.getTableFullMORParams(), op.getMORParams());
+                        op.getTableFullMORParams(), op.getMORParams(), partitionIdGenerator);
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());

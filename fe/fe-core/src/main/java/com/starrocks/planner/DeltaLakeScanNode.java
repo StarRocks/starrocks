@@ -103,8 +103,14 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeSource.hasMoreOutput();
     }
 
+<<<<<<< HEAD
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
             throws StarRocksException {
+=======
+    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
+                                     PartitionIdGenerator partitionIdGenerator,
+                                     boolean enableIncrementalScanRanges) throws UserException {
+>>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();
@@ -120,7 +126,7 @@ public class DeltaLakeScanNode extends ScanNode {
             remoteFileInfoSource = new RemoteFileInfoDefaultSource(
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, params));
         }
-        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource);
+        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource, partitionIdGenerator);
     }
 
     @Override

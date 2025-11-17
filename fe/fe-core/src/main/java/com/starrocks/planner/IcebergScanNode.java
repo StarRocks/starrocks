@@ -71,16 +71,25 @@ public class IcebergScanNode extends ScanNode {
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
+<<<<<<< HEAD
     private IcebergMetricsReporter icebergScanMetricsReporter;
+=======
+    private PartitionIdGenerator partitionIdGenerator = null;
+>>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
+                           PartitionIdGenerator partitionIdGenerator) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
+<<<<<<< HEAD
         this.icebergScanMetricsReporter = new IcebergMetricsReporter();
         this.icebergTable.setIcebergMetricsReporter(icebergScanMetricsReporter);
+=======
+        this.partitionIdGenerator = partitionIdGenerator;
+>>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
         setupCloudCredential();
     }
 
@@ -141,7 +150,7 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc);
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc, partitionIdGenerator);
     }
 
     private void setupCloudCredential() {
