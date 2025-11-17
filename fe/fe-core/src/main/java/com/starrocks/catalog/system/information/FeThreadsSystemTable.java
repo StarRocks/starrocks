@@ -132,7 +132,9 @@ public class FeThreadsSystemTable {
         Thread[] threads = new Thread[rootGroup.activeCount() * 2];
         int count = rootGroup.enumerate(threads, true);
         for (int i = 0; i < count; i++) {
-            threadMap.put(threads[i].getId(), threads[i]);
+            if (threads[i] != null) {
+                threadMap.put(threads[i].getId(), threads[i]);
+            }
         }
         return threadMap;
     }
