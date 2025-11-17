@@ -601,6 +601,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                             .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
+                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
+                        materializedView.getId(), status, "");
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return null;
@@ -608,14 +611,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.warn("Setting the materialized view {}({}) to inactive because " +
                                 "user use alter materialized view set status to inactive",
                         materializedView.getName(), materializedView.getId());
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false);
+                Set<MvId> visited = Sets.newHashSet();
+                // not clear version map for user manual inactive by default since mv's refreshed data has not been
+                // broken from the current base tables.
+                // this method will write edit log in it.
+                doInactiveMaterializedViewRecursive(materializedView, MANUAL_INACTIVE_MV_REASON, false, visited);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
-            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
-                    materializedView.getId(), status, MANUAL_INACTIVE_MV_REASON);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             return null;
         } catch (DdlException | MetaNotFoundException e) {
             throw new AlterJobException(e.getMessage(), e);
@@ -632,13 +635,55 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
     /**
      * Inactive the materialized view and its related materialized views.
-     * <p>
-     * NOTE:
+     */
+    private static void doInactiveMaterializedViewRecursive(MaterializedView mv, String reason,
+                                                            boolean isClearVersionMap,
+                                                            Set<MvId> visited) {
+        // Only check this in leader and not replay to avoid duplicate inactive
+        if (mv == null || !GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+        if (visited.contains(mv.getMvId())) {
+            return;
+        }
+        // inactive this mv first
+        doInactiveMaterializedViewOnly(mv, reason, isClearVersionMap);
+        // add it into visited
+        visited.add(mv.getMvId());
+
+        // reset inactive reason
+        reason = MaterializedViewExceptions.inactiveReasonForBaseTableInActive(mv.getName());
+        // recursive inactive
+        for (MvId mvId : mv.getRelatedMaterializedViews()) {
+            if (visited.contains(mvId)) {
+                continue;
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+            if (db == null) {
+                LOG.warn("Table {} inactive MaterializedView, viewId {} ,db {} not found",
+                        mv.getName(), mvId.getId(), mvId.getDbId());
+                continue;
+            }
+            MaterializedView relatedMV = (MaterializedView) db.getTable(mvId.getId());
+            if (relatedMV == null) {
+                LOG.info("Ignore materialized view {} does not exists", mvId);
+                continue;
+            }
+            // do inactive this mvs
+            doInactiveMaterializedViewRecursive(relatedMV, reason, isClearVersionMap, visited);
+        }
+    }
+
+    /**
      * 1. This method will clear all visible version map of the MV since for all schema changes, the MV should be
      * refreshed.
      * 2. User's inactive-mv command should not call this which will reserve the visible version map.
+     * @param mv target mv to inactive
+     * @param reason inactive reason
+     * @param isClearVersionMap whether to clear version map, if true the following mv refresh will refresh the whole data.
      */
-    private static void doInactiveMaterializedView(MaterializedView mv, String reason) {
+    private static void doInactiveMaterializedViewOnly(MaterializedView mv, String reason,
+                                                       boolean isClearVersionMap) {
         // Only check this in leader and not replay to avoid duplicate inactive
         if (mv == null || !GlobalStateMgr.getCurrentState().isLeader()) {
             return;
@@ -651,22 +696,27 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             GlobalStateMgr.getCurrentState().getAlterJobMgr().
                     alterMaterializedViewStatus(mv, status, reason, false);
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
-                    mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
+                    mv.getId(), status, reason);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
         } else {
             mv.setInactiveAndReason(reason);
         }
         // clear version map to make sure the MV will be refreshed
-        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-        // recursive inactive
-        inactiveRelatedMaterializedView(mv,
-                MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()), false);
+        if (isClearVersionMap) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+        }
     }
 
     /**
      * Inactive related materialized views because of base table/view is changed or dropped in the leader background.
+     * </p>
+     * NOTE: This method will clear the related mvs' version map by default since the base table
+     *  has broken from mv existed refreshed data.
      */
-    public static void inactiveRelatedMaterializedView(Table olapTable, String reason, boolean isReplay) {
+    public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason, boolean isReplay) {
+        if (olapTable == null) {
+            return;
+        }
         if (!Config.enable_mv_automatic_inactive_by_base_table_changes) {
             LOG.warn("Skip to inactive related materialized views because of automatic inactive is disabled, " +
                     "table:{}, reason:{}", olapTable.getName(), reason);
@@ -679,19 +729,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     olapTable.getName(), GlobalStateMgr.getCurrentState().isLeader(), isReplay, reason);
             return;
         }
+        Set<MvId> inactiveMVIds = Sets.newHashSet();
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-            if (db == null) {
-                LOG.warn("Table {} inactive MaterializedView, viewId {} ,db {} not found",
-                        olapTable.getName(), mvId.getId(), mvId.getDbId());
-                continue;
-            }
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            MaterializedView mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mvId);
             if (mv == null) {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
                 continue;
             }
-            doInactiveMaterializedView(mv, reason);
+            doInactiveMaterializedViewRecursive(mv, reason, true, inactiveMVIds);
         }
     }
 
@@ -699,10 +744,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      * Inactive related mvs after modified columns have been done. Only inactive mvs after
      * modified columns have done because the modified process may be failed and in this situation
      * should not inactive mvs then.
+     * </p>
+     * NOTE: This method will clear the related mvs' version map by default since the base table
+     *  has broken from mv existed refreshed data.
      */
-    public static void inactiveRelatedMaterializedViews(Database db,
-                                                        OlapTable olapTable,
-                                                        Set<String> modifiedColumns) {
+    public static void inactiveRelatedMaterializedViewsRecursive(OlapTable olapTable, Set<String> modifiedColumns) {
         if (modifiedColumns == null || modifiedColumns.isEmpty()) {
             return;
         }
@@ -715,10 +761,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
+        Set<MvId> visited = Sets.newHashSet();
         // inactive related asynchronous mvs
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), mvId.getId());
+            if (visited.contains(mvId)) {
+                continue;
+            }
+            MaterializedView mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mvId);
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -742,7 +791,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 .map(x -> x.getName())
                                 .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
                         if (modifiedColumns.stream().anyMatch(usedColNames::contains)) {
-                            doInactiveMaterializedView(mv, reason);
+                            doInactiveMaterializedViewRecursive(mv, reason, true, visited);
                         }
                     }
                 }
@@ -751,12 +800,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
-                doInactiveMaterializedView(mv, reason);
+                doInactiveMaterializedViewRecursive(mv, reason, true, visited);
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
                 if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
-                    doInactiveMaterializedView(mv, reason);
+                    doInactiveMaterializedViewRecursive(mv, reason, true, visited);
                 }
             }
         }

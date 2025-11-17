@@ -31,6 +31,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -48,6 +50,7 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -129,6 +132,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -139,13 +143,19 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
-                                                             int maxLevel,
-                                                             Set<Table> tablesToCheck) {
+    /**
+     * @param connectContext connect context
+     * @param maxLevel max level to collect
+     * @param tablesToCheck input tables to check
+     * @return a sorted related mvs by level result.
+     */
+    public static SortedSet<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
+                                                                   int maxLevel,
+                                                                   Set<Table> tablesToCheck) {
         if (tablesToCheck.isEmpty()) {
-            return Sets.newHashSet();
+            return Sets.newTreeSet();
         }
-        Set<MaterializedViewWrapper> mvs = Sets.newHashSet();
+        SortedSet<MaterializedViewWrapper> mvs = Sets.newTreeSet();
         getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
@@ -1541,8 +1551,12 @@ public class MvUtils {
             List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
                     materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
             return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
-        } else {
+        } else if (distributionInfo instanceof RandomDistributionInfo) {
             return new RandomDistributionDesc();
+        } else if (distributionInfo instanceof RangeDistributionInfo) {
+            return new RangeDistributionDesc();
+        } else {
+            throw new RuntimeException("Unsupported distribution type: " + distributionInfo.getType());
         }
     }
 

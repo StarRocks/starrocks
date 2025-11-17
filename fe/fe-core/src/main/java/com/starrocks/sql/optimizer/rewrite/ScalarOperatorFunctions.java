@@ -1610,5 +1610,28 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(value.getVarchar());
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "hour", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "hour", argTypes = {DATE}, returnType = TINYINT)
+    })
+    public static ConstantOperator hour(ConstantOperator value) {
+        return ConstantOperator.createTinyInt((byte) value.getDatetime().getHour());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "minute", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "minute", argTypes = {DATE}, returnType = TINYINT)
+    })
+    public static ConstantOperator minute(ConstantOperator value) {
+        return ConstantOperator.createTinyInt((byte) value.getDatetime().getMinute());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "second", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "second", argTypes = {DATE}, returnType = TINYINT)
+    })
+    public static ConstantOperator second(ConstantOperator value) {
+        return ConstantOperator.createTinyInt((byte) value.getDatetime().getSecond());
+    }
 }
 

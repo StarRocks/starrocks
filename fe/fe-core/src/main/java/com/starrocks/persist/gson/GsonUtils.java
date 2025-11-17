@@ -128,6 +128,7 @@ import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
@@ -256,7 +257,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory
                     .of(DistributionInfo.class, "clazz")
                     .registerSubtype(HashDistributionInfo.class, "HashDistributionInfo")
-                    .registerSubtype(RandomDistributionInfo.class, "RandomDistributionInfo");
+                    .registerSubtype(RandomDistributionInfo.class, "RandomDistributionInfo")
+                    .registerSubtype(RangeDistributionInfo.class, "RangeDistributionInfo");
 
     private static final RuntimeTypeAdapterFactory<PartitionInfo> PARTITION_INFO_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory

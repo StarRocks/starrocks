@@ -1756,24 +1756,24 @@ public class EditLog {
         logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
     }
 
-    public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob) {
-        logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
+    public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob, walApplier);
     }
 
-    public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
-        logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
+    public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation, walApplier);
     }
 
-    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
-        logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask, walApplier);
     }
 
-    public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask) {
-        logJsonObject(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, streamLoadTask);
+    public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, streamLoadTask, walApplier);
     }
 
-    public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
-        logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
+    public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob, walApplier);
     }
 
     public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
@@ -1893,12 +1893,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log);
     }
 
-    public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) {
-        logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
+    public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log, walApplier);
     }
 
-    public void logAlterLoadJob(AlterLoadJobOperationLog log) {
-        logJsonObject(OperationType.OP_ALTER_LOAD_JOB, log);
+    public void logAlterLoadJob(AlterLoadJobOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_LOAD_JOB, log, walApplier);
     }
 
     public void logGlobalVariableV2(GlobalVarPersistInfo info) {
