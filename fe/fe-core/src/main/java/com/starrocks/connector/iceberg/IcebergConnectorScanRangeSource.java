@@ -206,12 +206,6 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
         hdfsScanRange.setLength(file.content() == FileContent.DATA ? task.length() : file.fileSizeInBytes());
 
-        boolean isFirstSplit = (hdfsScanRange.getOffset() == 0);
-        // But sometimes first task offset is 4. For example, the first four bytes are magic bytes in parquet file.
-        if (file.splitOffsets() != null && !file.splitOffsets().isEmpty()) {
-            isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
-        }
-
         ConnectContext context = ConnectContext.get();
         if (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
                 partitionSlotIdsCache.containsKey(file.specId())) {
@@ -269,8 +263,7 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
         return scanRangeLocations;
     }
 
-    @VisibleForTesting
-    public long addPartition(FileScanTask task) throws AnalysisException {
+    private long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
 
         StructLike partition = task.partition();

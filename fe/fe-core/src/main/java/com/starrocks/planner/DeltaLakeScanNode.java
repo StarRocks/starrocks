@@ -104,8 +104,7 @@ public class DeltaLakeScanNode extends ScanNode {
 
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
                                      PartitionIdGenerator partitionIdGenerator,
-                                     boolean enableIncrementalScanRanges)
-            throws StarRocksException {
+                                     boolean enableIncrementalScanRanges) throws UserException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
         Engine engine = deltaLakeTable.getDeltaEngine();
