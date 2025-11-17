@@ -706,8 +706,6 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_tablet_metadata(_tablet_manager->tablet_metadata_location(4, 1)).ok());
 }
 
-<<<<<<< HEAD
-=======
 TEST_F(LakeTabletManagerTest, get_inital_tablet_metadata) {
     auto tablet_id = next_id();
 
@@ -728,18 +726,6 @@ TEST_F(LakeTabletManagerTest, get_inital_tablet_metadata) {
     EXPECT_EQ(res.value()->id(), tablet_id);
     EXPECT_EQ(res.value()->version(), 1);
 }
-
-TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
-    auto metadata = std::make_shared<TabletMetadata>();
-    auto tablet_id = next_id();
-    metadata->set_id(tablet_id);
-    metadata->set_version(2);
-    ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
-    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
-    ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
-}
-
->>>>>>> 486eb23d48 ([BugFix] Fix the issue where the tablet ID is missing when get initial tablet meta. (#65550))
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
