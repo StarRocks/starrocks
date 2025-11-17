@@ -17,12 +17,8 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.catalog.DataProperty;
-=======
->>>>>>> 17659ec2dd ([UT] Fix unstable case testCreateTableIfNotExists (#62566))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
@@ -53,22 +49,13 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-=======
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
->>>>>>> 17659ec2dd ([UT] Fix unstable case testCreateTableIfNotExists (#62566))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
