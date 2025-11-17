@@ -503,7 +503,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         metadata_or = load_tablet_metadata(new_path, cache_opts.fill_data_cache, expected_gtid, fs);
         // set tablet id for initial metadata
         if (metadata_or.ok()) {
-            metadata_or.value()->set_id(tablet_id);
+            auto metadata = const_cast<starrocks::TabletMetadataPB*>(metadata_or.value().get());
+            metadata->set_id(tablet_id);
         }
     }
 
