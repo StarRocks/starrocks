@@ -46,11 +46,8 @@
 #include "fs/fs.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
-<<<<<<< HEAD
-=======
 #include "runtime/current_thread.h"
 #include "runtime/raw_container_checked.h"
->>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/coding.h"
 #include "util/compression/block_compression.h"
