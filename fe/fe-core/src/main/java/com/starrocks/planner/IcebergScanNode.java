@@ -88,7 +88,6 @@ public class IcebergScanNode extends ScanNode {
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private ScalarOperator predicate = null;
     private CloudConfiguration cloudConfiguration = null;
-<<<<<<< HEAD
     private final List<Integer> deleteColumnSlotIds = new ArrayList<>();
     private final TupleDescriptor equalityDeleteTupleDesc;
 
@@ -99,85 +98,6 @@ public class IcebergScanNode extends ScanNode {
         setupCloudCredential();
     }
 
-=======
-    protected Optional<Long> snapshotId;
-    private IcebergConnectorScanRangeSource scanRangeSource = null;
-    private final IcebergTableMORParams tableFullMORParams;
-    private final IcebergMORParams morParams;
-    private int selectedPartitionCount = -1;
-    private PartitionIdGenerator partitionIdGenerator = null;
-
-    public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
-                           PartitionIdGenerator partitionIdGenerator) {
-        super(id, desc, planNodeName);
-        this.icebergTable = (IcebergTable) desc.getTable();
-        this.tableFullMORParams = tableFullMORParams;
-        this.morParams = morParams;
-        this.partitionIdGenerator = partitionIdGenerator;
-        setupCloudCredential();
-    }
-
-    @Override
-    public boolean hasMoreScanRanges() {
-        if (scanRangeSource == null) {
-            return false;
-        }
-
-        return scanRangeSource.hasMoreOutput();
-    }
-
-    @Override
-    public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        if (snapshotId.isEmpty() || scanRangeSource == null) {
-            return List.of();
-        }
-
-        if (maxScanRangeLength == 0) {
-            return scanRangeSource.getAllOutputs();
-        }
-        return scanRangeSource.getOutputs((int) maxScanRangeLength);
-    }
-
-    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws UserException {
-        Preconditions.checkNotNull(snapshotId, "snapshot id is null");
-        if (snapshotId.isEmpty()) {
-            LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
-            return;
-        }
-
-        GetRemoteFilesParams params =
-                IcebergGetRemoteFilesParams.newBuilder()
-                        .setAllParams(tableFullMORParams)
-                        .setParams(morParams)
-                        .setTableVersionRange(TableVersionRange.withEnd(snapshotId))
-                        .setPredicate(icebergJobPlanningPredicate)
-                        .build();
-
-        RemoteFileInfoSource remoteFileInfoSource;
-        if (enableIncrementalScanRanges) {
-            remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(icebergTable, params);
-        } else {
-            List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(icebergTable, params);
-            if (splits.isEmpty()) {
-                LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
-                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), icebergJobPlanningPredicate);
-                return;
-            }
-            remoteFileInfoSource = new RemoteFileInfoDefaultSource(splits);
-            if (morParams != IcebergMORParams.EMPTY) {
-                boolean needToCheckEqualityIds = tableFullMORParams.size() != 3;
-                IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(
-                        remoteFileInfoSource, morParams, needToCheckEqualityIds);
-                Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
-                remoteFileInfoSource = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
-            }
-        }
-
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc, partitionIdGenerator);
-    }
-
->>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
     private void setupCloudCredential() {
         String catalogName = icebergTable.getCatalogName();
         if (catalogName == null) {
