@@ -707,7 +707,7 @@ Status JsonReader::_read_file_stream() {
                                            _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING,
                                            _file_stream_buffer->meta()->type()));
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
-        buf->flip();
+        buf->flip_to_read();
         // copying meta fail should not affect the scan
         Status copy_st = buf->meta()->copy_from(_file_stream_buffer->meta());
         if (!copy_st.ok()) {

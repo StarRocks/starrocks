@@ -82,7 +82,7 @@ public:
                                            size + simdjson::SIMDJSON_PADDING,
                                            need_meta ? ByteBufferMetaType::KAFKA : ByteBufferMetaType::NONE));
         buf->put_bytes(data, size);
-        buf->flip();
+        buf->flip_to_read();
         if (need_meta) {
             KafkaByteBufferMeta* meta = static_cast<KafkaByteBufferMeta*>(buf->meta());
             meta->set_partition(partition);
