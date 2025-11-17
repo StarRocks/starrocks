@@ -91,12 +91,7 @@ public:
     // query execution
     pipeline::PipelineExecutorMetrics pipeline_executor_metrics;
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_driver_schedule_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_driver_execution_time, MetricUnit::NANOSECONDS);
-    METRIC_DEFINE_INT_GAUGE(pipe_driver_queue_len, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_poller_block_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(runtime_filter_event_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);

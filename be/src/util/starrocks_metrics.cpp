@@ -55,12 +55,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
-    REGISTER_STARROCKS_METRIC(pipe_scan_executor_queuing);
-    REGISTER_STARROCKS_METRIC(pipe_driver_schedule_count);
-    REGISTER_STARROCKS_METRIC(pipe_driver_execution_time);
-    REGISTER_STARROCKS_METRIC(pipe_driver_queue_len);
-    REGISTER_STARROCKS_METRIC(pipe_poller_block_queue_len);
-
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_eos_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);

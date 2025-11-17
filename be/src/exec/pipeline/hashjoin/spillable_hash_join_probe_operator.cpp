@@ -329,6 +329,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
         auto yield_func = [&](workgroup::ScanTask&& task) { spill::IOTaskExecutor::force_submit(std::move(task)); };
         auto io_task =
                 workgroup::ScanTask(_join_builder->spiller()->options().wg, std::move(task), std::move(yield_func));
+        io_task.set_query_type(state->query_options().query_type);
         RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     }
     return Status::OK();

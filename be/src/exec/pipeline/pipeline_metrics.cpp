@@ -22,13 +22,66 @@
 
 namespace starrocks::pipeline {
 
-void ScanExecutorMetrics::register_all_metrics(MetricRegistry* registry, const std::string& prefix) {
-#define REGISTER_SCAN_EXECUTOR_METRIC(name) registry->register_metric("pipe_" + prefix + "_" + #name, &name)
+// ------------------------------------------------------------------------------------
+// QueryTypeTimeMetric.
+// ------------------------------------------------------------------------------------
 
-    REGISTER_SCAN_EXECUTOR_METRIC(execution_time);
-    REGISTER_SCAN_EXECUTOR_METRIC(finished_tasks);
-    REGISTER_SCAN_EXECUTOR_METRIC(running_tasks);
-    REGISTER_SCAN_EXECUTOR_METRIC(pending_tasks);
+namespace {
+constexpr const char* kWorkloadLabelName = "workload_type";
+
+const char* workload_label_value(TQueryType::type query_type) {
+    switch (query_type) {
+    case TQueryType::SELECT:
+        return "query";
+    case TQueryType::LOAD:
+        return "load";
+    case TQueryType::EXTERNAL:
+    default:
+        return "unknown";
+    }
+}
+} // namespace
+
+void QueryTypeTimeMetric::register_metrics(MetricRegistry* registry, const std::string& metric_name) {
+    MetricLabels query_labels;
+    query_labels.add(kWorkloadLabelName, workload_label_value(TQueryType::SELECT));
+    registry->register_metric(metric_name, query_labels, &_query_counter);
+
+    MetricLabels load_labels;
+    load_labels.add(kWorkloadLabelName, workload_label_value(TQueryType::LOAD));
+    registry->register_metric(metric_name, load_labels, &_load_counter);
+
+    MetricLabels unknown_labels;
+    unknown_labels.add(kWorkloadLabelName, workload_label_value(TQueryType::EXTERNAL));
+    registry->register_metric(metric_name, unknown_labels, &_unknown_counter);
+}
+
+void QueryTypeTimeMetric::increment(TQueryType::type query_type, int64_t delta) {
+    counter(query_type)->increment(delta);
+}
+
+IntCounter* QueryTypeTimeMetric::counter(TQueryType::type query_type) {
+    switch (query_type) {
+    case TQueryType::SELECT:
+        return &_query_counter;
+    case TQueryType::LOAD:
+        return &_load_counter;
+    case TQueryType::EXTERNAL:
+    default:
+        return &_unknown_counter;
+    }
+}
+
+// ------------------------------------------------------------------------------------
+// Metrics.
+// ------------------------------------------------------------------------------------
+
+void ScanExecutorMetrics::register_all_metrics(MetricRegistry* registry, const std::string& prefix) {
+    const std::string base_name = "pipe_" + prefix + "_";
+    execution_time.register_metrics(registry, base_name + "execution_time");
+    registry->register_metric(base_name + "finished_tasks", &finished_tasks);
+    registry->register_metric(base_name + "running_tasks", &running_tasks);
+    registry->register_metric(base_name + "pending_tasks", &pending_tasks);
 }
 
 #define ACCUMULATED(array, field)                                                                                     \
@@ -52,23 +105,18 @@ void ExecStateReporterMetrics::register_all_metrics() {
 }
 
 void DriverQueueMetrics::register_all_metrics(MetricRegistry* registry) {
-#define REGISTER_DRIVER_QUEUE_METRIC(name) registry->register_metric("pipe_" #name, &name)
-
-    REGISTER_DRIVER_QUEUE_METRIC(driver_queue_len);
+    registry->register_metric("pipe_driver_queue_len", &driver_queue_len);
 }
 
 void PollerMetrics::register_all_metrics(MetricRegistry* registry) {
-#define REGISTER_POLLER_METRIC(name) registry->register_metric("pipe_" #name, &name)
-    REGISTER_POLLER_METRIC(poller_block_queue_len);
+    registry->register_metric("pipe_poller_block_queue_len", &poller_block_queue_len);
 }
 
 void DriverExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
-#define REGISTER_DRIVER_EXECUTOR_METRIC(name) registry->register_metric("pipe_" #name, &name)
-
-    REGISTER_DRIVER_EXECUTOR_METRIC(driver_schedule_count);
-    REGISTER_DRIVER_EXECUTOR_METRIC(driver_execution_time);
-    REGISTER_DRIVER_EXECUTOR_METRIC(exec_running_tasks);
-    REGISTER_DRIVER_EXECUTOR_METRIC(exec_finished_tasks);
+    registry->register_metric("pipe_driver_schedule_count", &driver_schedule_count);
+    driver_execution_time.register_metrics(registry, "pipe_driver_execution_time");
+    registry->register_metric("pipe_exec_running_tasks", &exec_running_tasks);
+    registry->register_metric("pipe_exec_finished_tasks", &exec_finished_tasks);
 }
 
 void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
@@ -78,4 +126,5 @@ void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
     connector_scan_executor_metrics.register_all_metrics(registry, "connector_scan");
     exec_state_reporter_metrics.register_all_metrics();
 }
+
 } // namespace starrocks::pipeline
