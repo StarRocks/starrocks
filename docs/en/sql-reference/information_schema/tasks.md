@@ -17,6 +17,6 @@ The following fields are provided in `tasks`:
 | DEFINITION  | SQL definition of the task.                                  |
 | EXPIRE_TIME | Time when the task expires.                                  |
 
-## Syntax
+## Reference
 
 [StarRocks SUBMIT_TASK Documentation](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK/)
