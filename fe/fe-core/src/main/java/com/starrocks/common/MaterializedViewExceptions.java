@@ -71,7 +71,7 @@ public class MaterializedViewExceptions {
         return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
     }
 
-    public static String inactiveReasonForBaseTableActive(String tableName) {
+    public static String inactiveReasonForBaseTableInActive(String tableName) {
         return "base-mv inactive: " + tableName;
     }
 

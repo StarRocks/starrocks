@@ -27,26 +27,33 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   有关用户名 (username) 的命名要求，参见[系统限制](../../System_limit.md)。
 
-- `auth_option`：用户的认证方式。目前，StarRocks 支持原生密码、mysql_native_password 和 LDAP 三种认证方式，其中，原生密码与 mysql_native_password 认证方式的内在逻辑相同，仅在具体设置语法上有轻微差别。同一个 user identity 只能使用一种认证方式。
+- `auth_option`：用户的认证方式。目前，StarRocks 支持原生密码、`mysql_native_password`、`authentication_ldap_simple`、JSON Web Token 和 OAuth 2.0 五种认证方式，其中，原生密码与 `mysql_native_password` 认证方式的内在逻辑相同，仅在具体设置语法上有轻微差别。同一个 user identity 只能使用一种认证方式。
 
     ```SQL
-      auth_option: {
-          IDENTIFIED BY 'auth_string'
-          IDENTIFIED WITH mysql_native_password BY 'auth_string'
-          IDENTIFIED WITH mysql_native_password AS 'auth_string'
-          IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
-          
-      }
-      ```
+    auth_option: {
+        IDENTIFIED BY 'auth_string'
+        IDENTIFIED WITH mysql_native_password BY 'auth_string'
+        IDENTIFIED WITH mysql_native_password AS 'auth_string'
+        IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
+        IDENTIFIED WITH authentication_jwt [AS 'auth_properties']
+        IDENTIFIED WITH authentication_oauth2 [AS 'auth_properties']
+    }
+    ```
 
-      | **认证方式**                 | **创建用户时的密码** | **用户****登录****时的密码** |
-      | ---------------------------- | -------------------- | ---------------------------- |
-      | 原生密码                     | 明文或密文           | 明文                         |
-      | `mysql_native_password BY`   | 明文                 | 明文                         |
-      | `mysql_native_password WITH` | 密文                 | 明文                         |
-      | `authentication_ldap_simple` | 明文                 | 明文                         |
+    | **认证方式**                 | **创建用户时的密码** | **用户****登录****时的密码** |
+    | ---------------------------- | -------------------- | ---------------------------- |
+    | 原生密码                     | 明文或密文           | 明文                         |
+    | `mysql_native_password BY`   | 明文                 | 明文                         |
+    | `mysql_native_password WITH` | 密文                 | 明文                         |
+    | `authentication_ldap_simple` | 明文                 | 明文                         |
 
-    > 注：在所有认证方式中，StarRocks均会加密存储用户的密码。
+    :::note
+    StarRocks 会加密存储用户的密码。
+    :::
+
+    有关 JSON Web Token (JWT) 认证和 OAuth 2.0 认证的 `auth_properties` 详细信息，请参阅对应文档：
+    - [JSON Web Token 认证](../../../administration/user_privs/authentication/jwt_authentication.md)
+    - [OAuth 2.0 认证](../../../administration/user_privs/authentication/oauth2_authentication.md)
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定了此参数，则会自动将此角色赋予给用户，并且在用户登录后默认激活。如果不指定，则该用户默认没有任何权限。指定的角色必须已经存在。
 
@@ -134,6 +141,35 @@ CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'datab
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
+```
+
+示例十一：使用 JSON Web Token 认证创建用户。
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt AS
+'{
+  "jwks_url": "http://localhost:38080/realms/master/protocol/jwt/certs",
+  "principal_field": "preferred_username",
+  "required_issuer": "http://localhost:38080/realms/master",
+  "required_audience": "starrocks"
+}';
+```
+
+示例十二：使用 OAuth 2.0 认证创建用户。
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 
+'{
+  "auth_server_url": "http://localhost:38080/realms/master/protocol/openid-connect/auth",
+  "token_server_url": "http://localhost:38080/realms/master/protocol/openid-connect/token",
+  "client_id": "12345",
+  "client_secret": "LsWyD9vPcM3LHxLZfzJsuoBwWQFBLcoR",
+  "redirect_url": "http://localhost:8030/api/oauth2",
+  "jwks_url": "http://localhost:38080/realms/master/protocol/openid-connect/certs",
+  "principal_field": "preferred_username",
+  "required_issuer": "http://localhost:38080/realms/master",
+  "required_audience": "12345"
+}';
 ```
 
 ## 相关文档

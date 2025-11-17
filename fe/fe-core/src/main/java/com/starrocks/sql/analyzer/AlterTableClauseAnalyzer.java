@@ -372,6 +372,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             PropertyAnalyzer.analyzeMutableBucketNum(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
@@ -470,14 +472,6 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                             "update for a primary key table. ");
-            }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
-            try {
-                PropertyAnalyzer.analyzeEnableDynamicTablet(properties, false);
-            } catch (Exception e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET +
-                                " must be bool type(false/true)");
             }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);

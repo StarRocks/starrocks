@@ -1140,6 +1140,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     @Override
     public void onCreate(Database database) throws DdlException {
+        super.onCreate(database);
         onReload(false, isActive(), true);
     }
 
@@ -1340,7 +1341,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     res = InactiveReason.ofInactive(
-                            MaterializedViewExceptions.inactiveReasonForBaseTableActive(baseTableInfo.getTableName()));
+                            MaterializedViewExceptions.inactiveReasonForBaseTableInActive(baseTableInfo.getTableName()));
                 }
             }
 
@@ -2512,12 +2513,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
             if (this.defineQueryParseNode == null) {
-                try {
-                    connectContext.setDatabase(db.getOriginName());
-                    this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
-                } catch (Exception e) {
-                    // ignore
-                    LOG.warn("parse view define sql failed:", e);
+                if (!Strings.isNullOrEmpty(viewDefineSql)) {
+                    try {
+                        connectContext.setDatabase(db.getOriginName());
+                        this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                    } catch (Exception e) {
+                        // ignore
+                        LOG.warn("parse view define sql failed:", e);
+                    }
                 }
             }
         }

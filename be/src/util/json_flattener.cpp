@@ -642,6 +642,20 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
 // why dfs? because need compute parent isn't extract base on bottom-up, stack is not suitable
 uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
+    // Type conflict: node has both object and primitive values, flatten as TYPE_JSON
+    if (!absolute_path.empty() && !node->children.empty()) {
+        auto it = _derived_maps.find(node);
+        if (it != _derived_maps.end() && it->second.base_type_count > 0) {
+            for (auto& [key, child] : node->children) {
+                child->remain = true;
+            }
+            hit_leaf->emplace_back(node, absolute_path);
+            node->type = LogicalType::TYPE_JSON;
+            node->remain = false;
+            return 1;
+        }
+    }
+
     uint32_t flat_count = 0;
     for (auto& [key, child] : node->children) {
         if (!key.empty() && key.find('.') == std::string::npos) {
@@ -1170,21 +1184,7 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         // Skip keys already processed from remain in the first loop when IN_TREE=true
         bool key_processed_from_remain = remain->hasKey(vpack::StringRef(child_name.data(), child_name.size()));
         if (key_processed_from_remain) {
-            if constexpr (IN_TREE) {
-                continue;
-            } else {
-                // For IN_TREE=false, only process if remain is empty but flat columns have values
-                auto remain_value = remain->get(vpack::StringRef(child_name.data(), child_name.size()));
-                bool has_value = false;
-                if (!child->children.empty()) {
-                    _check_has_non_null_values(child.get(), index, &has_value);
-                } else {
-                    has_value = !_src_columns[child->index]->is_null(index);
-                }
-                if (!(remain_value.isObject() && remain_value.isEmptyObject() && has_value)) {
-                    continue;
-                }
-            }
+            continue;
         }
 
         // e.g. flat path: b.b2.b3}

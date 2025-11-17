@@ -944,6 +944,8 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addScanBytes(execStats.getScanBytes() != null ? execStats.getScanBytes() : 0);
         context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
         context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);
+        context.getAuditEventBuilder().addReadLocalCnt(execStats.readLocalCnt != null ? execStats.readLocalCnt : 0);
+        context.getAuditEventBuilder().addReadRemoteCnt(execStats.readRemoteCnt != null ? execStats.readRemoteCnt : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
         context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
     }
@@ -1372,8 +1374,9 @@ public class StmtExecutor {
             }
         }
 
+        // TODO(liuzihe): support execute in FE for Arrow Flight SQL.
         boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
-                && canExecuteInFe(context, execPlan.getPhysicalPlan());
+                && canExecuteInFe(context, execPlan.getPhysicalPlan()) && !(context instanceof ArrowFlightSqlConnectContext);
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
@@ -1400,7 +1403,7 @@ public class StmtExecutor {
         if (executeInFe) {
             coord = new FeExecuteCoordinator(context, execPlan);
         } else {
-            coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
+            coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable, execPlan);
         }
 
         // Predict the cost of this query
@@ -2370,6 +2373,12 @@ public class StmtExecutor {
         if (statisticsForAuditLog.spillBytes == null) {
             statisticsForAuditLog.spillBytes = 0L;
         }
+        if (statisticsForAuditLog.readLocalCnt == null) {
+            statisticsForAuditLog.readLocalCnt = 0L;
+        }
+        if (statisticsForAuditLog.readRemoteCnt == null) {
+            statisticsForAuditLog.readRemoteCnt = 0L;
+        }
         return statisticsForAuditLog;
     }
 
@@ -2564,7 +2573,7 @@ public class StmtExecutor {
         String trackingSql = "";
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
-                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean needQuery = false;
@@ -2992,7 +3001,7 @@ public class StmtExecutor {
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
 
             coord = getCoordinatorFactory().createQueryScheduler(
-                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 
             coord.exec();
@@ -3052,7 +3061,7 @@ public class StmtExecutor {
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = getCoordinatorFactory().createQueryScheduler(
-                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 
             coord.exec();
@@ -3170,6 +3179,8 @@ public class StmtExecutor {
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+            queryDetail.calculateCacheMissRatio(statistics.readLocalCnt == null ? 0 : statistics.readLocalCnt,
+                    statistics.readRemoteCnt == null ? 0 : statistics.readRemoteCnt);
         }
         queryDetail.setCatalog(ctx.getCurrentCatalog());
 

@@ -1183,6 +1183,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
 - Introduced in: v4.0
 
+##### txn_latency_metric_report_groups
+
+- Default: An empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A comma-separated list of transaction latency metric groups to report. Load types are categorized into logical groups for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. Valid values: `stream_load`, `routine_load`, `broker_load`, `insert`, and `compaction` (availabl only for shared-data clusters). Example: `"stream_load,routine_load"`.
+- Introduced in: v4.0
+
 ### User, role, and privilege
 
 ##### privilege_max_total_roles_per_user
@@ -1588,7 +1597,41 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Description: Controls automatic statistics collection and maintenance triggered by data loading operations. This includes:
+  - Statistics collection when data is first loaded into a partition (partition version equals 2).
+  - Statistics collection when data is loaded into empty partitions of multi-partition tables.
+  - Statistics copying and updating for INSERT OVERWRITE operations.
+
+  **Decision Policy for Statistics Collection Type:**
+  
+  - For INSERT OVERWRITE: `deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed. Only the existing statistics will be copied.
+    - Else, if `targetRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
+    - Else, FULL statistics collection is used.
+  
+  - For First Load: `deltaRatio = loadRows / (totalRows + 1)`
+    - If `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (Default: 0.1), statistics collection will not be performed.
+    - Else, if `loadRows > statistic_sample_collect_rows` (Default: 200000), SAMPLE statistics collection is used.
+    - Else, FULL statistics collection is used.
+  
+  **Synchronization Behavior:**
+  
+  - For DML statements (INSERT INTO/INSERT OVERWRITE): Synchronous mode with table lock. The load operation waits for statistics collection to complete (up to `semi_sync_collect_statistic_await_seconds`).
+  - For Stream Load and Broker Load: Asynchronous mode without lock. Statistics collection runs in background without blocking the load operation.
+  
+  :::note
+  Disabling this configuration will prevent all loading-triggered statistics operations, including statistics maintenance for INSERT OVERWRITE, which may result in tables lacking statistics. If new tables are frequently created and data is frequently loaded, enabling this feature will increase memory and CPU overhead.
+  :::
+
+- Introduced in: v3.1
+
+##### semi_sync_collect_statistic_await_seconds
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Maximum wait time for semi-synchronous statistics collection during DML operations (INSERT INTO and INSERT OVERWRITE statements). Stream Load and Broker Load use asynchronous mode and are not affected by this configuration. If statistics collection time exceeds this value, the load operation continues without waiting for collection to complete. This configuration works in conjunction with `enable_statistic_collect_on_first_load`.
 - Introduced in: v3.1
 
 <!--
@@ -1830,7 +1873,18 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
+- Description: The row count threshold for deciding between SAMPLE and FULL statistics collection during loading-triggered statistics operations. If the number of loaded or changed rows exceeds this threshold (default 200,000), SAMPLE statistics collection is used; otherwise, FULL statistics collection is used. This setting works in conjunction with `enable_statistic_collect_on_first_load` and `statistic_sample_collect_ratio_threshold_of_first_load`.
+- Introduced in: -
+
+
+
+##### enable_predicate_columns_collection
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 
 ##### histogram_buckets_size
@@ -2597,6 +2651,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
+##### partition_recycle_retention_period_secs
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md).
+- Introduced in: v3.5.9
+
 ##### enable_auto_tablet_distribution
 
 - Default: true
@@ -2697,6 +2760,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
 - Introduced in: -
+
+##### tablet_checker_lock_time_per_cycle_ms
+
+- Default: 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum lock hold time per cycle for tablet checker before releasing and reacquiring the table lock. Values less than 100 will be treated as 100.
+- Introduced in: v3.5.9, v4.0.2
 
 ##### tablet_create_timeout_second
 

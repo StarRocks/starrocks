@@ -1175,6 +1175,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
 - 引入版本：v4.0
 
+##### txn_latency_metric_report_groups
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否可变: 是
+- 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
+- 引入版本: v4.0
+
 ### 用户，角色及权限
 
 ##### privilege_max_total_roles_per_user
@@ -1580,7 +1589,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：当空表第一次导入数据时，是否自动触发统计信息采集。如果一张表包含多个分区，只要是某个空的分区第一次导入数据，都会触发该分区的统计信息采集。如果系统频繁创建新表并且导入数据，会存在一定内存和 CPU 开销。
+- 描述：控制数据导入操作触发的自动统计信息采集和维护。包括：
+  - 分区首次导入数据时的统计信息采集（分区版本号为 2）。
+  - 多分区表的空分区导入数据时的统计信息采集。
+  - INSERT OVERWRITE 操作的统计信息复制和更新。
+
+  **统计信息采集类型的决策策略：**
+  
+  - 对于 INSERT OVERWRITE：`deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
+    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load`（默认：0.1），则不采集统计信息，仅复制现有统计信息。
+    - 否则，如果 `targetRows > statistic_sample_collect_rows`（默认：200000），则使用抽样统计信息。
+    - 否则，使用全量统计信息。
+  
+  - 对于首次导入：`deltaRatio = loadRows / (totalRows + 1)`
+    - 如果 `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load`（默认：0.1），则不采集统计信息。
+    - 否则，如果 `loadRows > statistic_sample_collect_rows`（默认：200000），则使用抽样统计信息。
+    - 否则，使用全量统计信息。
+  
+  **同步行为：**
+  
+  - DML 语句（INSERT INTO/INSERT OVERWRITE）：同步模式，带表锁。等待统计信息采集完成（最多等待 `semi_sync_collect_statistic_await_seconds` 秒）。
+  - Stream Load 和 Broker Load：异步模式，不加锁。统计信息采集在后台运行，不阻塞导入。
+  
+  :::note
+  禁用此配置将阻止所有由导入触发的统计信息操作，包括 INSERT OVERWRITE 的统计信息维护，这可能导致表缺少统计信息。如果系统频繁创建新表并且导入数据，启用此功能会存在一定内存和 CPU 开销。
+  :::
+
+- 引入版本：v3.1
+
+##### semi_sync_collect_statistic_await_seconds
+
+- 默认值：30
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：DML 操作（INSERT 和 INSERT OVERWRITE 语句）期间半同步统计信息采集的最大等待时间。Stream Load 和 Broker Load 使用异步模式，不受此设置影响。如果统计信息采集超过此超时时间，导入将继续进行而不等待采集完成。此设置与 `enable_statistic_collect_on_first_load` 配合使用。
 - 引入版本：v3.1
 
 <!--
@@ -1822,7 +1865,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：-
 - 是否动态：是
-- 描述：最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。
+- 描述：导入触发的统计信息采集操作中用于决定抽样采集和全量采集的行数阈值。如果加载或更改的行数超过此阈值（默认 200,000 行），则使用抽样统计信息采集；否则使用全量统计信息采集。此设置与 `enable_statistic_collect_on_first_load` 和 `statistic_sample_collect_ratio_threshold_of_first_load` 配合使用。
+- 引入版本：-
+
+
+
+##### enable_predicate_columns_collection
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
 - 引入版本：-
 
 ##### histogram_buckets_size
@@ -2581,6 +2635,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 语句恢复。
 - 引入版本：-
 
+##### partition_recycle_retention_period_secs
+
+- 默认值：1800
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：因 INSERT OVERWRITE 或物化视图刷新操作而被删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 命令恢复。
+- 引入版本：v3.5.9
+
 ##### enable_auto_tablet_distribution
 
 - 默认值：true
@@ -2682,6 +2745,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：在 Tablet 副本丢失/损坏时，是否使用空的 Tablet 代替。这样可以保证在有 Tablet 副本丢失/损坏时，查询依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 `false`，表示不进行替代，查询会失败。
 - 引入版本：-
+
+##### tablet_checker_lock_time_per_cycle_ms
+
+- 默认值：1000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：Tablet Checker 在释放并重新获取表锁之前，每个周期持有锁的最大时间（毫秒）。小于 100 的值将被视为 100。
+- 引入版本：v3.5.9, v4.0.2
 
 ##### tablet_create_timeout_second
 

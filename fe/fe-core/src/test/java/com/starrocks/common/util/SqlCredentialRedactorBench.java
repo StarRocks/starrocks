@@ -35,13 +35,15 @@ import java.util.regex.Pattern;
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @State(Scope.Benchmark)
 @Fork(value = 1)
-@Warmup(iterations = 3)
-@Measurement(iterations = 5)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 3, time = 1)
 public class SqlCredentialRedactorBench {
 
     private String sqlWithManyKeys;
     private String sqlWithFewKeys;
     private String sqlWithoutCredentials;
+    private String sqlLong1;
+    private String sqlLong2;
     private Pattern oldPattern;
 
     public static void main(String[] args) throws Exception {
@@ -112,11 +114,37 @@ public class SqlCredentialRedactorBench {
 
         // SQL without credentials
         sqlWithoutCredentials = "SELECT * FROM table WHERE id = 1";
+
+        // long string
+        String longString1 = "abcdefdhi".repeat(104857);
+        sqlLong1 = "INSERT INTO t1 VALUES(\"" + longString1 + "\",)";
+        String longString2 = "a".repeat(104857);
+        sqlLong2 = "ALTER TABLE t1 SET PROPERTIES('key1' = '" + longString2 + "')";
     }
 
     @Benchmark
     public void benchmarkManyKeys() {
         SqlCredentialRedactor.redact(sqlWithManyKeys);
+    }
+
+    @Benchmark
+    public void benchmarkLongString1() {
+        SqlCredentialRedactor.redact(sqlLong1);
+    }
+
+    @Benchmark
+    public void benchmarkLongString2() {
+        SqlCredentialRedactor.redact(sqlLong2);
+    }
+
+    @Benchmark
+    public void benchmarkOldVersionLongString1() {
+        redactOldVersion(sqlLong1);
+    }
+
+    @Benchmark
+    public void benchmarkOldVersionLongString2() {
+        redactOldVersion(sqlLong2);
     }
 
     @Benchmark

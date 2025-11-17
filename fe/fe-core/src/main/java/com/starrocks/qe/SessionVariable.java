@@ -69,6 +69,7 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
+import com.starrocks.thrift.TPredicateTreeParams;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TSpillOptions;
@@ -185,6 +186,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
+    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
+    public static final String AUTHENTICATION_POLICY = "authentication_policy"; 
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -840,8 +843,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
-
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
+    public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
 
@@ -1208,6 +1211,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String defaultStorageEngine = "InnoDB";
     @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
     private String defaultTmpStorageEngine = "InnoDB";
+    @VariableMgr.VarAttr(name = DEFAULT_AUTHENTICATION_PLUGIN)
+    private String defaultAuthenticationPlugin = "mysql_native_password"; 
+    @VariableMgr.VarAttr(name = AUTHENTICATION_POLICY)
+    private String authenticationPolicy = "*,,"; 
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
@@ -2594,6 +2601,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE, flag = VariableMgr.INVISIBLE)
     private boolean enableShowPredicateTreeInProfile = false;
 
+    @VarAttr(name = MAX_PUSHDOWN_OR_PREDICATES, flag = VariableMgr.INVISIBLE)
+    private int maxPushdownOrPredicates = 32;
+
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
 
@@ -2883,6 +2893,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean disableTableStatsFromMetadataForSingleTable() {
         return disableTableStatsFromMetadataForSingleTable;
+    }
+
+    public void setDisableTableStatsFromMetadataForSingleTable(boolean value) {
+        this.disableTableStatsFromMetadataForSingleTable = value;
     }
 
     public boolean enableIcebergColumnStatistics() {
@@ -4912,12 +4926,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
-    public boolean isEnablePushdownOrPredicate() {
-        return enablePushdownOrPredicate;
-    }
-
-    public boolean isEnableShowPredicateTreeInProfile() {
-        return enableShowPredicateTreeInProfile;
+    public TPredicateTreeParams getPredicateTreeParams() {
+        TPredicateTreeParams params = new TPredicateTreeParams();
+        params.setEnable_or(enablePushdownOrPredicate);
+        params.setEnable_show_in_profile(enableShowPredicateTreeInProfile);
+        params.setMax_pushdown_or_predicates(maxPushdownOrPredicates);
+        return params;
     }
 
     public double getSelectRatioThreshold() {

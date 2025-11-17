@@ -1224,6 +1224,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
 - Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
 
+##### enable_strict_delvec_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
+- Introduced in: -
+
 ##### size_tiered_min_level_size
 
 - Default: 131072
@@ -1382,7 +1391,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### tablet_map_shard_size
 
-- Default: 32
+- Default: 1024
 - Type: Int
 - Unit: -
 - Is mutable: No
@@ -4099,7 +4108,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_min_disk_quota_for_adjustment
 
-- Default: 107374182400
+- Default: 10737418240
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes

@@ -773,7 +773,9 @@ public class MvRewritePreprocessor {
             logMVPrepare(connectContext, "Prepare MV {} failed to build materialization context", mv.getName());
             return;
         }
-        synchronized (materializationContext) {
+        // add valid candidate mv to query materialization context, needs to synchronize queryMaterializationContext
+        // to avoid race condition when multiple threads are adding valid candidate mvs to query materialization context
+        synchronized (queryMaterializationContext) {
             queryMaterializationContext.addValidCandidateMV(materializationContext);
         }
         logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
@@ -1068,7 +1070,7 @@ public class MvRewritePreprocessor {
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
                     MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexId());
-                    selectTabletIds.addAll(materializedIndex.getTabletIds());
+                    selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
                 }
             }
         }

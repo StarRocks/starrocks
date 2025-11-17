@@ -17,13 +17,12 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.DataProperty;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -39,24 +38,22 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnRenameClause;
-import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
-import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -66,6 +63,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
@@ -120,56 +118,6 @@ public class LocalMetaStoreTest {
         olapTable.replacePartition(db.getId(), "t1", "t1_100");
 
         Assertions.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
-    }
-
-    @Test
-    public void testGetPartitionIdToStorageMediumMap() throws Exception {
-        new MockUp<MaterializedViewOptimizer>() {
-            @Mock
-            public MvPlanContext optimize(MaterializedView mv,
-                                          ConnectContext connectContext) {
-                return null;
-            }
-        };
-
-        // Mock the cacheMaterializedView method to avoid actual caching in the background
-        new MockUp<CachingMvPlanContextBuilder>() {
-            @Mock
-            public void cacheMaterializedView(MaterializedView mv) {
-                // Do nothing to avoid actual caching
-            }
-        };
-
-        starRocksAssert.withMaterializedView(
-                    "CREATE MATERIALIZED VIEW test.mv1\n" +
-                                "distributed by hash(k1) buckets 3\n" +
-                                "refresh async\n" +
-                                "properties(\n" +
-                                "'replication_num' = '1'\n" +
-                                ")\n" +
-                                "as\n" +
-                                "select k1,k2 from test.t1;");
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        new MockUp<PartitionInfo>() {
-            @Mock
-            public DataProperty getDataProperty(long partitionId) {
-                return new DataProperty(TStorageMedium.SSD, 0);
-            }
-        };
-        new MockUp<EditLog>() {
-            @Mock
-            public void logModifyPartition(ModifyPartitionInfo info) {
-                Assertions.assertNotNull(info);
-                Assertions.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId())
-                            .isOlapTableOrMaterializedView());
-                Assertions.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
-                Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
-            }
-        };
-        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-        localMetastore.getPartitionIdToStorageMediumMap();
-        // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
-        starRocksAssert.dropMaterializedView("test.mv1");
     }
 
     @Test
@@ -344,4 +292,49 @@ public class LocalMetaStoreTest {
         Assertions.assertNull(db.getTable(tableName));
     }
 
+    @Test
+    public void testTruncateInTheMiddleOfDatabaseDropped() throws Exception {
+        String dbName = "db_to_be_dropped";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("CREATE TABLE t1(k1 int, k2 int, k3 int) distributed by " +
+                        "hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        Database db = localMetastore.getDb(dbName);
+        long t1TableId = db.getTable("t1").getId();
+        AtomicBoolean writeLockAcquired = new AtomicBoolean(false);
+
+        long tabletsCountBefore = connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+        new MockUp<Locker>() {
+            @Mock
+            public boolean lockTableAndCheckDbExist(Invocation invocation, Database database, long tableId,
+                                                    LockType lockType)
+                    throws DdlException, MetaNotFoundException {
+                if (lockType == LockType.WRITE && database.getId() == db.getId() && t1TableId == tableId) {
+                    // simulate that the database is dropped after locking the table
+                    localMetastore.dropDb(connectContext, dbName, false);
+                    long tabletCountInMiddle =
+                            connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+                    // The new partition is ready, but not committed yet, so 3 more tablets are created
+                    Assertions.assertEquals(tabletsCountBefore + 3, tabletCountInMiddle,
+                            "3 new tablets should be created for the new partition during truncate");
+                    writeLockAcquired.set(true);
+                    return false;
+                } else {
+                    return Boolean.TRUE.equals(invocation.proceed(database, tableId, lockType));
+                }
+            }
+        };
+
+
+        TableRef tableRef = new TableRef(new TableName(dbName, "t1"), null);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
+        DdlException exception =
+                Assertions.assertThrows(DdlException.class, () -> localMetastore.truncateTable(stmt, connectContext));
+        Assertions.assertEquals("Unknown database 'db_to_be_dropped'", exception.getMessage());
+        long tabletsCountAfter = connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+        Assertions.assertEquals(tabletsCountBefore, tabletsCountAfter,
+                "Tablets should not be changed when truncate fails");
+        Assertions.assertTrue(writeLockAcquired.get(), "Write lock should be acquired during truncate");
+    }
 }

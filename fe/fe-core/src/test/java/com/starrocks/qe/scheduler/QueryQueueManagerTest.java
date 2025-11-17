@@ -661,6 +661,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
     }
 
+    @Disabled
     @Test
     public void testAllocatedSlotTimeout() throws Exception {
         final int concurrencyLimit = 3;

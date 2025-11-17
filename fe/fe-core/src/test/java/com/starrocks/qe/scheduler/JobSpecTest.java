@@ -120,7 +120,7 @@ public class JobSpecTest extends SchedulerTestBase {
         List<ScanNode> scanNodes = execPlan.getScanNodes();
 
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(connectContext, sql, coordinator));
@@ -139,7 +139,7 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(QUERY_RESOURCE_GROUP, jobSpec.getResourceGroup());
 
         coordinator = COORDINATOR_FACTORY.createInsertScheduler(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
         jobSpec = coordinator.getJobSpec();
         Assertions.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
     }
@@ -175,7 +175,7 @@ public class JobSpecTest extends SchedulerTestBase {
         // Check created jobSpec.
         {
             DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                    connectContext, fragments, scanNodes, descTable.toThrift());
+                    connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
             JobSpec jobSpec = coordinator.getJobSpec();
 
             TWorkGroup group = jobSpec.getResourceGroup();
@@ -188,7 +188,7 @@ public class JobSpecTest extends SchedulerTestBase {
             connectContext.getSessionVariable().setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
 
             DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                    connectContext, fragments, scanNodes, descTable.toThrift());
+                    connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
             JobSpec jobSpec = coordinator.getJobSpec();
 
             // Check created jobSpec.
@@ -213,7 +213,7 @@ public class JobSpecTest extends SchedulerTestBase {
         List<ScanNode> scanNodes = execPlan.getScanNodes();
 
         JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
 
         // Check created jobSpec.
         Assertions.assertEquals(queryId, jobSpec.getQueryId());

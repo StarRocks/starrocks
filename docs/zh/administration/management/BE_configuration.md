@@ -1190,6 +1190,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否为 Primary Key 表开启 Size-tiered Compaction 策略。`true` 代表开启。`false` 代表关闭。
 - 引入版本：存算分离集群自 v3.2.4, v3.1.10 起生效，存算一体集群自 v3.2.5, v3.1.10 起生效
 
+##### enable_strict_delvec_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当enable_strict_delvec_crc_check设置为true后，我们会对delete vector的crc32进行严格检查，如果不一致，将返回失败。
+- 引入版本：-
+
 ##### size_tiered_min_level_size
 
 - 默认值：131072
@@ -1311,7 +1320,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### tablet_map_shard_size
 
-- 默认值：32
+- 默认值：1024
 - 类型：Int
 - 单位：-
 - 是否动态：否
@@ -4049,7 +4058,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_min_disk_quota_for_adjustment
 
-- 默认值：107374182400
+- 默认值：10737418240
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是

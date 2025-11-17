@@ -18,9 +18,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
 public abstract class WarehouseTestBase extends StarRocksTestBase {
     @BeforeAll
@@ -33,5 +37,15 @@ public abstract class WarehouseTestBase extends StarRocksTestBase {
         };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                if (computeResource != null && computeResource.getWarehouseId() == DEFAULT_WAREHOUSE_ID) {
+                    return true;
+                }
+                return false;
+            }
+        };
     }
 }

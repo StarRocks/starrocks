@@ -62,7 +62,6 @@ import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -1487,22 +1486,24 @@ public class OlapTable extends Table {
     }
 
     // This is a private method.
-    // Call public "dropPartitionAndReserveTablet" and "dropPartition"
+    // Call public "dropPartitionAndReserveTablet", "dropPartition" and "dropPartitionWithRetention"
     private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         Partition partition = nameToPartition.get(partitionName);
         if (partition == null) {
             return;
         }
-
         if (!reserveTablets) {
             RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
             recyclePartitionInfo.setRecoverable(!isForceDrop);
             GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
         }
+        removePartitionFromInnerState(partition);
+    }
 
+    private void removePartitionFromInnerState(Partition partition) {
         partitionInfo.dropPartition(partition.getId());
         idToPartition.remove(partition.getId());
-        nameToPartition.remove(partitionName);
+        nameToPartition.remove(partition.getName());
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
@@ -1544,6 +1545,33 @@ public class OlapTable extends Table {
 
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         dropPartition(dbId, partitionName, isForceDrop, false);
+    }
+
+    /**
+     *  Try to retain the partition for a while to avoid tablet missing errors.
+     *  This method is used in `insert overwrite`, `mv rewrite` etc. scenarios,
+     *  where we don't want to delete data immediately
+     *
+     *  This method is not thread safe. The caller should ensure that this method is called under lock.
+     */
+    public void dropPartitionWithRetention(long dbId, String partitionName, long partitionRetentionPeriod) {
+        Partition partition = nameToPartition.get(partitionName);
+        if (partition == null) {
+            return;
+        }
+        if (partitionRetentionPeriod > 0) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
+            // mark the partition as not recoverable
+            recyclePartitionInfo.setRecoverable(false);
+            // retain partition tablets with specified period
+            recyclePartitionInfo.setRetentionPeriod(partitionRetentionPeriod);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+
+            removePartitionFromInnerState(partition);
+        } else {
+            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully
+            dropPartition(dbId, partitionName, true);
+        }
     }
 
     // check input partition has temporary partition
@@ -2033,7 +2061,7 @@ public class OlapTable extends Table {
             LOG.debug("signature. partition name: {}", partName);
             DistributionInfo distributionInfo = partition.getDistributionInfo();
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                         this, hashDistributionInfo.getDistributionColumns());
@@ -2108,7 +2136,7 @@ public class OlapTable extends Table {
             checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition name is inconsistent"));
             DistributionInfo distributionInfo = partition.getDistributionInfo();
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
                         this, hashDistributionInfo.getDistributionColumns());
@@ -2393,7 +2421,7 @@ public class OlapTable extends Table {
 
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
-            for (Long tabletId : baseIdx.getTabletIds()) {
+            for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
                 if (replicaBackendIds.size() < replicationNum) {
@@ -2710,6 +2738,22 @@ public class OlapTable extends Table {
         tableProperty.buildReplicatedStorage();
     }
 
+    public boolean enableStatisticCollectOnFirstLoad() {
+        if (tableProperty != null) {
+            return tableProperty.enableStatisticCollectOnFirstLoad();
+        }
+        return true;
+    }
+
+    public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                Boolean.valueOf(enable).toString());
+        tableProperty.buildEnableStatisticCollectOnFirstLoad();
+    }
+
     public boolean allowBucketSizeSetting() {
         return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
     }
@@ -2932,7 +2976,7 @@ public class OlapTable extends Table {
                 Partition oldPartition = nameToPartition.get(oldPartitionName);
                 if (oldPartition != null) {
                     // drop old partition
-                    dropPartition(dbId, oldPartitionName, true);
+                    dropPartitionWithRetention(dbId, oldPartitionName, Config.partition_recycle_retention_period_secs);
                 }
                 // add new partition
                 addPartition(partition);
@@ -3031,7 +3075,7 @@ public class OlapTable extends Table {
         // 1. drop old partitions
         for (String partitionName : partitionNames) {
             // This will also drop all tablets of the partition from TabletInvertedIndex
-            dropPartition(dbId, partitionName, true);
+            dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
         }
 
         // 2. add temp partitions' range info to rangeInfo, and remove them from
@@ -3067,7 +3111,7 @@ public class OlapTable extends Table {
         // drop source partition
         Partition srcPartition = nameToPartition.get(sourcePartitionName);
         if (srcPartition != null) {
-            dropPartition(dbId, sourcePartitionName, true);
+            dropPartitionWithRetention(dbId, sourcePartitionName, Config.partition_recycle_retention_period_secs);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);
@@ -3310,39 +3354,6 @@ public class OlapTable extends Table {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION,
                 Boolean.valueOf(useFastSchemaEvolution).toString());
         tableProperty.buildUseFastSchemaEvolution();
-    }
-
-    public Boolean getEnableDynamicTablet() {
-        if (tableProperty != null) {
-            return tableProperty.getEnableDynamicTablet();
-        }
-        return null;
-    }
-
-    public boolean isEnableDynamicTablet() {
-        if (!isCloudNativeTableOrMaterializedView()) {
-            return false;
-        }
-
-        if (defaultDistributionInfo.getType() != DistributionInfoType.HASH) {
-            return false;
-        }
-
-        Boolean enableDynamicTablet = getEnableDynamicTablet();
-        if (enableDynamicTablet == null) {
-            return false;
-        }
-
-        return enableDynamicTablet;
-    }
-
-    public void setEnableDynamicTablet(Boolean enableDynamicTablet) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET,
-                enableDynamicTablet != null ? enableDynamicTablet.toString() : "");
-        tableProperty.buildEnableDynamicTablet();
     }
 
     public void setSessionId(UUID sessionId) {
@@ -3593,6 +3604,11 @@ public class OlapTable extends Table {
         Boolean enableLoadProfile = enableLoadProfile();
         if (enableLoadProfile) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+        }
+
+        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
+        if (!enableStatisticCollectOnFirstLoad) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
         }
 
         // base compaction forbidden time ranges

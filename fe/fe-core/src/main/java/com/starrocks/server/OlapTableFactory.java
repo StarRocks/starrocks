@@ -463,6 +463,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
+            if (PropertyAnalyzer.analyzeBooleanProp(properties,
+                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
+                table.setEnableStatisticCollectOnFirstLoad(true);
+            } else {
+                table.setEnableStatisticCollectOnFirstLoad(false);
+            }
+
             try {
                 table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
                 if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
@@ -488,13 +495,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             try {
                 boolean fileBundling = PropertyAnalyzer.analyzeFileBundling(properties);
                 table.setFileBundling(fileBundling);
-            } catch (Exception e) {
-                throw new DdlException(e.getMessage());
-            }
-
-            try {
-                Boolean enableDynamicTablet = PropertyAnalyzer.analyzeEnableDynamicTablet(properties, true);
-                table.setEnableDynamicTablet(enableDynamicTablet);
             } catch (Exception e) {
                 throw new DdlException(e.getMessage());
             }
