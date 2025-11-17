@@ -103,6 +103,7 @@ import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -1184,6 +1185,8 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             prepareContextSlots(node, context, tupleDescriptor);
+
+            PartitionIdGenerator partitionIdGenerator = context.getDescTbl().getTablePartitionIdGenerator(referenceTable);
 
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
