@@ -216,8 +216,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
                             // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure
-                            // that
-                            // we can eliminate the equality delete files.
+                            // that we can eliminate the equality delete files.
                         }
                     }
                 }
