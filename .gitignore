@@ -93,16 +93,14 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-<<<<<<< HEAD
 fe/fe-core/pseudo_cluster_*
 contrib/java-udf/target/
 java-extensions/*/bin/
-=======
+
 .claude
 CLAUDE.md
 .clangd
 .cursor/
-
 
 !build-mac/CMakeLists.txt
 # build-mac generated files
@@ -114,5 +112,5 @@ build-mac/CMakeFiles/
 build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
+
 _codeql_detected_source_root
->>>>>>> b0835f65a9 ([BugFix] Fix integer overflow in JSON array comparison (#64981))
