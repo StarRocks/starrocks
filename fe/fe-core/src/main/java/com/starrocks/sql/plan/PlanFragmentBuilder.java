@@ -196,7 +196,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
-import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -575,7 +574,6 @@ public class PlanFragmentBuilder {
             for (ScalarOperator predicate : predicates) {
                 predicateColumns.union(predicate.getUsedColumns());
             }
-
 
             // ------------------------------------------------------------------------------------
             // unused Columns = required columns - predicate columns.
@@ -1422,7 +1420,6 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, ExecPlan context) {
             return buildIcebergScanNode(optExpression, context);
         }
-
 
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
@@ -3447,8 +3444,6 @@ public class PlanFragmentBuilder {
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
             exchangeNode.forceCollectExecStats();
-
-
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
