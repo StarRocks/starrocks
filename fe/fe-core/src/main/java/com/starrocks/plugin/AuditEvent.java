@@ -146,6 +146,12 @@ public class AuditEvent {
     @AuditField(value = "QueryFEAllocatedMemory")
     public long queryFeMemory = 0;
 
+    @AuditField(value = "Command")
+    public String command = "";
+
+    @AuditField(value = "PreparedStmtId", ignore_zero = true)
+    public String preparedStmtId = null;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -371,6 +377,16 @@ public class AuditEvent {
 
         public AuditEventBuilder setQueryFeMemory(long queryFeMemory) {
             auditEvent.queryFeMemory = queryFeMemory;
+            return this;
+        }
+
+        public AuditEventBuilder setCommand(String command) {
+            auditEvent.command = command;
+            return this;
+        }
+
+        public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
+            auditEvent.preparedStmtId = preparedStmtId;
             return this;
         }
 

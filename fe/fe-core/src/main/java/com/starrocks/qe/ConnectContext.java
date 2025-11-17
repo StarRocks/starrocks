@@ -576,6 +576,14 @@ public class ConnectContext {
         return command;
     }
 
+    public String getCommandStr() {
+        if (command == null) {
+            return "MySQL.UNKNOWN";
+        } else {
+            return "MySQL." + command;
+        }
+    }
+
     public void setCommand(MysqlCommand command) {
         this.command = command;
     }

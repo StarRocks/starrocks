@@ -2110,7 +2110,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int scanOlapPartitionNumLimit = 0;
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
-    private boolean auditExecuteStmt = false;
+    private boolean auditExecuteStmt = true;
 
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
