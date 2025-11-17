@@ -167,6 +167,12 @@ public class AuditEvent {
     @AuditField(value = "QuerySource")
     public String querySource = "";
 
+    @AuditField(value = "Command")
+    public String command = "";
+
+    @AuditField(value = "PreparedStmtId", ignore_zero = true)
+    public String preparedStmtId = null;
+
     public long readLocalCnt = 0;
     public long readRemoteCnt = 0;
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
@@ -468,6 +474,16 @@ public class AuditEvent {
 
         public AuditEventBuilder setQuerySource(String querySource) {
             auditEvent.querySource = querySource;
+            return this;
+        }
+
+        public AuditEventBuilder setCommand(String command) {
+            auditEvent.command = command;
+            return this;
+        }
+
+        public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
+            auditEvent.preparedStmtId = preparedStmtId;
             return this;
         }
 

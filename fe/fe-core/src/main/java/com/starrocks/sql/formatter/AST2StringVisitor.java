@@ -120,6 +120,7 @@ import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
@@ -1594,9 +1595,17 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
     protected String printWithParentheses(ParseNode node) {
         if (node instanceof SlotRef || node instanceof LiteralExpr) {
             return visit(node);
-        } else {
-            return "(" + visit(node) + ")";
         }
+
+        if (node instanceof Parameter) {
+            Parameter parameter = (Parameter) node;
+            Expr expr = parameter.getExpr();
+            if ((expr instanceof SlotRef || expr instanceof LiteralExpr)) {
+                return visit(node);
+            }
+        }
+
+        return "(" + visit(node) + ")";
     }
 
     // --------------------------------------------Storage volume Statement ----------------------------------------

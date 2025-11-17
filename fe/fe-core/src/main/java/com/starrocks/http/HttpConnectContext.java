@@ -170,4 +170,9 @@ public class HttpConnectContext extends ConnectContext {
             });
         }
     }
+
+    @Override
+    public String getCommandStr() {
+        return "HTTP.Query";
+    }
 }
