@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -50,7 +51,7 @@ import java.util.Map;
 /*
  * e.g.
  *    select a, b, count(c) as cc, sum(d)
- *    from t
+ *    from t group by a, b
  *    order by cc limit 10
  *
  * -> select t.a, t.b, cc, sum(d)
@@ -98,7 +99,109 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 && ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
+
+        // Get scan statistics for checking column average row size
+        Statistics scanStatistics = input.inputAt(0).inputAt(0).getStatistics();
+
+        // Calculate columns that will be read twice (once in each scan)
+        List<ColumnRefOperator> orderByRefs = topN.getOrderByElements().stream().map(Ordering::getColumnRef).toList();
+        List<ColumnRefOperator> splitAggregations = splitTopNAggregations(agg, orderByRefs);
+        if (splitAggregations.isEmpty()) {
+            return false;
+        }
+
+        // First scan (join right side) needs: groupingKeys + splitAggregations used columns + predicate columns
+        ColumnRefSet firstScanColumns = new ColumnRefSet();
+        firstScanColumns.union(agg.getGroupingKeys());
+        splitAggregations.forEach(c -> firstScanColumns.union(agg.getAggregations().get(c).getUsedColumns()));
+        if (scan.getPredicate() != null) {
+            firstScanColumns.union(scan.getPredicate().getUsedColumns());
+        }
+
+        // Check predicate and column type constraints only for duplicated columns
+        if (!checkPredicateAndColumnConstraints(scan, scanStatistics, firstScanColumns)) {
+            return false;
+        }
+
         return true;
+    }
+
+    private boolean checkPredicateAndColumnConstraints(LogicalOlapScanOperator scan, Statistics scanStatistics,
+                                                       ColumnRefSet duplicatedColumns) {
+        // if read too much repeated columns, scan's extra costs may bigger then agg's
+        if (duplicatedColumns.size() > 3) {
+            return false;
+        }
+
+        if (hasLongStringOrComplexType(scan, duplicatedColumns, scanStatistics)) {
+            return false;
+        }
+
+        ScalarOperator predicate = scan.getPredicate();
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        List<ScalarOperator> disconjuncts = Utils.extractDisjunctive(predicate);
+
+        // if evaluate too much predicates, scan's extra costs may bigger then agg's
+        if (conjuncts.size() > 2 || disconjuncts.size() > 2) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if the duplicated columns have long string or complex type columns.
+     * Long string is determined by averageRowSize > 5 or no statistics.
+     */
+    private boolean hasLongStringOrComplexType(LogicalOlapScanOperator scan, ColumnRefSet duplicatedColumns,
+                                               Statistics scanStatistics) {
+        for (ColumnRefOperator colRef : scan.getColRefToColumnMetaMap().keySet()) {
+            if (!duplicatedColumns.contains(colRef)) {
+                continue;
+            }
+
+            Type colType = colRef.getType();
+
+            if (colType.isStringType()) {
+                if (isLongString(colRef, scanStatistics)) {
+                    return true;
+                }
+            }
+
+            if (isComplexType(colType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a string column is a long string based on statistics.
+     * Returns true if:
+     * - No statistics available, OR
+     * - averageRowSize >= 5
+     */
+    private boolean isLongString(ColumnRefOperator colRef, Statistics scanStatistics) {
+        if (scanStatistics == null) {
+            // No statistics: treat as long string to be safe
+            return true;
+        }
+
+        ColumnStatistic columnStatistic = scanStatistics.getColumnStatistics().get(colRef);
+        if (columnStatistic == null || columnStatistic.isUnknown()) {
+            // No statistics for this column: treat as long string to be safe
+            return true;
+        }
+
+        double averageRowSize = columnStatistic.getAverageRowSize();
+        return averageRowSize >= 5;
+    }
+
+    /**
+     * Check if a type is complex type (ARRAY, MAP, STRUCT, JSON, VARIANT).
+     */
+    private boolean isComplexType(Type type) {
+        return type.isComplexType() || type.isJsonType() || type.isVariantType();
     }
 
     @Override
