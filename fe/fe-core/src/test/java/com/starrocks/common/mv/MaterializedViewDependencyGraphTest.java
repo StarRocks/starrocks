@@ -22,7 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +42,7 @@ public class MaterializedViewDependencyGraphTest {
      */
     private MaterializedView createMockMV(long id, Long... dependencies) {
         List<Column> columns = new ArrayList<>();
-        columns.add(new Column("c1", Type.INT));
+        columns.add(new Column("c1", IntegerType.INT));
         
         MaterializedView mv = new MaterializedView(id, 1L, "mv_" + id, columns, KeysType.DUP_KEYS,
                 null, null, null);
@@ -459,7 +459,7 @@ public class MaterializedViewDependencyGraphTest {
     @Test
     public void testNullRelatedMaterializedViews() {
         List<Column> columns = new ArrayList<>();
-        columns.add(new Column("c1", Type.INT));
+        columns.add(new Column("c1", IntegerType.INT));
         
         MaterializedView mv1 = new MaterializedView(1L, 1L, "mv_1", columns, KeysType.DUP_KEYS,
                 null, null, null);

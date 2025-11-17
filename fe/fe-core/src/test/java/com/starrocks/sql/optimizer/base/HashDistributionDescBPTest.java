@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.thrift.TBucketFunction;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +29,7 @@ class HashDistributionDescBPTest {
     private List<BucketProperty> createBucketProperties(int count) {
         List<BucketProperty> bucketProperties = Lists.newArrayList();
         for (int i = 0; i < count; i++) {
-            Column column = new Column("col" + i, Type.INT);
+            Column column = new Column("col" + i, IntegerType.INT);
             bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10, column));
         }
         return bucketProperties;
@@ -147,7 +147,7 @@ class HashDistributionDescBPTest {
         // Create different bucket properties that won't satisfy
         List<BucketProperty> bucketProperties2 = Lists.newArrayList();
         for (int i = 0; i < 2; i++) {
-            Column column = new Column("col" + i, Type.INT);
+            Column column = new Column("col" + i, IntegerType.INT);
             // Different bucket count
             bucketProperties2.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, 20, column));
         }

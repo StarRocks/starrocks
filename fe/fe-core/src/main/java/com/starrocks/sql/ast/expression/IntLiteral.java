@@ -43,11 +43,9 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -176,13 +174,13 @@ public class IntLiteral extends LiteralExpr {
     private void init(long value) {
         this.value = value;
         if (this.value <= TINY_INT_MAX && this.value >= TINY_INT_MIN) {
-            type = Type.TINYINT;
+            type = IntegerType.TINYINT;
         } else if (this.value <= SMALL_INT_MAX && this.value >= SMALL_INT_MIN) {
-            type = Type.SMALLINT;
+            type = IntegerType.SMALLINT;
         } else if (this.value <= INT_MAX && this.value >= INT_MIN) {
-            type = Type.INT;
+            type = IntegerType.INT;
         } else {
-            type = Type.BIGINT;
+            type = IntegerType.BIGINT;
         }
     }
 
@@ -228,12 +226,6 @@ public class IntLiteral extends LiteralExpr {
         }
 
         return new IntLiteral(value);
-    }
-
-    public static IntLiteral read(DataInput in) throws IOException {
-        IntLiteral literal = new IntLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     @Override
@@ -366,17 +358,6 @@ public class IntLiteral extends LiteralExpr {
     public void swapSign() throws NotImplementedException {
         // swapping sign does not change the type
         value = -value;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readLong();
     }
 
     @Override

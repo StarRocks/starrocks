@@ -32,6 +32,9 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.StarRocksTestBase;
@@ -289,19 +292,19 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
 
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
-            Assertions.assertEquals(ScalarType.INT, columns.get(0).getType());
+            Assertions.assertEquals(IntegerType.INT, columns.get(0).getType());
 
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
-            Assertions.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
+            Assertions.assertEquals(IntegerType.BIGINT, columns.get(1).getType());
 
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
-            Assertions.assertEquals(ScalarType.DOUBLE, columns.get(2).getType());
+            Assertions.assertEquals(FloatType.DOUBLE, columns.get(2).getType());
 
             Assertions.assertEquals("c3", columns.get(3).getName());
             Assertions.assertEquals(3, columns.get(3).getUniqueId());
-            Assertions.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
+            Assertions.assertEquals(DateType.DATETIME, columns.get(3).getType());
 
             Assertions.assertEquals("c4", columns.get(4).getName());
             Assertions.assertEquals(4, columns.get(4).getUniqueId());
@@ -314,10 +317,10 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         // zonemap index can not be reused
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c3 DATE", false);
-            Assertions.assertEquals(ScalarType.DATE, table.getBaseSchema().get(3).getType());
+            Assertions.assertEquals(DateType.DATE, table.getBaseSchema().get(3).getType());
 
             executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c4 INT", false);
-            Assertions.assertEquals(ScalarType.INT, table.getBaseSchema().get(4).getType());
+            Assertions.assertEquals(IntegerType.INT, table.getBaseSchema().get(4).getType());
         }
     }
 

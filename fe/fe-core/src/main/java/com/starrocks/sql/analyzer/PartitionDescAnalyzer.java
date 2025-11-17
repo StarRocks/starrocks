@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
@@ -402,7 +403,8 @@ public class PartitionDescAnalyzer {
             for (MultiRangePartitionDesc multiRangePartitionDesc : desc.getMultiRangePartitionDescs()) {
                 TimestampArithmeticExpr.TimeUnit timeUnit = TimestampArithmeticExpr.TimeUnit
                         .fromName(multiRangePartitionDesc.getTimeUnit());
-                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR && firstPartitionColumn.getType() != Type.DATETIME) {
+                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR
+                        && firstPartitionColumn.getType() != DateType.DATETIME) {
                     throw new AnalysisException("Batch build partition for hour interval only supports " +
                             "partition column as DATETIME type");
                 }
@@ -482,7 +484,7 @@ public class PartitionDescAnalyzer {
 
                     String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
                     if (functionName.equals(FunctionSet.STR2DATE)) {
-                        desc.setPartitionType(Type.DATE);
+                        desc.setPartitionType(DateType.DATE);
                         if (!PartitionFunctionChecker.checkStr2date(expr)) {
                             throw new SemanticException("partition function check fail, only supports the result " +
                                     "of the function str2date(VARCHAR str, VARCHAR format) as a strict DATE type");
@@ -727,7 +729,7 @@ public class PartitionDescAnalyzer {
                     DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
                     LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
                     LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, DateType.DATETIME);
                     long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
                     partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                 }

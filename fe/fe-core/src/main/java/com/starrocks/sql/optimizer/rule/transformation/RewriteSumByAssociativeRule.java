@@ -36,6 +36,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -314,11 +316,11 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 List<Type> argTypes = Lists.newArrayList(arg1.getType());
 
                 AggregateFunction countFunction = AggregateFunction.createBuiltin(
-                        FunctionSet.COUNT, argTypes, Type.BIGINT, Type.BIGINT,
+                        FunctionSet.COUNT, argTypes, IntegerType.BIGINT, IntegerType.BIGINT,
                         false, true, true);
 
                 CallOperator newAggFunction = new CallOperator(FunctionSet.COUNT,
-                        Type.BIGINT, countArguments, countFunction);
+                        IntegerType.BIGINT, countArguments, countFunction);
 
                 ColumnRefOperator newAggRef = columnRefFactory.create(
                         newAggFunction, newAggFunction.getType(), false);
@@ -341,18 +343,18 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                         break;
                     case DOUBLE:
                         countOperator = new CastOperator(returnType, newAggRef, false);
-                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.DOUBLE) :
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(FloatType.DOUBLE) :
                                 ConstantOperator.createDouble(((ConstantOperator) arg0).getDouble());
                         break;
                     case LARGEINT:
                         countOperator = new CastOperator(returnType, newAggRef, false);
-                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.LARGEINT) :
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(IntegerType.LARGEINT) :
                                 ConstantOperator.createLargeInt(new BigInteger(arg0.toString()));
                         break;
                     case BIGINT:
                         // count() always return BIGINT, no need to cast
                         countOperator = newAggRef;
-                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.BIGINT) :
+                        constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(IntegerType.BIGINT) :
                                 ConstantOperator.createBigint(Long.parseLong(arg0.toString()));
                         break;
                     default:

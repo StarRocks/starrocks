@@ -43,6 +43,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -164,15 +166,15 @@ public class DatabaseTest {
         // Add addIntInt function to database
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new Function(name, argTypes, IntegerType.INT, false);
         db.addFunction(f);
 
         // Add addDoubleDouble function to database
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setDb(db.getCatalogName());
-        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
-        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        final Type[] argTypes2 = {FloatType.DOUBLE, FloatType.DOUBLE};
+        Function f2 = new Function(name2, argTypes2, FloatType.DOUBLE, false);
         db.addFunction(f2);
     }
 
@@ -180,8 +182,8 @@ public class DatabaseTest {
     public void testAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new Function(name, argTypes, IntegerType.INT, false);
 
         // Add the UDF for the first time
         db.addFunction(f);
@@ -194,8 +196,8 @@ public class DatabaseTest {
     public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new Function(name, argTypes, IntegerType.INT, false);
 
         // Add the UDF for the first time
         db.addFunction(f, true, false);
@@ -210,7 +212,7 @@ public class DatabaseTest {
     @Test
     public void testAddAndDropFunctionForRestore() {
         Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                                   new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+                                   new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
         try {
             db.addFunction(f1);
         } catch (Exception e) {

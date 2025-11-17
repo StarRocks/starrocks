@@ -20,7 +20,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.catalog.Catalog;
@@ -114,7 +114,7 @@ public class PaimonConnectorTest {
         Assertions.assertEquals("tbl1", paimonTable.getCatalogTableName());
         Assertions.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
-        Assertions.assertEquals(Type.INT, paimonTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, paimonTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("paimon_catalog", paimonTable.getCatalogName());
     }
 

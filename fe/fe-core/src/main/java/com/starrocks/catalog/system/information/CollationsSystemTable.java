@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -34,10 +34,10 @@ public class CollationsSystemTable {
                 builder()
                         .column("COLLATION_NAME", TypeFactory.createVarchar(512))
                         .column("CHARACTER_SET_NAME", TypeFactory.createVarchar(64))
-                        .column("ID", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ID", IntegerType.BIGINT)
                         .column("IS_DEFAULT", TypeFactory.createVarchar(64))
                         .column("IS_COMPILED", TypeFactory.createVarchar(64))
-                        .column("SORTLEN", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("SORTLEN", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_COLLATIONS);
     }
 }

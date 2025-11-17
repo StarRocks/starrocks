@@ -17,7 +17,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
@@ -43,19 +44,19 @@ public class EventsSystemTable {
                         .column("EVENT_DEFINITION",
                                 TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EVENT_TYPE", TypeFactory.createVarchar(9))
-                        .column("EXECUTE_AT", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("EXECUTE_AT", DateType.DATETIME)
                         .column("INTERVAL_VALUE", TypeFactory.createVarchar(256))
                         .column("INTERVAL_FIELD", TypeFactory.createVarchar(18))
                         .column("SQL_MODE", TypeFactory.createVarchar(8192))
-                        .column("STARTS", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("ENDS", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("STARTS", DateType.DATETIME)
+                        .column("ENDS", DateType.DATETIME)
                         .column("STATUS", TypeFactory.createVarchar(18))
                         .column("ON_COMPLETION", TypeFactory.createVarchar(12))
-                        .column("CREATED", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LAST_ALTERED", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LAST_EXECUTED", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CREATED", DateType.DATETIME)
+                        .column("LAST_ALTERED", DateType.DATETIME)
+                        .column("LAST_EXECUTED", DateType.DATETIME)
                         .column("EVENT_COMMENT", TypeFactory.createVarchar(64))
-                        .column("ORIGINATOR", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("ORIGINATOR", IntegerType.BIGINT)
                         .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(32))
                         .column("COLLATION_CONNECTION", TypeFactory.createVarchar(32))
                         .column("DATABASE_COLLATION", TypeFactory.createVarchar(32))

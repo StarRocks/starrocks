@@ -25,6 +25,8 @@ import java.util.Arrays;
  * Describes a MAP type. MAP types have a scalar key and an arbitrarily-typed value.
  */
 public class MapType extends Type {
+    public static final Type MAP_VARCHAR_VARCHAR = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
+
     @SerializedName(value = "keyType")
     private Type keyType;
     @SerializedName(value = "valueType")
@@ -73,10 +75,10 @@ public class MapType extends Type {
     public void pruneUnusedSubfields() {
         // We set pruned subfield to NULL in map
         if (!selectedFields[0]) {
-            keyType = ScalarType.UNKNOWN_TYPE;
+            keyType = UnknownType.UNKNOWN_TYPE;
         }
         if (!selectedFields[1]) {
-            valueType = ScalarType.UNKNOWN_TYPE;
+            valueType = UnknownType.UNKNOWN_TYPE;
         }
         Preconditions.checkArgument(!keyType.isUnknown() || !valueType.isUnknown());
     }

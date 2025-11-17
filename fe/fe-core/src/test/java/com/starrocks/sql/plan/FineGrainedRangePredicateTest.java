@@ -23,7 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.FineGrainedRangePredicateRule;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
 import org.apache.commons.lang3.tuple.Triple;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -48,7 +48,7 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
 
     @Test
     void testCutDateRange1() {
-        ColumnRefOperator datetimeCol = new ColumnRefOperator(1, Type.DATETIME, "datetime_col", true);
+        ColumnRefOperator datetimeCol = new ColumnRefOperator(1, DateType.DATETIME, "datetime_col", true);
 
         List<Triple<String, LocalDateTime, LocalDateTime>> tripleList;
         List<ScalarOperator> rangePredicates;
@@ -74,7 +74,7 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
 
     @Test
     void testCutDateRange2() {
-        ColumnRefOperator datetimeCol = new ColumnRefOperator(1, Type.DATETIME, "datetime_col", true);
+        ColumnRefOperator datetimeCol = new ColumnRefOperator(1, DateType.DATETIME, "datetime_col", true);
         LocalDateTime begin = LocalDateTime.of(2020, 12, 14, 1, 1);
         LocalDateTime end = LocalDateTime.of(2021, 2, 17, 2, 1);
         ConstantOperator datetimeBegin = ConstantOperator.createDatetime(begin);
@@ -115,7 +115,7 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
 
     @Test
     void testCutRange3() {
-        ColumnRefOperator dateCol = new ColumnRefOperator(1, Type.DATE, "date_col", true);
+        ColumnRefOperator dateCol = new ColumnRefOperator(1, DateType.DATE, "date_col", true);
         LocalDateTime begin = LocalDateTime.of(2020, 12, 14, 0, 0);
         LocalDateTime end = LocalDateTime.of(2022, 1, 17, 0, 0);
         ConstantOperator dateBegin = ConstantOperator.createDate(begin);
@@ -154,7 +154,7 @@ public class FineGrainedRangePredicateTest extends DistributedEnvPlanTestBase {
 
     @Test
     void testCutDateRange4() {
-        ColumnRefOperator datetimeCol = new ColumnRefOperator(1, Type.DATETIME, "datetime_col", true);
+        ColumnRefOperator datetimeCol = new ColumnRefOperator(1, DateType.DATETIME, "datetime_col", true);
         LocalDateTime begin = LocalDateTime.of(2020, 8, 14, 14, 1);
         LocalDateTime end = LocalDateTime.of(2022, 2, 17, 2, 26);
         ConstantOperator datetimeBegin = ConstantOperator.createDatetime(begin);

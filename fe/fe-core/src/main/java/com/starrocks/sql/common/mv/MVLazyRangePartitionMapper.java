@@ -28,8 +28,8 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.PartitionMapping;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -108,7 +108,7 @@ public class MVLazyRangePartitionMapper extends MVRangePartitionMapper {
         DateLiteral upperDate;
         LocalDateTime truncUpperDateTime;
         if (upperExpr instanceof MaxLiteral) {
-            upperDate = new DateLiteral(Type.DATE, true);
+            upperDate = new DateLiteral(DateType.DATE, true);
             truncUpperDateTime = upperDate.toLocalDateTime();
         } else {
             upperDate = (DateLiteral) upperExpr;

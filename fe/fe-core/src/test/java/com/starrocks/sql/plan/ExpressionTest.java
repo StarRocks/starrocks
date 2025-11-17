@@ -35,8 +35,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
@@ -245,9 +251,9 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testScalarOperatorToExpr() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(2, Type.INT, "e", true);
-        ScalarOperator cast = new CastOperator(Type.DOUBLE, columnRefOperator);
-        ColumnRefOperator castColumnRef = new ColumnRefOperator(1, Type.INT, "cast", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(2, IntegerType.INT, "e", true);
+        ScalarOperator cast = new CastOperator(FloatType.DOUBLE, columnRefOperator);
+        ColumnRefOperator castColumnRef = new ColumnRefOperator(1, IntegerType.INT, "cast", true);
 
         HashMap<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         projectMap.put(castColumnRef, cast);
@@ -265,11 +271,11 @@ public class ExpressionTest extends PlanTestBase {
 
         // lambda functions
         ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(100000, Type.INT, "x", true),
+                new ColumnRefOperator(100000, IntegerType.INT, "x", true),
                 ConstantOperator.createInt(1));
-        ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
+        ColumnRefOperator colRef = new ColumnRefOperator(100000, IntegerType.INT, "x", true);
         LambdaFunctionOperator lambda =
-                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, BooleanType.BOOLEAN);
         variableToSlotRef.clear();
         projectMap.clear();
         context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
@@ -537,7 +543,7 @@ public class ExpressionTest extends PlanTestBase {
         List<ColumnRefOperator> outColumns = plan.getOutputColumns();
 
         Assertions.assertEquals(1, outColumns.size());
-        Assertions.assertEquals(Type.DATETIME, outColumns.get(0).getType());
+        Assertions.assertEquals(DateType.DATETIME, outColumns.get(0).getType());
         Assertions.assertTrue(outColumns.get(0).isNullable());
     }
 
@@ -1985,12 +1991,13 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testFoundJsonInt() {
-        Function func = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.VARCHAR, Type.VARCHAR},
+        Function func = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT,
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(func);
         Assertions.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
 
-        func = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.JSON, Type.VARCHAR},
+        func = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {JsonType.JSON, VarcharType.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(func);
         Assertions.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());

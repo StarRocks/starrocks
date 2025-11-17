@@ -228,7 +228,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
     }
 
-
     @Test
     public void testPartitionedIVMWithAggregate1() throws Exception {
         doTestWith3Runs("SELECT date, sum(id), approx_count_distinct(data) " +
@@ -239,10 +238,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                                     "     TABLE: partitioned_db.t1\n" +
                                     "     TABLE VERSION: Delta@[MIN,1]");
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
-                            "HASH JOIN\n" +
-                                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                            "  7:HASH JOIN\n" +
+                                    "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                                     "  |  colocate: false, reason: \n" +
-                                    "  |  equal join conjunct: 17: from_binary = 9: __ROW_ID__");
+                                    "  |  equal join conjunct: 9: __ROW_ID__ = 17: from_binary");
                 },
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -253,10 +252,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                             "  6:OlapScanNode\n" +
                                     "     TABLE: test_mv1");
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
-                            "HASH JOIN\n" +
-                                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                            "  7:HASH JOIN\n" +
+                                    "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                                     "  |  colocate: false, reason: \n" +
-                                    "  |  equal join conjunct: 17: from_binary = 9: __ROW_ID__");
+                                    "  |  equal join conjunct: 9: __ROW_ID__ = 17: from_binary");
                 }
         );
     }
@@ -358,7 +357,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 }
         );
     }
-    
+
     @Test
     public void testUnionAllAndAggregate() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);

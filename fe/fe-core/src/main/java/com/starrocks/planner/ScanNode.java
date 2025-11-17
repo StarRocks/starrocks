@@ -39,6 +39,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
@@ -76,6 +77,8 @@ public abstract class ScanNode extends PlanNode {
     // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
     // The compute resource used by this scan node.
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    // the scan node's version range to scan
+    protected TvrVersionRange tvrVersionRange;
 
     private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
 
@@ -157,6 +160,10 @@ public abstract class ScanNode extends PlanNode {
         } else {
             return expr;
         }
+    }
+
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
     }
 
     /**

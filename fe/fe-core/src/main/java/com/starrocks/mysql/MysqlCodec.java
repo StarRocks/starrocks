@@ -26,10 +26,10 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static com.starrocks.type.Type.CHARSET_BINARY;
-import static com.starrocks.type.Type.CHARSET_UTF8;
-
 public class MysqlCodec {
+    public static final int CHARSET_BINARY = 63;
+    public static final int CHARSET_UTF8 = 33;
+
     public static byte readByte(ByteBuffer buffer) {
         return buffer.get();
     }

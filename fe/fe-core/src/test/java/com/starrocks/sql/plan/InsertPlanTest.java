@@ -39,7 +39,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -829,8 +829,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         Table nativeTable = new BaseTable(null, null);
 
-        Column k1 = new Column("k1", Type.INT);
-        Column k2 = new Column("k2", Type.INT);
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
         builder.setCatalogDBName("iceberg_db");
@@ -932,8 +932,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         Table nativeTable = new BaseTable(null, null);
 
-        Column k1 = new Column("k1", Type.INT);
-        Column k2 = new Column("k2", Type.INT);
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog_shuffle");
         builder.setCatalogDBName("iceberg_db");

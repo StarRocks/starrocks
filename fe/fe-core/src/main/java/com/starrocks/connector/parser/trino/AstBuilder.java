@@ -91,12 +91,28 @@ import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.UnknownType;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
 import io.trino.sql.tree.ArithmeticBinaryExpression;
@@ -218,10 +234,14 @@ import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.UNBOU
 import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.DateType.TIME;
+import static com.starrocks.type.FloatType.FLOAT;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final long sqlMode;
+
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
     }
@@ -308,7 +328,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 map(type -> (ExplainType) type).findFirst();
         if (explainType.isPresent()) {
             ExplainType.Type type = explainType.get().getType();
-            if (type == ExplainType.Type.LOGICAL)  {
+            if (type == ExplainType.Type.LOGICAL) {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
             } else if (type == ExplainType.Type.DISTRIBUTED) {
                 queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
@@ -381,7 +401,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitQuerySpecification(QuerySpecification node, ParseTreeContext context) {
         List<SelectListItem> selectListItems = node.getSelect().getSelectItems().stream().map(
-                selectItem -> visit(selectItem, context)).map(selectItem -> (SelectListItem) selectItem).
+                        selectItem -> visit(selectItem, context)).map(selectItem -> (SelectListItem) selectItem).
                 collect(Collectors.toList());
         boolean isDistinct = node.getSelect().isDistinct();
         SelectList selectList = new SelectList(selectListItems, isDistinct);
@@ -706,7 +726,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new SelectListItem(expression, alias);
     }
 
-
     @Override
     protected ParseNode visitAllColumns(AllColumns node, ParseTreeContext context) {
         if (node.getTarget().isPresent()) {
@@ -840,7 +859,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     protected AnalyticExpr visitWindowSpecification(FunctionCallExpr functionCallExpr, WindowSpecification node,
-                                                 ParseTreeContext context) {
+                                                    ParseTreeContext context) {
         functionCallExpr.setIsAnalyticFnCall(true);
         List<OrderByElement> orderByElements = new ArrayList<>();
         if (node.getOrderBy().isPresent()) {
@@ -895,7 +914,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
             builder.add(fieldName);
             return new SubfieldExpr(subfieldExpr.getChild(0), builder.build());
-        }  else {
+        } else {
             return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
     }
@@ -983,7 +1002,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitGenericLiteral(GenericLiteral node, ParseTreeContext context) {
         if (node.getType().equalsIgnoreCase("date")) {
             try {
-                return new DateLiteral(node.getValue(), Type.DATE);
+                return new DateLiteral(node.getValue(), DateType.DATE);
             } catch (AnalysisException e) {
                 throw new ParsingException(e.getMessage());
             }
@@ -1033,10 +1052,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
             ZoneId zoneId = parseTimeZoneFromString(formattedValue);
             if (zoneId == null) {
-                return new DateLiteral(formattedValue, Type.DATETIME);
+                return new DateLiteral(formattedValue, DateType.DATETIME);
             } else {
                 return new FunctionCallExpr("convert_tz", List.of(
-                        new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
+                        new DateLiteral(parseDateTimeFromString(formattedValue), DateType.DATETIME),
                         new VariableExpr("time_zone"),
                         new com.starrocks.sql.ast.expression.StringLiteral(zoneId.toString())
                 ));
@@ -1075,7 +1094,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Expr child = (Expr) visit(node.getValue(), context);
         if (node.getSign() == ArithmeticUnaryExpression.Sign.MINUS) {
             return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, new IntLiteral(-1), child);
-        } else  {
+        } else {
             return child;
         }
     }
@@ -1295,13 +1314,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
-        List<String> parts  = node.getTarget().getParts();
+        List<String> parts = node.getTarget().getParts();
         String tableName = parts.get(parts.size() - 1);
         List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
                 map(Identifier::getValue).collect(Collectors.toList()) : null;
         return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
                 tableName.concat(UUID.randomUUID().toString()), columnAliases,
-        (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
+                (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }
 
     @Override
@@ -1346,9 +1365,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else if (dataType instanceof DateTimeDataType) {
             DateTimeDataType dateTimeType = (DateTimeDataType) dataType;
             if (dateTimeType.getType() == DateTimeDataType.Type.TIME) {
-                return TypeFactory.createType(PrimitiveType.TIME);
+                return TIME;
             } else {
-                return TypeFactory.createType(PrimitiveType.DATETIME);
+                return DATETIME;
             }
         } else if (dataType instanceof RowDataType) {
             RowDataType rowDataType = (RowDataType) dataType;
@@ -1396,13 +1415,102 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else if (typeName.contains("decimal")) {
             throw new ParsingException("Unknown type: %s", typeName);
         } else if (typeName.equals("real")) {
-            return TypeFactory.createType(PrimitiveType.FLOAT);
+            return FLOAT;
         } else if (typeName.equals("array")) {
             TypeParameter typeParam = (TypeParameter) dataType.getArguments().get(0);
             return new ArrayType(getType(typeParam.getValue()));
         } else {
             // this contains datetime/date/numeric type
-            return TypeFactory.createType(typeName);
+            return getTypeByName(typeName);
+        }
+    }
+
+    private ScalarType getTypeByName(String typeName) {
+        if (typeName == null) {
+            return null;
+        }
+
+        String upperTypeName = typeName.toUpperCase();
+        switch (upperTypeName) {
+            // Null type
+            case "NULL_TYPE":
+                return NullType.NULL;
+
+            // Boolean type
+            case "BOOLEAN":
+                return BooleanType.BOOLEAN;
+
+            // Integer types
+            case "TINYINT":
+                return IntegerType.TINYINT;
+            case "SMALLINT":
+                return IntegerType.SMALLINT;
+            case "INTEGER":
+            case "UNSIGNED":
+            case "INT":
+                return IntegerType.INT;
+            case "BIGINT":
+                return IntegerType.BIGINT;
+            case "LARGEINT":
+                return IntegerType.LARGEINT;
+
+            // Float types
+            case "FLOAT":
+                return FloatType.FLOAT;
+            case "DOUBLE":
+                return FloatType.DOUBLE;
+
+            // Decimal types
+            case "DECIMAL":
+            case "DECIMALV2":
+                return DecimalType.DEFAULT_DECIMALV2;
+            case "DECIMAL32":
+                return DecimalType.DECIMAL32;
+            case "DECIMAL64":
+                return DecimalType.DECIMAL64;
+            case "DECIMAL128":
+                return DecimalType.DECIMAL128;
+            case "DECIMAL256":
+                return DecimalType.DECIMAL256;
+
+            // String types
+            case "STRING":
+                return StringType.DEFAULT_STRING;
+            case "CHAR":
+                return CharType.CHAR;
+            case "VARCHAR":
+                return VarcharType.VARCHAR;
+
+            // Date/Time types
+            case "DATE":
+                return DateType.DATE;
+            case "DATETIME":
+                return DateType.DATETIME;
+            case "TIME":
+                return DateType.TIME;
+
+            // Binary types
+            case "VARBINARY":
+                return VarbinaryType.VARBINARY;
+
+            // Special types
+            case "HLL":
+                return HLLType.HLL;
+            case "BITMAP":
+                return BitmapType.BITMAP;
+            case "PERCENTILE":
+                return PercentileType.PERCENTILE;
+            case "JSON":
+                return JsonType.JSON;
+            case "VARIANT":
+                return VariantType.VARIANT;
+            case "FUNCTION":
+                return FunctionType.FUNCTION;
+            case "UNKNOWN_TYPE":
+                return UnknownType.UNKNOWN_TYPE;
+
+            default:
+                return null;
         }
     }
 }

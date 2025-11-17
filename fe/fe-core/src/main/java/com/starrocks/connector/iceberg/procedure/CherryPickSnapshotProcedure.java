@@ -17,7 +17,7 @@ package com.starrocks.connector.iceberg.procedure;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 
 import java.util.List;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class CherryPickSnapshotProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(SNAPSHOT_ID, Type.BIGINT, true)
+                        new NamedArgument(SNAPSHOT_ID, IntegerType.BIGINT, true)
                 ),
                 IcebergTableOperation.CHERRYPICK_SNAPSHOT
         );
@@ -52,7 +52,7 @@ public class CherryPickSnapshotProcedure extends IcebergTableProcedure {
             throw new StarRocksConnectorException("missing required argument: %s", SNAPSHOT_ID);
         }
         ConstantOperator snapshotIdArg = args.get(SNAPSHOT_ID);
-        long snapshotId = snapshotIdArg.castTo(Type.BIGINT)
+        long snapshotId = snapshotIdArg.castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected BIGINT", SNAPSHOT_ID));
 

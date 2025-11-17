@@ -44,6 +44,7 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -293,8 +294,8 @@ public class InfoSchemaDbTest {
 
         CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
         Type[] arg = new Type[1];
-        arg[0] = Type.INT;
-        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
+        arg[0] = IntegerType.INT;
+        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, IntegerType.INT,
                 false, TFunctionBinaryType.SRJAR,
                 "objectFile", "mainClass.getCanonicalName()", "", "");
         function.setChecksum("checksum");
@@ -352,7 +353,7 @@ public class InfoSchemaDbTest {
 
                 metadataMgr.getTable((ConnectContext) any, (String) any, (String) any, (String) any);
                 result = HiveTable.builder().setHiveTableName("tbl")
-                        .setFullSchema(Lists.newArrayList(new Column("v1", Type.INT))).build();
+                        .setFullSchema(Lists.newArrayList(new Column("v1", IntegerType.INT))).build();
                 minTimes = 0;
             }
         };

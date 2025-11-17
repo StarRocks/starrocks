@@ -42,14 +42,16 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 
 public class IsNullPredicate extends Predicate {
 
     static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-            new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+            new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
     static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-            new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+            new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
     {
         isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
         isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);

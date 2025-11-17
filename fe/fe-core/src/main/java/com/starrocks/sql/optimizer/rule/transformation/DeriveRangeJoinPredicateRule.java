@@ -38,7 +38,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import com.starrocks.type.Type;
+import com.starrocks.type.StringType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -149,8 +149,8 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
                 continue;
             }
 
-            ScalarOperator lower = new ConstantOperator(columnStatistic.getMinString(), Type.STRING);
-            ScalarOperator upper = new ConstantOperator(columnStatistic.getMaxString(), Type.STRING);
+            ScalarOperator lower = new ConstantOperator(columnStatistic.getMinString(), StringType.STRING);
+            ScalarOperator upper = new ConstantOperator(columnStatistic.getMaxString(), StringType.STRING);
 
             if (!anchor.getType().isStringType()) {
                 lower = new CastOperator(anchor.getType(), lower);

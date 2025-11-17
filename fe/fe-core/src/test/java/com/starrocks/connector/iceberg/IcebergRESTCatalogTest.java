@@ -60,7 +60,7 @@ import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
-import static com.starrocks.type.Type.INT;
+import static com.starrocks.type.IntegerType.INT;
 import static org.apache.iceberg.catalog.SessionCatalog.SessionContext;
 
 public class IcebergRESTCatalogTest {

@@ -79,7 +79,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -399,7 +399,7 @@ public class SparkLoadJobTest {
                 result = partitionInfo;
 
                 table.getSchemaByIndexId(Long.valueOf(12));
-                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -502,7 +502,7 @@ public class SparkLoadJobTest {
                 result = partitionInfo;
 
                 table.getSchemaByIndexId(Long.valueOf(12));
-                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);

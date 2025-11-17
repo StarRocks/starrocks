@@ -28,8 +28,9 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.util.Util;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TCacheParam;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
@@ -393,6 +394,7 @@ public class QueryCacheTest {
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -918,8 +920,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(rangeValue.get(0), DateType.DATETIME), PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(rangeValue.get(1), DateType.DATETIME), PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -950,8 +952,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(rangeValue.get(0), DateType.DATETIME), PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(rangeValue.get(1), DateType.DATETIME), PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -981,8 +983,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new IntLiteral(rangeValue.get(0), Type.INT), PrimitiveType.INT);
-            endKey.pushColumn(new IntLiteral(rangeValue.get(1), Type.INT), PrimitiveType.INT);
+            startKey.pushColumn(new IntLiteral(rangeValue.get(0), IntegerType.INT), PrimitiveType.INT);
+            endKey.pushColumn(new IntLiteral(rangeValue.get(1), IntegerType.INT), PrimitiveType.INT);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1013,8 +1015,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(rangeValue.get(0), DateType.DATETIME), PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(rangeValue.get(1), DateType.DATETIME), PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1045,8 +1047,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(rangeValue.get(0), DateType.DATETIME), PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(rangeValue.get(1), DateType.DATETIME), PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1077,8 +1079,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(rangeValue.get(0), DateType.DATETIME), PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(rangeValue.get(1), DateType.DATETIME), PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1098,9 +1100,9 @@ public class QueryCacheTest {
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assertions.assertTrue(!rangeMap.isEmpty());
         PartitionKey startKey = new PartitionKey();
-        startKey.pushColumn(new DateLiteral("2022-01-03 00:00:00", Type.DATETIME), PrimitiveType.DATETIME);
+        startKey.pushColumn(new DateLiteral("2022-01-03 00:00:00", DateType.DATETIME), PrimitiveType.DATETIME);
         PartitionKey endKey = new PartitionKey();
-        endKey.pushColumn(new DateLiteral("2022-01-03 00:00:01", Type.DATETIME), PrimitiveType.DATETIME);
+        endKey.pushColumn(new DateLiteral("2022-01-03 00:00:01", DateType.DATETIME), PrimitiveType.DATETIME);
         Range<PartitionKey> expectRange = Range.closedOpen(startKey, endKey);
         rangeMap.values().stream().collect(Collectors.toSet()).contains(expectRange.toString());
     }

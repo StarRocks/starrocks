@@ -21,7 +21,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.apache.hadoop.util.Lists;
 
 import java.util.List;
@@ -69,7 +69,7 @@ public class TableMetaMetadata implements ConnectorMetadata {
                                                 Optional<ConnectorTableVersion> startVersion,
                                                 Optional<ConnectorTableVersion> endVersion) {
         if (endVersion.isPresent()) {
-            Long snapshotId = endVersion.get().getConstantOperator().castTo(Type.BIGINT).get().getBigint();
+            Long snapshotId = endVersion.get().getConstantOperator().castTo(IntegerType.BIGINT).get().getBigint();
             return TvrTableSnapshot.of(Optional.of(snapshotId));
         } else {
             return TvrTableSnapshot.empty();

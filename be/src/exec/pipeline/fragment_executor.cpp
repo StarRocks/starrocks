@@ -24,19 +24,15 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
-#include "exec/multi_olap_table_sink.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
@@ -933,8 +929,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     FAIL_POINT_TRIGGER_EXECUTE(fragment_prepare_sleep, { sleep(2); });
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
-    auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_fragment_prepared(true);
     _query_ctx->mark_prepared();
     prepare_success = true;
 
@@ -965,6 +959,9 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
+
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_fragment_prepared(true);
 
     return Status::OK();
 }

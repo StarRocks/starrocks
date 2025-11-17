@@ -46,7 +46,19 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TTypeNodeType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PercentileType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
@@ -54,6 +66,8 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -65,55 +79,55 @@ public class TypeTest {
     @Test
     public void testGetMysqlResultSetMetaData() {
         // tinyint
-        ScalarType type = Type.TINYINT;
+        ScalarType type = IntegerType.TINYINT;
         Assertions.assertEquals(4, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // smallint
-        type = Type.SMALLINT;
+        type = IntegerType.SMALLINT;
         Assertions.assertEquals(6, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // int
-        type = Type.INT;
+        type = IntegerType.INT;
         Assertions.assertEquals(11, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // bigint
-        type = Type.BIGINT;
+        type = IntegerType.BIGINT;
         Assertions.assertEquals(20, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // largeint
-        type = Type.LARGEINT;
+        type = IntegerType.LARGEINT;
         Assertions.assertEquals(40, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // date
-        type = Type.DATE;
+        type = DateType.DATE;
         Assertions.assertEquals(10, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // datetime
-        type = Type.DATETIME;
+        type = DateType.DATETIME;
         Assertions.assertEquals(19, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // float
-        type = Type.FLOAT;
+        type = FloatType.FLOAT;
         Assertions.assertEquals(12, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(31, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // int
-        type = Type.DOUBLE;
+        type = FloatType.DOUBLE;
         Assertions.assertEquals(22, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(31, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(63, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
@@ -149,45 +163,45 @@ public class TypeTest {
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // bitmap
-        type = Type.BITMAP;
+        type = BitmapType.BITMAP;
         // 20 * 3
         Assertions.assertEquals(192, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // hll
-        type = Type.HLL;
+        type = HLLType.HLL;
         // MAX_HLL_LENGTH(16385) * 3
         Assertions.assertEquals(49155, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // hll
-        type = Type.JSON;
+        type = JsonType.JSON;
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(type));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(type));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(type));
 
         // array
-        ArrayType arrayType = new ArrayType(Type.INT);
+        ArrayType arrayType = new ArrayType(IntegerType.INT);
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(arrayType));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(arrayType));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(arrayType));
 
         // function (an invisible type for users, just used to express the lambda Functions in high-order functions)
-        type = Type.FUNCTION;
+        type = FunctionType.FUNCTION;
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(type));
 
         MapType mapType =
-                new MapType(TypeFactory.createType(PrimitiveType.INT), TypeFactory.createType(PrimitiveType.INT));
+                new MapType(IntegerType.INT, IntegerType.INT);
         // default 20 * 3
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(mapType));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(mapType));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(mapType));
 
-        StructField structField = new StructField("a", TypeFactory.createType(PrimitiveType.INT));
+        StructField structField = new StructField("a", IntegerType.INT);
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField);
         StructType structType = new StructType(structFields);
@@ -205,8 +219,8 @@ public class TypeTest {
                 {TypeFactory.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
                 {TypeFactory.createVarchar(16), "VARCHAR(16)"},
                 {TypeFactory.createCharType(16), "CHAR(16)"},
-                {TypeFactory.createType(PrimitiveType.INT), "INT"},
-                {TypeFactory.createType(PrimitiveType.FLOAT), "FLOAT"},
+                {IntegerType.INT, "INT"},
+                {FloatType.FLOAT, "FLOAT"},
         };
 
         for (Object[] tc : testCases) {
@@ -219,12 +233,12 @@ public class TypeTest {
     @Test
     public void testMysqlDataType() {
         Object[][] testCases = new Object[][] {
-                {TypeFactory.createType(PrimitiveType.BOOLEAN), "tinyint"},
-                {TypeFactory.createType(PrimitiveType.LARGEINT), "bigint unsigned"},
+                {BooleanType.BOOLEAN, "tinyint"},
+                {IntegerType.LARGEINT, "bigint unsigned"},
                 {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal"},
-                {new ArrayType(Type.INT), "array"},
-                {new MapType(Type.INT, Type.INT), "map"},
-                {new StructType(Lists.newArrayList(Type.INT)), "struct"},
+                {new ArrayType(IntegerType.INT), "array"},
+                {new MapType(IntegerType.INT, IntegerType.INT), "map"},
+                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct"},
         };
 
         for (Object[] tc : testCases) {
@@ -237,12 +251,12 @@ public class TypeTest {
     @Test
     public void testMysqlColumnType() {
         Object[][] testCases = new Object[][] {
-                {TypeFactory.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
-                {TypeFactory.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
+                {BooleanType.BOOLEAN, "tinyint(1)"},
+                {IntegerType.LARGEINT, "bigint(20) unsigned"},
                 {TypeFactory.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
-                {new ArrayType(Type.INT), "array<int(11)>"},
-                {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
-                {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},
+                {new ArrayType(IntegerType.INT), "array<int(11)>"},
+                {new MapType(IntegerType.INT, IntegerType.INT), "map<int(11),int(11)>"},
+                {new StructType(Lists.newArrayList(IntegerType.INT)), "struct<col1 int(11)>"},
         };
 
         for (Object[] tc : testCases) {
@@ -256,11 +270,11 @@ public class TypeTest {
     public void testMapSerialAndDeser() {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
-                new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("c1", IntegerType.INT),
                 new StructField("cc1", TypeFactory.createDefaultCatalogString())
         ));
         MapType mapType =
-                new MapType(TypeFactory.createType(PrimitiveType.INT), c1);
+                new MapType(IntegerType.INT, c1);
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assertions.assertTrue(deType.isMapType());
@@ -274,11 +288,11 @@ public class TypeTest {
     public void testStructSerialAndDeser() {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
-                new StructField("c1", TypeFactory.createType(PrimitiveType.INT)),
+                new StructField("c1", IntegerType.INT),
                 new StructField("cc1", TypeFactory.createDefaultCatalogString())
         ));
         StructType root = new StructType(Lists.newArrayList(
-                new StructField("struct_test", TypeFactory.createType(PrimitiveType.INT), "comment test"),
+                new StructField("struct_test", IntegerType.INT, "comment test"),
                 new StructField("c1", c1)
         ));
         String json = GsonUtils.GSON.toJson(root);
@@ -411,18 +425,19 @@ public class TypeTest {
 
     @Test
     public void testCastJsonToMap() {
-        Type jsonType = Type.JSON;
+        Type jsonType = JsonType.JSON;
         List<Type> mapTypes = Lists.newArrayList(
-                new MapType(Type.VARCHAR, Type.JSON),
-                new MapType(Type.INT, Type.VARCHAR),
-                new MapType(Type.VARCHAR, new ArrayType(Type.INT)),
-                new MapType(Type.VARCHAR, new ArrayType(Type.JSON)),
-                new MapType(Type.VARCHAR, new ArrayType(Type.JSON)),
-                new MapType(Type.VARCHAR, new MapType(Type.VARCHAR, Type.BOOLEAN)),
-                new MapType(Type.VARCHAR, new MapType(Type.INT, Type.JSON)),
-                new MapType(Type.VARCHAR, new MapType(Type.INT, new ArrayType(Type.VARCHAR))),
-                new MapType(Type.VARCHAR, new StructType(
-                        Arrays.asList(Type.INT, new ArrayType(Type.VARCHAR), new MapType(Type.INT, Type.JSON))))
+                new MapType(VarcharType.VARCHAR, JsonType.JSON),
+                new MapType(IntegerType.INT, VarcharType.VARCHAR),
+                new MapType(VarcharType.VARCHAR, new ArrayType(IntegerType.INT)),
+                new MapType(VarcharType.VARCHAR, new ArrayType(JsonType.JSON)),
+                new MapType(VarcharType.VARCHAR, new ArrayType(JsonType.JSON)),
+                new MapType(VarcharType.VARCHAR, new MapType(VarcharType.VARCHAR, BooleanType.BOOLEAN)),
+                new MapType(VarcharType.VARCHAR, new MapType(IntegerType.INT, JsonType.JSON)),
+                new MapType(VarcharType.VARCHAR, new MapType(IntegerType.INT, new ArrayType(VarcharType.VARCHAR))),
+                new MapType(VarcharType.VARCHAR, new StructType(
+                        Arrays.asList(IntegerType.INT, new ArrayType(VarcharType.VARCHAR),
+                                new MapType(IntegerType.INT, JsonType.JSON))))
         );
         for (Type mapType : mapTypes) {
             Assertions.assertTrue(TypeManager.canCastTo(jsonType, mapType));
@@ -432,36 +447,36 @@ public class TypeTest {
     @Test
     public void testSupportZonemap() {
         // Positive cases: Scalar types that are numeric, date, or string
-        Assertions.assertTrue(Type.TINYINT.supportZoneMap());
-        Assertions.assertTrue(Type.SMALLINT.supportZoneMap());
-        Assertions.assertTrue(Type.INT.supportZoneMap());
-        Assertions.assertTrue(Type.BIGINT.supportZoneMap());
-        Assertions.assertTrue(Type.LARGEINT.supportZoneMap());
-        Assertions.assertTrue(Type.FLOAT.supportZoneMap());
-        Assertions.assertTrue(Type.DOUBLE.supportZoneMap());
-        Assertions.assertTrue(Type.DATE.supportZoneMap());
-        Assertions.assertTrue(Type.DATETIME.supportZoneMap());
-        Assertions.assertTrue(Type.VARCHAR.supportZoneMap());
-        Assertions.assertTrue(Type.CHAR.supportZoneMap());
-        Assertions.assertTrue(Type.DEFAULT_DECIMALV2.supportZoneMap());
-        Assertions.assertTrue(Type.DECIMAL32.supportZoneMap());
-        Assertions.assertTrue(Type.DECIMAL64.supportZoneMap());
-        Assertions.assertTrue(Type.DECIMAL128.supportZoneMap());
-        Assertions.assertTrue(Type.DECIMAL256.supportZoneMap());
+        Assertions.assertTrue(IntegerType.TINYINT.supportZoneMap());
+        Assertions.assertTrue(IntegerType.SMALLINT.supportZoneMap());
+        Assertions.assertTrue(IntegerType.INT.supportZoneMap());
+        Assertions.assertTrue(IntegerType.BIGINT.supportZoneMap());
+        Assertions.assertTrue(IntegerType.LARGEINT.supportZoneMap());
+        Assertions.assertTrue(FloatType.FLOAT.supportZoneMap());
+        Assertions.assertTrue(FloatType.DOUBLE.supportZoneMap());
+        Assertions.assertTrue(DateType.DATE.supportZoneMap());
+        Assertions.assertTrue(DateType.DATETIME.supportZoneMap());
+        Assertions.assertTrue(VarcharType.VARCHAR.supportZoneMap());
+        Assertions.assertTrue(CharType.CHAR.supportZoneMap());
+        Assertions.assertTrue(DecimalType.DEFAULT_DECIMALV2.supportZoneMap());
+        Assertions.assertTrue(DecimalType.DECIMAL32.supportZoneMap());
+        Assertions.assertTrue(DecimalType.DECIMAL64.supportZoneMap());
+        Assertions.assertTrue(DecimalType.DECIMAL128.supportZoneMap());
+        Assertions.assertTrue(DecimalType.DECIMAL256.supportZoneMap());
         Assertions.assertTrue(TypeFactory.createVarcharType(10).supportZoneMap());
         Assertions.assertTrue(TypeFactory.createCharType(5).supportZoneMap());
 
         // Negative cases: Non-scalar types or scalar types that are not numeric, date, or string
-        Assertions.assertFalse(Type.NULL.supportZoneMap());
-        Assertions.assertFalse(Type.BOOLEAN.supportZoneMap()); // Boolean is not numeric, date or string
-        Assertions.assertFalse(Type.HLL.supportZoneMap());
-        Assertions.assertFalse(Type.BITMAP.supportZoneMap());
-        Assertions.assertFalse(Type.PERCENTILE.supportZoneMap());
-        Assertions.assertFalse(Type.JSON.supportZoneMap());
-        Assertions.assertFalse(Type.FUNCTION.supportZoneMap());
-        Assertions.assertFalse(Type.VARBINARY.supportZoneMap());
-        Assertions.assertFalse(Type.ARRAY_INT.supportZoneMap());
-        Assertions.assertFalse(Type.MAP_VARCHAR_VARCHAR.supportZoneMap());
-        Assertions.assertFalse(new StructType(Lists.newArrayList(Type.INT)).supportZoneMap());
+        Assertions.assertFalse(NullType.NULL.supportZoneMap());
+        Assertions.assertFalse(BooleanType.BOOLEAN.supportZoneMap()); // Boolean is not numeric, date or string
+        Assertions.assertFalse(HLLType.HLL.supportZoneMap());
+        Assertions.assertFalse(BitmapType.BITMAP.supportZoneMap());
+        Assertions.assertFalse(PercentileType.PERCENTILE.supportZoneMap());
+        Assertions.assertFalse(JsonType.JSON.supportZoneMap());
+        Assertions.assertFalse(FunctionType.FUNCTION.supportZoneMap());
+        Assertions.assertFalse(VarbinaryType.VARBINARY.supportZoneMap());
+        Assertions.assertFalse(ArrayType.ARRAY_INT.supportZoneMap());
+        Assertions.assertFalse(MapType.MAP_VARCHAR_VARCHAR.supportZoneMap());
+        Assertions.assertFalse(new StructType(Lists.newArrayList(IntegerType.INT)).supportZoneMap());
     }
 }

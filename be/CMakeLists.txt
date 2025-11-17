@@ -359,8 +359,9 @@ set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_D
 
 if (ENABLE_MULTI_DYNAMIC_LIBS)
     add_library(fmt SHARED IMPORTED)
-    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so)
-    install(TARGETS ${LIB_NAME} DESTINATION ${OUTPUT_DIR}/lib)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.8)
+    file(GLOB FMT_SO_FILES "${THIRDPARTY_DIR}/lib64/libfmt.so*")
+    install(FILES ${FMT_SO_FILES} DESTINATION ${OUTPUT_DIR}/lib)
 else()
     add_library(fmt STATIC IMPORTED)
     set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
@@ -552,66 +553,10 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif()
 
 # LLVM
-set (LLVM_LIBRARIES
-    LLVMRuntimeDyld
-    LLVMBitstreamReader
-    LLVMOption
-    LLVMAsmPrinter
-    LLVMProfileData
-    LLVMAsmParser
-    LLVMOrcTargetProcess
-    LLVMExecutionEngine
-    LLVMBinaryFormat
-    LLVMDebugInfoDWARF
-    LLVMObjCARCOpts
-    LLVMPasses
-    LLVMCodeGen
-    LLVMFrontendOpenMP
-    LLVMMCDisassembler
-    LLVMJITLink
-    LLVMCFGuard
-    LLVMInstrumentation
-    LLVMInstCombine
-    LLVMipo
-    LLVMVectorize
-    LLVMIRReader
-    LLVMCore
-    LLVMTarget
-    LLVMMC
-    LLVMAnalysis
-    LLVMGlobalISel
-    LLVMScalarOpts
-    LLVMLinker
-    LLVMCoroutines
-    LLVMTargetParser
-    LLVMDemangle
-    LLVMRemarks
-    LLVMDebugInfoCodeView
-    LLVMAggressiveInstCombine
-    LLVMIRPrinter
-    LLVMOrcShared
-    LLVMOrcJIT
-    LLVMTextAPI
-    LLVMBitWriter
-    LLVMBitReader
-    LLVMObject
-    LLVMTransformUtils
-    LLVMSelectionDAG
-    LLVMMCParser
-    LLVMSupport
-)
+include(cmake_modules/FindLLVM.cmake)
 
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info LLVMX86AsmParser LLVMX86Disassembler)
-elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info LLVMAArch64Utils LLVMAArch64AsmParser LLVMAArch64Disassembler)
-endif()
-
-foreach(lib IN ITEMS ${LLVM_LIBRARIES})
-    add_library(${lib} STATIC IMPORTED GLOBAL)
-    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
-endforeach()
-
+# install runtime libraries if needed
+include(cmake_modules/InstallSysRuntime.cmake)
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -1041,12 +986,7 @@ endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES})
-
-IF( NOT ENABLE_MULTI_DYNAMIC_LIBS)
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} hdfs)
-ENDIF()
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jvm)
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES} hdfs jvm)
 
 set(BUILD_FOR_SANITIZE "OFF")
 set(DEP_SANITIZE_LIBS "")
@@ -1088,7 +1028,7 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         # support build and install component 
         # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
         ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE -Wl,--allow-shlib-undefined ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
+        target_link_libraries(${LIB_NAME} PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
         install(TARGETS ${LIB_NAME}
             LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
             ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
@@ -1099,15 +1039,17 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
+set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
+
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${WL_LINK_STATIC} -lgomp -lbfd
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on

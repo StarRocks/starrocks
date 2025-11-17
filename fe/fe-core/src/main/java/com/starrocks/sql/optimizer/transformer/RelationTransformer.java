@@ -575,6 +575,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
+        } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
+            distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else {
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
@@ -745,6 +747,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
+        }
+        if (tableVersionRange != null) {
+            scanOperator.setTvrVersionRange(tableVersionRange);
         }
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));

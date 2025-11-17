@@ -179,6 +179,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
@@ -2066,7 +2067,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH
-                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM) {
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANGE) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
@@ -2101,7 +2103,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH
-                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM) {
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANGE) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
@@ -2575,6 +2578,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             return null;
         }
         return database.getTable(tblName);
+    }
+
+    /**
+     * @param mvId mv's mvid
+     * @return a checked mv by input mvid.
+     */
+    public MaterializedView getMaterializedView(MvId mvId) {
+        long dbId = mvId.getDbId();
+        long tableId = mvId.getId();
+        Table table = getTable(dbId, tableId);
+        if (table == null || !(table instanceof MaterializedView)) {
+            return null;
+        }
+        return (MaterializedView) table;
     }
 
     public Table getTable(Long dbId, Long tableId) {
@@ -3470,7 +3487,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         db.dropTable(oldTableName);
         db.registerTableUnlocked(olapTable);
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                 MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
@@ -3792,6 +3809,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                boolean enable = (boolean) results.get(key);
+                table.setEnableStatisticCollectOnFirstLoad(enable);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3871,6 +3895,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             String locations = PropertyAnalyzer.analyzeLocation(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, locations);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            boolean enable = PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
+            results.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, enable);
+            properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4455,6 +4484,40 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * Validates that a table exists (by ID), is an OLAP/Cloud Native table, and is in NORMAL state.
+     * This method should be called while holding a lock on the table.
+     * Supports both permanent tables and session-specific temporary tables.
+     *
+     * @param context the connection context (used for session-aware table lookup)
+     * @param db the database containing the table
+     * @param tableId the ID of the table to validate
+     * @param dbTbl the table name (used for lookup and error messages)
+     * @return the validated OlapTable
+     * @throws DdlException if validation fails (table not found, wrong type, wrong state, or table replaced)
+     */
+    private OlapTable validateTableForTruncate(ConnectContext context, Database db, long tableId, TableName dbTbl)
+            throws DdlException {
+        Table table;
+        try {
+            table = MetaUtils.getSessionAwareTable(context, db, dbTbl);
+        } catch (SemanticException exception) {
+            throw new DdlException(exception.getMessage());
+        }
+        // Check if the table has been replaced (dropped and recreated) during truncation
+        if (table.getId() != tableId) {
+            throw new DdlException("Table [" + dbTbl.getTbl() + "] has been modified during truncation, please retry");
+        }
+        if (!table.isOlapOrCloudNativeTable()) {
+            throw new DdlException("Only support truncate OLAP table or LAKE table");
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+        }
+        return olapTable;
+    }
+
     /*
      * Truncate specified table or partitions.
      * The main idea is:
@@ -4486,23 +4549,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         TableName dbTbl = new TableName(dbName, tableName);
         boolean truncateEntireTable = tblRef.getPartitionDef() == null;
 
+        // Get the table outside the lock to obtain the tableId for fine-grained locking.
+        // Use session-aware lookup to support temporary tables.
+        long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            Table table = MetaUtils.getSessionAwareTable(context, db, dbTbl);
-            if (table == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTbl.getTbl());
-            }
-
-            if (!table.isOlapOrCloudNativeTable()) {
-                throw new DdlException("Only support truncate OLAP table or LAKE table");
-            }
-
-            OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
-            }
-
+            // Retrieve the table again under the lock, make sure the table still exists.
+            OlapTable olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
             if (!truncateEntireTable) {
                 for (String partName : tblRef.getPartitionDef().getPartitionNames()) {
                     Partition partition = olapTable.getPartition(partName);
@@ -4522,10 +4578,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
-        // 2. use the copied table to create partitions
+        // 2. use the copied table to create partitions outside the lock
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(origPartitions.size());
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
@@ -4565,18 +4621,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         // all partitions are created successfully, try to replace the old partitions.
         // before replacing, we need to check again.
-        // Things may be changed outside the database lock.
-        locker.lockDatabase(db.getId(), LockType.WRITE);
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+            // The db could be dropped during the unlock-READ and lock-WRITE.
+            deleteUselessTablets(tabletIdSet);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            OlapTable olapTable = (OlapTable) getTable(db.getId(), copiedTbl.getId());
-            if (olapTable == null) {
-                throw new DdlException("Table[" + copiedTbl.getName() + "] is dropped");
-            }
-
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
-            }
-
+            // The table could also be changed during the unlock-READ and lock-WRITE.
+            OlapTable olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
             // check partitions
             for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
                 Partition partition = olapTable.getPartition(entry.getValue().getId());
@@ -4650,7 +4702,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         } catch (MetaNotFoundException e) {
             LOG.warn("Table related materialized view can not be found", e);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
 
         LOG.info("finished to truncate table {}, partitions: {}",

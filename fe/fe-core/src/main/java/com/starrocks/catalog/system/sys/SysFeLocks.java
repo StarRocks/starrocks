@@ -39,7 +39,9 @@ import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
@@ -61,10 +63,10 @@ public class SysFeLocks {
                         .column("lock_type", TypeFactory.createVarcharType(64))
                         .column("lock_object", TypeFactory.createVarcharType(64))
                         .column("lock_mode", TypeFactory.createVarcharType(64))
-                        .column("start_time", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("hold_time_ms", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("start_time", DateType.DATETIME)
+                        .column("hold_time_ms", IntegerType.BIGINT)
                         .column("thread_info", TypeFactory.createVarcharType(64))
-                        .column("granted", TypeFactory.createType(PrimitiveType.BOOLEAN))
+                        .column("granted", BooleanType.BOOLEAN)
                         .column("waiter_list", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.SYS_FE_LOCKS);

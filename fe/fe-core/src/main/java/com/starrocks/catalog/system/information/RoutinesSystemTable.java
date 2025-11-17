@@ -16,7 +16,7 @@ package com.starrocks.catalog.system.information;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -48,8 +48,8 @@ public class RoutinesSystemTable {
                         .column("SQL_DATA_ACCESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("SQL_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("SECURITY_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATED", TypeFactory.createType(PrimitiveType.DATETIME))
-                        .column("LAST_ALTERED", TypeFactory.createType(PrimitiveType.DATETIME))
+                        .column("CREATED", DateType.DATETIME)
+                        .column("LAST_ALTERED", DateType.DATETIME)
                         .column("SQL_MODE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("ROUTINE_COMMENT", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .column("DEFINER", TypeFactory.createVarchar(NAME_CHAR_LEN))

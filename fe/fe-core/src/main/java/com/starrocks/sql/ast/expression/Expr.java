@@ -44,7 +44,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
-import com.starrocks.common.io.Writable;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleId;
 import com.starrocks.sql.ast.AstVisitor;
@@ -52,6 +51,7 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import org.roaringbitmap.RoaringBitmap;
 
@@ -66,7 +66,7 @@ import java.util.stream.Collectors;
 /**
  * Root of the expr node hierarchy.
  */
-public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
+public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneable {
 
     protected Type type;  // result of analysis
 
@@ -107,14 +107,14 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     protected Expr() {
         pos = NodePosition.ZERO;
-        type = Type.INVALID;
-        originType = Type.INVALID;
+        type = InvalidType.INVALID;
+        originType = InvalidType.INVALID;
     }
 
     protected Expr(NodePosition pos) {
         this.pos = pos;
-        type = Type.INVALID;
-        originType = Type.INVALID;
+        type = InvalidType.INVALID;
+        originType = InvalidType.INVALID;
     }
 
     protected Expr(Expr other) {

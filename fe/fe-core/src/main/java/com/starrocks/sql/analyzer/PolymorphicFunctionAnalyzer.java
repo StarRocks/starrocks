@@ -30,6 +30,7 @@ import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -111,6 +112,21 @@ public class PolymorphicFunctionAnalyzer {
         public Type apply(Type[] types) {
             MapType mapType = (MapType) types[0];
             return new ArrayType(mapType.getValueType());
+        }
+    }
+
+    private static class MapEntriesDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            // Return ARRAY<STRUCT<key_type, value_type>>
+            // Create named struct fields with "key" and "value" as field names
+            List<StructField> structFields = Arrays.asList(
+                    new StructField("key", mapType.getKeyType()),
+                    new StructField("value", mapType.getValueType())
+            );
+            StructType structType = new StructType(structFields, true);
+            return new ArrayType(structType);
         }
     }
 
@@ -203,6 +219,7 @@ public class PolymorphicFunctionAnalyzer {
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
             .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_ENTRIES, new MapEntriesDeduce())
             .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
             .put(FunctionSet.ROW, new RowDeduce())
             .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
@@ -408,8 +425,8 @@ public class PolymorphicFunctionAnalyzer {
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {
-            typeElement = Type.BOOLEAN;
-            typeArray = new ArrayType(Type.BOOLEAN);
+            typeElement = BooleanType.BOOLEAN;
+            typeArray = new ArrayType(BooleanType.BOOLEAN);
         }
 
         if (retType instanceof AnyArrayType) {

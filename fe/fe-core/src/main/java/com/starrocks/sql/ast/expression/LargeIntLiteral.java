@@ -36,15 +36,12 @@ package com.starrocks.sql.ast.expression;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -68,7 +65,7 @@ public class LargeIntLiteral extends LiteralExpr {
 
     public LargeIntLiteral(boolean isMax) throws AnalysisException {
         super();
-        type = Type.LARGEINT;
+        type = IntegerType.LARGEINT;
         value = isMax ? LARGE_INT_MAX : LARGE_INT_MIN;
         analysisDone();
     }
@@ -91,7 +88,7 @@ public class LargeIntLiteral extends LiteralExpr {
             throw new AnalysisException("Invalid integer literal: " + value, e);
         }
         this.value = bigInt;
-        type = Type.LARGEINT;
+        type = IntegerType.LARGEINT;
         analysisDone();
     }
 
@@ -111,14 +108,14 @@ public class LargeIntLiteral extends LiteralExpr {
 
     public static LargeIntLiteral createMinValue() {
         LargeIntLiteral largeIntLiteral = new LargeIntLiteral();
-        largeIntLiteral.type = Type.LARGEINT;
+        largeIntLiteral.type = IntegerType.LARGEINT;
         largeIntLiteral.value = LARGE_INT_MIN;
         return largeIntLiteral;
     }
 
     public static LargeIntLiteral createMaxValue() {
         LargeIntLiteral largeIntLiteral = new LargeIntLiteral();
-        largeIntLiteral.type = Type.LARGEINT;
+        largeIntLiteral.type = IntegerType.LARGEINT;
         largeIntLiteral.value = LARGE_INT_MAX;
         return largeIntLiteral;
     }
@@ -222,23 +219,6 @@ public class LargeIntLiteral extends LiteralExpr {
     public void swapSign() throws NotImplementedException {
         // swapping sign does not change the type
         value = value.negate();
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, value.toString());
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = new BigInteger(Text.readString(in));
-    }
-
-    public static LargeIntLiteral read(DataInput in) throws IOException {
-        LargeIntLiteral largeIntLiteral = new LargeIntLiteral();
-        largeIntLiteral.readFields(in);
-        return largeIntLiteral;
     }
 
     @Override
