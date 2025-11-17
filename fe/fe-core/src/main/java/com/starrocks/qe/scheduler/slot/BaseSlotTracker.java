@@ -294,7 +294,7 @@ public abstract class BaseSlotTracker {
         final long nowMs = System.currentTimeMillis();
         List<LogicalSlot> expiredSlots = new ArrayList<>();
         for (LogicalSlot slot : slotsOrderByExpiredTime) {
-            if (!slot.isAllocatedExpired(nowMs)) {
+            if (!slot.isExpired(nowMs)) {
                 break;
             }
             expiredSlots.add(slot);

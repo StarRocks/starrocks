@@ -157,7 +157,8 @@ public class QueryQueueManager {
         long queryQueuePendingTimeoutSecond =
                 slotManager.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
         long expiredPendingTimeMs = nowMs + queryQueuePendingTimeoutSecond * 1000L;
-        long expiredAllocatedTimeMs = nowMs + queryQueuePendingTimeoutSecond * 1000L;
+        long execTimeoutS = context.getExecTimeout() - context.getPendingTimeSecond();
+        long expiredAllocatedTimeMs = expiredPendingTimeMs + execTimeoutS * 1000L;
 
         int numFragments = coord.getFragments().size();
         int pipelineDop = coord.getJobSpec().getQueryOptions().getPipeline_dop();

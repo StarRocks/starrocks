@@ -177,8 +177,19 @@ public class LogicalSlot {
         return System.currentTimeMillis() >= expiredPendingTimeMs;
     }
 
+    public boolean isRequiringExpired(long nowMs) {
+        return nowMs >= expiredPendingTimeMs;
+    }
+
     public boolean isAllocatedExpired(long nowMs) {
         return nowMs >= expiredAllocatedTimeMs;
+    }
+
+    public boolean isExpired(long nowMs) {
+        if (state == State.CREATED || state == State.REQUIRING) {
+            return isRequiringExpired(nowMs);
+        }
+        return isAllocatedExpired(nowMs);
     }
 
     public long getFeStartTimeMs() {
