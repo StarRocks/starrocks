@@ -60,7 +60,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
-                "root", "", "default_catalog");
+                "root", "", "default_catalog", "MySQL.Query", null);
         startQueryDetail.setScanRows(100);
         startQueryDetail.setScanBytes(10001);
         startQueryDetail.setReturnRows(1);
@@ -97,7 +97,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
-                "root", "", "default_catalog");
+                "root", "", "default_catalog", "MySQL.Query", null);
         startQueryDetail.setScanRows(100);
         startQueryDetail.setScanBytes(10001);
         startQueryDetail.setReturnRows(1);
@@ -113,7 +113,7 @@ public class QueryDetailV2Test extends StarRocksHttpTestCase {
                 QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e5", false, 1, "127.0.0.1",
                         System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                         "testDb", "select * from table2 limit 1",
-                        "root", "", "default_catalog");
+                        "root", "", "default_catalog", "MySQL.Query", null);
                 startQueryDetail.setScanRows(150);
                 startQueryDetail.setScanBytes(10005);
                 startQueryDetail.setReturnRows(1);
