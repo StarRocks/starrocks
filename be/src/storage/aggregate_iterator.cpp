@@ -61,32 +61,18 @@ public:
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         RETURN_IF_ERROR(_child->init_encoded_schema(dict_maps));
-<<<<<<< HEAD
-        _curr_chunk = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
+        ASSIGN_OR_RETURN(_curr_chunk, ChunkHelper::new_chunk_checked(encoded_schema(), _chunk_size));
         _aggregator = std::make_unique<ChunkAggregator>(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
                                                         _is_vertical_merge, _is_key);
-=======
-        ASSIGN_OR_RETURN(_curr_chunk, ChunkHelper::new_chunk_checked(encoded_schema(), _chunk_size));
-        ASSIGN_OR_RETURN(_aggregator,
-                         ChunkAggregator::create(&encoded_schema(), _chunk_size, _pre_aggregate_factor / 100,
-                                                 _is_vertical_merge, _is_key));
->>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
     Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         RETURN_IF_ERROR(_child->init_output_schema(unused_output_column_ids));
-<<<<<<< HEAD
-        _curr_chunk = ChunkHelper::new_chunk(output_schema(), _chunk_size);
+        ASSIGN_OR_RETURN(_curr_chunk, ChunkHelper::new_chunk_checked(output_schema(), _chunk_size));
         _aggregator = std::make_unique<ChunkAggregator>(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
                                                         _is_vertical_merge, _is_key);
-=======
-        ASSIGN_OR_RETURN(_curr_chunk, ChunkHelper::new_chunk_checked(output_schema(), _chunk_size));
-        ASSIGN_OR_RETURN(_aggregator,
-                         ChunkAggregator::create(&output_schema(), _chunk_size, _pre_aggregate_factor / 100,
-                                                 _is_vertical_merge, _is_key));
->>>>>>> eea6bc1471 ([BugFix] Enable memory limit check in olap table scan (#65131))
         return Status::OK();
     }
 
