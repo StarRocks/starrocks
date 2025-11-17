@@ -103,7 +103,9 @@ public class DeltaLakeScanNode extends ScanNode {
         return scanRangeSource.hasMoreOutput();
     }
 
-    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames, boolean enableIncrementalScanRanges)
+    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
+                                     PartitionIdGenerator partitionIdGenerator,
+                                     boolean enableIncrementalScanRanges)
             throws StarRocksException {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
@@ -120,7 +122,7 @@ public class DeltaLakeScanNode extends ScanNode {
             remoteFileInfoSource = new RemoteFileInfoDefaultSource(
                     GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(deltaLakeTable, params));
         }
-        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource);
+        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource, partitionIdGenerator);
     }
 
     @Override

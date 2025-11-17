@@ -38,6 +38,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
@@ -100,15 +101,68 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Map<Integer, List<Integer>> indexesCache = Maps.newHashMap();
     private final Set<String> seenEqDeleteFiles = new HashSet<>();
     private final List<Integer> extendedColumnSlotIds = new ArrayList<>();
+<<<<<<< HEAD
+=======
+    // index -> field pos & bucket num
+    private final List<Pair<Integer, Integer>> bucketInfo = new ArrayList<>();
+
+    private final Set<DataFile> scannedDataFiles;
+    private final Set<DeleteFile> appliedPosDeleteFiles;
+    private final Set<DeleteFile> appliedEqualDeleteFiles;
+    private final boolean recordScanFiles;
+    private final PartitionIdGenerator partitionIdGenerator;
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
                                            IcebergMORParams morParams,
+<<<<<<< HEAD
                                            TupleDescriptor desc) {
+=======
+                                           TupleDescriptor desc,
+                                           Optional<List<BucketProperty>> bucketProperties,
+                                           PartitionIdGenerator partitionIdGenerator,
+                                           boolean recordScanFiles) {
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
         this.desc = desc;
+<<<<<<< HEAD
+=======
+        this.bucketProperties = bucketProperties;
+        initBucketInfo();
+        this.recordScanFiles = recordScanFiles;
+        this.scannedDataFiles = new HashSet<>();
+        this.appliedPosDeleteFiles = new HashSet<>();
+        this.appliedEqualDeleteFiles = new HashSet<>();
+        this.partitionIdGenerator = partitionIdGenerator;
+    }
+
+    public IcebergConnectorScanRangeSource(IcebergTable table,
+                                           RemoteFileInfoSource remoteFileInfoSource,
+                                           IcebergMORParams morParams,
+                                           TupleDescriptor desc,
+                                           Optional<List<BucketProperty>> bucketProperties,
+                                           PartitionIdGenerator partitionIdGenerator) {
+        this.table = table;
+        this.remoteFileInfoSource = remoteFileInfoSource;
+        this.morParams = morParams;
+        this.desc = desc;
+        this.bucketProperties = bucketProperties;
+        initBucketInfo();
+        this.recordScanFiles = false;
+        this.scannedDataFiles = new HashSet<>();
+        this.appliedPosDeleteFiles = new HashSet<>();
+        this.appliedEqualDeleteFiles = new HashSet<>();
+        this.partitionIdGenerator = partitionIdGenerator;
+    }
+
+    public void clearScannedFiles() {
+        this.scannedDataFiles.clear();
+        this.appliedPosDeleteFiles.clear();
+        this.appliedEqualDeleteFiles.clear();
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
     }
 
     @Override
@@ -132,7 +186,57 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+<<<<<<< HEAD
     private List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
+=======
+    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, long fileSizeThreshold, boolean allFiles) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
+            List<FileScanTask> res = new ArrayList<>();
+            while (hasMoreOutput() && res.size() < maxSize) {
+                RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
+                IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
+                FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
+                if (allFiles || fileScanTask.file().fileSizeInBytes() <= fileSizeThreshold) {
+                    res.add(fileScanTask);
+                } else {
+                    for (DeleteFile del : fileScanTask.deletes()) {
+                        if (del.content() == FileContent.POSITION_DELETES) {
+                            // if the pos delete is a file level pos delete, then we may skip the data file scan if 
+                            // the condition does not match. Otherwise(partition-level delete file), 
+                            // we scan the data file anyway, to make sure the pos delete can be eliminated any way
+                            int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
+                            if (del.referencedDataFile() == null && (del.lowerBounds() != null && del.upperBounds() != null &&
+                                    !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId)))) {
+                                //partition pos delete file related files
+                                res.add(fileScanTask);
+                            }
+                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
+                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure
+                            // that we can eliminate the equality delete files.
+                        }
+                    }
+                }
+            }
+            return res;
+        }
+    }
+
+    private void initBucketInfo() {
+        if (bucketProperties.isPresent()) {
+            List<PartitionField> fields = table.getNativeTable().spec().fields();
+            for (BucketProperty bucket : bucketProperties.get()) {
+                for (int i = 0; i < fields.size(); i++) {
+                    if (fields.get(i).name().equals(bucket.getColumn().getName() + "_bucket")) {
+                        bucketInfo.add(new Pair<>(i, bucket.getBucketNum()));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    protected List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         long partitionId;
         try {
             partitionId = addPartition(fileScanTask);
@@ -210,11 +314,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
         }
 
-        if (!partitionSlotIdsCache.containsKey(file.specId())) {
-            hdfsScanRange.setPartition_id(-1);
-        } else {
+        ConnectContext context = ConnectContext.get();
+        if (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize() &&
+                partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(partitionId);
             hdfsScanRange.setIdentity_partition_slot_ids(partitionSlotIdsCache.get(file.specId()));
+        } else {
+            hdfsScanRange.setPartition_id(-1);
         }
 
         hdfsScanRange.setFile_length(file.fileSizeInBytes());
@@ -275,10 +381,18 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         return scanRangeLocations;
     }
 
-    private long addPartition(FileScanTask task) throws AnalysisException {
+    @VisibleForTesting
+    public long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
+<<<<<<< HEAD
 
         StructLike partition = task.partition();
+=======
+        //Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
+        StructLike origPartition = task.partition();
+        StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
+        StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         if (partitionKeyToId.containsKey(partition)) {
             return partitionKeyToId.get(partition);
         }
@@ -288,8 +402,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
+<<<<<<< HEAD
         PartitionKey partitionKey = getPartitionKey(partition, task.spec(), partitionFieldIndexes, indexToPartitionField);
         long partitionId = partitionIdGen.getAndIncrement();
+=======
+        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+        long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
 
         Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
@@ -322,11 +441,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     public BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
-        // TODO: expose transform information in Iceberg library
         BiMap<Integer, PartitionField> columns = HashBiMap.create();
+<<<<<<< HEAD
         if (!ConnectContext.get().getSessionVariable().getEnableIcebergIdentityColumnOptimize()) {
             return columns;
         }
+=======
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
         for (int i = 0; i < partitionSpec.fields().size(); i++) {
             PartitionField field = partitionSpec.fields().get(i);
             if (field.transform().isIdentity()) {
@@ -361,9 +482,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 partitionValue = field.transform().toHumanString(type, PartitionUtil.getPartitionValue(
                         partition, index, javaClass));
             }
+<<<<<<< HEAD
 
             partitionValues.add(partitionValue);
 
+=======
+            if (!partitionValueIsNull) {
+                partitionValues.add(partitionValue);
+            } else {
+                partitionValues.add(null);
+            }
+>>>>>>> ef205e8d0e ([BugFix] fix data race of partition id allocation (#65600))
             cols.add(table.getColumn(field.name()));
         });
 
