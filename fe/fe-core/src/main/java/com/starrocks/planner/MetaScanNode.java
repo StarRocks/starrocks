@@ -75,8 +75,13 @@ public class MetaScanNode extends ScanNode {
         if (selectPartitionNames.isEmpty()) {
             partitions = olapTable.getPhysicalPartitions();
         } else {
-            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
-                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+            partitions = selectPartitionNames.stream().map(name -> {
+                Partition partition = olapTable.getPartition(name, false);
+                if (partition != null) {
+                    return partition;
+                }
+                return olapTable.getPartition(name, true);
+            }).map(Partition::getSubPartitions).flatMap(Collection::stream).collect(Collectors.toList());
         }
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
