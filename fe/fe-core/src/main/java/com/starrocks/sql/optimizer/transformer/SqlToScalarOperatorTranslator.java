@@ -20,6 +20,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
@@ -199,7 +200,7 @@ public final class SqlToScalarOperatorTranslator {
         result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
         result = ScalarOperatorRewriter.replaceScalarOperatorByColumnRef(result,
-                                        expressionMapping.getGeneratedColumnExprOpToColumnRef());
+                expressionMapping.getGeneratedColumnExprOpToColumnRef());
 
         requireNonNull(result, "translated expression is null");
         return result;
@@ -529,16 +530,15 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitArithmeticExpr(ArithmeticExpr node, Context context) {
+            Function arithmeticFn = ExpressionAnalyzer.getArithmeticFunction(node);
             if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.BINARY_INFIX) {
                 ScalarOperator left = visit(node.getChild(0), context.clone(node));
                 ScalarOperator right = visit(node.getChild(1), context.clone(node));
 
-                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(left, right),
-                        node.getFn());
+                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(left, right), arithmeticFn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
                 ScalarOperator child = visit(node.getChild(0), context.clone(node));
-                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(child),
-                        node.getFn());
+                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(child), arithmeticFn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
                 throw unsupportedException("nonsupport arithmetic expr");
             } else {
@@ -619,12 +619,12 @@ public final class SqlToScalarOperatorTranslator {
             List<ScalarOperator> children = node.getChildren().stream()
                     .map(child -> visit(child, context))
                     .collect(Collectors.toList());
-            
+
             return new LargeInPredicateOperator(
                     node.getRawText(),
-                    node.getRawConstantList(), 
+                    node.getRawConstantList(),
                     node.getConstantCount(),
-                    node.isNotIn(), 
+                    node.isNotIn(),
                     node.getConstantType(),
                     children);
         }

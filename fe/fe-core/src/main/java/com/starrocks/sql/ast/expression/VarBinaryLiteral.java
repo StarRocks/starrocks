@@ -16,12 +16,10 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.type.Type;
 import com.starrocks.type.VarbinaryType;
 
 import java.nio.charset.StandardCharsets;
@@ -145,11 +143,6 @@ public class VarBinaryLiteral extends LiteralExpr {
     @Override
     public double getDoubleValue() {
         return 0.0;
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        return super.uncheckedCastTo(targetType);
     }
 
     @Override

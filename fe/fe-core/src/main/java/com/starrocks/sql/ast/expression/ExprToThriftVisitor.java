@@ -87,32 +87,6 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         return fn;
     }
 
-    private static Function getFunction(Expr expr) {
-        if (expr instanceof FunctionCallExpr) {
-            return ((FunctionCallExpr) expr).getFn();
-        }
-        if (expr instanceof CastExpr) {
-            return ExprUtils.getCastFunction(expr.getType(), expr, ((CastExpr) expr).isImplicit());
-        }
-        if (expr instanceof ArithmeticExpr) {
-            return ((ArithmeticExpr) expr).getFn();
-        }
-        if (expr instanceof TimestampArithmeticExpr) {
-            Function fn = ExprUtils.getTimestampArithmeticFunction((TimestampArithmeticExpr) expr);
-            Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a builtin function");
-            return fn;
-        }
-        if (expr instanceof IsNullPredicate) {
-            return ((IsNullPredicate) expr).isNotNull() ? IS_NOT_NULL_FN : IS_NULL_FN;
-        }
-        if (expr instanceof LikePredicate) {
-            return ExprUtils.getBuiltinFunction(((LikePredicate) expr).getOp().name(),
-                    new Type[] {expr.getChild(0).getType(), expr.getChild(1).getType()},
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        }
-        return null;
-    }
-
     public static void treeToThriftHelper(Expr expr, TExpr container, BiConsumer<Expr, TExprNode> consumer) {
         if (expr.getType().isNull()) {
             Preconditions.checkState(expr instanceof NullLiteral || expr instanceof SlotRef);
@@ -131,15 +105,6 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         msg.num_children = children.size();
         msg.setHas_nullable_child(expr.hasNullableChild());
         msg.setIs_nullable(expr.isNullable());
-        Function fn = getFunction(expr);
-        if (fn != null) {
-            TFunction tfn = fn.toThrift();
-            tfn.setIgnore_nulls(expr.getIgnoreNulls());
-            msg.setFn(tfn);
-            if (fn.hasVarArgs()) {
-                msg.setVararg_start_idx(fn.getNumArgs() - 1);
-            }
-        }
         // BE no longer consumes output_scale; keep thrift field populated with a sentinel to preserve wire compatibility.
         msg.output_scale = -1;
         msg.setIs_monotonic(expr.isMonotonic());
@@ -208,6 +173,17 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     @Override
     public Void visitLikePredicate(LikePredicate node, TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
+        Function fn = ExprUtils.getBuiltinFunction(node.getOp().name(),
+                new Type[] {node.getChild(0).getType(), node.getChild(1).getType()},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        if (fn != null) {
+            TFunction tfn = fn.toThrift();
+            tfn.setIgnore_nulls(node.getIgnoreNulls());
+            msg.setFn(tfn);
+            if (fn.hasVarArgs()) {
+                msg.setVararg_start_idx(fn.getNumArgs() - 1);
+            }
+        }
         return null;
     }
 
@@ -297,12 +273,28 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
         } else {
             msg.node_type = TExprNodeType.FUNCTION_CALL;
         }
+        Function fn = node.getFn();
+        if (fn != null) {
+            TFunction tfn = fn.toThrift();
+            tfn.setIgnore_nulls(node.getIgnoreNulls());
+            msg.setFn(tfn);
+            if (fn.hasVarArgs()) {
+                msg.setVararg_start_idx(fn.getNumArgs() - 1);
+            }
+        }
         return null;
     }
 
     @Override
     public Void visitIsNullPredicate(IsNullPredicate node, TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
+        Function fn = node.isNotNull() ? IS_NOT_NULL_FN : IS_NULL_FN;
+        TFunction tfn = fn.toThrift();
+        tfn.setIgnore_nulls(node.getIgnoreNulls());
+        msg.setFn(tfn);
+        if (fn.hasVarArgs()) {
+            msg.setVararg_start_idx(fn.getNumArgs() - 1);
+        }
         return null;
     }
 
@@ -434,6 +426,14 @@ public class ExprToThriftVisitor implements AstVisitorExtendInterface<Void, TExp
     public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, TExprNode msg) {
         msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
         msg.setOpcode(ExprOpcodeRegistry.getExprOpcode(node));
+        Function fn = ExprUtils.getTimestampArithmeticFunction(node);
+        Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a builtin function");
+        TFunction tfn = fn.toThrift();
+        tfn.setIgnore_nulls(node.getIgnoreNulls());
+        msg.setFn(tfn);
+        if (fn.hasVarArgs()) {
+            msg.setVararg_start_idx(fn.getNumArgs() - 1);
+        }
         return null;
     }
 

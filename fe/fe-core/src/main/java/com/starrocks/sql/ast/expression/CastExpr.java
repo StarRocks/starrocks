@@ -133,19 +133,11 @@ public class CastExpr extends Expr {
         // this cast may result in loss of precision, but the user requested it
         if (childType.matchesType(type)) {
             noOp = true;
-            return;
         }
-
-        ExprUtils.ensureCastFunctionExists(type, this, isImplicit);
     }
 
-    @Override
-    public Expr reset() {
-        Expr e = super.reset();
-        if (noOp && !getChild(0).getType().matchesType(this.type)) {
-            noOp = false;
-        }
-        return e;
+    void setNoOpForReset(boolean value) {
+        noOp = value;
     }
 
     @Override
@@ -181,7 +173,8 @@ public class CastExpr extends Expr {
         if (targetTypeDef != null && !targetTypeDef.getType().equals(castExpr.getTargetTypeDef().getType())) {
             return false;
         }
-        return true;
+
+        return isImplicit == castExpr.isImplicit;
     }
 
     @Override

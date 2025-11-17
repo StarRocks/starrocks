@@ -40,11 +40,9 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;
@@ -365,13 +363,4 @@ public class FunctionCallExpr extends Expr {
         return false;
     }
 
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        Type type = getFn().getReturnType();
-        if (!type.equals(targetType)) {
-            return super.uncheckedCastTo(targetType);
-        } else {
-            return this;
-        }
-    }
 }

@@ -82,14 +82,6 @@ public class IsNullPredicate extends Predicate {
     }
 
 
-    /**
-     * Negates an IsNullPredicate.
-     */
-    @Override
-    public Expr negate() {
-        return new IsNullPredicate(getChild(0), !isNotNull);
-    }
-
     public boolean isNullable() {
         return false;
     }

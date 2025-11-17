@@ -394,7 +394,7 @@ public class AnalyticExpr extends Expr {
     }
 
     @Override
-    protected void resetAnalysisState() {
+    public void resetAnalysisState() {
         super.resetAnalysisState();
         fnCall.resetAnalysisState();
 

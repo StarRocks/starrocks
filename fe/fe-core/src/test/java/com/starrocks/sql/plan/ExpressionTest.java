@@ -292,7 +292,7 @@ public class ExpressionTest extends PlanTestBase {
         Assertions.assertTrue(slotRef.isFromLambda());
 
         List<TupleId> tids = ImmutableList.of(new TupleId(111));
-        Assertions.assertTrue(lexpr.getChild(1).isBoundByTupleIds(tids));
+        Assertions.assertTrue(ExprUtils.isBoundByTupleIds(lexpr.getChild(1), tids));
     }
 
     @Test

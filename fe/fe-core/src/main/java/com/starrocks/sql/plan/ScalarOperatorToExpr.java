@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -267,7 +268,7 @@ public class ScalarOperatorToExpr {
                     return new FloatLiteral(literal.getTime(), DateType.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
                     DecimalLiteral d = new DecimalLiteral(literal.getDecimal());
-                    d.uncheckedCastTo(type);
+                    ExprCastFunction.uncheckedCastTo(d, type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     String str = literal.getVarchar();
