@@ -48,6 +48,7 @@ java {
 dependencies {
     // Internal project dependencies
     implementation(project(":fe-grammar"))
+    implementation(project(":fe-type"))
     implementation(project(":fe-parser"))
     implementation(project(":fe-spi"))
     implementation(project(":fe-testing"))

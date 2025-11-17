@@ -410,4 +410,8 @@ public class TypeFactory {
         Preconditions.checkNotNull(res, "unknown type " + type);
         return res;
     }
+
+    static {
+        StringType.STRING = new StringType(Config.max_varchar_length);
+    }
 }
