@@ -41,6 +41,7 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 | cpu_weight                 | BE ノード上のこのリソースグループの CPU スケジューリングの重み。 | (0, `avg_be_cpu_cores`] (0 より大きい場合に有効)     | 0       |
 | exclusive_cpu_cores        | このリソースグループの CPU ハードアイソレーションパラメータ。          | (0, `min_be_cpu_cores - 1`] (0 より大きい場合に有効) | 0       |
 | mem_limit                  | 現在の BE ノード上でこのリソースグループがクエリに利用できるメモリの割合。 | (0, 1] (必須)               | -       |
+| mem_pool | リソースグループをグループ化して、メモリ制限を共有します。 | 文字列 | default_mem_pool |
 | spill_mem_limit_threshold  | ディスクへのスピリングをトリガーするメモリ使用量のしきい値。         | (0, 1]                                                         | 1.0     |
 | concurrency_limit          | このリソースグループでの同時クエリの最大数。   | 整数 (0 より大きい場合に有効)                     | 0       |
 | big_query_cpu_second_limit | 各 BE ノードでの大規模クエリタスクの最大 CPU 時間（秒単位）。   | 整数 (0 より大きい場合に有効)               | 0       |
@@ -88,6 +89,29 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 ##### `mem_limit`
 
 現在の BE ノードでリソースグループが利用できるメモリ（クエリプール）の割合を指定します。値の範囲は (0,1] です。
+
+##### `mem_pool`
+
+v4.0 以降、共有メモリプール識別子を指定します。同じ `mem_pool` 識別子を持つリソースグループは共有メモリプールからメモリを取得し、`mem_limit` によってまとめて制限されます。指定しない場合、リソースグループは `default_mem_pool` に割り当てられ、そのメモリ使用量は自身の `mem_limit` のみによって制限されます。
+
+同じ `mem_pool` を共有するすべてのリソースグループは、同一の `mem_limit` で設定する必要があります。
+
+2つのリソースグループが合計でメモリの 50% を消費するように制限するには、次のように定義できます:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO (db='db1')
+WITH (
+    'mem_limit' = '50%',
+    'mem_pool' = 'shared_pool'
+);
+
+CREATE RESOURCE GROUP rg2
+TO (db='db1')
+WITH (
+    'mem_limit' = '50%',
+    'mem_pool' = 'shared_pool'
+);
 
 ##### `spill_mem_limit_threshold`
 
