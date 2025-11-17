@@ -677,10 +677,21 @@ public class VariableMgr {
                     try {
                         setValue(sessionVar, field, valueStr);
                         refreshed = true;
+                        // If force is true, remove the variable from modifiedSessionVariables
+                        // since it has been forcibly reset to global default
+                        if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                            modifiedVars.remove(varName);
+                        }
                     } catch (DdlException e) {
                         LOG.warn("Failed to refresh variable {} for connection {}: {}", 
                                 varName, ctx.getConnectionId(), e.getMessage());
                     }
+                } else if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                    // Even if the value hasn't changed, if force is true and the variable
+                    // was previously modified, remove it from modifiedSessionVariables
+                    // to allow future non-forced refreshes to update it
+                    modifiedVars.remove(varName);
+                    refreshed = true;
                 }
             } catch (IllegalAccessException e) {
                 LOG.warn("Failed to access field {} for connection {}: {}", 

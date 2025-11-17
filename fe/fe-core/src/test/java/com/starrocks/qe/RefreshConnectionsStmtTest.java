@@ -100,7 +100,7 @@ public class RefreshConnectionsStmtTest {
     }
 
     @Test
-    public void testParseRefreshConnectionsForce() throws Exception {
+    public void testParseRreshConnectionsForce() throws Exception {
         String sql = "REFRESH CONNECTIONS FORCE";
         RefreshConnectionsStmt stmt = (RefreshConnectionsStmt) UtFrameUtils.parseStmtWithNewParser(
                 sql, starRocksAssert.getCtx());
@@ -404,6 +404,56 @@ public class RefreshConnectionsStmtTest {
             info.setPersistJsonString("{\"force\":true}");
             variableMgr.replayGlobalVariableV2(info);
             Assertions.assertEquals(1200, testCtx.getSessionVariable().getQueryTimeoutS());
+        } finally {
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(testCtx);
+        }
+    }
+
+    @Test
+    public void testForceRefreshClearsModifiedVariables() throws Exception {
+        ctxToRoot();
+        ExecuteEnv.setup();
+        ConnectContext testCtx = new ConnectContext();
+        testCtx.setGlobalStateMgr(starRocksAssert.getCtx().getGlobalStateMgr());
+        testCtx.setSessionVariable(starRocksAssert.getCtx().getGlobalStateMgr()
+                .getVariableMgr().newSessionVariable());
+        testCtx.setConnectionId(6);
+        testCtx.setQualifiedUser("aaa");
+        ExecuteEnv.getInstance().getScheduler().registerConnection(testCtx);
+        try {
+            String setGlobalSql1 = "SET GLOBAL query_timeout = 1500";
+            SetStmt setStmt1 = (SetStmt) UtFrameUtils.parseStmtWithNewParser(
+                    setGlobalSql1, starRocksAssert.getCtx());
+            Analyzer.analyze(setStmt1, starRocksAssert.getCtx());
+            SetExecutor setExecutor1 = new SetExecutor(starRocksAssert.getCtx(), setStmt1);
+            setExecutor1.execute();
+            SystemVariable sessionVar = new SystemVariable(SetType.SESSION, "query_timeout",
+                    new IntLiteral(700L));
+            testCtx.modifySystemVariable(sessionVar, true);
+            Assertions.assertTrue(testCtx.getModifiedSessionVariablesMap().containsKey("query_timeout"));
+            String refreshSqlForce = "REFRESH CONNECTIONS FORCE";
+            RefreshConnectionsStmt refreshStmtForce = (RefreshConnectionsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    refreshSqlForce, starRocksAssert.getCtx());
+            Analyzer.analyze(refreshStmtForce, starRocksAssert.getCtx());
+            com.starrocks.qe.StmtExecutor executorForce = new com.starrocks.qe.StmtExecutor(
+                    starRocksAssert.getCtx(), refreshStmtForce);
+            executorForce.execute();
+            Assertions.assertEquals(1500, testCtx.getSessionVariable().getQueryTimeoutS());
+            Assertions.assertFalse(testCtx.getModifiedSessionVariablesMap().containsKey("query_timeout"));
+            String setGlobalSql2 = "SET GLOBAL query_timeout = 2000";
+            SetStmt setStmt2 = (SetStmt) UtFrameUtils.parseStmtWithNewParser(
+                    setGlobalSql2, starRocksAssert.getCtx());
+            Analyzer.analyze(setStmt2, starRocksAssert.getCtx());
+            SetExecutor setExecutor2 = new SetExecutor(starRocksAssert.getCtx(), setStmt2);
+            setExecutor2.execute();
+            String refreshSql = "REFRESH CONNECTIONS";
+            RefreshConnectionsStmt refreshStmt = (RefreshConnectionsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    refreshSql, starRocksAssert.getCtx());
+            Analyzer.analyze(refreshStmt, starRocksAssert.getCtx());
+            com.starrocks.qe.StmtExecutor executor = new com.starrocks.qe.StmtExecutor(
+                    starRocksAssert.getCtx(), refreshStmt);
+            executor.execute();
+            Assertions.assertEquals(2000, testCtx.getSessionVariable().getQueryTimeoutS());
         } finally {
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(testCtx);
         }

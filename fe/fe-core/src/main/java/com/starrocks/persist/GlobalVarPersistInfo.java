@@ -85,11 +85,18 @@ public class GlobalVarPersistInfo implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         try {
-            JSONObject root = new JSONObject();
+            JSONObject root;
             // Handle refresh connections command (empty varNames)
             if (varNames == null || varNames.isEmpty()) {
-                root = new JSONObject(); // Empty JSON
+                // If persistJsonString is already set (e.g., for refresh connections with force flag),
+                // use it; otherwise create an empty JSON
+                if (persistJsonString != null && !persistJsonString.isEmpty()) {
+                    root = new JSONObject(persistJsonString);
+                } else {
+                    root = new JSONObject(); // Empty JSON
+                }
             } else {
+                root = new JSONObject();
                 for (String varName : varNames) {
                     // find attr in defaultSessionVariable or GlobalVariables
                     Object varInstance = null;
