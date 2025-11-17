@@ -4368,7 +4368,7 @@ TEST_F(FileReaderTest, test_read_variant) {
             R"(['array_primitive', [2,1,5,9], '[2,1,5,9]'])",
             R"(['primitive_binary', "AxM33q2+78r+", '"AxM33q2+78r+"'])",
             R"(['primitive_decimal8', 12345678.9, '12345678.9'])",
-            R"(['primitive_double', 1.2345678901234E9, '1.2345678901234E9'])",
+            R"(['primitive_double', 1234567890.1234, '1.2345678901234E9'])",
             R"(['primitive_int64', 1234567890123456789, '1234567890123456789'])",
             R"(['primitive_boolean_true', true, 'true'])",
             R"(['primitive_decimal4', 12.34, '12.34'])",
