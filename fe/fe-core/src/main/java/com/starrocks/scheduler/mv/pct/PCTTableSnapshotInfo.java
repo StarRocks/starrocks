@@ -21,6 +21,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -37,6 +38,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -158,9 +160,17 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
     }
 
     private static MaterializedView.BasePartitionInfo toBasePartitionInfo(Partition partition) {
-        return new MaterializedView.BasePartitionInfo(partition.getId(),
-                partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+        PhysicalPartition defaultPartition = partition.getDefaultPhysicalPartition();
+        if (partition.getSubPartitions() != null && partition.getSubPartitions().size() > 1) {
+            defaultPartition = partition.getSubPartitions()
+                    .stream()
+                    .max(Comparator.comparing(PhysicalPartition::getVisibleVersionTime))
+                    .orElse(defaultPartition);
+        }
+        return new MaterializedView.BasePartitionInfo(
+                partition.getId(),
+                defaultPartition.getVisibleVersion(),
+                defaultPartition.getVisibleVersionTime());
     }
 
     private void updatePCTOlapPartitionInfos(OlapTable olapTable,
