@@ -138,7 +138,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 String token = context.peerIdentity();
                 ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
 
-                ctx.reset(request.getQuery());
+                ctx.initWithStatement(request.getQuery());
                 // To prevent the client from mistakenly interpreting an empty Schema as an update statement (instead of a query statement),
                 // we need to ensure that the Schema returned by createPreparedStatement includes the query metadata.
                 // This means we need to correctly set the DatasetSchema and ParameterSchema in ActionCreatePreparedStatementResult.
@@ -169,6 +169,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public void closePreparedStatement(FlightSql.ActionClosePreparedStatementRequest request, CallContext context,
                                        StreamListener<Result> listener) {
+        String token = context.peerIdentity();
+        ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
+        ctx.reset(); 
         executor.submit(listener::onCompleted);
     }
 
@@ -202,7 +205,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                              FlightDescriptor descriptor) {
         String token = context.peerIdentity();
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
-        ctx.reset(command.getQuery());
+        ctx.initWithStatement(command.getQuery());
         ctx.setThreadLocalInfo();
         return getFlightInfoFromQuery(ctx, descriptor);
     }
@@ -439,7 +442,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         listener.start(vectorSchemaRoot);
         listener.putNext();
         listener.completed();
-
         ctx.removeResult(queryId);
     }
 
@@ -517,6 +519,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
             return buildFlightInfo(ticketStatement, descriptor, schema, endpoint);
         } catch (Exception e) {
+            ctx.reset();
             LOG.warn("[ARROW] failed to getFlightInfoFromQuery [queryID={}]", DebugUtil.printId(ctx.getExecutionId()), e);
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
         }
