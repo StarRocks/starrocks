@@ -107,8 +107,7 @@ void GlobalDriverExecutor::_worker_thread() {
         }
 
         auto* fragment_ctx = driver->fragment_ctx();
-        auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
-        auto* runtime_state = runtime_state_ptr.get();
+        auto* runtime_state = fragment_ctx->runtime_state();
         auto* query_ctx = driver->query_ctx();
 
         DCHECK(!driver->is_in_ready());
@@ -117,8 +116,6 @@ void GlobalDriverExecutor::_worker_thread() {
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
         }
-        auto* query_ctx = driver->query_ctx();
-        auto* fragment_ctx = driver->fragment_ctx();
         const TQueryType::type query_type = fragment_ctx->query_type();
 
         driver->increment_schedule_times();
