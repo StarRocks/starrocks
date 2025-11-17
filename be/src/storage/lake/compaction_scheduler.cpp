@@ -38,8 +38,10 @@
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/misc.h"
+#include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
+#include "util/time.h"
 
 namespace starrocks::lake {
 
@@ -398,6 +400,14 @@ Status compaction_should_cancel(CompactionTaskContext* context) {
 }
 
 Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
+    MonotonicStopWatch timer;
+    timer.start();
+    DeferOp defer([&timer] {
+        timer.stop();
+        const uint64_t elapsed_us = timer.elapsed_time() / 1000;
+        StarRocksMetrics::instance()->base_cumulative_compaction_duration_us.increment(elapsed_us);
+    });
+
     const auto start_time = ::time(nullptr);
     const auto tablet_id = context->tablet_id;
     const auto txn_id = context->txn_id;

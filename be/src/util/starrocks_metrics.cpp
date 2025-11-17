@@ -182,6 +182,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
                              &update_compaction_outputs_bytes_total);
     _metrics.register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
                              &update_compaction_duration_us);
+    REGISTER_STARROCKS_METRIC(base_cumulative_compaction_duration_us);
 
     _metrics.register_metric("meta_request_total", MetricLabels().add("type", "write"), &meta_write_request_total);
     _metrics.register_metric("meta_request_total", MetricLabels().add("type", "read"), &meta_read_request_total);

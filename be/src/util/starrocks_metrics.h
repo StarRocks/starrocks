@@ -166,6 +166,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(update_compaction_outputs_total, MetricUnit::ROWSETS);
     METRIC_DEFINE_INT_COUNTER(update_compaction_outputs_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(update_compaction_duration_us, MetricUnit::MICROSECONDS);
+    METRIC_DEFINE_INT_COUNTER(base_cumulative_compaction_duration_us, MetricUnit::MICROSECONDS);
 
     METRIC_DEFINE_INT_COUNTER(publish_task_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(publish_task_failed_total, MetricUnit::REQUESTS);
