@@ -121,8 +121,19 @@ public class DeltaLakeScanNode extends ScanNode {
         }
     }
 
+<<<<<<< HEAD
     public void setupScanRangeLocationsImpl(DescriptorTable descTbl, List<String> fieldNames) throws UserException {
         Metadata deltaMetadata = deltaLakeTable.getDeltaMetadata();
+=======
+    @Override
+    public boolean hasMoreScanRanges() {
+        return scanRangeSource.hasMoreOutput();
+    }
+
+    public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
+                                     PartitionIdGenerator partitionIdGenerator,
+                                     boolean enableIncrementalScanRanges) throws UserException {
+>>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
 
         String catalogName = deltaLakeTable.getCatalogName();
@@ -140,6 +151,7 @@ public class DeltaLakeScanNode extends ScanNode {
             LOG.warn("There is no scan tasks after planFiles on {}.{} and predicate: [{}]", dbName, tableName, predicate);
             return;
         }
+<<<<<<< HEAD
 
         DeltaLakeRemoteFileDesc remoteFileDesc = (DeltaLakeRemoteFileDesc) splits.get(0).getFiles().get(0);
         if (remoteFileDesc == null) {
@@ -203,6 +215,9 @@ public class DeltaLakeScanNode extends ScanNode {
         scanRangeLocations.addToLocations(scanRangeLocation);
 
         scanRangeLocationsList.add(scanRangeLocations);
+=======
+        scanRangeSource = new DeltaConnectorScanRangeSource(deltaLakeTable, remoteFileInfoSource, partitionIdGenerator);
+>>>>>>> 3c3298ae6d ([BugFix] fix data race of partition id allocation (backport #65600) (#65608))
     }
 
     @Override
