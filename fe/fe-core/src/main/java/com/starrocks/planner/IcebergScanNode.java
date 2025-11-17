@@ -68,13 +68,16 @@ public class IcebergScanNode extends ScanNode {
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
+    private PartitionIdGenerator partitionIdGenerator = null;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
+                           PartitionIdGenerator partitionIdGenerator) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
+        this.partitionIdGenerator = partitionIdGenerator;
         setupCloudCredential();
     }
 
@@ -134,7 +137,7 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
-        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc);
+        scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable, remoteFileInfoSource, morParams, desc, partitionIdGenerator);
     }
 
     private void setupCloudCredential() {
