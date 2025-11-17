@@ -951,6 +951,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
             // Condition 3: the varchar column has collected global dict
             Column columnObj = table.getColumn(column.getName());
+            if (columnObj == null) {
+                LOG.debug("{} column not found in table", column.getName());
+                continue;
+            }
             if (!IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                 LOG.debug("{} doesn't have global dict", column.getName());
                 continue;
