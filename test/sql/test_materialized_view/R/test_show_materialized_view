@@ -2,15 +2,9 @@
 set enable_rewrite_bitmap_union_to_bitamp_agg = false;
 -- result:
 -- !result
-<<<<<<< HEAD
-=======
 set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
-set enable_evaluate_schema_scan_rule=false;
--- result:
--- !result
->>>>>>> 0525b5eb30 ([UT] Fix unstable tests (#64940))
 create database test_show_materialized_view;
 -- result:
 -- !result
