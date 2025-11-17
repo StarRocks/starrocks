@@ -23,7 +23,6 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
