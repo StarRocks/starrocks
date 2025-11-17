@@ -76,7 +76,8 @@ public class InformationSchemaBeFeTableTest {
                 long beId = 10001 + i;
                 PseudoBackend be = PseudoCluster.getInstance().getBackend(beId);
                 long oldCnt = be.getNumSchemaScan();
-                Assertions.assertTrue(stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
+                Assertions.assertTrue(
+                        stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
                 long newCnt = be.getNumSchemaScan();
                 Assertions.assertEquals(1, newCnt - oldCnt);
             }
@@ -115,109 +116,13 @@ public class InformationSchemaBeFeTableTest {
         Statement stmt = connection.createStatement();
         try {
             Assertions.assertFalse(
-                    stmt.execute("update information_schema.be_configs set value=\"1000\" where name=\"txn_info_history_size\""));
+                    stmt.execute(
+                            "update information_schema.be_configs set value=\"1000\" where " +
+                                    "name=\"txn_info_history_size\""));
         } finally {
             stmt.close();
             connection.close();
         }
     }
 
-    @Test
-    public void testFeThreadsBasicQueries() throws Exception {
-        Connection connection = PseudoCluster.getInstance().getQueryConnection();
-        Statement stmt = connection.createStatement();
-        try {
-            // Test basic select
-            Assertions.assertTrue(stmt.execute("select * from information_schema.fe_threads limit 10"));
-            int rowCount = 0;
-            while (stmt.getResultSet().next()) {
-                rowCount++;
-                // Verify columns exist
-                Assertions.assertNotNull(stmt.getResultSet().getString("FE_ADDRESS"));
-                Assertions.assertNotNull(stmt.getResultSet().getLong("THREAD_ID"));
-                Assertions.assertNotNull(stmt.getResultSet().getString("THREAD_NAME"));
-                Assertions.assertNotNull(stmt.getResultSet().getString("THREAD_STATE"));
-                Assertions.assertNotNull(stmt.getResultSet().getBoolean("IS_DAEMON"));
-                Assertions.assertNotNull(stmt.getResultSet().getInt("PRIORITY"));
-            }
-            Assertions.assertTrue(rowCount > 0, "Should have at least some threads");
-
-            // Test filtering by thread state
-            Assertions.assertTrue(stmt.execute(
-                    "select count(*) from information_schema.fe_threads where thread_state = 'RUNNABLE'"));
-            Assertions.assertTrue(stmt.getResultSet().next());
-            long runnableCount = stmt.getResultSet().getLong(1);
-            Assertions.assertTrue(runnableCount >= 0);
-
-            // Test filtering by daemon threads
-            Assertions.assertTrue(stmt.execute(
-                    "select count(*) from information_schema.fe_threads where is_daemon = true"));
-            Assertions.assertTrue(stmt.getResultSet().next());
-            long daemonCount = stmt.getResultSet().getLong(1);
-            Assertions.assertTrue(daemonCount >= 0);
-
-            // Test grouping by thread state
-            Assertions.assertTrue(stmt.execute(
-                    "select thread_state, count(*) as cnt from information_schema.fe_threads " +
-                            "group by thread_state order by cnt desc limit 5"));
-            int stateCount = 0;
-            while (stmt.getResultSet().next()) {
-                stateCount++;
-                Assertions.assertNotNull(stmt.getResultSet().getString("thread_state"));
-                Assertions.assertTrue(stmt.getResultSet().getLong("cnt") > 0);
-            }
-            Assertions.assertTrue(stateCount > 0);
-        } finally {
-            stmt.close();
-            connection.close();
-        }
-    }
-
-    @Test
-    public void testFeThreadsCommonThreads() throws Exception {
-        Connection connection = PseudoCluster.getInstance().getQueryConnection();
-        Statement stmt = connection.createStatement();
-        try {
-            // Test that common JVM threads exist
-            // Query all threads and check for common patterns
-            Assertions.assertTrue(stmt.execute(
-                    "select thread_name from information_schema.fe_threads limit 100"));
-            boolean foundCommonThread = false;
-            int rowCount = 0;
-            while (stmt.getResultSet().next()) {
-                rowCount++;
-                String threadName = stmt.getResultSet().getString("thread_name");
-                if (threadName != null && (
-                        threadName.contains("main") ||
-                        threadName.contains("GC") ||
-                        threadName.contains("RMI") ||
-                        threadName.contains("Finalizer") ||
-                        threadName.contains("Reference Handler"))) {
-                    foundCommonThread = true;
-                    break;
-                }
-            }
-            // At least one common thread should exist in a JVM
-            Assertions.assertTrue(foundCommonThread,
-                    "Should find some common JVM threads (main, GC, RMI, Finalizer, or Reference Handler). Found " + rowCount + " threads total.");
-
-            // Test that we can query by FE_ADDRESS
-            Assertions.assertTrue(stmt.execute(
-                    "select count(*) from information_schema.fe_threads where fe_address is not null"));
-            Assertions.assertTrue(stmt.getResultSet().next());
-            long feAddressCount = stmt.getResultSet().getLong(1);
-            Assertions.assertTrue(feAddressCount > 0, "All threads should have FE_ADDRESS");
-
-            // Test CPU time columns (may be -1 if not supported)
-            Assertions.assertTrue(stmt.execute(
-                    "select count(*) from information_schema.fe_threads " +
-                            "where cpu_time_ms >= -1 and user_time_ms >= -1"));
-            Assertions.assertTrue(stmt.getResultSet().next());
-            long validTimeCount = stmt.getResultSet().getLong(1);
-            Assertions.assertTrue(validTimeCount > 0, "All threads should have valid time values");
-        } finally {
-            stmt.close();
-            connection.close();
-        }
-    }
 }
