@@ -370,6 +370,13 @@ void FragmentContext::clear_pipeline_timer() {
     }
 }
 
+TQueryType::type FragmentContext::query_type() const {
+    if (_runtime_state == nullptr) {
+        return TQueryType::EXTERNAL;
+    }
+    return _runtime_state->query_options().query_type;
+}
+
 Status FragmentContext::reset_epoch() {
     _num_finished_epoch_pipelines = 0;
     const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
