@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler;
 
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.RpcException;
@@ -25,6 +26,7 @@ import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.Future;
@@ -44,6 +46,12 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
     public static void afterClass() {
         SchedulerTestBase.afterClass();
         singleNodeTest = false;
+    }
+
+    @BeforeEach
+    public void beforeEach() {
+        // Clear blacklist to ensure backend is available for tests
+        SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
     }
 
     @Test
