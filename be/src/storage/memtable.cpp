@@ -320,6 +320,7 @@ Status MemTable::finalize() {
     }
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
+    StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
     StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }
