@@ -16,12 +16,8 @@ package com.starrocks.catalog.system.information;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-=======
->>>>>>> 1f06a331d6 ([BugFix] Fix querying information_schema.tables/views in different dbs when enable_evaluate_schema_scan_rule is true (#65533))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
