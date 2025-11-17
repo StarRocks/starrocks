@@ -54,7 +54,6 @@ import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -111,9 +110,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
-import javax.swing.text.html.Option;
 
-import static com.starrocks.common.util.Util.executeCommand;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 
@@ -127,10 +124,11 @@ public class IcebergScanNodeTest {
                 Deencapsulation.getField(original, "morParams"),
                 Deencapsulation.getField(original, "desc"),
                 Deencapsulation.getField(original, "bucketProperties"),
+                Deencapsulation.getField(original, "partitionIdGenerator"),
                 Deencapsulation.getField(original, "recordScanFiles")
             );
         }
-    
+
         @Override
         public List<TScanRangeLocations> toScanRanges(FileScanTask fileScanTask) {
             return Collections.singletonList(new TScanRangeLocations());
@@ -180,7 +178,7 @@ public class IcebergScanNodeTest {
 
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, catalog,
-                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+                tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, PartitionIdGenerator.of());
         scanNode.setSnapshotId(Optional.of(12345L));
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
@@ -231,7 +229,8 @@ public class IcebergScanNodeTest {
         }};
 
         IcebergConnectorScanRangeSource scanSource = new IcebergConnectorScanRangeSource(
-                null, mockSource, null, null, Optional.empty(), true  // recordScanFiles = true
+                null, mockSource, null, null, Optional.empty(), PartitionIdGenerator.of(),
+                true  // recordScanFiles = true
         ) {
             private int callCount = 0;
 
@@ -730,7 +729,7 @@ public class IcebergScanNodeTest {
 
     @Test
     void testDynamicOverwrite() {
-        
+
         InMemoryCatalog catalog = new InMemoryCatalog();
         catalog.initialize("test", new HashMap<>());
 
@@ -884,7 +883,8 @@ public class IcebergScanNodeTest {
                 remoteFileInfoSource,
                 morParams,
                 tupleDesc,
-                Optional.empty()
+                Optional.empty(),
+                PartitionIdGenerator.of()
         );
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
@@ -1021,7 +1021,8 @@ public class IcebergScanNodeTest {
                 remoteFileInfoSource,
                 morParams,
                 tupleDesc,
-                Optional.empty()
+                Optional.empty(),
+                PartitionIdGenerator.of()
         );
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
@@ -1273,7 +1274,7 @@ public class IcebergScanNodeTest {
 
         IcebergScanNode scanNode = new IcebergScanNode(
                 new PlanNodeId(0), desc, "IcebergScanNode",
-                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, PartitionIdGenerator.of());
 
         // Create three bucket properties
         List<BucketProperty> bucketProperties = new ArrayList<>();
