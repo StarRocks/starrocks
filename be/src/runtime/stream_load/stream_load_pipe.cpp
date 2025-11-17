@@ -77,7 +77,7 @@ Status StreamLoadPipe::append(const char* data, size_t size) {
             pos = _write_buf->remaining();
             _write_buf->put_bytes(data, pos);
 
-            _write_buf->flip();
+            _write_buf->flip_to_read();
             RETURN_IF_ERROR(_append(_write_buf));
             _write_buf.reset();
         }
@@ -216,7 +216,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
 
 Status StreamLoadPipe::finish() {
     if (_write_buf != nullptr) {
-        _write_buf->flip();
+        _write_buf->flip_to_read();
         RETURN_IF_ERROR(_append(_write_buf));
         _write_buf.reset();
     }
@@ -323,7 +323,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
             _decompressed_buffer->put_bytes(piece->ptr, piece->pos);
         }
     }
-    _decompressed_buffer->flip();
+    _decompressed_buffer->flip_to_read();
     return _decompressed_buffer;
 }
 
