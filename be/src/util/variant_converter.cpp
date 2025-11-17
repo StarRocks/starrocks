@@ -43,7 +43,7 @@ StatusOr<RunTimeCppType<TYPE_BOOLEAN>> cast_variant_to_bool(const Variant& varia
             size_t len = str.value().size();
             StringParser::ParseResult parsed;
             auto r = StringParser::string_to_int<int32_t>(str_value, len, &parsed);
-            if (parsed != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+            if (parsed != StringParser::PARSE_SUCCESS) {
                 const bool casted = StringParser::string_to_bool(str_value, len, &parsed);
                 if (parsed != StringParser::PARSE_SUCCESS) {
                     return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str.value()));
