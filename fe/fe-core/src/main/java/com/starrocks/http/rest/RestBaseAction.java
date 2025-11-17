@@ -163,7 +163,6 @@ public class RestBaseAction extends BaseAction {
         checkPassword(ctx, authInfo);
 
         // Change user for ConnectContext if necessary
-        ctx.setQualifiedUser(authInfo.fullUserName);
         if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
             ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
             Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
