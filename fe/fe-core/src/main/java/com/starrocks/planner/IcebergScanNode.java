@@ -68,7 +68,6 @@ public class IcebergScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
     private CloudConfiguration cloudConfiguration = null;
-    protected TvrVersionRange tvrVersionRange;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
@@ -245,10 +244,6 @@ public class IcebergScanNode extends ScanNode {
     // for unit tests
     public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
-    }
-
-    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
-        this.tvrVersionRange = tvrVersionRange;
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
