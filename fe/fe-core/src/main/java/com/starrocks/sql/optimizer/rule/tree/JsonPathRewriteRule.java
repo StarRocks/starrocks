@@ -130,9 +130,15 @@ public class JsonPathRewriteRule extends TransformationRule {
         // Records newly created extended columns for scan operators
         private final Map<ColumnRefOperator, Column> extendedColumns = Maps.newHashMap();
         private final ColumnRefFactory columnRefFactory;
+        // The actual table of the scan operator (may differ from columnRefFactory's table after MV rewrite)
+        private Table scanTable;
 
         public JsonPathRewriteContext(ColumnRefFactory factory) {
             this.columnRefFactory = factory;
+        }
+
+        public void setScanTable(Table table) {
+            this.scanTable = table;
         }
 
         public ColumnRefFactory getColumnRefFactory() {
@@ -155,8 +161,22 @@ public class JsonPathRewriteRule extends TransformationRule {
             Pair<Table, Column> tableAndColumn = columnRefFactory.getTableAndColumn(jsonColumn);
             Preconditions.checkState(tableAndColumn != null,
                     "ColumnRefOperator %s must be attached to a table", jsonColumn);
+
+            // Use scan operator's table if available (fixes issue with transparent MV rewrite)
+            // When transparent MV rewrite rewrites MV scan to base table scan, the columnRefFactory
+            // may still return MV table, but the actual scan operator's table is base table.
+            Table targetTable = scanTable != null ? scanTable : tableAndColumn.first;
+
+            // Find the corresponding column in the target table
+            Column targetColumn = targetTable.getColumn(tableAndColumn.second.getName());
+            if (targetColumn == null) {
+                // If column doesn't exist in target table, fall back to original table
+                targetTable = tableAndColumn.first;
+                targetColumn = tableAndColumn.second;
+            }
+            
             String path = jsonPath.getLinearPath();
-            String fullPath = tableAndColumn.first.getId() + "." + path;
+            String fullPath = targetTable.getId() + "." + path;
 
             ColumnRefOperator existingColumn = pathMap.get(fullPath);
             if (existingColumn != null) {
@@ -170,12 +190,12 @@ public class JsonPathRewriteRule extends TransformationRule {
             }
 
             // Create new column in table metadata
-            Column extendedColumn = createExtendedColumn(tableAndColumn.first, path, jsonPath);
+            Column extendedColumn = createExtendedColumn(targetTable, path, jsonPath);
 
             // Create a ref
             ColumnRefOperator newColumnRef = columnRefFactory.create(path, jsonPath.getValueType(), true);
             newColumnRef.setHints(List.of(COLUMN_REF_HINT));
-            columnRefFactory.updateColumnRefToColumns(newColumnRef, extendedColumn, tableAndColumn.first);
+            columnRefFactory.updateColumnRefToColumns(newColumnRef, extendedColumn, targetTable);
             pathMap.put(fullPath, newColumnRef);
 
             // Record the newly created extended column
@@ -312,6 +332,10 @@ public class JsonPathRewriteRule extends TransformationRule {
                             .withOperator(scanOperator);
 
             JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
+            // Set the scan operator's table to ensure extended columns are created for the correct table
+            // This fixes the issue where transparent MV rewrite rewrites MV scan to base table scan,
+            // but JsonPathRewriteRule still uses MV table from columnRefFactory
+            context.setScanTable(scanOperator.getTable());
             JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
 
             // Rewrite predicate
