@@ -275,7 +275,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
-
         TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
         scanRangeLocations.addToLocations(scanRangeLocation);
         return scanRangeLocations;
