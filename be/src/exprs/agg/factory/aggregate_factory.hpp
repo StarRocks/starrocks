@@ -202,7 +202,11 @@ public:
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
+    static AggregateFunctionPtr MakePercentileApproxArrayAggregateFunction();
+
     static AggregateFunctionPtr MakePercentileApproxWeightedAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileApproxWeightedArrayAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 

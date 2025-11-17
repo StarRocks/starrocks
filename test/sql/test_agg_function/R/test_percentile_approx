@@ -43,3 +43,27 @@ with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_var
 -- result:
 25000
 -- !result
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_approx(c2, array<double>[0.25, 0.5, 0.75]) from t1;
+-- result:
+[12499.75,25000,37500.25]
+-- !result
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_approx(c2, array<double>[0.0, 0.5, 1.0]) from t1;
+-- result:
+[1,25000,49999]
+-- !result
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_approx(c2, [0.1, 0.25, 0.5, 0.75, 0.9]) from t1;
+-- result:
+[4999.6005859375,12499.75,25000,37500.25,45000.3984375]
+-- !result
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_approx(c2, [0.25, 0.5, 0.75], 2048) from t1;
+-- result:
+[12499.75,25000,37500.25]
+-- !result
+select percentile_approx(c2, array<double>[0.5, 0.9], 5000) from t1;
+-- result:
+[25000,45000.40234375]
+-- !result
+select percentile_approx(c2, [0.1, 0.5, 0.9], 10000) from t1;
+-- result:
+[4999.6005859375,25000,45000.3984375]
+-- !result
