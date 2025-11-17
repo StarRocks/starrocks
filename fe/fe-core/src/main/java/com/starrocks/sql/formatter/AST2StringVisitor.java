@@ -336,6 +336,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     @Override
     public String visitRefreshConnectionsStatement(RefreshConnectionsStmt stmt, Void context) {
+        if (stmt.isForce()) {
+            return "REFRESH CONNECTIONS FORCE";
+        }
         return "REFRESH CONNECTIONS";
     }
 

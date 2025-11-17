@@ -20,15 +20,30 @@ import com.starrocks.sql.parser.NodePosition;
   Refresh connections to apply global variables to existing connections
 
   syntax:
-      REFRESH CONNECTIONS
+      REFRESH CONNECTIONS [FORCE]
  */
 public class RefreshConnectionsStmt extends StatementBase {
-    public RefreshConnectionsStmt(NodePosition pos) {
+    private final boolean force;
+
+    public RefreshConnectionsStmt(boolean force, NodePosition pos) {
         super(pos);
+        this.force = force;
+    }
+
+    public RefreshConnectionsStmt(boolean force) {
+        this(force, NodePosition.ZERO);
+    }
+
+    public RefreshConnectionsStmt(NodePosition pos) {
+        this(false, pos);
     }
 
     public RefreshConnectionsStmt() {
-        this(NodePosition.ZERO);
+        this(false, NodePosition.ZERO);
+    }
+
+    public boolean isForce() {
+        return force;
     }
 
     @Override

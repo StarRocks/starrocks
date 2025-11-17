@@ -2157,7 +2157,7 @@ setExprOrDefault
     ;
 
 refreshConnectionsStatement
-    : REFRESH CONNECTIONS
+    : REFRESH CONNECTIONS (FORCE)?
     ;
 
 setUserPropertyStatement

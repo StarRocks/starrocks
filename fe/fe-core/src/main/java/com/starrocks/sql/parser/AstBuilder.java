@@ -4425,7 +4425,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitRefreshConnectionsStatement(
             com.starrocks.sql.parser.StarRocksParser.RefreshConnectionsStatementContext context) {
-        return new RefreshConnectionsStmt(createPos(context));
+        boolean force = context.FORCE() != null;
+        return new RefreshConnectionsStmt(force, createPos(context));
     }
 
     @Override

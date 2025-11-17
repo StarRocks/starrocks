@@ -453,9 +453,10 @@ public class VariableMgr {
             JSONObject root = new JSONObject(json);
             
             // Check if this is a refresh connections command (empty varNames)
-            if (root.length() == 0 && info.getVarNames() != null && info.getVarNames().isEmpty()) {
+            if (info.getVarNames() != null && info.getVarNames().isEmpty()) {
                 // This is a refresh connections command
-                refreshConnectionsInternal();
+                boolean force = root.has("force") && root.getBoolean("force");
+                refreshConnectionsInternal(force);
                 return;
             }
             
@@ -562,13 +563,28 @@ public class VariableMgr {
      * Only refreshes variables that haven't been modified by the session itself.
      */
     public void refreshConnections() {
+        refreshConnections(false);
+    }
+
+    /**
+     * Refresh all active connections to apply global variables.
+     *
+     * @param force if true, force refresh all variables even if they have been modified by the session.
+     *              When force is false, only variables that haven't been modified by the session are refreshed.
+     */
+    public void refreshConnections(boolean force) {
         // Refresh on current node
-        refreshConnectionsInternal();
-        
+        refreshConnectionsInternal(force);
+
         // Write to edit log to distribute to all FE nodes
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             GlobalVarPersistInfo info = new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList());
-            info.setPersistJsonString("{}"); // Empty JSON to indicate refresh connections
+            // Use JSON to indicate refresh connections and force flag
+            if (force) {
+                info.setPersistJsonString("{\"force\":true}");
+            } else {
+                info.setPersistJsonString("{}"); // Empty JSON to indicate refresh connections
+            }
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logGlobalVariableV2(info);
         }
@@ -577,7 +593,7 @@ public class VariableMgr {
     /**
      * Internal method to refresh connections on the current node.
      */
-    private void refreshConnectionsInternal() {
+    private void refreshConnectionsInternal(boolean force) {
         if (ExecuteEnv.getInstance().getScheduler() == null) {
             LOG.warn("ConnectScheduler is not initialized, skip refresh connections");
             return;
@@ -600,7 +616,7 @@ public class VariableMgr {
         int refreshedCount = 0;
         for (ConnectContext ctx : connectionMap.values()) {
             try {
-                if (refreshConnectionVariables(ctx, defaultVar)) {
+                if (refreshConnectionVariables(ctx, defaultVar, force)) {
                     refreshedCount++;
                 }
             } catch (Exception e) {
@@ -614,13 +630,13 @@ public class VariableMgr {
 
     /**
      * Refresh variables for a single connection.
-     * Only refreshes variables that haven't been modified by the session.
      * 
      * @param ctx the connection context
      * @param defaultVar the default session variables (current global defaults)
+     * @param force if true, force refresh all variables even if they have been modified by the session
      * @return true if any variables were refreshed
      */
-    private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar) {
+    private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar, boolean force) {
         SessionVariable sessionVar = ctx.getSessionVariable();
         Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
         
@@ -634,9 +650,9 @@ public class VariableMgr {
             }
 
             String varName = attr.name();
-            
-            // Skip variables that have been modified by the session
-            if (modifiedVars != null && modifiedVars.containsKey(varName)) {
+
+            // Skip variables that have been modified by the session (unless force is true)
+            if (!force && modifiedVars != null && modifiedVars.containsKey(varName)) {
                 continue;
             }
 
