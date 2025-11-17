@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -129,7 +130,7 @@ public class AstToSQLBuilder {
 
             fieldName = handleColumnName(fieldName);
             res += fieldName;
-            
+
             if (columnName != null) {
                 columnName = handleColumnName(columnName);
                 if (!fieldName.equalsIgnoreCase(columnName)) {
@@ -439,6 +440,14 @@ public class AstToSQLBuilder {
             }
             sb.append("}");
             return sb.toString();
+        }
+
+        @Override
+        public String visitParameterExpr(Parameter node, Void context) {
+            if (node.getExpr() == null) {
+                return super.visitParameterExpr(node, context);
+            }
+            return visit(node.getExpr(), context);
         }
 
     }
