@@ -813,10 +813,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         scanner = new HdfsTextScanner();
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
+    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both mapped to RC_FILE in the frontend.
+        // The RC_TEXT check is retained here for backward compatibility with older FE versions.
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", to_string(format));
@@ -878,8 +880,8 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
 
-    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
     return Status::OK();
 }
 

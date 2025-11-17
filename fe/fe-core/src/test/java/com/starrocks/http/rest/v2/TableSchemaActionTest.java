@@ -21,7 +21,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -29,18 +28,13 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.http.StarRocksHttpTestCase;
 import com.starrocks.http.rest.v2.vo.ColumnView;
 import com.starrocks.http.rest.v2.vo.DistributionInfoView;
@@ -54,6 +48,18 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.VarcharType;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -139,8 +145,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 assertEquals("c1", column.getName());
                 ColumnView.ScalarTypeView colType = (ColumnView.ScalarTypeView) column.getType();
                 assertEquals(PrimitiveType.DOUBLE.name(), colType.getName());
-                assertEquals(Type.DOUBLE.getTypeSize(), colType.getTypeSize().intValue());
-                assertEquals(Type.DOUBLE.getColumnSize(), colType.getColumnSize());
+                assertEquals(FloatType.DOUBLE.getTypeSize(), colType.getTypeSize().intValue());
+                assertEquals(FloatType.DOUBLE.getColumnSize(), colType.getColumnSize());
                 assertEquals(0, colType.getPrecision().intValue());
                 assertEquals(0, colType.getScale().intValue());
                 assertNull(column.getAggregationType());
@@ -159,10 +165,10 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 assertEquals("c2", column.getName());
                 ColumnView.ScalarTypeView colType = (ColumnView.ScalarTypeView) column.getType();
                 assertEquals(PrimitiveType.DECIMAL64.name(), colType.getName());
-                assertEquals(Type.DEFAULT_DECIMAL64.getTypeSize(), colType.getTypeSize().intValue());
-                assertEquals(Type.DEFAULT_DECIMAL64.getColumnSize(), colType.getColumnSize());
-                assertEquals(Type.DEFAULT_DECIMAL64.getPrecision(), colType.getPrecision());
-                assertEquals(Type.DEFAULT_DECIMAL64.getScalarScale(), colType.getScale().intValue());
+                assertEquals(DecimalType.DEFAULT_DECIMAL64.getTypeSize(), colType.getTypeSize().intValue());
+                assertEquals(DecimalType.DEFAULT_DECIMAL64.getColumnSize(), colType.getColumnSize());
+                assertEquals(DecimalType.DEFAULT_DECIMAL64.getPrecision(), colType.getPrecision());
+                assertEquals(DecimalType.DEFAULT_DECIMAL64.getScalarScale(), colType.getScale().intValue());
                 assertNull(column.getAggregationType());
                 assertFalse(column.getKey());
                 assertTrue(column.getAllowNull());
@@ -183,8 +189,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 {
                     ColumnView.ScalarTypeView itemType = (ColumnView.ScalarTypeView) colType.getItemType();
                     assertEquals(PrimitiveType.INT.name(), itemType.getName());
-                    assertEquals(Type.INT.getTypeSize(), itemType.getTypeSize().intValue());
-                    assertEquals(Type.INT.getColumnSize(), itemType.getColumnSize());
+                    assertEquals(IntegerType.INT.getTypeSize(), itemType.getTypeSize().intValue());
+                    assertEquals(IntegerType.INT.getColumnSize(), itemType.getColumnSize());
                     assertEquals(0, itemType.getPrecision().intValue());
                     assertEquals(0, itemType.getScale().intValue());
                 }
@@ -218,8 +224,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
                         ColumnView.ScalarTypeView fieldItemType = (ColumnView.ScalarTypeView) fieldType.getItemType();
                         assertEquals(PrimitiveType.INT.name(), fieldItemType.getName());
-                        assertEquals(Type.INT.getTypeSize(), fieldItemType.getTypeSize().intValue());
-                        assertEquals(Type.INT.getColumnSize(), fieldItemType.getColumnSize());
+                        assertEquals(IntegerType.INT.getTypeSize(), fieldItemType.getTypeSize().intValue());
+                        assertEquals(IntegerType.INT.getColumnSize(), fieldItemType.getColumnSize());
                         assertEquals(0, fieldItemType.getPrecision().intValue());
                         assertEquals(0, fieldItemType.getScale().intValue());
                     }
@@ -238,8 +244,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                             assertEquals("c4_b_1", subField.getName());
                             ColumnView.ScalarTypeView subFieldType = (ColumnView.ScalarTypeView) subField.getType();
                             assertEquals(PrimitiveType.VARCHAR.name(), subFieldType.getName());
-                            assertEquals(Type.VARCHAR.getTypeSize(), subFieldType.getTypeSize().intValue());
-                            assertEquals(Type.VARCHAR.getColumnSize(), subFieldType.getColumnSize());
+                            assertEquals(VarcharType.VARCHAR.getTypeSize(), subFieldType.getTypeSize().intValue());
+                            assertEquals(VarcharType.VARCHAR.getColumnSize(), subFieldType.getColumnSize());
                             assertEquals(0, subFieldType.getPrecision().intValue());
                             assertEquals(0, subFieldType.getScale().intValue());
                         }
@@ -268,8 +274,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
                 {
                     ColumnView.ScalarTypeView keyType = (ColumnView.ScalarTypeView) colType.getKeyType();
                     assertEquals(PrimitiveType.BIGINT.name(), keyType.getName());
-                    assertEquals(Type.BIGINT.getTypeSize(), keyType.getTypeSize().intValue());
-                    assertEquals(Type.BIGINT.getColumnSize(), keyType.getColumnSize());
+                    assertEquals(IntegerType.BIGINT.getTypeSize(), keyType.getTypeSize().intValue());
+                    assertEquals(IntegerType.BIGINT.getColumnSize(), keyType.getColumnSize());
                     assertEquals(0, keyType.getPrecision().intValue());
                     assertEquals(0, keyType.getScale().intValue());
                 }
@@ -280,15 +286,15 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
                     ColumnView.ScalarTypeView valKeyType = (ColumnView.ScalarTypeView) valueType.getKeyType();
                     assertEquals(PrimitiveType.INT.name(), valKeyType.getName());
-                    assertEquals(Type.INT.getTypeSize(), valKeyType.getTypeSize().intValue());
-                    assertEquals(Type.INT.getColumnSize(), valKeyType.getColumnSize());
+                    assertEquals(IntegerType.INT.getTypeSize(), valKeyType.getTypeSize().intValue());
+                    assertEquals(IntegerType.INT.getColumnSize(), valKeyType.getColumnSize());
                     assertEquals(0, valKeyType.getPrecision().intValue());
                     assertEquals(0, valKeyType.getScale().intValue());
 
                     ColumnView.ScalarTypeView valValueType = (ColumnView.ScalarTypeView) valueType.getValueType();
                     assertEquals(PrimitiveType.VARCHAR.name(), valValueType.getName());
-                    assertEquals(Type.VARCHAR.getTypeSize(), valValueType.getTypeSize().intValue());
-                    assertEquals(Type.VARCHAR.getColumnSize(), valValueType.getColumnSize());
+                    assertEquals(VarcharType.VARCHAR.getTypeSize(), valValueType.getTypeSize().intValue());
+                    assertEquals(VarcharType.VARCHAR.getColumnSize(), valValueType.getColumnSize());
                     assertEquals(0, valValueType.getPrecision().intValue());
                     assertEquals(0, valValueType.getScale().intValue());
                 }
@@ -310,8 +316,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
                 ColumnView.ScalarTypeView colType = (ColumnView.ScalarTypeView) column.getType();
                 assertEquals(PrimitiveType.JSON.name(), colType.getName());
-                assertEquals(Type.JSON.getTypeSize(), colType.getTypeSize().intValue());
-                assertEquals(Type.JSON.getColumnSize(), colType.getColumnSize());
+                assertEquals(JsonType.JSON.getTypeSize(), colType.getTypeSize().intValue());
+                assertEquals(JsonType.JSON.getColumnSize(), colType.getColumnSize());
                 assertEquals(0, colType.getPrecision().intValue());
                 assertEquals(0, colType.getScale().intValue());
 
@@ -332,8 +338,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
                 ColumnView.ScalarTypeView colType = (ColumnView.ScalarTypeView) column.getType();
                 assertEquals(PrimitiveType.BITMAP.name(), colType.getName());
-                assertEquals(Type.BITMAP.getTypeSize(), colType.getTypeSize().intValue());
-                assertEquals(Type.BITMAP.getColumnSize(), colType.getColumnSize());
+                assertEquals(BitmapType.BITMAP.getTypeSize(), colType.getTypeSize().intValue());
+                assertEquals(BitmapType.BITMAP.getColumnSize(), colType.getColumnSize());
                 assertEquals(0, colType.getPrecision().intValue());
                 assertEquals(0, colType.getScale().intValue());
 
@@ -354,8 +360,8 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
 
                 ColumnView.ScalarTypeView colType = (ColumnView.ScalarTypeView) column.getType();
                 assertEquals(PrimitiveType.HLL.name(), colType.getName());
-                assertEquals(Type.HLL.getTypeSize(), colType.getTypeSize().intValue());
-                assertEquals(Type.HLL.getColumnSize(), colType.getColumnSize());
+                assertEquals(HLLType.HLL.getTypeSize(), colType.getTypeSize().intValue());
+                assertEquals(HLLType.HLL.getColumnSize(), colType.getColumnSize());
                 assertEquals(0, colType.getPrecision().intValue());
                 assertEquals(0, colType.getScale().intValue());
 
@@ -434,20 +440,21 @@ public class TableSchemaActionTest extends StarRocksHttpTestCase {
     private static OlapTable newOlapTable(Long tableId, String tableName) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
-        Column c1 = new Column("c1", Type.DOUBLE, true, null, null, false, null, "cc1", 1);
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL64, false, null, null, true,
+        Column c1 = new Column("c1", FloatType.DOUBLE, true, null, null, false, null, "cc1", 1);
+        Column c2 = new Column("c2", DecimalType.DEFAULT_DECIMAL64, false, null, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "cc2", 2);
-        Column c3 = new Column("c3", new ArrayType(Type.INT), false, null, null, true, null, "cc3", 3);
+        Column c3 = new Column("c3", new ArrayType(IntegerType.INT), false, null, null, true, null, "cc3", 3);
         Column c4 = new Column("c4", new StructType(
                 Lists.newArrayList(
-                        new StructField("c4_a", new ArrayType(Type.INT)),
-                        new StructField("c4_b", new StructType(Lists.newArrayList(new StructField("c4_b_1", Type.VARCHAR))))
+                        new StructField("c4_a", new ArrayType(IntegerType.INT)),
+                        new StructField("c4_b", new StructType(Lists.newArrayList(
+                                new StructField("c4_b_1", VarcharType.VARCHAR))))
                 )), false, null, null, true, null, "cc4", 4);
-        Column c5 = new Column("c5", new MapType(Type.BIGINT,
-                new MapType(Type.INT, Type.VARCHAR)), false, null, null, false, null, "cc5", 5);
-        Column c6 = new Column("c6", Type.JSON, false, null, null, false, null, "cc6", 6);
-        Column c7 = new Column("c7", Type.BITMAP, false, null, null, false, null, "cc7", 7);
-        Column c8 = new Column("c8", Type.HLL, false, null, null, false, null, "cc8", 8);
+        Column c5 = new Column("c5", new MapType(IntegerType.BIGINT,
+                new MapType(IntegerType.INT, VarcharType.VARCHAR)), false, null, null, false, null, "cc5", 5);
+        Column c6 = new Column("c6", JsonType.JSON, false, null, null, false, null, "cc6", 6);
+        Column c7 = new Column("c7", BitmapType.BITMAP, false, null, null, false, null, "cc7", 7);
+        Column c8 = new Column("c8", HLLType.HLL, false, null, null, false, null, "cc8", 8);
         List<Column> columns = Lists.newArrayList(c1, c2, c3, c4, c5, c6, c7, c8);
 
         PartitionInfo partitionInfo = new RangePartitionInfo(

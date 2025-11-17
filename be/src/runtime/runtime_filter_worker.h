@@ -243,7 +243,7 @@ public:
     const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }
 
 private:
-    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
+    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, int timeout_ms, int64_t rpc_http_min_size);
     void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
                                                       std::vector<TRuntimeFilterDestination>&& destinations,
                                                       int timeout_ms, int64_t rpc_http_min_size);
@@ -254,7 +254,8 @@ private:
                                                  std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
                                                  int64_t rpc_http_min_size);
     void _deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& params,
-                                                 const TRuntimeFilterDestination& destinations);
+                                                 const TRuntimeFilterDestination& destinations, int timeout_ms,
+                                                 int64_t rpc_http_min_size);
 
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,

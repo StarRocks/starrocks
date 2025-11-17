@@ -43,7 +43,11 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
 import com.starrocks.sql.formatter.ExprVerboseVisitor;
@@ -168,7 +172,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.limit = node.limit;
         this.tupleIds = Lists.newArrayList(node.tupleIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
-        this.conjuncts = Expr.cloneList(node.conjuncts, null);
+        this.conjuncts = ExprUtils.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
     }
@@ -525,7 +529,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));
         }
         for (Expr e : conjuncts) {
-            msg.addToConjuncts(e.treeToThrift());
+            msg.addToConjuncts(ExprToThriftVisitor.treeToThrift(e));
         }
         toThrift(msg);
         container.addToNodes(msg);
@@ -623,7 +627,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (exprs == null) {
             return "";
         }
-        return exprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
+        return exprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
     }
 
     protected String explainExpr(Expr... exprs) {

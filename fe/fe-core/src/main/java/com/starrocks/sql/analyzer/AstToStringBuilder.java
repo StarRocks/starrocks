@@ -201,7 +201,9 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
+            if (distributionInfo.getType() != DistributionInfo.DistributionInfoType.RANGE) {
+                sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
+            }
 
             // order by
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -405,7 +407,7 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullSchema().stream().map(AstToStringBuilder::toMysqlDDL).
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL).
                 collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");

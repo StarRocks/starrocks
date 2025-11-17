@@ -27,6 +27,7 @@
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
 #include "runtime/mem_pool.h"
+#include "util/bit_util.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -77,7 +78,7 @@ public:
 
         // finalize agg states into result
         auto align_size = _function->alignof_size();
-        auto state_size = align_to(_function->size(), align_size);
+        auto state_size = BitUtil::round_up(_function->size(), align_size);
         AlignedMemoryGuard guard(align_size, state_size);
         RETURN_IF_ERROR(guard.allocate());
         AggDataPtr agg_state = guard.get();

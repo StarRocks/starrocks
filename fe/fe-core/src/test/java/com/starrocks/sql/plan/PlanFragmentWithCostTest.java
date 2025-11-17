@@ -55,6 +55,14 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, NUM_TABLE0_ROWS);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t2, NUM_TABLE2_ROWS);
     }
 
     private static final String V1 = "v1";
@@ -1049,7 +1057,10 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
     public void testLocalGroupingSet1() throws Exception {
         String sql = "select v1, v2, v3 from t0 group by grouping sets((v1, v2), (v1, v3), (v1))";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 1: v1, 2: v2, 3: v3, 4: GROUPING_ID\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 1: v1, 2: v2, 3: v3, 4: GROUPING_ID\n" +
                 "  |  \n" +
@@ -1494,7 +1505,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assertions.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  withLocalShuffle: true\n" +
@@ -1512,12 +1523,12 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             Assertions.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             Assertions.assertFalse(execPlan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(4: count)\n" +
                     "  |  group by: 2: v2, 4: count\n" +
                     "  |  withLocalShuffle: true\n" +
                     "  |  \n" +
-                    "  2:AGGREGATE (update finalize)\n" +
+                    "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: count(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  withLocalShuffle: true\n" +
@@ -1605,17 +1616,17 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
             Assertions.assertEquals(0, olapScanNode.getBucketExprs().size());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+            assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
-            assertContains(plan, "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
-                    "  |  group by: 2: v2\n" +
-                    "  |  \n" +
-                    "  2:EXCHANGE");
 
             // case 8: insert into cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
@@ -1640,7 +1651,29 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "(select v2, sum(v2) from t0 group by v2) t2 on t1.v2=t2.v2";
             execPlan = getExecPlan(sql);
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "8:HASH JOIN\n" +
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 2: v2 = 6: v2\n" +
+                    "  |  \n" +
+                    "  |----5:AGGREGATE (update finalize)\n" +
+                    "  |    |  group by: 6: v2\n" +
+                    "  |    |  \n" +
+                    "  |    4:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  2:AGGREGATE (update finalize)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgLowCardinality);
+            sql = "select count(1) from " +
+                    "(select v2, sum(v2) from t0 group by v2) t1 join " +
+                    "(select v2, sum(v2) from t0 group by v2) t2 on t1.v2=t2.v2";
+            execPlan = getExecPlan(sql);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 6: v2\n" +
@@ -2410,5 +2443,10 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  3:EXCHANGE");
             connectContext.getSessionVariable().setBroadcastRowCountLimit(originLimit);
         }
+    }
+
+    @Test
+    public void testCostBasedMultiStageAgg() {
+        runFileUnitTest("optimized-plan/cost_based_multi_stage_agg");
     }
 }

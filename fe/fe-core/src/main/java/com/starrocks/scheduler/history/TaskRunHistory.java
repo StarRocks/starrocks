@@ -199,15 +199,11 @@ public class TaskRunHistory {
             Stopwatch watch = Stopwatch.createStarted();
             historyTable.addHistories(runs);
 
-            // 2. Remove from memory
-            for (var run : runs) {
-                removeTaskByQueryId(run.getQueryId());
-            }
-
-            // 3. Write EditLog
+            // 2. Write EditLog
             List<String> queryIdList = runs.stream().map(TaskRunStatus::getQueryId).collect(Collectors.toList());
             ArchiveTaskRunsLog log = new ArchiveTaskRunsLog(queryIdList);
-            GlobalStateMgr.getCurrentState().getEditLog().logArchiveTaskRuns(log);
+            GlobalStateMgr.getCurrentState().getEditLog().logArchiveTaskRuns(log,
+                    wal -> replay((ArchiveTaskRunsLog) wal));
             LOG.info("archive task-run history, {} records took {}ms",
                     runs.size(), watch.elapsed(TimeUnit.MILLISECONDS));
         } catch (Throwable e) {

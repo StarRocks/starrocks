@@ -34,6 +34,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/bit_util.h"
 #include "util/runtime_profile.h"
@@ -332,18 +333,18 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
     auto iter = std::find_if(partitions.begin(), partitions.end(),
                              [partition](auto& val) { return val->partition_id == partition->partition_id; });
     _total_partition_num -= (iter != partitions.end());
+    if (partition->block_group != nullptr) {
+        auto affinity_group = partition->block_group->get_affinity_group();
+        DCHECK(affinity_group != kDefaultBlockAffinityGroup);
+        WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
+                      fmt::format("release affinity group {} error", affinity_group));
+    }
     partitions.erase(iter);
     if (partitions.empty()) {
         _level_to_partitions.erase(level);
         if (_min_level == level) {
             _min_level = level + 1;
         }
-    }
-    if (partition->block_group != nullptr) {
-        auto affinity_group = partition->block_group->get_affinity_group();
-        DCHECK(affinity_group != kDefaultBlockAffinityGroup);
-        WARN_IF_ERROR(_spiller->block_manager()->release_affinity_group(affinity_group),
-                      fmt::format("release affinity group {} error", affinity_group));
     }
 }
 
@@ -474,6 +475,8 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
 
 Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SerdeContext& ctx,
                                                  SpilledPartition* partition) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
@@ -497,6 +500,7 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
 
     mem_table->reset();
     TRACE_SPILL_LOG << fmt::format("spill partition[{}] done ", partition->debug_string());
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 

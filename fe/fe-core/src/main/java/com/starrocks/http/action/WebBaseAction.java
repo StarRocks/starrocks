@@ -117,7 +117,8 @@ public class WebBaseAction extends BaseAction {
                     + "    <div class=\"navbar-header\">"
                     + "      <a class=\"navbar-brand\" href=\"/\" style=\"padding: unset;\">"
                     +
-                    "        <img alt=\"StarRocks\" style=\"height: inherit;\" src=\"/static/images?res=starrocks-logo.png\">"
+                    "        <img alt=\"StarRocks\" style=\"height: inherit;\" " +
+                    "src=\"/static/images?res=starrocks-logo.png\">"
                     + "      </a>"
                     + "    </div>"
                     + "    <div>"
@@ -314,6 +315,9 @@ public class WebBaseAction extends BaseAction {
                     .append("</a></li>");
             sb.append("<li id=\"nav_ha\"><a href=\"/ha\">")
                     .append("ha")
+                    .append("</a></li>");
+            sb.append("<li id=\"nav_proc_profile\"><a href=\"/proc_profile\">")
+                    .append("proc profiles")
                     .append("</a></li>");
         }
 

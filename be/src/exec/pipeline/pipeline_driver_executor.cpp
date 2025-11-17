@@ -27,6 +27,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -44,7 +45,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
-          _exec_state_reporter(new ExecStateReporter(cpuids)),
+          _exec_state_reporter(new ExecStateReporter(cpuids, metrics->get_exec_state_reporter_metrics())),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
@@ -112,12 +113,13 @@ void GlobalDriverExecutor::_worker_thread() {
         }
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
+        const TQueryType::type query_type = fragment_ctx->query_type();
 
         driver->increment_schedule_times();
         _metrics->driver_schedule_count.increment(1);
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
-
+        DUMP_TRACE_IF_TIMEOUT(config::pipeline_process_timeout_guard_ms);
         SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
@@ -166,7 +168,7 @@ void GlobalDriverExecutor::_worker_thread() {
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
             int64_t end_time = driver->get_active_time();
-            _metrics->driver_execution_time.increment(end_time - start_time);
+            _metrics->driver_execution_time.increment(query_type, end_time - start_time);
             _metrics->exec_running_tasks.increment(-1);
             _metrics->exec_finished_tasks.increment(1);
 

@@ -530,7 +530,7 @@ Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int
         RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
         *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
     }
-#ifdef BE_TEST
+#if defined(BE_TEST) || defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
     *file_metadata_size = sizeof(FileMetaData);
 #endif
     return Status::OK();

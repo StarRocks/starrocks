@@ -27,9 +27,11 @@
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {
+class ExecStateReporterMetrics;
 class ExecStateReporter {
 public:
-    explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids);
+    explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics);
+    ~ExecStateReporter();
 
     static std::unique_ptr<TReportExecStatusParams> create_report_exec_status_params(
             QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
@@ -49,6 +51,7 @@ public:
     static Status report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env, const TNetworkAddress& fe_addr);
 
 private:
+    ExecStateReporterMetrics* _metrics;
     std::unique_ptr<ThreadPool> _thread_pool;
     std::unique_ptr<ThreadPool> _priority_thread_pool;
 };

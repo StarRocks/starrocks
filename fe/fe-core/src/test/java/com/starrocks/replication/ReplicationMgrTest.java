@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ReplicationsProcNode;
@@ -27,7 +28,6 @@ import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -46,7 +46,6 @@ import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletReplicationInfo;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -72,19 +71,16 @@ public class ReplicationMgrTest {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        AnalyzeTestUtil.init();
-        starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
-        starRocksAssert.withDatabase("test").useDatabase("test");
+        FeConstants.runningUnitTest = true;
+        AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
+        starRocksAssert = AnalyzeTestUtil.starRocksAssert;
 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
                 "properties('replication_num' = '1'); ";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
-                AnalyzeTestUtil.getConnectContext());
-        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        starRocksAssert.withTable(sql);
 
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "single_partition_duplicate_key");

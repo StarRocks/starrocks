@@ -47,7 +47,9 @@
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
+#endif
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -206,6 +208,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     std::vector<std::string> all_files;
     std::vector<std::string> new_inverted_index_files;
     RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
+#ifndef __APPLE__
     for (const auto& file : all_files) {
         if (CLucenePlugin::is_index_files(file)) {
             auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
@@ -230,6 +233,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
                                                                inverted_index_path + "/" + new_file_name));
         }
     }
+#endif
 
     std::unordered_map<string, string> old_to_new_rowsetid;
 

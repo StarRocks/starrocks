@@ -42,6 +42,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | cpu_weight                 | The CPU scheduling weight of this resource group on a BE node. | (0, `avg_be_cpu_cores`] (takes effect when greater than 0)     | 0       |
 | exclusive_cpu_cores        | CPU hard isolation parameter for this resource group.          | (0, `min_be_cpu_cores - 1`] (takes effect when greater than 0) | 0       |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node. | (0, 1] (required)               | -       |
+| mem_pool                   | Groups resource groups to share a memory limit.                | String                                                         | default_mem_pool |
 | spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.         | (0, 1]                                                         | 1.0     |
 | concurrency_limit          | Maximum number of concurrent queries in this resource group.   | Integer (takes effect when greater than 0)                     | 0       |
 | big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.   | Integer (takes effect when greater than 0)               | 0       |
@@ -89,6 +90,30 @@ UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_re
 ##### `mem_limit`
 
 Specifies the percentage of memory (query pool) available to the resource group on the current BE node. The value range is (0,1].
+
+##### `mem_pool`
+
+Since v3.5, specifies a shared memory pool identifier. Resource groups with the same mem_pool identifier draw from a shared memory pool, collectively limited by the `mem_limit`. If not specified, the resource group is assigned to `default_mem_pool`, and its memory usage is limited solely by its own `mem_limit`.
+
+All resource groups sharing the same `mem_pool` must be configured with an identical `mem_limit`.
+
+To limit two resource groups to consume 50% of memory collectively, it could be defined in the following way:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO (db='db1')
+WITH (
+    'mem_limit' = '50%',
+    'mem_pool' = 'shared_pool'
+);
+
+CREATE RESOURCE GROUP rg2
+TO (db='db1')
+WITH (
+    'mem_limit' = '50%',
+    'mem_pool' = 'shared_pool'
+);
+```
 
 ##### `spill_mem_limit_threshold`
 

@@ -338,8 +338,12 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
     @Override
     public void increaseRefreshJobStatus(Constants.TaskRunState status) {
+        if (status == null || !status.isFinishState()) {
+            return;
+        }
         this.counterRefreshJobTotal.increase(1L);
         switch (status) {
+            case MERGED:
             case SKIPPED:
                 this.counterRefreshJobEmptyTotal.increase(1L);
                 break;

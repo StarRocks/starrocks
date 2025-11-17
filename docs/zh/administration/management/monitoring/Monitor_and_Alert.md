@@ -140,6 +140,10 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/promethe
              group: be
    ```
 
+   :::note
+   请注意，在集群进行扩缩容后，Prometheus 将无法检测到服务（`targets`）变更。例如，对于部署在 AWS 上的集群，可为托管 Prometheus 服务的 EC2 实例授予 `ec2:DescribeInstances` 和 `ec2:DescribeTags` 权限，并在 **prometheus/prometheus.yml** 中添加 `ec2_sd_configs` 和 `relabel_configs` 属性。详细操作指南请参阅 [附录 - 为 Prometheus 启用服务检测](#为-prometheus-启用服务检测)。
+   :::
+
    配置文件修改完成后，您可以使用 `promtool` 检查配置文件语法是否合规。
 
    ```Bash
@@ -773,6 +777,81 @@ BE 节点的 CPU Idle，即 CPU 空闲率。
 3. 在 **Alert evaluation behavior** 区域，选择上文创建的 **PROD** 目录和 **01** 组，“异常持续时间”配置为 30s。
 4. 在 **Add details for your alert rule** 区域，点击 **Add annotation**，选择 **Description**，输入报警内容，例如：“FE 堆内存使用率过高，请在 FE 配置文件 **fe.conf** 中调整堆内存上限”。
 5. 在 **Notifications** 区域，**Labels** 配置与 FE 报警规则相同 。若不配置 Label，Granfana 将使用 Default policy，将报警邮件发送至 “StarRocksOp” 报警渠道。
+
+## 附录
+
+### 为 Prometheus 启用服务检测
+
+您可以为 Prometheus 启用服务检测功能，使其能够在集群进行扩缩容后自动检测服务（节点）。
+
+:::note
+以下部分以 AWS 为例进行说明。
+:::
+
+1. 使用 IAM Policy 为托管 Prometheus 服务的 EC2 实例授予以下权限：
+
+   ```JSON
+   {
+         "Version": "2012-10-17",
+         "Statement": [
+                  {
+                           "Effect": "Allow",
+                           "Action": [
+                                 "ec2:DescribeInstances",
+                                 "ec2:DescribeTags"
+                           ],
+                           "Resource": "*"
+                  }
+         ]
+   }
+   ```
+
+   有关配置 AWS 认证信息的详细说明，请参阅 [配置 AWS 认证信息](../../../integrations/authenticate_to_aws_resources.md)。
+
+   通过这些权限，Prometheus能够列出 Region 内的实例及其标签。
+
+2. 在 **prometheus/prometheus.yml** 中添加 `ec2_sd_configs` 和 `relabel_configs` 部分。
+
+   示例：
+
+   ```Yaml
+   global:
+   scrape_interval: 15s # Set the global scrape interval to 15s. The default is 1 min.
+   evaluation_interval: 15s # Set the global rule evaluation interval to 15s. The default is 1 min.
+   scrape_configs:
+   - job_name: 'StarRocks_Cluster01'
+      metrics_path: '/metrics'
+      # highlight-start
+      ec2_sd_configs:
+         - region: us-west-2
+         port: 8030
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['FE']
+         - region: us-west-2
+         port: 8040
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['BE']
+      relabel_configs:
+         - source_labels: [__meta_ec2_tag_ClusterName]
+         regex: test-stage-20251021
+         target_label: cluster
+         replacement: test-stage-20251021
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: FE
+         target_label: group
+         replacement: fe
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: BE
+         target_label: group
+         replacement: be
+      # highlight-end
+   ```
 
 ## Q&A
 

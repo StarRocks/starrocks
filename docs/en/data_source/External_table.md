@@ -6,9 +6,13 @@ displayed_sidebar: docs
 
 :::note
 
+The External Table feature is no longer recommended except for certain corner usage cases, and might be deprecated in future releases. To manage and query data from external data sources in general scenarios, [External Catalog](./catalog/catalog_overview.md) is recommended.
+
 - From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](./catalog/iceberg/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
 - From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+
+- From v3.2.9 and v3.3.1, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from Oracle and SQL Server.
 
 - The External Table feature was designed to help with loading data into StarRocks, NOT to perform efficient queries against external systems as a normal operation. A more performant solution would be to load the data into StarRocks.
 
@@ -682,7 +686,7 @@ select count(*) from profile_wos_p7;
 
 ### Update cached Hive table metadata
 
-* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
+* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.
   * The cached data can also be refreshed manually.
     1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
     2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.

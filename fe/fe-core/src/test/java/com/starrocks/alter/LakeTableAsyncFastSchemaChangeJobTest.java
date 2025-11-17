@@ -21,8 +21,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -34,6 +32,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -80,15 +83,23 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         return jobs.get(0);
     }
 
-    private AlterJobV2 executeAlterAndWaitFinish(Table table, String sql, boolean expectFastSchemaEvolution) throws Exception {
+    private AlterJobV2 executeAlterAndWaitFinish(
+            LakeTable table, String sql, boolean expectFastSchemaEvolution) throws Exception {
         alterTable(connectContext, sql);
         AlterJobV2 alterJob = getAlterJob(table);
-        alterJob.run();
-        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+        long startTime = System.currentTimeMillis();
+        long timeoutMs = 10 * 60 * 1000; // 10 minutes timeout
+        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED
+                || table.getState() != OlapTable.OlapTableState.NORMAL) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - startTime > timeoutMs) {
+                throw new RuntimeException(
+                        String.format("Alter job timeout after 10 minutes. Job state: %s, table state: %s",
+                        alterJob.getJobState(), table.getState()));
+            }
             alterJob.run();
             Thread.sleep(100);
         }
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
         Assertions.assertEquals(expectFastSchemaEvolution, (alterJob instanceof LakeTableAsyncFastSchemaChangeJob));
         return alterJob;
     }
@@ -108,7 +119,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
@@ -118,7 +128,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
@@ -130,7 +139,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(2, columns.get(1).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 
@@ -226,7 +234,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
         oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
@@ -238,7 +245,6 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
     }
 
@@ -286,19 +292,19 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
 
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
-            Assertions.assertEquals(ScalarType.INT, columns.get(0).getType());
+            Assertions.assertEquals(IntegerType.INT, columns.get(0).getType());
 
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
-            Assertions.assertEquals(ScalarType.BIGINT, columns.get(1).getType());
+            Assertions.assertEquals(IntegerType.BIGINT, columns.get(1).getType());
 
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
-            Assertions.assertEquals(ScalarType.DOUBLE, columns.get(2).getType());
+            Assertions.assertEquals(FloatType.DOUBLE, columns.get(2).getType());
 
             Assertions.assertEquals("c3", columns.get(3).getName());
             Assertions.assertEquals(3, columns.get(3).getUniqueId());
-            Assertions.assertEquals(ScalarType.DATETIME, columns.get(3).getType());
+            Assertions.assertEquals(DateType.DATETIME, columns.get(3).getType());
 
             Assertions.assertEquals("c4", columns.get(4).getName());
             Assertions.assertEquals(4, columns.get(4).getUniqueId());
@@ -306,16 +312,15 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             Assertions.assertEquals(20, ((ScalarType) columns.get(4).getType()).getLength());
 
             Assertions.assertTrue(table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId() > oldSchemaId);
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         }
 
         // zonemap index can not be reused
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c3 DATE", false);
-            Assertions.assertEquals(ScalarType.DATE, table.getBaseSchema().get(3).getType());
+            Assertions.assertEquals(DateType.DATE, table.getBaseSchema().get(3).getType());
 
             executeAlterAndWaitFinish(table, "ALTER TABLE t_modify_type MODIFY COLUMN c4 INT", false);
-            Assertions.assertEquals(ScalarType.INT, table.getBaseSchema().get(4).getType());
+            Assertions.assertEquals(IntegerType.INT, table.getBaseSchema().get(4).getType());
         }
     }
 

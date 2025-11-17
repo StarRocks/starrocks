@@ -19,9 +19,8 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.common.DmlException;
@@ -30,6 +29,7 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -186,8 +186,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t1 union all select * from t2;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -202,8 +202,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t2 union all select * from t1;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -269,7 +269,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
 
                         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                         int mvRefreshTimes = 3;
-                        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 1);
+                        List<Integer> t1PartitionNums = ImmutableList.of(1, 0, 0);
                         List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1);
                         TaskRun taskRun = null;
                         for (int i = 0; i < mvRefreshTimes; i++) {
@@ -329,7 +329,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         MaterializedView mv = starRocksAssert.getMv("test", "join_mv1");
         Assertions.assertEquals(3, mv.getPartitionNames().size());
         Set<Range<PartitionKey>> ranges =
-                mv.getRangePartitionMap().values().stream().collect(Collectors.toSet());
+                toRangeMap(mv.getRangePartitionMap()).values().stream().collect(Collectors.toSet());
         Assertions.assertEquals(3, ranges.size());
         PartitionKey p0 = new PartitionKey(ImmutableList.of(new DateLiteral(0, 1, 1)),
                 ImmutableList.of(PrimitiveType.DATE));

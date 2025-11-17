@@ -108,23 +108,23 @@ void MysqlRowBuffer::push_number_binary_format(T data) {
         char buff[8];
         float8store(buff, data);
         _data.append(buff, 8);
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int8_t>) {
+    } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>) {
         char buff[1];
         int1store(buff, data);
         _data.append(buff, 1);
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int16_t>) {
+    } else if constexpr (std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t>) {
         char buff[2];
         int2store(buff, data);
         _data.append(buff, 2);
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int32_t>) {
+    } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>) {
         char buff[4];
         int4store(buff, data);
         _data.append(buff, 4);
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int64_t>) {
+    } else if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
         char buff[8];
         int8store(buff, data);
         _data.append(buff, 8);
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
+    } else if constexpr (std::is_same_v<T, __int128>) {
         std::string value = LargeIntValue::to_string(data);
         _push_string_normal(value.data(), value.size());
     } else if constexpr (std::is_same_v<T, int256_t>) {
@@ -155,23 +155,23 @@ void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
         // 1 for string trail, 1 for length, 1 for sign, other for digits
         pos = _resize_extra(2 + MAX_DOUBLE_STR_LENGTH);
         length = d2s_buffered_n(data, pos + length_prefix_bytes);
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int8_t>) {
+    } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>) {
         pos = _resize_extra(2 + MAX_TINYINT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int16_t>) {
+    } else if constexpr (std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t>) {
         pos = _resize_extra(2 + MAX_SMALLINT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int32_t>) {
+    } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>) {
         pos = _resize_extra(2 + MAX_INT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, int64_t>) {
+    } else if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
         pos = _resize_extra(2 + MAX_BIGINT_WIDTH);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;
-    } else if constexpr (std::is_same_v<std::make_signed_t<T>, __int128>) {
+    } else if constexpr (std::is_same_v<T, __int128>) {
         pos = _resize_extra(2 + 40);
         end = fmt::format_to(pos + length_prefix_bytes, FMT_COMPILE("{}"), data);
         length = end - pos - length_prefix_bytes;

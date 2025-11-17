@@ -17,11 +17,12 @@ package com.starrocks.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -38,6 +39,8 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +50,7 @@ import static com.starrocks.scheduler.TaskRun.MV_ID;
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
 public class TaskBuilder {
+    private static final Logger LOG = LogManager.getLogger(TaskBuilder.class);
 
     public static Task buildPipeTask(PipeTaskDesc desc) {
         Task task = new Task(desc.getUniqueTaskName());
@@ -119,28 +123,6 @@ public class TaskBuilder {
         }
     }
 
-    public static String getAnalyzeMVStmt(String tableName) {
-        final ConnectContext ctx = ConnectContext.get();
-        return getAnalyzeMVStmt(ctx, tableName);
-    }
-
-    public static String getAnalyzeMVStmt(ConnectContext ctx, String tableName) {
-        if (FeConstants.runningUnitTest || ctx == null) {
-            return "";
-        }
-        final String analyze = ctx.getSessionVariable().getAnalyzeForMV();
-        final String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
-        String stmt;
-        if ("sample".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
-        } else if ("full".equalsIgnoreCase(analyze)) {
-            stmt = "ANALYZE TABLE " + tableName + async;
-        } else {
-            stmt = "";
-        }
-        return stmt;
-    }
-
     public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName,
                                                  long warehouseId) {
         OptimizeTask task = new OptimizeTask(name);
@@ -173,7 +155,6 @@ public class TaskBuilder {
         task.setProperties(taskProperties);
 
         task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (ConnectContext.get() != null) {
             task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
@@ -192,7 +173,6 @@ public class TaskBuilder {
         previousTaskProperties.put(MV_ID, mvId);
         task.setProperties(previousTaskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
-        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         if (previousTask != null) {
             task.setCreateUser(previousTask.getCreateUser());
@@ -267,13 +247,13 @@ public class TaskBuilder {
         if (currentTask == null) {
             task = TaskBuilder.buildMvTask(materializedView, dbName);
             TaskBuilder.updateTaskInfo(task, materializedView);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         } else {
             Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
                     Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
             Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties, currentTask);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
-            taskManager.alterTask(currentTask, changedTask, false);
+            taskManager.alterTask(currentTask, changedTask);
             task = currentTask;
         }
 
@@ -285,5 +265,37 @@ public class TaskBuilder {
 
     public static String getMvTaskName(long mvId) {
         return "mv-" + mvId;
+    }
+
+    /**
+     * Get MaterializedView object from task if the task is mv task, otherwise return null.
+     */
+    public static MaterializedView getMvFromTask(Task task) {
+        if (task == null || task.getSource() != Constants.TaskSource.MV) {
+            return null;
+        }
+
+        Map<String, String> properties = task.getProperties();
+        if (properties == null || !properties.containsKey(MV_ID)) {
+            LOG.warn("mv id is missing in task properties, task: {}", task.getName());
+            return null;
+        }
+        String dbName = task.getDbName();
+        if (dbName == null) {
+            LOG.warn("db name is missing in task, task: {}", task.getName());
+            return null;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            LOG.warn("db not found: {}, task: {}", dbName, task.getName());
+            return null;
+        }
+        long mvId = Long.parseLong(properties.get(MV_ID));
+        Table table = db.getTable(mvId);
+        if (table == null || !(table instanceof MaterializedView)) {
+            LOG.warn("mv not found: {}, task: {}", mvId, task.getName());
+            return null;
+        }
+        return (MaterializedView) table;
     }
 }

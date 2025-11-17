@@ -35,7 +35,6 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.ClusterLoadStatistic;
@@ -50,6 +49,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -151,7 +151,7 @@ public class BalanceStatProcNodeTest {
 
         // 1. cluster tablet balance
         {
-            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1025L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
@@ -187,7 +187,7 @@ public class BalanceStatProcNodeTest {
 
         // 2. colocate mismatch balance
         {
-            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1125L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
@@ -231,7 +231,7 @@ public class BalanceStatProcNodeTest {
 
         // 3. label location mismatch balance
         {
-            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1225L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);

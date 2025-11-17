@@ -1223,7 +1223,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n"));
+                "     avgRowSize=3.0\n"), plan);
 
         sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1680,7 +1680,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 4> : arrays_overlap(3: v3, CAST([1] AS ARRAY<BIGINT>))\n" +
+                "  |  <slot 4> : arrays_overlap(3: v3, [1])\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
@@ -1874,6 +1874,27 @@ public class AggregateTest extends PlanTestBase {
                 "     <id 17> : max_t1b\n" +
                 "     <id 18> : min_id_datetime\n" +
                 "     <id 19> : count_t1b");
+
+        sql = "select count(*) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type_not_null\n" +
+                "     <id 14> : rows_t1b");
+
+        sql = "select count(*) from part_t1 partitions(p1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_v4)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: part_t1\n" +
+                "     <id 7> : rows_v4\n" +
+                "     Partitions: [p1]");
 
         // The following cases will not use MetaScan because some conditions are not met
         // with group by key
@@ -3120,5 +3141,190 @@ public class AggregateTest extends PlanTestBase {
         sql = "select sum_if(v2, 'true') from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "sum_if");
+    }
+
+    @Test
+    public void testPruneAggregateNode() throws Exception {
+        String sql;
+        String plan;
+
+        FeConstants.runningUnitTest = true;
+        try {
+            sql = "with w1 as (SELECT v2, v3 from t0 order by v2 ) SELECT count(v2), sum(v3) from w1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(2: v2), sum(3: v3)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  2:MERGING-EXCHANGE");
+
+            sql = "SELECT count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
+            plan = getCostExplain(sql);
+            assertContains(plan, "  5:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: count[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+                    "args nullable: true; result nullable: false], " +
+                    "bitmap_union_count[([6: bitmap_union_count, BIGINT, false]); " +
+                    "args: BITMAP; result: BIGINT; args nullable: true; " +
+                    "result nullable: false]\n" +
+                    "  |  group by: [3: v3, BIGINT, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  column statistics: \n" +
+                    "  |  * v3-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  * count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  * bitmap_union_count-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                    "  |  \n" +
+                    "  4:AGGREGATE (merge serialize)\n" +
+                    "  |  aggregate: bitmap_union_count[([6: bitmap_union_count, BITMAP, false]); " +
+                    "args: BITMAP; result: BIGINT; " +
+                    "args nullable: true; result nullable: false]\n" +
+                    "  |  group by: [2: v2, BIGINT, true], [3: v3, BIGINT, true]\n" +
+                    "  |  cardinality: 1");
+
+            sql = "SELECT /*+SET_VAR(enable_cost_based_multi_stage_agg=false)*/ " +
+                    "count(distinct v2), bitmap_union_count(to_bitmap(v2)) from t0 group by v3;";
+            String disabledPlan = getCostExplain(sql);
+            Assertions.assertEquals(disabledPlan, plan);
+
+            // distinct group_concat cannot merge two phase agg to one phase agg.
+            sql = "select group_concat(distinct 1,2 order by 1,2) from t0 group by v1 order by 1;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (merge finalize)\n" +
+                    "  |  output: group_concat(4: group_concat, '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: group_concat(DISTINCT '1', '2', ',')\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // distinct avg cannot merge two phase agg to one phase agg.
+            sql = "select avg(distinct v2) from t0 group by v1";
+            plan  = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: avg(2: v2)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update serialize)\n" +
+                    "  |  group by: 1: v1, 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            // Test basic case - should apply the rule
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)\n"
+                    + "  |  colocate: false, reason: \n"
+                    + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
+                    + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
+
+            // Test case 1: duplicatedColumns.size() > 3 - should not apply the rule
+            // This query has 4 columns in first scan: L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_LINENUMBER
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 2: conjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 AND L_DISCOUNT < 1 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 3: disconjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 OR L_DISCOUNT = 3 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 4: conjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 "
+                    + "GROUP BY L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 5: disconjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 6: duplicatedColumns.size() = 3 - should apply the rule (boundary case)
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 7: long string column (averageRowSize > 5) - should not apply the rule
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_COMMENT <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied due to long string
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_RETURNFLAG <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied for short string
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testAvoidMergeNonGroupByAgg() throws Exception {
+        String plan = getFragmentPlan("SELECT /*+SET_VAR(disable_join_reorder=true)*/ COUNT(*) " +
+                "FROM t0 RIGHT JOIN t1 ON v1 < v4");
+        assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  6:AGGREGATE (update serialize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: ");
     }
 }

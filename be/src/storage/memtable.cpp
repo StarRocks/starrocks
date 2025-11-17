@@ -69,13 +69,14 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
     }
 }
 
-void MemTable::_init_aggregator_if_needed() {
+Status MemTable::prepare() {
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(_vectorized_schema, 0, INT_MAX, 0);
+        ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(_vectorized_schema, 0, INT_MAX, 0));
     }
+    return Status::OK();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -92,7 +93,6 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
-    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -108,7 +108,6 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
-    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
@@ -120,9 +119,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, 
           _sink(sink),
           _aggregator(nullptr),
           _max_buffer_size(max_buffer_size),
-          _mem_tracker(mem_tracker) {
-    _init_aggregator_if_needed();
-}
+          _mem_tracker(mem_tracker) {}
 
 MemTable::~MemTable() = default;
 
@@ -323,6 +320,7 @@ Status MemTable::finalize() {
     }
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
+    StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
     StarRocksMetrics::instance()->memtable_finalize_duration_us.increment(duration_ns / 1000);
     return Status::OK();
 }

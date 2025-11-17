@@ -15,30 +15,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# ==============================================================================
-# StarRocks Backend (BE) CMakeLists.txt for macOS ARM64
-# ==============================================================================
-#
-# This CMakeLists.txt is specifically designed for building StarRocks BE on
-# macOS ARM64 (Apple Silicon). It includes all necessary configurations for:
-# - Third-party library integration
-# - Apple frameworks support
-# - ARM64 optimizations
-# - Static linking preferences
-# - Disabled problematic components
-#
-# Usage:
-#   mkdir build && cd build
-#   cmake -G Ninja -DCMAKE_BUILD_TYPE=Release ..
-#   ninja starrocks_be
-#
-# Environment Variables:
-#   STARROCKS_THIRDPARTY    - Third-party libraries directory
-#   STARROCKS_GCC_HOME      - Compiler home directory
-#   STARROCKS_LLVM_HOME     - LLVM home directory
-#   PROTOBUF_ROOT          - Protobuf installation directory
-#
-
 cmake_minimum_required(VERSION 3.11.1)
 
 # ==============================================================================
@@ -89,13 +65,6 @@ endmacro()
 
 project(starrocks_macos CXX C)
 
-# ==============================================================================
-# BUILD TYPE CONFIGURATION
-# ==============================================================================
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
-
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE)
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
@@ -106,6 +75,23 @@ execute_process(COMMAND bash "-c" "uname -m"
 message(STATUS "Build target arch is ${CMAKE_BUILD_TARGET_ARCH}")
 
 # ==============================================================================
+# HOMEBREW PREFIX DETECTION
+# ==============================================================================
+# Dynamically detect Homebrew installation path
+execute_process(
+    COMMAND brew --prefix
+    OUTPUT_VARIABLE HOMEBREW_PREFIX
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE BREW_RESULT
+)
+
+if(NOT BREW_RESULT EQUAL 0)
+    message(FATAL_ERROR "Homebrew not found. Please install Homebrew first: https://brew.sh")
+endif()
+
+message(STATUS "Homebrew prefix: ${HOMEBREW_PREFIX}")
+
+# ==============================================================================
 # DIRECTORY CONFIGURATION
 # ==============================================================================
 set(BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../be")
@@ -114,6 +100,10 @@ set(THIRDPARTY_DIR "$ENV{STARROCKS_THIRDPARTY}")
 set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(SRC_DIR "${BASE_DIR}/src")
 set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
+set(GENCODE_DIR "${GENSRC_DIR}/gen_cpp")
+if(NOT EXISTS "${GENCODE_DIR}")
+    message(FATAL_ERROR "Generated C++ sources directory not found: ${GENCODE_DIR}")
+endif()
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
@@ -131,138 +121,42 @@ message(STATUS "Base directory: ${BASE_DIR}")
 message(STATUS "Build directory: ${BUILD_DIR}")
 message(STATUS "Third-party directory: ${THIRDPARTY_DIR}")
 
-# ==============================================================================
-# FEATURE OPTIONS - DISABLED COMPONENTS FOR MACOS
-# ==============================================================================
-# Force disable problematic components on macOS
-option(MAKE_TEST "ON for make unit test or OFF for not" OFF)
-option(WITH_AVRO "Build with Avro support" OFF)
-option(WITH_ORC "Build with ORC support" OFF)
-option(WITH_HDFS "Build with HDFS support" OFF)
-option(WITH_JDBC "Build with JDBC support" OFF)
-option(WITH_HTTP "Build with HTTP client support" ON)  # Required for BE operation
-option(WITH_PYTHON "Build with Python runtime support" OFF)
-option(WITH_JAVA "Build with Java runtime support" OFF)
-option(WITH_LZO "Build with LZO compression support" OFF)
-option(WITH_S2 "Build with S2 geometry support" OFF)
-option(WITH_GLOG_STACKTRACE "Build with glog stack trace support" OFF)
-option(WITH_STARCACHE "Build with starcache support" OFF)
-option(WITH_PULSAR "Build with Pulsar support" OFF)
-option(WITH_BVAR "Build with BVAR support" OFF)
-option(WITH_JSON_FLAT "Build with JSON flat support" OFF)
-option(WITH_ARROW_FLIGHT "Build with Arrow Flight support" OFF)
-option(WITH_KAFKA "Build with Kafka support" OFF)
-option(WITH_TENANN "Build with TENANN" OFF)
-option(WITH_AZURE "Build with Azure support" OFF)
-option(WITH_GEO "Build with GEO support" OFF)
-option(WITH_S3 "Build with S3 support" OFF)
-option(WITH_MYSQL "Build with MySQL table writer support" OFF)
-option(WITH_CLUCENE "Build with CLucene inverted index support" OFF)
-option(USE_SANITIZER "Enable AddressSanitizer" OFF)
-option(USE_SSE4_2 "Build with SSE4.2 instruction" OFF)
-option(USE_BMI_2 "Build with BMI2 instruction" OFF)
-option(USE_AVX2 "Build with AVX2 instruction" OFF)
-option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
-option(STARROCKS_JIT_ENABLE "Enable JIT compilation support" OFF)
-
-# Set all disabled options as FORCE to prevent override
-set(WITH_AVRO OFF CACHE BOOL "Disable Avro on macOS" FORCE)
-set(WITH_ORC OFF CACHE BOOL "Disable ORC on macOS" FORCE)
-set(WITH_HDFS OFF CACHE BOOL "Disable HDFS on macOS" FORCE)
-set(WITH_JDBC OFF CACHE BOOL "Disable JDBC on macOS" FORCE)
-set(WITH_PYTHON OFF CACHE BOOL "Disable Python runtime on macOS" FORCE)
-set(WITH_JAVA OFF CACHE BOOL "Disable Java runtime on macOS" FORCE)
-set(WITH_LZO OFF CACHE BOOL "Disable LZO compression on macOS" FORCE)
-set(WITH_S2 OFF CACHE BOOL "Disable S2 geometry on macOS" FORCE)
-set(WITH_GLOG_STACKTRACE OFF CACHE BOOL "Disable glog stack trace on macOS" FORCE)
-set(WITH_STARCACHE OFF CACHE BOOL "Disable starcache on macOS" FORCE)
-set(USE_SSE4_2 OFF CACHE BOOL "Disable SSE4.2 on ARM64" FORCE)
-set(USE_AVX2 OFF CACHE BOOL "Disable AVX2 on ARM64" FORCE)
-set(USE_AVX512 OFF CACHE BOOL "Disable AVX512 on ARM64" FORCE)
-set(STARROCKS_JIT_ENABLE OFF CACHE BOOL "Disable JIT on macOS" FORCE)
-set(WITH_AZURE OFF CACHE BOOL "Disable Azure on macOS" FORCE)
-set(WITH_GEO OFF CACHE BOOL "Disable GEO on macOS" FORCE)
-set(WITH_S3 OFF CACHE BOOL "Disable S3 on macOS" FORCE)
-set(WITH_MYSQL OFF CACHE BOOL "Disable MySQL table writer on macOS" FORCE)
-set(WITH_CLUCENE OFF CACHE BOOL "Disable CLucene inverted index on macOS" FORCE)
-
-# Add compile definitions for disabled features
-add_definitions(-DMACOS_DISABLE_AVRO)
-add_definitions(-DMACOS_DISABLE_ORC)
-add_definitions(-DMACOS_DISABLE_HDFS)
-add_definitions(-DMACOS_DISABLE_JDBC)
-add_definitions(-DMACOS_DISABLE_PYTHON)
-add_definitions(-DMACOS_DISABLE_JAVA)
-add_definitions(-DMACOS_DISABLE_LZO)
-add_definitions(-DMACOS_DISABLE_S2)
-add_definitions(-DMACOS_DISABLE_GLOG_STACKTRACE)
-add_definitions(-DMACOS_DISABLE_TRACER)
-add_definitions(-DMACOS_DISABLE_OPENTELEMETRY)
-add_definitions(-DMACOS_DISABLE_JIT)
-add_definitions(-DMACOS_DISABLE_AZURE)
-add_definitions(-DMACOS_DISABLE_GEO)
-add_definitions(-DMACOS_DISABLE_S3)
-add_definitions(-DMACOS_DISABLE_MYSQL)
-add_definitions(-DMACOS_DISABLE_CLUCENE)
-add_definitions(-DMACOS_DISABLE_STARCACHE)
-# Disable spill feature on macOS
-add_definitions(-DMACOS_DISABLE_SPILL)
-# Disable Elasticsearch connector on macOS
-add_definitions(-DMACOS_DISABLE_ES)
-
-# Force-include macOS shim headers across all translation units to avoid
-# touching core source files.
+# Force-include macOS shim headers (required for typeof, std::max overloads, etc.)
+# Note: We now use fmt 8.1.1 from source (same as Linux), so fmt-related conflicts are resolved
 add_compile_options(-include ${CMAKE_CURRENT_LIST_DIR}/shims/include/starrocks_macos_fmt_shims.h)
+
 # Ensure starcache/staros code paths are disabled by making the macros undefined
 add_compile_options(-UWITH_STARCACHE -UUSE_STAROS)
+# Add glog export definition to fix compilation issues
+add_compile_definitions(GLOG_USE_GLOG_EXPORT)
 
 message(STATUS "macOS: Disabled problematic components for ARM64 compatibility")
 
 # ==============================================================================
 # PROTOBUF CONFIGURATION - CRITICAL FOR BRPC COMPATIBILITY
 # ==============================================================================
-# Use compiled protobuf-3.14.0 from thirdparty directory
+# Use compiled protobuf-3.14.0 from thirdparty directory for version compatibility
 if(DEFINED ENV{PROTOBUF_ROOT})
     set(PROTOBUF_HOME "$ENV{PROTOBUF_ROOT}")
 else()
     set(PROTOBUF_HOME "${THIRDPARTY_DIR}/installed")
 endif()
 
-# Force CMake to use our protobuf instead of system
+# Force CMake to use our protobuf 3.14.0 instead of system version
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
-set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
 set(CMAKE_PREFIX_PATH "${PROTOBUF_HOME};${CMAKE_PREFIX_PATH}")
-set(CMAKE_FIND_ROOT_PATH "${PROTOBUF_HOME};${CMAKE_FIND_ROOT_PATH}")
-
-# Overwrite any cached Protobuf discovery with our thirdparty 3.14.0
 set(Protobuf_DIR "${PROTOBUF_HOME}/lib/cmake/protobuf" CACHE PATH "Protobuf config dir" FORCE)
-set(protobuf_DIR "${PROTOBUF_HOME}/lib/cmake/protobuf" CACHE PATH "protobuf config dir (lowercase)" FORCE)
-
-# Remove any system protobuf paths from CMAKE_PREFIX_PATH
-string(REPLACE "/opt/homebrew/lib/cmake/protobuf" "" CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
-string(REPLACE "/opt/homebrew" "" CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
-
-# Ensure our protobuf path is first in CMAKE_PREFIX_PATH
-set(CMAKE_PREFIX_PATH "${PROTOBUF_HOME}/lib/cmake/protobuf;${PROTOBUF_HOME};${CMAKE_PREFIX_PATH}")
 
 # Set protobuf variables for direct usage
-set(PROTOBUF_FOUND TRUE)
 set(PROTOBUF_LIBRARY "${PROTOBUF_HOME}/lib/libprotobuf.a" CACHE FILEPATH "libprotobuf.a" FORCE)
 set(PROTOBUF_INCLUDE_DIR "${PROTOBUF_HOME}/include" CACHE PATH "protobuf include dir" FORCE)
 set(PROTOBUF_PROTOC_EXECUTABLE "${PROTOBUF_HOME}/bin/protoc" CACHE FILEPATH "protoc" FORCE)
 
-# Force override again after any other package loads protobuf
-set(Protobuf_FOUND TRUE)
-set(Protobuf_INCLUDE_DIRS "${PROTOBUF_HOME}/include" CACHE PATH "" FORCE)
-set(Protobuf_LIBRARIES "${PROTOBUF_HOME}/lib/libprotobuf.a" CACHE FILEPATH "" FORCE)
-set(Protobuf_PROTOC_EXECUTABLE "${PROTOBUF_HOME}/bin/protoc" CACHE FILEPATH "" FORCE)
-
-# Create protobuf target for macOS - STATIC ONLY to avoid dynamic linking
+# Create protobuf target - STATIC ONLY to avoid dynamic linking issues
 add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES
-    IMPORTED_LOCATION "${PROTOBUF_HOME}/lib/libprotobuf.a"
-    INTERFACE_INCLUDE_DIRECTORIES "${PROTOBUF_HOME}/include"
-    IMPORTED_LINK_INTERFACE_LIBRARIES "")
+    IMPORTED_LOCATION "${PROTOBUF_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${PROTOBUF_INCLUDE_DIR}")
 
 # Force static linking preferences
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
@@ -272,8 +166,13 @@ set(BUILD_SHARED_LIBS OFF)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-search_paths_first")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-search_paths_first")
 
-# Force compiler include paths: ensure our protobuf include comes FIRST
-include_directories(BEFORE "${PROTOBUF_HOME}/include")
+# Add linker flags for libc++ compatibility on macOS
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
+
+# Force the linker to use the correct libc++ version
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++ -lc++abi")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -lc++ -lc++abi")
 
 message(STATUS "Protobuf configuration:")
 message(STATUS "  Home: ${PROTOBUF_HOME}")
@@ -303,6 +202,12 @@ add_library(build_version OBJECT ${BUILD_VERSION_CC})
 target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
 
 # ==============================================================================
+# ENV CONFIG GENERATION
+# ==============================================================================
+# Generate env_config.h according to env_config.h.in
+configure_file(${SRC_DIR}/common/env_config.h.in ${GENSRC_DIR}/common/env_config.h @ONLY)
+
+# ==============================================================================
 # THIRD-PARTY LIBRARY PATHS
 # ==============================================================================
 # Add common cmake prefix path and link library path
@@ -318,9 +223,9 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_NO_BOOST_CMAKE ON)
 set(BOOST_ROOT ${THIRDPARTY_DIR}/installed)
 
-# On macOS, use shared Boost (more compatible)
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_STATIC_RUNTIME OFF)
+# On macOS, use static Boost libraries (matching thirdparty build)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME ON)
 
 # Thread configuration for macOS
 set(CMAKE_THREAD_LIBS_INIT "-lpthread")
@@ -369,6 +274,10 @@ set_target_properties(glog PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 target_compile_definitions(glog INTERFACE GLOG_USE_GLOG_EXPORT)
 
+# Create gflags-glog combined library to fix missing glog symbols
+add_library(gflags-glog INTERFACE)
+target_link_libraries(gflags-glog INTERFACE gflags glog)
+
 # leveldb
 add_library(leveldb STATIC IMPORTED GLOBAL)
 set_target_properties(leveldb PROPERTIES
@@ -394,35 +303,82 @@ set_target_properties(velocypack PROPERTIES
     IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libvelocypack.a
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
+# fmt - formatting library (check if not already imported by Arrow)
+if(NOT TARGET fmt)
+    add_library(fmt STATIC IMPORTED GLOBAL)
+    set_target_properties(fmt PROPERTIES
+        IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libfmt.a
+        INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+    message(STATUS "fmt library imported from thirdparty: ${THIRDPARTY_DIR}/installed/lib/libfmt.a")
+else()
+    message(STATUS "fmt target already exists (likely from Arrow), using existing target")
+endif()
+
 # bitshuffle
 add_library(bitshuffle STATIC IMPORTED GLOBAL)
 set_target_properties(bitshuffle PROPERTIES
     IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libbitshuffle.a
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
-# Homebrew libraries - jemalloc
-find_library(JEMALLOC_LIB NAMES jemalloc PATHS /opt/homebrew/lib REQUIRED)
-add_library(jemalloc STATIC IMPORTED GLOBAL)
-set_target_properties(jemalloc PROPERTIES
-    IMPORTED_LOCATION ${JEMALLOC_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
-
 # Homebrew libraries - snappy
-find_library(SNAPPY_LIB NAMES snappy PATHS /opt/homebrew/lib REQUIRED)
+find_library(SNAPPY_LIB NAMES snappy PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
 add_library(snappy STATIC IMPORTED GLOBAL)
 set_target_properties(snappy PROPERTIES
     IMPORTED_LOCATION ${SNAPPY_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
 
-# zlib (from homebrew) - use direct path
-set(ZLIB_LIB "/opt/homebrew/Cellar/zlib/1.3.1/lib/libz.a")
-if(NOT EXISTS ${ZLIB_LIB})
-    message(FATAL_ERROR "zlib library not found at ${ZLIB_LIB}")
+# Homebrew libraries - lz4
+find_library(LZ4_LIB NAMES lz4 PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+add_library(lz4 STATIC IMPORTED GLOBAL)
+set_target_properties(lz4 PROPERTIES
+    IMPORTED_LOCATION ${LZ4_LIB}
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/opt/lz4/include)
+
+# On macOS, Homebrew installs headers without subdirectory
+# Add macro to use direct includes instead of subdirectory includes
+add_compile_definitions(STARROCKS_MACOS_USE_FLAT_INCLUDES=1)
+
+# Homebrew libraries - zstd
+find_library(ZSTD_LIB NAMES zstd PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+add_library(zstd STATIC IMPORTED GLOBAL)
+set_target_properties(zstd PROPERTIES
+    IMPORTED_LOCATION ${ZSTD_LIB}
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/opt/zstd/include)
+
+# zlib (from homebrew) - use dynamic lookup
+find_library(ZLIB_LIB NAMES z PATHS
+    ${HOMEBREW_PREFIX}/Cellar/zlib/*/lib
+    ${HOMEBREW_PREFIX}/lib
+    REQUIRED
+    NO_DEFAULT_PATH)
+if(NOT ZLIB_LIB)
+    message(FATAL_ERROR "zlib library not found. Please install: brew install zlib")
 endif()
 add_library(zlib STATIC IMPORTED GLOBAL)
 set_target_properties(zlib PROPERTIES
-    IMPORTED_LOCATION ${ZLIB_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    IMPORTED_LOCATION ${ZLIB_LIB})
+message(STATUS "zlib found: ${ZLIB_LIB}")
+
+# Bzip2 library for compression support - use dynamic lookup
+find_library(BZIP2_LIB NAMES bz2 PATHS
+    ${HOMEBREW_PREFIX}/Cellar/bzip2/*/lib
+    ${HOMEBREW_PREFIX}/lib
+    REQUIRED
+    NO_DEFAULT_PATH)
+if(NOT BZIP2_LIB)
+    message(FATAL_ERROR "bzip2 library not found. Please install: brew install bzip2")
+endif()
+add_library(bzip2 STATIC IMPORTED GLOBAL)
+set_target_properties(bzip2 PROPERTIES
+    IMPORTED_LOCATION ${BZIP2_LIB})
+message(STATUS "bzip2 found: ${BZIP2_LIB}")
+
+# Ryu library for fast float-to-string conversion
+add_library(ryu STATIC IMPORTED GLOBAL)
+set_target_properties(ryu PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libryu.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+message(STATUS "ryu found: ${THIRDPARTY_DIR}/installed/lib/libryu.a")
 
 # vectorscan (hyperscan-compatible) from thirdparty
 # Vectorscan installs libhs.a and libhs_runtime.a (hyperscan ABI)
@@ -431,24 +387,28 @@ set_target_properties(vectorscan PROPERTIES
     IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libhs.a
     INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
-# hs_runtime from vectorscan
-add_library(hs_runtime STATIC IMPORTED GLOBAL)
-set_target_properties(hs_runtime PROPERTIES
-    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libhs_runtime.a
-    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+# roaring bitmap - use only compiled static library from thirdparty
+find_library(ROARING_LIB NAMES libroaring.a PATHS
+    ${THIRDPARTY_DIR}/installed/lib
+    NO_DEFAULT_PATH)
 
-# roaring bitmap from homebrew (dynamic library)
-set(ROARING_LIB "/opt/homebrew/Cellar/croaring/4.3.12/lib/libroaring.dylib")
-if(NOT EXISTS ${ROARING_LIB})
-    message(FATAL_ERROR "roaring library not found at ${ROARING_LIB}")
+# roaring bitmap - use only compiled static library from thirdparty
+find_library(ROARING_LIB NAMES libroaring.a PATHS
+    ${THIRDPARTY_DIR}/installed/lib
+    NO_DEFAULT_PATH)
+
+if(NOT ROARING_LIB)
+    message(FATAL_ERROR "roaring library not found in thirdparty. Please run build_thirdparty.sh first to build croaringbitmap from source")
 endif()
-add_library(roaring SHARED IMPORTED GLOBAL)
+
+message(STATUS "roaring found (compiled): ${ROARING_LIB}")
+add_library(roaring STATIC IMPORTED GLOBAL)
 set_target_properties(roaring PROPERTIES
     IMPORTED_LOCATION ${ROARING_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
 
 # Apache Arrow and Parquet from Homebrew - required for file formats
-set(APACHE_ARROW_HOME "/opt/homebrew/opt/apache-arrow")
+set(APACHE_ARROW_HOME "${HOMEBREW_PREFIX}/opt/apache-arrow")
 if(EXISTS "${APACHE_ARROW_HOME}/lib/libarrow.dylib")
     add_library(arrow SHARED IMPORTED GLOBAL)
     set_target_properties(arrow PROPERTIES
@@ -465,65 +425,139 @@ else()
     message(FATAL_ERROR "Apache Arrow not found. Please install: brew install apache-arrow")
 endif()
 
-# Thrift from Homebrew - required for Thrift protocols
-set(THRIFT_HOME "/opt/homebrew/opt/thrift@0.20")
-if(EXISTS "${THRIFT_HOME}/lib/libthrift.dylib")
-    add_library(thrift SHARED IMPORTED GLOBAL)
+# fmt library - already defined above using thirdparty compiled version (removed duplicate)
+
+# ICU libraries (use thirdparty compiled version for compatibility)
+# Use static libraries from thirdparty to avoid version conflicts
+add_library(icuuc STATIC IMPORTED GLOBAL)
+set_target_properties(icuuc PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libicuuc.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+add_library(icui18n STATIC IMPORTED GLOBAL)
+set_target_properties(icui18n PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libicui18n.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+add_library(icuio STATIC IMPORTED GLOBAL)
+set_target_properties(icuio PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libicuio.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+add_library(icudata STATIC IMPORTED GLOBAL)
+set_target_properties(icudata PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libicudata.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+add_library(icutest STATIC IMPORTED GLOBAL)
+set_target_properties(icutest PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libicutest.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+add_library(icutu STATIC IMPORTED GLOBAL)
+set_target_properties(icutu PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libicutu.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+
+message(STATUS "ICU libraries found in thirdparty")
+
+# Thrift from thirdparty - built from source for complete functionality
+set(THRIFT_HOME "${THIRDPARTY_DIR}/installed")
+
+# Main Thrift library
+if(EXISTS "${THRIFT_HOME}/lib/libthrift.a")
+    add_library(thrift STATIC IMPORTED GLOBAL)
     set_target_properties(thrift PROPERTIES
-        IMPORTED_LOCATION "${THRIFT_HOME}/lib/libthrift.dylib"
+        IMPORTED_LOCATION "${THRIFT_HOME}/lib/libthrift.a"
         INTERFACE_INCLUDE_DIRECTORIES "${THRIFT_HOME}/include")
 
-    message(STATUS "Thrift found at: ${THRIFT_HOME}")
+    message(STATUS "Thrift static library found at: ${THRIFT_HOME}")
 else()
-    message(FATAL_ERROR "Thrift not found. Please install: brew install thrift@0.20")
+    message(FATAL_ERROR "Thrift static library not found. Please run build_thirdparty.sh first")
 endif()
 
-# OpenSSL from Homebrew
+# Thrift Non-Blocking library (critical for TNonblockingServer)
+if(EXISTS "${THRIFT_HOME}/lib/libthriftnb.a")
+    add_library(thriftnb STATIC IMPORTED GLOBAL)
+    set_target_properties(thriftnb PROPERTIES
+        IMPORTED_LOCATION "${THRIFT_HOME}/lib/libthriftnb.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${THRIFT_HOME}/include")
+
+    message(STATUS "Thrift NB static library found at: ${THRIFT_HOME}")
+else()
+    message(FATAL_ERROR "Thrift NB static library not found. Please run build_thirdparty.sh first")
+endif()
+
+# OpenSSL from Homebrew - required for SSL/TLS support in brpc and thrift
 find_package(OpenSSL REQUIRED)
 if(NOT OpenSSL_FOUND)
     message(FATAL_ERROR "OpenSSL not found. Please install: brew install openssl@3")
 endif()
 
-# cURL from Homebrew - use direct path to fix linking
-set(CURL_LIBRARY "/opt/homebrew/Cellar/curl/8.16.0/lib/libcurl.dylib")
-if(NOT EXISTS ${CURL_LIBRARY})
-    set(CURL_LIBRARY "/opt/homebrew/lib/libcurl.dylib")  # fallback to symlink
+# Ensure we have both ssl and crypto libraries
+if(NOT OPENSSL_CRYPTO_LIBRARY)
+    message(FATAL_ERROR "OpenSSL crypto library not found")
 endif()
 
+message(STATUS "OpenSSL configuration:")
+message(STATUS "  SSL Library: ${OPENSSL_SSL_LIBRARY}")
+message(STATUS "  Crypto Library: ${OPENSSL_CRYPTO_LIBRARY}")
+
+# cURL from thirdparty - use our custom compiled version
+set(CURL_LIBRARY "${THIRDPARTY_DIR}/installed/lib/libcurl.a")
 if(NOT EXISTS ${CURL_LIBRARY})
-    message(FATAL_ERROR "CURL library not found")
+    message(FATAL_ERROR "Custom curl library not found. Please run build_thirdparty.sh first")
 endif()
 
 # Create imported target for curl
-add_library(CURL::libcurl SHARED IMPORTED GLOBAL)
+add_library(CURL::libcurl STATIC IMPORTED GLOBAL)
 set_target_properties(CURL::libcurl PROPERTIES
     IMPORTED_LOCATION ${CURL_LIBRARY}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
-
-message(STATUS "CURL found: ${CURL_LIBRARY}")
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+message(STATUS "Using custom curl: ${CURL_LIBRARY}")
 
 # libevent from Homebrew - required for HTTP server functionality
-find_library(LIBEVENT_LIB NAMES event PATHS /opt/homebrew/lib REQUIRED)
-find_library(LIBEVENT_CORE_LIB NAMES event_core PATHS /opt/homebrew/lib REQUIRED)
-find_library(LIBEVENT_EXTRA_LIB NAMES event_extra PATHS /opt/homebrew/lib REQUIRED)
-if(NOT LIBEVENT_LIB OR NOT LIBEVENT_CORE_LIB OR NOT LIBEVENT_EXTRA_LIB)
+find_library(LIBEVENT_LIB NAMES event PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+if(NOT LIBEVENT_LIB)
     message(FATAL_ERROR "libevent not found. Please install: brew install libevent")
 endif()
 
 add_library(libevent STATIC IMPORTED GLOBAL)
 set_target_properties(libevent PROPERTIES
     IMPORTED_LOCATION ${LIBEVENT_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
 
-add_library(libevent_core STATIC IMPORTED GLOBAL)
-set_target_properties(libevent_core PROPERTIES
-    IMPORTED_LOCATION ${LIBEVENT_CORE_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+# re2 library from Homebrew - required for regex support
+find_library(RE2_LIB NAMES re2 PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+if(NOT RE2_LIB)
+    message(FATAL_ERROR "re2 not found. Please install: brew install re2")
+endif()
 
-add_library(libevent_extra STATIC IMPORTED GLOBAL)
-set_target_properties(libevent_extra PROPERTIES
-    IMPORTED_LOCATION ${LIBEVENT_EXTRA_LIB}
-    INTERFACE_INCLUDE_DIRECTORIES /opt/homebrew/include)
+add_library(re2 STATIC IMPORTED GLOBAL)
+set_target_properties(re2 PROPERTIES
+    IMPORTED_LOCATION ${RE2_LIB}
+    INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+
+# abseil libraries from Homebrew - required by re2 (dynamic libraries)
+# Temporarily allow finding .dylib files for abseil
+set(CMAKE_FIND_LIBRARY_SUFFIXES_SAVED ${CMAKE_FIND_LIBRARY_SUFFIXES})
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".dylib" ".a")
+
+find_library(ABSL_BASE_LIB NAMES absl_base PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_SPINLOCK_WAIT_LIB NAMES absl_spinlock_wait PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_HASH_LIB NAMES absl_hash PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_LOG_INTERNAL_MESSAGE_LIB NAMES absl_log_internal_message PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_SYNCHRONIZATION_LIB NAMES absl_synchronization PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_STRINGS_LIB NAMES absl_strings PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_STR_FORMAT_INTERNAL_LIB NAMES absl_str_format_internal PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+find_library(ABSL_RAW_HASH_SET_LIB NAMES absl_raw_hash_set PATHS ${HOMEBREW_PREFIX}/lib NO_DEFAULT_PATH)
+
+# Restore the original suffixes
+set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES_SAVED})
+
+if(NOT ABSL_BASE_LIB)
+    message(FATAL_ERROR "abseil libraries not found. Please install: brew install abseil")
+endif()
 
 message(STATUS "Third-party libraries configured successfully")
 
@@ -566,6 +600,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-everything")
 # macOS SDK and deployment target
 set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
 set(CMAKE_OSX_ARCHITECTURES "arm64")
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Build type specific flags
 if(CMAKE_BUILD_TYPE STREQUAL "DEBUG")
@@ -577,9 +614,11 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
     set(CMAKE_CXX_FLAGS_RELEASE "${CXX_FLAGS_RELEASE}")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
 elseif(CMAKE_BUILD_TYPE STREQUAL "ASAN")
-    set(CXX_FLAGS_ASAN "-g -O1 -fsanitize=address -fno-omit-frame-pointer -DDEBUG")
+    set(CXX_FLAGS_ASAN "-g -O0 -fsanitize=address -fno-omit-frame-pointer -DDEBUG -DADDRESS_SANITIZER")
     set(CMAKE_CXX_FLAGS_ASAN "${CXX_FLAGS_ASAN}")
-    set(CMAKE_C_FLAGS_ASAN "-g -O1 -fsanitize=address -fno-omit-frame-pointer -DDEBUG")
+    set(CMAKE_C_FLAGS_ASAN "-g -O0 -fsanitize=address -fno-omit-frame-pointer -DDEBUG")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address")
 endif()
 
 # Apply common flags
@@ -592,13 +631,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CXX_COMMON_FLAGS} -Wno-everything")
 # Base link libraries for macOS
 set(STARROCKS_LINK_LIBS "")
 
-# Static-only library strategy for better compatibility
-set(WL_START_GROUP "-Wl,-all_load")
-set(WL_END_GROUP "")
-
 # Core libraries
 list(APPEND STARROCKS_LINK_LIBS
-    ${WL_START_GROUP}
     protobuf
     brpc
     glog
@@ -607,40 +641,92 @@ list(APPEND STARROCKS_LINK_LIBS
     rocksdb
     velocypack
     bitshuffle
-    jemalloc
     snappy
+    lz4
+    zstd
     zlib
+    bzip2
+    ryu
     vectorscan
-    hs_runtime
     roaring
     arrow
     parquet
     thrift
+    thriftnb
     libevent
-    libevent_core
-    libevent_extra
+    re2
+    ${ABSL_BASE_LIB}
+    ${ABSL_SPINLOCK_WAIT_LIB}
+    ${ABSL_HASH_LIB}
+    ${ABSL_LOG_INTERNAL_MESSAGE_LIB}
+    ${ABSL_SYNCHRONIZATION_LIB}
+    ${ABSL_STRINGS_LIB}
+    ${ABSL_STR_FORMAT_INTERNAL_LIB}
+    ${ABSL_RAW_HASH_SET_LIB}
+    icuuc
+    icui18n
+    icudata
+    fmt
     ${Boost_LIBRARIES}
-    ${OPENSSL_LIBRARIES}
-    ${CURL_LIBRARIES}
-    ${WL_END_GROUP}
+    ${OPENSSL_SSL_LIBRARY}
+    ${OPENSSL_CRYPTO_LIBRARY}
+    CURL::libcurl
+    # Additional libraries for missing symbols
+    -levent_pthreads
 )
 
-# System libraries for macOS
+# cctz - Google's C++ time zone library (from thirdparty)
+add_library(cctz STATIC IMPORTED GLOBAL)
+set_target_properties(cctz PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libcctz.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+list(APPEND STARROCKS_LINK_LIBS cctz)
+message(STATUS "cctz found (thirdparty): ${THIRDPARTY_DIR}/installed/lib/libcctz.a")
+
+# streamvbyte for integer compression
+find_library(STREAMVBYTE_LIB NAMES streamvbyte PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+if(STREAMVBYTE_LIB)
+    add_library(streamvbyte STATIC IMPORTED GLOBAL)
+    set_target_properties(streamvbyte PROPERTIES
+        IMPORTED_LOCATION ${STREAMVBYTE_LIB}
+        INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+    list(APPEND STARROCKS_LINK_LIBS streamvbyte)
+    message(STATUS "streamvbyte found: ${STREAMVBYTE_LIB}")
+else()
+    message(FATAL_ERROR "streamvbyte not found. Please install: brew install streamvbyte")
+endif()
+
+# simdjson for fast JSON parsing
+find_library(SIMDJSON_LIB NAMES simdjson PATHS ${HOMEBREW_PREFIX}/lib REQUIRED)
+if(SIMDJSON_LIB)
+    add_library(simdjson SHARED IMPORTED GLOBAL)
+    set_target_properties(simdjson PROPERTIES
+        IMPORTED_LOCATION ${SIMDJSON_LIB}
+        INTERFACE_INCLUDE_DIRECTORIES ${HOMEBREW_PREFIX}/include)
+    list(APPEND STARROCKS_LINK_LIBS simdjson)
+    message(STATUS "simdjson found: ${SIMDJSON_LIB}")
+else()
+    message(FATAL_ERROR "simdjson not found. Please install: brew install simdjson")
+endif()
+
+# simdutf from thirdparty (statically built)
+add_library(simdutf STATIC IMPORTED GLOBAL)
+set_target_properties(simdutf PROPERTIES
+    IMPORTED_LOCATION ${THIRDPARTY_DIR}/installed/lib/libsimdutf.a
+    INTERFACE_INCLUDE_DIRECTORIES ${THIRDPARTY_DIR}/installed/include)
+list(APPEND STARROCKS_LINK_LIBS simdutf)
+message(STATUS "simdutf found (compiled): ${THIRDPARTY_DIR}/installed/lib/libsimdutf.a")
+
+# System libraries for macOS - fix libc++ linking, put standard libraries last
 list(APPEND STARROCKS_LINK_LIBS
     -lresolv
     -lc
     -lm
     -ldl
-    c++
-    c++abi
+    -lc++
+    -lc++abi
     ${CMAKE_THREAD_LIBS_INIT}
 )
-
-# AddressSanitizer support
-if(USE_SANITIZER)
-    list(APPEND STARROCKS_LINK_LIBS -fsanitize=address)
-    message(STATUS "AddressSanitizer enabled")
-endif()
 
 # ==============================================================================
 # APPLE FRAMEWORKS REQUIRED BY BRPC
@@ -649,12 +735,14 @@ find_library(COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
 find_library(CORETEXT_FRAMEWORK CoreText REQUIRED)
 find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
 find_library(SECURITY_FRAMEWORK Security REQUIRED)
+find_library(SYSTEMCONFIGURATION_FRAMEWORK SystemConfiguration REQUIRED)
 
 list(APPEND STARROCKS_LINK_LIBS
     ${COREGRAPHICS_FRAMEWORK}
     ${CORETEXT_FRAMEWORK}
     ${FOUNDATION_FRAMEWORK}
     ${SECURITY_FRAMEWORK}
+    ${SYSTEMCONFIGURATION_FRAMEWORK}
 )
 
 message(STATUS "Apple frameworks configured for brpc support")
@@ -664,12 +752,23 @@ message(STATUS "Apple frameworks configured for brpc support")
 # ==============================================================================
 # Include all source directories
 include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/include)
+include_directories(BEFORE ${CMAKE_CURRENT_LIST_DIR}/shims/override)
 include_directories(${SRC_DIR})
 include_directories(${GENSRC_DIR})
 include_directories(${BASE_DIR}/build)
 include_directories(${BASE_DIR}/../gensrc/build)
 include_directories(${BASE_DIR}/../gensrc/build/gen_cpp)
 include_directories(${THIRDPARTY_DIR}/installed/include)
+include_directories(${HOMEBREW_PREFIX}/opt/re2/include)
+include_directories(${HOMEBREW_PREFIX}/opt/abseil/include)
+include_directories(${HOMEBREW_PREFIX}/opt/rapidjson/include)
+include_directories(${HOMEBREW_PREFIX}/opt/fast_float/include)
+include_directories(${HOMEBREW_PREFIX}/opt/simdjson/include)
+include_directories(${HOMEBREW_PREFIX}/opt/googletest/include)
+include_directories(${HOMEBREW_PREFIX}/opt/libevent/include)
+include_directories(${HOMEBREW_PREFIX}/opt/apache-arrow/include)
+include_directories(${HOMEBREW_PREFIX}/opt/openssl@3/include)
+include_directories(${HOMEBREW_PREFIX}/opt/gperftools/include)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
 # Add source subdirectories - following the same pattern as main CMakeLists.txt
@@ -682,6 +781,7 @@ set(STARROCKS_SOURCE_DIRS
     ${SRC_DIR}/gen_cpp
     ${SRC_DIR}/geo
     ${SRC_DIR}/runtime
+    ${SRC_DIR}/serde
     ${SRC_DIR}/service
     ${SRC_DIR}/storage
     ${SRC_DIR}/types
@@ -690,32 +790,90 @@ set(STARROCKS_SOURCE_DIRS
 
 # Create a library for all StarRocks sources
 file(GLOB_RECURSE STARROCKS_SOURCES
+    ${SRC_DIR}/agent/*.cpp
     ${SRC_DIR}/common/*.cpp
     ${SRC_DIR}/column/*.cpp
     ${SRC_DIR}/exec/*.cpp
+    ${SRC_DIR}/exec/**/*.cpp
     ${SRC_DIR}/exprs/*.cpp
+    ${SRC_DIR}/exprs/**/*.cpp
     ${SRC_DIR}/formats/*.cpp
+    ${SRC_DIR}/formats/**/*.cpp
     ${SRC_DIR}/fs/*.cpp
-    ${SRC_DIR}/gen_cpp/*.cc
+    ${SRC_DIR}/fs/**/*.cpp
+    # Remove gen_cpp/*.cc to avoid duplicates - these are included via THRIFT_SOURCES
     ${SRC_DIR}/geo/*.cpp
     ${SRC_DIR}/http/*.cpp
+    ${SRC_DIR}/io/*.cpp
+    ${SRC_DIR}/cache/*.cpp
+    ${SRC_DIR}/cache/**/*.cpp
+    ${SRC_DIR}/gutil/*.cc
+    ${SRC_DIR}/gutil/**/*.cc
+    ${SRC_DIR}/gutil/*.cpp
+    ${SRC_DIR}/gutil/**/*.cpp
     ${SRC_DIR}/runtime/*.cpp
+    ${SRC_DIR}/runtime/**/*.cpp
+    ${SRC_DIR}/serde/*.cpp
     ${SRC_DIR}/service/*.cpp
+    ${SRC_DIR}/service/**/*.cpp
     ${SRC_DIR}/storage/*.cpp
+    ${SRC_DIR}/storage/**/*.cpp
     ${SRC_DIR}/types/*.cpp
+    # util contains important .cc sources on macOS (e.g., easy_json.cc)
     ${SRC_DIR}/util/*.cpp
+    ${SRC_DIR}/util/*.cc
+    ${SRC_DIR}/util/**/*.cpp
+    ${SRC_DIR}/util/**/*.cc
 )
 
+# Exclude generated sources under gen_cpp to avoid duplicate compilation
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/gen_cpp/.*")
+
+# Avoid compiling aggregate operator helper sources twice; aggregate_operators.cpp
+# already includes the individual operator implementations.
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/aggregate/[^/]*_operator.cpp$")
+
+# Force-remove geo sources from build on macOS
+file(GLOB_RECURSE GEO_SOURCES
+    ${SRC_DIR}/geo/*.cpp
+    ${SRC_DIR}/geo/**/*.cpp)
+list(REMOVE_ITEM STARROCKS_SOURCES ${GEO_SOURCES})
+
 # Add generated protobuf files
-file(GLOB_RECURSE PROTOBUF_SOURCES
-    ${BASE_DIR}/build/*.pb.cc
-    ${BASE_DIR}/../gensrc/build/*.pb.cc
-    ${BASE_DIR}/../gensrc/build/gen_cpp/*.pb.cc
-    ${GENSRC_DIR}/*.pb.cc
+# Only use the resolved gen_cpp directory to avoid duplicate sources mirrored in gensrc/build
+file(GLOB PROTOBUF_SOURCES
+    ${GENCODE_DIR}/*.pb.cc
 )
+list(REMOVE_DUPLICATES PROTOBUF_SOURCES)
+
+# Add generated Thrift files (exclude server skeleton helpers)
+file(GLOB THRIFT_SOURCES
+    ${GENCODE_DIR}/*.cpp
+)
+list(FILTER THRIFT_SOURCES EXCLUDE REGEX ".*_server\\.skeleton\\.cpp$")
+list(REMOVE_DUPLICATES THRIFT_SOURCES)
 
 # Combine all sources
 list(APPEND STARROCKS_SOURCES ${PROTOBUF_SOURCES})
+list(APPEND STARROCKS_SOURCES ${THRIFT_SOURCES})
+list(REMOVE_DUPLICATES STARROCKS_SOURCES)
+
+# Exclude the BE entry point from the library; it is compiled separately for the executable.
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/service/starrocks_main.cpp$")
+
+# Include manual customizations for generated thrift types
+# This implements operators like TUniqueId::operator< used by std::map on macOS
+set(THRIFT_CUSTOM_IMPL "${SRC_DIR}/gen_cpp/thrift_types_customize_impl.cpp")
+if(EXISTS ${THRIFT_CUSTOM_IMPL})
+    list(APPEND STARROCKS_SOURCES ${THRIFT_CUSTOM_IMPL})
+endif()
+
+# Include minimal connector utilities needed by local_exchange
+list(APPEND STARROCKS_SOURCES ${SRC_DIR}/connector/utils.cpp)
+
+# Include connector sink executor for spill functionality
+list(APPEND STARROCKS_SOURCES ${SRC_DIR}/connector/connector_sink_executor.cpp)
+list(APPEND STARROCKS_SOURCES ${SRC_DIR}/connector/partition_chunk_writer.cpp)
 
 # Exclude problematic files for macOS - be more specific to avoid excluding core functionality
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*_test\\.cpp$")
@@ -724,6 +882,7 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*test_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*benchmark.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*java_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*python_.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*routine_load_task_executor.*\\.cpp$")
 
 # Completely exclude HDFS related files
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/hdfs/.*\\.cpp$")
@@ -732,64 +891,62 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*hdfs.*\\.cpp$")
 # Exclude Elasticsearch (ES) related files on macOS
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/es/.*\\.cpp$")
 
-# Exclude Avro format and scanner sources (no Avro C++ on macOS)
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/formats/avro/.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/file_scanner/avro_.*\\.cpp$")
+# Exclude Python UDF and Arrow Flight client
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/udf/python/.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/arrow_flight_.*\\.cpp$")
 
-# Exclude StarCache-related sources (unsupported on macOS build)
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/cache/disk_cache/starcache_engine\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/datacache_action\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/schema_scanner/schema_be_datacache_metrics_scanner\\.cpp$")
+# Exclude x86-specific gutil sources on ARM64
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/gutil/atomicops-internals-x86\\.cc$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/memory_lock.cpp$")
 
-# Completely exclude S3 related files
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/s3/.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*s3.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*aws.*\\.cpp$")
+# ==============================================================================
+# EXCLUDE DISABLED FILE FORMATS (Avro, ORC, Parquet, Iceberg)
+# ==============================================================================
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/formats/(avro|orc|parquet)/.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/file_scanner/(avro|orc|parquet)_.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(avro|orc|parquet|iceberg).*\\.cpp$")
 
-# Completely exclude JIT related files
+# ==============================================================================
+# EXCLUDE CLOUD STORAGE BACKENDS (S3, Azure, HDFS)
+# ==============================================================================
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/(s3|hdfs|azure|cloud)/.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(s3|aws|azure|hdfs|cloud).*\\.cpp$")
+
+# ==============================================================================
+# EXCLUDE DISABLED RUNTIME COMPONENTS
+# ==============================================================================
+# JIT compilation
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/jit/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*jit.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*jit_.*\\.cpp$")
-
-# Exclude ORC and Avro formats
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*avro.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*formats/orc/.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*orc.*\\.cpp$")
-
-# Exclude other disabled components
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/iceberg/.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg_table.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*mysql_scanner.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*minidump.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*jdbc.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*azure.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*mysql_table_writer.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*jvm_metrics.*\\.cpp$")
-
-# Exclude Pulsar related files
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*pulsar.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/data_consumer\\.cpp$")
+# Java/JDBC
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(java|jdbc|jvm_metrics).*\\.cpp$")
+# Message queues
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(kafka|pulsar|data_consumer).*\\.cpp$")
+# Database connectors
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(mysql_scanner|mysql_table_writer).*\\.cpp$")
+# Debug/profiling
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(minidump|tracer|opentelemetry).*\\.cpp$")
 
 # Exclude problematic components
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/inverted_plugin_factory\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*clucene.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*clucene.*\\.h$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/storage/index/inverted/.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exprs/gin_functions\\.cpp$")
 
-# Exclude geo components that need special parsing files
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/geo/.*\\.cpp$")
+# Exclude geo components in exprs as requested
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exprs/geo_functions\\.cpp$")
 
-# Exclude spillable components - more comprehensive
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spillable.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spill.*operator.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spill.*factory.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*spill_process.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/spill_process_channel\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/spill/.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*SpillableHashJoin.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*SpillableNLJoin.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*SpillablePartitionSort.*\\.cpp$")
-list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*SpillProcess.*\\.cpp$")
+# Enable spill components - remove aggressive filtering
+# Only exclude truly incompatible components, keep spill functionality
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/hashjoin/spillable.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/aggregate/.*spill.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/aggregate/spillable.*\\.cpp$")
+# Exclude additional pipeline spill operators that cause vtable issues
+# Keep partition_sort_sink_operator.cpp to fix vtable errors
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sort/spillable_partition_sort.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sort/partition_sort_probe.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sort/partitioned_spill.*\\.cpp$")
 
 # Exclude tracer/opentelemetry - more comprehensive
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*tracer.*\\.cpp$")
@@ -820,6 +977,12 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*connector.*orc.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/jit_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/.*jit.*\\.cpp$")
 
+# Exclude file/hive/table_function sinks to avoid Parquet/ORC builders on macOS
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/file_result_writer\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/hive_table_sink\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/table_function_table_sink\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sink/table_function_table_sink_operator\\.cpp$")
+
 # Exclude JVM/JNI dependent metrics on macOS
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/jvm_metrics\\.cpp$")
 
@@ -838,9 +1001,113 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*data_consumer_group.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg.*sink.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg_table_sink.*\\.cpp$")
 
-# Create StarRocks core library
+# Exclude Linux-only memory hook implementation on macOS
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/service/mem_hook\\.cpp$")
+
+# Exclude Linux-specific utilities that don't have macOS equivalents
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/bfd_parser\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/util/buffered_stream\\.cpp$")
+
+# Completely exclude Lake and cloud native functionality on macOS
+# This includes all lake-related files to avoid dependency issues
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*lake.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/storage/lake/.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/lake.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/service/lake.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sink/lake.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/schema_scanner/schema_be_cloud_native.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/schema_scanner/schema_be_datacache_metrics_scanner\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/storage/cloud.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/fs/cloud.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/lake_meta_reader\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/engine_alter_tablet_task\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/update_config_action\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/engine_batch_load_task\\.cpp$")
+
+# Exclude CSV scanner specifically
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/csv_scanner\\.cpp$")
+
+# Exclude additional files that reference lake components
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/engine_alter_tablet_task\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/update_config_action\\.cpp$")
+
+# Exclude cache-related files that depend on starcache (not available on macOS)
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/cache/.*\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/http/action/datacache_action\\.cpp$")
+
+# Exclude connector sink operator which requires full connector implementations
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/sink/connector_sink_operator\\.cpp$")
+
+# Keep spill and local exchange components enabled; required for queries
+
+# Add a minimal set of macOS shim sources only when required.
+set(MACOS_SHIM_SOURCES
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/gperftools_stubs.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/bitset_resize.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/variant_shims.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/sinks_shim.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/connector_shims.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/disabled_components_shim.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/thrift_uuid_stub.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/tracer_shim.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/lake_manager_stub.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/inverted_index_stub.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/java_window_function_stub.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/missing_symbols_shim.cpp"
+)
+foreach(_shim_file IN LISTS MACOS_SHIM_SOURCES)
+    if(EXISTS "${_shim_file}")
+        list(APPEND STARROCKS_SOURCES "${_shim_file}")
+    endif()
+endforeach()
+
+# ==============================================================================
+# CREATE SEPARATE LIBRARY FOR EXPRS TO FORCE-LOAD CONSTRUCTORS
+# ==============================================================================
+# Extract exprs files from STARROCKS_SOURCES for separate linking
+# This is needed because constructor functions in .inc files must be force-loaded on macOS
+set(EXPRS_SOURCES "")
+foreach(source_file ${STARROCKS_SOURCES})
+    if(source_file MATCHES ".*/exprs/.*\\.cpp$")
+        list(APPEND EXPRS_SOURCES "${source_file}")
+    endif()
+endforeach()
+
+# Count the number of exprs files found
+list(LENGTH EXPRS_SOURCES EXPRS_COUNT)
+message(STATUS "Found ${EXPRS_COUNT} exprs source files for force-loading")
+
+# If no exprs files found, this is a problem
+if(EXPRS_COUNT EQUAL 0)
+    message(FATAL_ERROR "No exprs source files found! Pattern matching may have failed.")
+endif()
+
+# Remove exprs from main sources
+list(REMOVE_ITEM STARROCKS_SOURCES ${EXPRS_SOURCES})
+
+# Create StarRocks core library with special handling for kv_store.cpp
+# Separate kv_store.cpp to apply different compile flags
+list(REMOVE_ITEM STARROCKS_SOURCES "${SRC_DIR}/storage/kv_store.cpp")
 add_library(starrocks_core STATIC ${STARROCKS_SOURCES})
-target_link_libraries(starrocks_core ${STARROCKS_LINK_LIBS})
+set_target_properties(starrocks_core PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+# Create separate exprs library to enable force-loading of constructor functions
+add_library(starrocks_exprs STATIC ${EXPRS_SOURCES})
+set_target_properties(starrocks_exprs PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+
+# Add kv_store.cpp with special compile flags (without shim header)
+add_library(kv_store_obj OBJECT "${SRC_DIR}/storage/kv_store.cpp")
+# Disable fmt shims for kv_store.cpp to avoid RocksDB/fmt conflicts
+set_source_files_properties("${SRC_DIR}/storage/kv_store.cpp" PROPERTIES
+    COMPILE_FLAGS "-DSTARROCKS_DISABLE_FMT_SHIMS=1")
+
+# macOS-specific replacement sources
+
+target_link_libraries(starrocks_core PRIVATE ${STARROCKS_LINK_LIBS} kv_store_obj)
 
 # ==============================================================================
 # MAIN EXECUTABLE TARGET
@@ -848,8 +1115,16 @@ target_link_libraries(starrocks_core ${STARROCKS_LINK_LIBS})
 # Create the main StarRocks BE executable
 add_executable(starrocks_be ${SRC_DIR}/service/starrocks_main.cpp)
 
+# Ensure the force-loaded archive is built before linking the final binary.
+add_dependencies(starrocks_be starrocks_exprs)
+
 # Link against core library and all dependencies
+# Force-load only the exprs library to ensure constructor functions (like function registration)
+# are linked even if not directly referenced. This is required for the .inc files to work.
+# The rest of starrocks_core is linked normally to avoid pulling in unwanted symbols.
 target_link_libraries(starrocks_be
+    -Wl,-force_load,$<TARGET_FILE:starrocks_exprs>
+    starrocks_exprs  # Explicitly add the library target so CMake/ninja tracks the dependency
     starrocks_core
     build_version
     ${STARROCKS_LINK_LIBS}
@@ -899,22 +1174,4 @@ message(STATUS "  Source: ${BASE_DIR}")
 message(STATUS "  Build: ${BUILD_DIR}")
 message(STATUS "  Third-party: ${THIRDPARTY_DIR}")
 message(STATUS "  Output: ${OUTPUT_DIR}")
-message(STATUS "")
-message(STATUS "Key Components:")
-message(STATUS "  HTTP Support: ${WITH_HTTP}")
-message(STATUS "  Protobuf: ${PROTOBUF_HOME}")
-message(STATUS "  Boost: ${Boost_VERSION}")
-message(STATUS "  AddressSanitizer: ${USE_SANITIZER}")
-message(STATUS "")
-message(STATUS "Disabled Components (for macOS compatibility):")
-message(STATUS "  Avro, ORC, HDFS, JDBC, Python, Java, LZO, S2")
-message(STATUS "  SSE/AVX instructions (ARM64)")
-message(STATUS "")
-message(STATUS "Build Targets:")
-message(STATUS "  starrocks_be - Main executable")
-message(STATUS "")
-message(STATUS "To build:")
-message(STATUS "  ninja starrocks_be")
-message(STATUS "  ninja install")
-message(STATUS "========================================")
 message(STATUS "")

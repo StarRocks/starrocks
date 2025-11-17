@@ -210,6 +210,13 @@ public class AlterJobMgr {
         }
     }
 
+    /**
+     * NOTE: Inactive the specific mv and not inactive its relative mvs recursively.
+     * @param materializedView target mv to inactive
+     * @param status status to be set
+     * @param reason reason why to set inactive
+     * @param isReplay whehter this is called in replay
+     */
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
@@ -225,6 +232,7 @@ public class AlterJobMgr {
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (Exception e) {
+                LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
                         "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage());
@@ -235,14 +243,32 @@ public class AlterJobMgr {
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.fixRelationship();
+            // resume the mv scheduler
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = taskManager.getTask(materializedView);
+            if (task == null) {
+                throw new SemanticException("Can not find running task for materialized view [%s]", materializedView.getName());
+            }
+            taskManager.resumeTask(task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
             final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            // suspend the inactive mv's task
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-                taskRunManager.killTaskRun(currentTask.getId(), true);
+                if (!taskRunManager.tryTaskRunLock()) {
+                    throw new SemanticException("Failed to acquire task run lock when altering " +
+                            "mv status:" + materializedView.getName());
+                }
+                try {
+                    taskRunManager.killTaskRun(currentTask.getId(), true);
+                } finally {
+                    taskRunManager.taskRunUnlock();
+                }
+                // suspend the task to avoid scheduling new task runs
+                taskManager.suspendTask(currentTask);
             }
         }
     }
@@ -271,7 +297,7 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getOrderedOutputColumns().stream()
+        List<Column> existedColumns = materializedView.getOrderedOutputColumns(true).stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
@@ -398,7 +424,6 @@ public class AlterJobMgr {
                 TaskBuilder.getMvTaskName(materializedView.getId()));
         if (currentTask != null) {
             currentTask.setDefinition(materializedView.getTaskDefinition());
-            currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
 
@@ -604,7 +629,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            AlterMVJobExecutor.inactiveRelatedMaterializedView(view,
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
             db.registerTableUnlocked(view);

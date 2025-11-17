@@ -638,6 +638,30 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitRecoverDbStatement(RecoverDbStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitDropCNGroupStatement(DropCnGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -660,5 +684,29 @@ public interface AstVisitor<R, C> {
 
     default R visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    default R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitBackupStatement(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitRestoreStatement(RestoreStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 }

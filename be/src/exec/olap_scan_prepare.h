@@ -96,6 +96,8 @@ public:
     template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
     void normalized_rf_with_null(const RuntimeFilter* rf, const SlotDescriptor* slot_desc, Args&&... args);
 
+    size_t num_predicates() const;
+
 private:
     const ScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
@@ -125,6 +127,7 @@ private:
 
     Status _get_column_predicates(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
 
+    // Push down runtime bitset filter to storage layer, only used for index filter.
     Status _build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root, PredicateParser* parser,
                                        ColumnPredicatePtrs& col_preds_owner);
 

@@ -374,6 +374,12 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 执行 SHOW CREATE SECURITY INTEGRATION 时，`ldap_bind_root_pwd` 会被隐藏。
 :::
 
+## 通过安全集成连接到 StarRocks
+
+- 有关如何通过 LDAP 连接到 StarRocks 的说明，请参阅 [LDAP 认证 - 连接到 StarRocks](./ldap_authentication.md#从-mysql-客户端连接-ldap)。
+- 有关通过 JWT 连接 StarRocks 的说明，请参阅 [JSON Web Token 认证 - 连接 StarRocks](./jwt_authentication.md#使用-jwt-从-mysql-客户端连接)。
+- 有关通过 OAuth 2.0 连接 StarRocks 的说明，请参阅 [OAuth 2.0 认证 - 连接 StarRocks](./oauth2_authentication.md#使用-oauth-20-从-jdbc-客户端连接)。
+
 ## 另见
 
 - 有关如何在 StarRocks 中通过 LDAP 手动验证用户的说明，请参阅 [LDAP 认证](./ldap_authentication.md)。

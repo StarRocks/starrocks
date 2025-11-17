@@ -67,11 +67,11 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.BrokerDesc;
-import com.starrocks.sql.ast.expression.TableRef;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -120,7 +120,7 @@ public class BackupJob extends AbstractJob {
 
     // all objects which need backup
     @SerializedName(value = "tableRefs")
-    protected List<TableRef> tableRefs = Lists.newArrayList();
+    protected List<TableRefPersist> tableRefs = Lists.newArrayList();
 
     @SerializedName(value = "state")
     protected BackupJobState state;
@@ -163,7 +163,7 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP);
     }
 
-    public BackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
+    public BackupJob(String label, long dbId, String dbName, List<TableRefPersist> tableRefs, long timeoutMs,
                      GlobalStateMgr globalStateMgr, long repoId) {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
@@ -202,7 +202,7 @@ public class BackupJob extends AbstractJob {
         return localMetaInfoFilePath;
     }
 
-    public List<TableRef> getTableRef() {
+    public List<TableRefPersist> getTableRef() {
         return tableRefs;
     }
 
@@ -409,7 +409,7 @@ public class BackupJob extends AbstractJob {
     }
 
     protected void checkBackupTables(Database db) {
-        for (TableRef tableRef : tableRefs) {
+        for (TableRefPersist tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
             Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
@@ -442,7 +442,7 @@ public class BackupJob extends AbstractJob {
 
     protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
-        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
+        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion, schemaHash);
         if (replica == null) {
             status = new Status(ErrCode.COMMON_ERROR,
                     "failed to choose replica to make snapshot for tablet " + tablet.getId()
@@ -501,7 +501,7 @@ public class BackupJob extends AbstractJob {
             taskProgress.clear();
             taskErrMsg.clear();
             // create snapshot tasks
-            for (TableRef tblRef : tableRefs) {
+            for (TableRefPersist tblRef : tableRefs) {
                 String tblName = tblRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {
@@ -540,7 +540,7 @@ public class BackupJob extends AbstractJob {
 
             // copy all related schema at this moment
             List<Table> copiedTables = Lists.newArrayList();
-            for (TableRef tableRef : tableRefs) {
+            for (TableRefPersist tableRef : tableRefs) {
                 String tblName = tableRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {
@@ -658,9 +658,8 @@ public class BackupJob extends AbstractJob {
                 }
                 Preconditions.checkState(brokers.size() == 1);
             } else {
-                BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                 try {
-                    HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                    HdfsUtil.getTProperties(repo.getLocation(), repo.getStorage().getProperties(), hdfsProperties);
                 } catch (StarRocksException e) {
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
                     return;
@@ -825,11 +824,12 @@ public class BackupJob extends AbstractJob {
     }
 
     /*
-     * Choose a replica whose version >= visibleVersion and dose not have failed version.
+     * Choose a replica whose status is OK.
      * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
-    private Replica chooseReplica(LocalTablet tablet, long visibleVersion) {
+    private Replica chooseReplica(LocalTablet tablet, long visibleVersion, int schemaHash) {
         List<Long> replicaIds = Lists.newArrayList();
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
         for (Replica replica : tablet.getImmutableReplicas()) {
             replicaIds.add(replica.getId());
         }
@@ -837,7 +837,7 @@ public class BackupJob extends AbstractJob {
         Collections.sort(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
-            if (replica.getLastFailedVersion() < 0 && (replica.getVersion() >= visibleVersion)) {
+            if (replica.computeReplicaStatus(infoService, visibleVersion, schemaHash) == Replica.ReplicaStatus.OK) {
                 return replica;
             }
         }

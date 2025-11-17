@@ -1,0 +1,31 @@
+-- name: test_proc_profile_simple
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "Process Profiles"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile" | grep -c "View"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile" | grep -o 'filename=[^"]*\.tar\.gz' | head -1 | cut -d'=' -f2 > profile_file.txt
+-- result:
+0
+
+-- !result
+shell: if [ $(curl -s -u root: "${url}/proc_profile/file?filename=$(cat profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+-- result:
+0
+exist
+-- !result
+shell: rm profile_file.txt
+-- result:
+0
+
+-- !result
+shell: curl -s -u root: "${url}/proc_profile/file?filename=invalid_file.tar.gz" | wc -l
+-- result:
+0
+0
+-- !result

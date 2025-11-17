@@ -2,7 +2,57 @@
 
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 
-function: assert_explain_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;","cardinality=1")
-function: assert_explain_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;","cardinality=1")
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_identity_to_bucket_partition;","cardinality=1", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;","cardinality=1", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_date_add_bucket order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_date_add_bucket;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_date_add_bucket order by k1;","cardinality=5", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_ts_to_day order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_ts_to_day;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_ts_to_day order by k1;","cardinality=3", "ESTIMATE")
+
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_month order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_month;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_month order by k1;","cardinality=7", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_month_to_year order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_month_to_year;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_month_to_year order by k1;","cardinality=7", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_bucket_drop_bucket order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_bucket_drop_bucket;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_bucket_drop_bucket order by k1;","cardinality=7", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_bucket order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_bucket;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_bucket order by k1;","cardinality=6", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_truncate order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_truncate;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_to_truncate order by k1;","cardinality=8", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_drop_day order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_drop_day;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_day_drop_day order by k1;","cardinality=4", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_day_add_month order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_day_add_month;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_day_add_month order by k1;","cardinality=5", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_month_add_bucket order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_month_add_bucket;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_month_add_bucket order by k1;","cardinality=7", "ESTIMATE")
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_bucket_add_truncate order by k1;
+[UC] analyze table iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_bucket_add_truncate;
+function: assert_explain_costs_contains("select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_partition_drop_bucket_add_truncate order by k1;","cardinality=8", "ESTIMATE")
 
 drop catalog iceberg_sql_test_${uuid0};

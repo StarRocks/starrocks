@@ -254,6 +254,9 @@ mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
 
 export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/lib64/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/llvm/lib/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$(find ${CMAKE_BUILD_DIR} -type f -name "*.so" -exec dirname {} \; | sort -u | tr '\n' ':' | sed 's/:$//'):$LD_LIBRARY_PATH
 
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
@@ -278,15 +281,14 @@ else
     fi
 fi
 
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
     # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
-    export LD_LIBRARY_PATH=$STARROCKS_GCC_HOME/lib64:$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH
 fi
 
-THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
-if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
-    export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+RUN_UT_HADOOP_COMMON_HOME=${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib
+if [[ -d ${RUN_UT_HADOOP_COMMON_HOME} ]] ; then
+    export HADOOP_CLASSPATH=${RUN_UT_HADOOP_COMMON_HOME}/*:${RUN_UT_HADOOP_COMMON_HOME}/lib/*:
     # get rid of StackOverflowError on the process reaper thread, which has a small stack size.
     # https://bugs.openjdk.org/browse/JDK-8153057
     export LIBHDFS_OPTS="$LIBHDFS_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"

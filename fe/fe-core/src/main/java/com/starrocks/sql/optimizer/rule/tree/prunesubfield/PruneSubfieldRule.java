@@ -21,9 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -39,6 +37,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 import java.util.Map;
@@ -145,12 +147,12 @@ public class PruneSubfieldRule extends TransformationRule {
         private static final Map<PrimitiveType, Function> SUPPORT_CAST_TYPE;
 
         static {
-            Function jsonInt = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
-            Function jsonDouble = Expr.getBuiltinFunction(FunctionSet.GET_JSON_DOUBLE,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
-            Function jsonString = Expr.getBuiltinFunction(FunctionSet.GET_JSON_STRING,
-                    new Type[] {Type.JSON, Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+            Function jsonInt = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT,
+                    new Type[] {JsonType.JSON, VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+            Function jsonDouble = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_DOUBLE,
+                    new Type[] {JsonType.JSON, VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+            Function jsonString = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_STRING,
+                    new Type[] {JsonType.JSON, VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
 
             SUPPORT_GET_TYPE = ImmutableMap.<PrimitiveType, Function>builder()
                     .put(PrimitiveType.BIGINT, jsonInt)

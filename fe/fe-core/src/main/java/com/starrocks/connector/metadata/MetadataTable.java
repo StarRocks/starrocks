@@ -18,12 +18,12 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.thrift.THdfsTable;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -36,7 +36,7 @@ public class MetadataTable extends Table {
     private final String originTable;
 
     protected static final List<Column> PLACEHOLDER_COLUMNS = ImmutableList.<Column>builder()
-            .add(new Column("predicate", ScalarType.STRING, true))
+            .add(new Column("predicate", StringType.STRING, true))
             .build();
 
     public MetadataTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,

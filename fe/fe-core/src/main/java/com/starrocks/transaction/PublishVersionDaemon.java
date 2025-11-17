@@ -43,6 +43,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
@@ -333,8 +334,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             if (shouldFinishTxn) {
-                globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
-                        publishErrorReplicaIds);
+                try {
+                    // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
+                    // This approach prevents blocking subsequent transactions due to the current one.
+                    globalTransactionMgr.finishTransaction(transactionState.getDbId(),
+                            transactionState.getTransactionId(), publishErrorReplicaIds,
+                            Config.finish_transaction_default_lock_timeout_ms);
+                } catch (StarRocksException exception) {
+                    if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
+                        LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
+                                transactionState.getTransactionId(), exception.getMessage());
+                        continue;
+                    } else {
+                        throw exception;
+                    }
+                }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
                     LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
@@ -469,6 +483,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
+        txnState.setHasSendTask(true);
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
@@ -487,6 +502,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    txnState.updatePublishTaskFinishTime();
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
                 } catch (StarRocksException e) {
                     throw new RuntimeException(e);
@@ -715,6 +731,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
+        states.forEach(state -> state.setHasSendTask(true));
         for (TransactionState state : states) {
             TableCommitInfo tableCommitInfo = Objects.requireNonNull(state.getTableCommitInfo(tableId));
             Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
@@ -772,6 +789,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishFuture.thenAccept(success -> {
             if (success) {
                 try {
+                    states.forEach(TransactionState::updatePublishTaskFinishTime);
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);

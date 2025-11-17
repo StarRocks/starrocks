@@ -35,22 +35,18 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.thrift.TDateLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -119,7 +115,7 @@ public class DateLiteral extends LiteralExpr {
         this.minute = 0;
         this.second = 0;
         this.microsecond = 0;
-        this.type = Type.DATE;
+        this.type = DateType.DATE;
     }
 
     public DateLiteral(long year, long month, long day, long hour, long minute, long second, long microsecond) {
@@ -130,7 +126,7 @@ public class DateLiteral extends LiteralExpr {
         this.minute = minute;
         this.second = second;
         this.microsecond = microsecond;
-        this.type = Type.DATETIME;
+        this.type = DateType.DATETIME;
     }
 
     public DateLiteral(LocalDateTime dateTime, Type type) throws AnalysisException {
@@ -289,11 +285,6 @@ public class DateLiteral extends LiteralExpr {
         }
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.DATE_LITERAL;
-        msg.date_literal = new TDateLiteral(getStringValue());
-    }
 
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
@@ -311,7 +302,7 @@ public class DateLiteral extends LiteralExpr {
             }
         } else if (targetType.isStringType()) {
             return new StringLiteral(getStringValue());
-        } else if (Type.isImplicitlyCastable(this.type, targetType, true)) {
+        } else if (TypeManager.isImplicitlyCastable(this.type, targetType, true)) {
             return new CastExpr(targetType, this);
         }
         Preconditions.checkState(false);
@@ -319,7 +310,7 @@ public class DateLiteral extends LiteralExpr {
     }
 
     public void castToDate() {
-        this.type = Type.DATE;
+        this.type = DateType.DATE;
         hour = 0;
         minute = 0;
         second = 0;
@@ -329,64 +320,6 @@ public class DateLiteral extends LiteralExpr {
     public java.time.LocalDateTime toLocalDateTime() {
         return java.time.LocalDateTime.of((int) year, (int) month, (int) day, (int) hour, (int) minute, (int) second,
                 (int) microsecond * 1000);
-    }
-
-    private long makePackedDatetime() {
-        long ymd = ((year * 13 + month) << 5) | day;
-        long hms = (hour << 12) | (minute << 6) | second;
-        return ((ymd << 17) | hms) << 24 + microsecond;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        // set flag bit in meta, 0 is DATETIME and 1 is DATE
-        if (this.type.isDatetime()) {
-            out.writeShort(DateLiteralType.DATETIME.value());
-        } else if (this.type.isDate()) {
-            out.writeShort(DateLiteralType.DATE.value());
-        } else {
-            throw new IOException("Error date literal type : " + type);
-        }
-        out.writeLong(makePackedDatetime());
-    }
-
-    private void fromPackedDatetime(long packedTime) {
-        microsecond = (packedTime % (1L << 24));
-        long ymdhms = (packedTime >> 24);
-        long ymd = ymdhms >> 17;
-        long hms = ymdhms % (1 << 17);
-
-        day = ymd % (1 << 5);
-        long ym = ymd >> 5;
-        month = ym % 13;
-        year = ym / 13;
-        year %= 10000;
-        second = hms % (1 << 6);
-        minute = (hms >> 6) % (1 << 6);
-        hour = (hms >> 12);
-        // set default date literal type to DATETIME
-        // date literal read from meta will set type by flag bit;
-        this.type = Type.DATETIME;
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        short dateLiteralType = in.readShort();
-        fromPackedDatetime(in.readLong());
-        if (dateLiteralType == DateLiteralType.DATETIME.value()) {
-            this.type = Type.DATETIME;
-        } else if (dateLiteralType == DateLiteralType.DATE.value()) {
-            this.type = Type.DATE;
-        } else {
-            throw new IOException("Error date literal type : " + type);
-        }
-    }
-
-    public static DateLiteral read(DataInput in) throws IOException {
-        DateLiteral literal = new DateLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     public long unixTimestamp(TimeZone timeZone) {
@@ -486,7 +419,7 @@ public class DateLiteral extends LiteralExpr {
                 if (len > 7) {
                     microsecond = data.getInt();
                     // choose the highest scale to keep microsecond value
-                    type = ScalarType.createDecimalV2Type(6);
+                    type = TypeFactory.createDecimalV2Type(6);
                 }
             } else {
                 copy(MIN_DATETIME);

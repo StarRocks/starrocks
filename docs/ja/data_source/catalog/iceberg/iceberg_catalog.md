@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 #### type
 
 データソースのタイプです。値を `iceberg` に設定します。
+
+#### SecurityParams
+
+StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
+
+Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
+
+##### catalog.access.control
+
+データアクセス制御ポリシー。有効な値：
+
+- `native` (デフォルト): StarRocks 組み込みのデータアクセス制御システムを使用します。
+- `allowall`: すべてのデータアクセスチェックをカタログ自体に委譲します。
+- `ranger`: データアクセスチェックを Apache Ranger に委譲します。
 
 #### MetastoreParams
 
@@ -745,8 +760,10 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Iceberg 関連のメタデータ（Table Cache、Partition Name Cache、Manifest 内の Data File Cache および Delete Data File Cache を含む）をキャッシュするかどうか。 |
 | iceberg_manifest_cache_with_column_statistics | false                 | 列の統計をキャッシュするかどうか。                  |
-| iceberg_manifest_cache_max_num                | 100000                | キャッシュできる Manifest ファイルの最大数。     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | Data File Cache のリフレッシュをトリガーする最小の Manifest ファイル長。 |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
+| iceberg_table_cache_refresh_interval_sec      | 60                    | Iceberg テーブルキャッシュの非同期更新がトリガーされる間隔（秒単位）。v3.5.7 以降でサポートされています。 |
 
 v3.4 以降、StarRocks は、以下のパラメーターを設定することで、Iceberg メタデータを読み取ることで Iceberg テーブルの統計情報を取得できます。これにより、Iceberg テーブルの統計情報の収集を積極的にトリガーする必要はありません。
 

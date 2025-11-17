@@ -134,8 +134,8 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     for (size_t i = 0; i < selected_size; ++i) {
         size_t key_index = validate_select_idx[i];
         const auto* partition = partitions[key_index];
-        const auto& virtual_buckets = partition->indexes[0].virtual_buckets;
-        int64_t tablet_id = virtual_buckets[record_hashes[key_index] % virtual_buckets.size()];
+        const auto& tablet_ids = partition->indexes[0].tablet_ids;
+        int64_t tablet_id = tablet_ids[record_hashes[key_index] % tablet_ids.size()];
         auto iter = multi_gets_by_tablet.find(tablet_id);
         TabletMultiGet* multi_get = nullptr;
         if (iter == multi_gets_by_tablet.end()) {

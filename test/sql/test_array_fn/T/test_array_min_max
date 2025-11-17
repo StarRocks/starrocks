@@ -1,4 +1,4 @@
--- name: test_array_min_max_all_type
+-- name: test_array_min_max_all_type @mac
 
 CREATE TABLE test_array_min_max (
     id INT,
