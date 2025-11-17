@@ -16,15 +16,19 @@ package com.starrocks.catalog.system.information;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+=======
+>>>>>>> 1f06a331d6 ([BugFix] Fix querying information_schema.tables/views in different dbs when enable_evaluate_schema_scan_rule is true (#65533))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -153,9 +157,6 @@ public class TablesSystemTable extends SystemTable {
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);
         authInfo.setCatalog_name(this.getCatalogName());
-        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(this.getCatalogName())) {
-            authInfo.setPattern(context.getDatabase());
-        }
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
             ColumnRefOperator columnRef = binary.getChild(0).cast();
@@ -179,10 +180,9 @@ public class TablesSystemTable extends SystemTable {
             return result.getTables_infos().stream()
                     .map(t -> infoToScalar(this, t))
                     .collect(Collectors.toList());
-        } catch (Exception e) {
-            LOG.warn("Failed to query tables ", e);
-            // Return empty result if query failed
-            return Lists.newArrayList();
+        } catch (TException e) {
+            LOG.debug("Failed to get table info for table: {}, error: ", params.getTable_name(), e);
+            throw new SemanticException("Failed to get table info for table: " + params.getTable_name(), e);
         }
     }
 

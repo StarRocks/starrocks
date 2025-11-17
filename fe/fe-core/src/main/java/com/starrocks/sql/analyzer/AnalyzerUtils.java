@@ -67,7 +67,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.system.SystemTable;
+>>>>>>> 1f06a331d6 ([BugFix] Fix querying information_schema.tables/views in different dbs when enable_evaluate_schema_scan_rule is true (#65533))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -937,6 +941,10 @@ public class AnalyzerUtils {
             }
 
             Table table = node.getTable();
+            // system table is immutable
+            if (table instanceof SystemTable) {
+                return null;
+            }
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
