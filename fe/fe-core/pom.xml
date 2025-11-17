@@ -1061,9 +1061,6 @@ under the License.
                     <!-- Kill a stuck test JVM after specified seconds -->
                     <!-- This enforces a hard timeout per forked process (test case when not reusing forks) -->
                     <forkedProcessTimeoutInSeconds>${fe_ut_timeout}</forkedProcessTimeoutInSeconds>
-                    <!-- Use OS-level kill when the fork does not exit gracefully on timeout -->
-                    <shutdown>kill</shutdown>
-
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         ${async.profiler.arg}
