@@ -275,7 +275,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
 
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
     if (_decompressed_buffer == nullptr) {
-        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size, buf->meta()->type()));
+        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size, 0, buf->meta()->type()));
     }
     // copy meta fail better not affect the decompression
     Status copy_st = _decompressed_buffer->meta()->copy_from(buf->meta());

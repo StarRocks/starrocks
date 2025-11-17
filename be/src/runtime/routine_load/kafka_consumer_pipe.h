@@ -79,7 +79,7 @@ public:
         bool need_meta = partition >= 0 && offset >= 0;
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(
-                                           size + simdjson::SIMDJSON_PADDING,
+                                           size, simdjson::SIMDJSON_PADDING,
                                            need_meta ? ByteBufferMetaType::KAFKA : ByteBufferMetaType::NONE));
         buf->put_bytes(data, size);
         buf->flip_to_read();
