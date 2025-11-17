@@ -19,10 +19,12 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -59,7 +61,8 @@ public final class AggStateMergeCombinator extends AggregateFunction {
             if (aggFunc.getAggStateDesc() != null) {
                 aggStateDesc = aggFunc.getAggStateDesc().clone();
             } else {
-                aggStateDesc = new AggStateDesc(aggFunc);
+                aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType(), 
+                        Arrays.asList(aggFunc.getArgs()), AggStateDesc.isAggFuncResultNullable(aggFunc.functionName()));
             }
             aggStateMergeFunc.setAggStateDesc(aggStateDesc);
             // use agg state desc's nullable as `agg_state` function's nullable

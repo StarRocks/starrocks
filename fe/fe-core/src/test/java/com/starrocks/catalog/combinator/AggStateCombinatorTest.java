@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;
@@ -406,7 +407,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 
@@ -437,7 +438,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 
@@ -1296,7 +1297,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType, intermediateType };
             Boolean[] argArgumentConstants = { false, false };
 
@@ -1329,7 +1330,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 

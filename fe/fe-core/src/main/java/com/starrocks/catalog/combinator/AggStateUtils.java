@@ -25,6 +25,7 @@ import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;

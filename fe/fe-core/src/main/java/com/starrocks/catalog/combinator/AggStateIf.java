@@ -19,6 +19,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
@@ -56,7 +57,8 @@ public final class AggStateIf extends AggregateFunction {
             aggStateIf.setPolymorphic(aggFunc.isPolymorphic());
 
             // agg_if's result should always be nullable, so BE can use nullable agg function
-            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc, true);
+            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType(),
+                    Arrays.asList(aggFunc.getArgs()), true);
             aggStateIf.setAggStateDesc(aggStateDesc);
             aggStateIf.setIsNullable(aggStateDesc.getResultNullable());
             return Optional.of(aggStateIf);

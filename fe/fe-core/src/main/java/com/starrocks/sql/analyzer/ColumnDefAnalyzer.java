@@ -14,14 +14,16 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -29,16 +31,20 @@ import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
+import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
@@ -135,7 +141,7 @@ public class ColumnDefAnalyzer {
                             String.format("Invalid aggregate function '%s' for '%s'", aggregateType, name));
                 }
                 // Ensure agg_state_desc is compatible with type
-                AggregateFunction aggFunc = aggStateDesc.getAggregateFunction();
+                AggregateFunction aggFunc = getAggregateFunction(aggStateDesc);
                 if (aggFunc == null) {
                     throw new AnalysisException(
                             String.format("Invalid aggregate function '%s' for '%s': aggregate function is not found",
@@ -185,6 +191,29 @@ public class ColumnDefAnalyzer {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
             }
         }
+    }
+
+    /**
+     * @return associated analyzed aggregate function
+     * @throws AnalysisException: when the aggregate function is not found or not an aggregate function
+     */
+    public static AggregateFunction getAggregateFunction(AggStateDesc aggStateDesc) throws AnalysisException {
+        List<Type> argTypes = aggStateDesc.getArgTypes();
+        String functionName = aggStateDesc.getFunctionName();
+        FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        Boolean[] isArgumentConstants = argTypes.stream().map(x -> false).toArray(Boolean[]::new);
+        Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
+                functionName, params, argumentTypes, isArgumentConstants, NodePosition.ZERO);
+        if (result == null) {
+            throw new AnalysisException(String.format("AggStateType function %s with input %s not found", functionName,
+                    argTypes));
+        }
+        if (!(result instanceof AggregateFunction)) {
+            throw new AnalysisException(String.format("AggStateType function %s with input %s found but not an aggregate " +
+                    "function", functionName, argTypes));
+        }
+        return (AggregateFunction) result;
     }
 
     public static Type extendedPrecision(Type type, boolean legacyCompatible) {
