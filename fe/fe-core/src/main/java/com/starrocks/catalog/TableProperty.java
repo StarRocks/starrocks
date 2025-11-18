@@ -1149,10 +1149,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
         buildMutableBucketNum();
-<<<<<<< HEAD
-=======
-        buildCompactionStrategy();
         buildEnableStatisticCollectOnFirstLoad();
->>>>>>> 90d12c2b3e ([Enhancement] Support enable_statistic_collect_on_first_load at table granularity (#65463))
     }
 }
