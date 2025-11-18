@@ -284,8 +284,8 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
     return Status::OK();
 }
 
-Status insert_page_cache(bool cache_enabled, const PageReadOptions& opts, StoragePageCache* cache, const std::string& cache_key,
-                         std::unique_ptr<std::vector<uint8_t>> page, PageHandle* handle) {
+Status insert_page_cache(bool cache_enabled, const PageReadOptions& opts, StoragePageCache* cache,
+                         const std::string& cache_key, std::unique_ptr<std::vector<uint8_t>> page, PageHandle* handle) {
     // If cache is not enabled or use_page_cache is false, just return
     if (!cache_enabled || !opts.use_page_cache) {
         *handle = PageHandle(page.get());
