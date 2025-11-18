@@ -170,7 +170,11 @@ std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
     }
 
     auto len = std::min(_len - off, sz);
-    return std::string(reinterpret_cast<char*>(_data) + off, len);
+    return std::string(_data + off, len);
+}
+
+size_t JsonDocumentStreamParser::truncated_bytes() const noexcept {
+    return _doc_stream.truncated_bytes();
 }
 
 Status JsonArrayParser::parse(char* data, size_t len, size_t allocated) noexcept {
