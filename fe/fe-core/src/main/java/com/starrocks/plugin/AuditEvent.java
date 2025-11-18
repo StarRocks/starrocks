@@ -154,6 +154,12 @@ public class AuditEvent {
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
 
+    @AuditField(value = "Command")
+    public String command = "";
+
+    @AuditField(value = "PreparedStmtId", ignore_zero = true)
+    public String preparedStmtId = null;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -398,6 +404,16 @@ public class AuditEvent {
             } else {
                 auditEvent.transmittedBytes += transmittedBytes;
             }
+            return this;
+        }
+
+        public AuditEventBuilder setCommand(String command) {
+            auditEvent.command = command;
+            return this;
+        }
+
+        public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
+            auditEvent.preparedStmtId = preparedStmtId;
             return this;
         }
 

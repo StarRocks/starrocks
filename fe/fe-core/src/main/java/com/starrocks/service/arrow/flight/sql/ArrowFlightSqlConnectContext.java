@@ -197,4 +197,9 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         result = new VectorSchemaRoot(schemaFields, dataFields);
         isShowResult = true;
     }
+
+    @Override
+    public String getCommandStr() {
+        return "ARROW_FLIGHT_SQL.Query";
+    }
 }
