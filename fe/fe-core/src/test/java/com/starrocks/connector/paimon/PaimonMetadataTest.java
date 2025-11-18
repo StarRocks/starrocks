@@ -134,8 +134,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.VARCHAR;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.VarcharType.VARCHAR;
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
@@ -271,7 +271,7 @@ public class PaimonMetadataTest {
                 result = paimonSystemTable;
                 paimonSystemTable.latestSnapshot();
                 result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
-                // accoding to PaimonMetadata::getTableVersionRange，the snapshot id of system table is -1L,
+                // according to PaimonMetadata::getTableVersionRange，the snapshot id of system table is -1L,
                 // so the above paimonSystemTable.latestSnapshotId() would not be called.
                 minTimes = 0;
                 paimonSystemTable.newReadBuilder();
@@ -359,7 +359,7 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
-        // accoding to PaimonMetadata::getTableVersionRange, empty table's snapshot id is -1L.
+        // according to PaimonMetadata::getTableVersionRange, empty table's snapshot id is -1L.
         List<RemoteFileInfo> result =
                 metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames)
                         .setTableVersionRange(TvrTableSnapshot.of(Optional.of(-1L))).build());
@@ -881,7 +881,7 @@ public class PaimonMetadataTest {
                 "test_db.test_table does not include tag: t_not_exist",
                 () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion3));
 
-        //2.4 check sepcify branch
+        //2.4 check specify branch
         //2.4.1 check branch base exist tag
         ((FileStoreTable) table).createBranch("b_1", "t_1"); //create branch base tag t_1
         constantOperator = new ConstantOperator("branch:b_1", VARCHAR);
@@ -929,7 +929,7 @@ public class PaimonMetadataTest {
         tableVersion = new ConnectorTableVersion(PointerType.VERSION, constantOperator);
         ConnectorTableVersion finalTableVersion5 = tableVersion;
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Please input corrent format like branch:branch_name or tag:tag_name",
+                "Please input correct format like branch:branch_name or tag:tag_name",
                 () -> metadata.getSnapshotIdFromVersion(table, finalTableVersion5));
 
         //3 clean env
@@ -970,7 +970,7 @@ public class PaimonMetadataTest {
         List<CommitMessage> messages;
         StreamTableCommit commit = writeBuilder.newCommit();
 
-        //load first batch data, genarate snapshot 1
+        //load first batch data, generate snapshot 1
         messages = write.prepareCommit(false, 0);
         GenericRow record1 = GenericRow.of(BinaryString.fromString("1001"), BinaryString.fromString("2025-09-01"));
         GenericRow record2 = GenericRow.of(BinaryString.fromString("1002"), BinaryString.fromString("2025-09-02"));
@@ -1008,7 +1008,7 @@ public class PaimonMetadataTest {
         tvrVersionRange = metadata.getTableVersionRange("test_db", table, startVersion, endVersion);
         assertEquals(tvrVersionRange.toString(), "Delta@[MIN,1]");
 
-        //3 clean env 
+        //3 clean env
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);

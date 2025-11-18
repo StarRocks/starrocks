@@ -73,7 +73,6 @@ public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private final PaimonTable paimonTable;
-    private TvrVersionRange tvrVersionRange;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
@@ -341,10 +340,6 @@ public class PaimonScanNode extends ScanNode {
 
     private long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
-    }
-
-    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
-        this.tvrVersionRange = tvrVersionRange;
     }
 
     @Override

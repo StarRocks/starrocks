@@ -322,13 +322,13 @@ public class PaimonMetadata implements ConnectorMetadata {
     private long getSnapshotIdFromTemporalVersion(org.apache.paimon.table.Table table, ConstantOperator version) {
         long snapshotId = -1L;
         try {
-            if (version.getType() != com.starrocks.catalog.Type.DATETIME &&
-                    version.getType() != com.starrocks.catalog.Type.DATE &&
-                    version.getType() != com.starrocks.catalog.Type.VARCHAR) {
+            if (version.getType() != com.starrocks.type.DateType.DATETIME &&
+                    version.getType() != com.starrocks.type.DateType.DATE &&
+                    version.getType() != com.starrocks.type.VarcharType.VARCHAR) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);
             }
-            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.catalog.Type.DATETIME);
+            Optional<ConstantOperator> timestampVersion = version.castTo(com.starrocks.type.DateType.DATETIME);
             if (timestampVersion.isEmpty()) {
                 throw new StarRocksConnectorException("Unsupported type for table temporal version: %s." +
                         " You should use timestamp type", version);
@@ -352,48 +352,49 @@ public class PaimonMetadata implements ConnectorMetadata {
     private long getTargetSnapshotIdFromVersion(org.apache.paimon.table.Table table, ConstantOperator version) {
         long snapshotId = -1L;
         //specify snapshotId
-        if (version.getType() == com.starrocks.catalog.Type.TINYINT ||
-                version.getType() == com.starrocks.catalog.Type.SMALLINT ||
-                version.getType() == com.starrocks.catalog.Type.INT ||
-                version.getType() == com.starrocks.catalog.Type.BIGINT) {
-            snapshotId = version.castTo(com.starrocks.catalog.Type.BIGINT).get().getBigint();
+        if (version.getType() == com.starrocks.type.IntegerType.TINYINT ||
+                version.getType() == com.starrocks.type.IntegerType.SMALLINT ||
+                version.getType() == com.starrocks.type.IntegerType.INT ||
+                version.getType() == com.starrocks.type.IntegerType.BIGINT) {
+            snapshotId = version.castTo(com.starrocks.type.IntegerType.BIGINT).get().getBigint();
             if (!((DataTable) table).snapshotManager().snapshotExists(snapshotId)) {
                 throw new StarRocksConnectorException("%s does not include snapshot: %s",
                         table.fullName(), snapshotId);
             }
             //specify branch、tag
-        } else if (version.getType() == com.starrocks.catalog.Type.VARCHAR) {
+        } else if (version.getType() == com.starrocks.type.VarcharType.VARCHAR) {
             String refName = version.getVarchar().toLowerCase();
+            String[] refNameParts = refName.split(":");
             org.apache.paimon.table.Table paimonTable;
-            if (refName.split(":").length == 2 &&
-                    (refName.split(":")[0].equals("branch") || refName.split(":")[0].equals("tag"))) {
-                if (refName.split(":")[0].equals("branch")) {
+            if (refNameParts.length == 2 &&
+                    (refNameParts[0].equals("branch") || refNameParts[0].equals("tag"))) {
+                if (refNameParts[0].equals("branch")) {
                     //if branch, format like branch:b_1, return the latest snapshot of the branch
-                    Identifier identifier = new Identifier(table.fullName().split("\\.")[0], table.fullName().split("\\.")[1],
-                            refName.split(":")[1]);
-                    branch = identifier.getBranchNameOrDefault();
+                    String[] tableFullName = table.fullName().split("\\.");
+                    Identifier identifier = new Identifier(tableFullName[0], tableFullName[1], refNameParts[1]);
+                    branch.set(identifier.getBranchNameOrDefault());
                     try {
                         paimonTable = paimonNativeCatalog.getTable(identifier);
                     } catch (Catalog.TableNotExistException e) {
                         throw new StarRocksConnectorException("%s does not include branch: %s",
-                                table.fullName(), refName.split(":")[1]);
+                                table.fullName(), refNameParts[1]);
                     }
                     snapshotId = paimonTable.latestSnapshot().isPresent() ? paimonTable.latestSnapshot().get().id() : -1L;
                 } else {
                     //if tag, format like tag:t_1, return the snapshot that the tag referenced
                     TagManager tagManager =  ((DataTable) table).tagManager();
-                    if (!tagManager.tagExists(refName.split(":")[1])) {
+                    if (!tagManager.tagExists(refNameParts[1])) {
                         throw new StarRocksConnectorException("%s does not include tag: %s",
-                                table.fullName(), refName.split(":")[1]);
+                                table.fullName(), refNameParts[1]);
                     }
                     snapshotId = tagManager.tagObjects().stream()
-                            .filter(p -> p.getValue().equals(refName.split(":")[1]))
+                            .filter(p -> p.getValue().equals(refNameParts[1]))
                             .map(p -> p.getKey().id())
                             .findFirst()
                             .get();
                 }
             } else {
-                throw new StarRocksConnectorException("Please input corrent format like branch:branch_name or tag:tag_name");
+                throw new StarRocksConnectorException("Please input correct format like branch:branch_name or tag:tag_name");
             }
         } else {
             throw new StarRocksConnectorException("Unsupported type for table version: " + version);
