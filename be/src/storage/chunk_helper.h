@@ -14,17 +14,19 @@
 
 #pragma once
 
+// NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <memory>
-#include <mutex>
-#include <queue>
 
+<<<<<<< HEAD
 #include "column/column_visitor.h"
 #include "column/column_visitor_adapter.h"
 #include "column/datum.h"
 #include "column/fixed_length_column_base.h"
+=======
+#include "column/chunk.h"
+>>>>>>> dd03f6deaf ([Refactor] remover unnecessary includes in column_helper.h (#65665))
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/olap_type_infra.h"
 #include "tablet_schema.h"
 
 namespace starrocks {

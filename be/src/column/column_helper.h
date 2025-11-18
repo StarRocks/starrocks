@@ -14,29 +14,20 @@
 
 #pragma once
 
-#include <utility>
-
-#include "column/nullable_column.h"
-#ifdef __x86_64__
-#include <immintrin.h>
-#endif
-#if defined(__ARM_NEON) && defined(__aarch64__)
-#include <arm_acle.h>
-#include <arm_neon.h>
-#endif
-
+// NOTE: This file is included by a large number of files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <runtime/types.h>
 
+#include <utility>
+
 #include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 struct TypeDescriptor;
@@ -466,6 +457,7 @@ public:
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
 
     template <typename T, bool avx512f>
+<<<<<<< HEAD
     static size_t t_filter_range(const Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
         auto result_offset = from;
@@ -575,6 +567,9 @@ public:
 
         return result_offset;
     }
+=======
+    static size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to);
+>>>>>>> dd03f6deaf ([Refactor] remover unnecessary includes in column_helper.h (#65665))
 
     template <typename T>
     static size_t filter_range(const Filter& filter, T* data, size_t from, size_t to) {
