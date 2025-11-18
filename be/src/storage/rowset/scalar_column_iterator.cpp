@@ -651,56 +651,41 @@ Status ScalarColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t 
     return Status::OK();
 }
 
-template <typename PageParseFunc>
-Status ScalarColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values,
-                                             PageParseFunc&& page_parse) {
+template <typename RowidReaderFunc, typename RangeReaderFunc>
+Status ScalarColumnIterator::_fetch_by_rowid_helper(const rowid_t* rowids, size_t size, Column* values,
+                                                    RowidReaderFunc&& rowid_reader, RangeReaderFunc&& range_reader) {
     DCHECK(std::is_sorted(rowids, rowids + size));
     RETURN_IF(size == 0, Status::OK());
     size_t prev_bytes = values->byte_size();
-    const rowid_t* const end = rowids + size;
     bool contain_deleted_row = (values->delete_state() != DEL_NOT_SATISFIED);
-    do {
-        RETURN_IF_ERROR(seek_to_ordinal(*rowids));
+    const rowid_t* cursor = rowids;
+    const rowid_t* const end = rowids + size;
+    while (cursor != end) {
+        RETURN_IF_ERROR(seek_to_ordinal(*cursor));
         contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         auto last_rowid = implicit_cast<rowid_t>(_page->first_ordinal() + _page->num_rows());
-        const rowid_t* next_page_rowid = std::lower_bound(rowids, end, last_rowid);
-        while (rowids != next_page_rowid) {
-            DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
-            rowid_t curr = *rowids;
-            _current_ordinal = implicit_cast<ordinal_t>(curr);
-            RETURN_IF_ERROR(_page->seek(curr - _page->first_ordinal()));
-            const rowid_t* p = rowids + 1;
-            while ((next_page_rowid != p) && (*p == curr + 1)) {
-                curr = *p++;
+        const rowid_t* next_page_rowid = std::lower_bound(cursor, end, last_rowid);
+        if (_page->supports_read_by_rowids()) {
+            size_t nread = next_page_rowid - cursor;
+            RETURN_IF_ERROR(rowid_reader(_page.get(), values, cursor, &nread));
+            cursor += nread;
+        } else {
+            while (cursor != next_page_rowid) {
+                DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
+                rowid_t curr = *cursor;
+                _current_ordinal = implicit_cast<ordinal_t>(curr);
+                RETURN_IF_ERROR(_page->seek(curr - _page->first_ordinal()));
+                const rowid_t* contiguous = cursor + 1;
+                while ((contiguous != next_page_rowid) && (*contiguous == curr + 1)) {
+                    curr = *contiguous++;
+                }
+                size_t run = contiguous - cursor;
+                RETURN_IF_ERROR(range_reader(_page.get(), values, &run));
+                _current_ordinal += run;
+                cursor = contiguous;
             }
-            size_t nread = p - rowids;
-            RETURN_IF_ERROR(page_parse(values, &nread));
-            _current_ordinal += nread;
-            rowids = p;
+            DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
         }
-        DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
-    } while (rowids != end);
-    values->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-    _opts.stats->bytes_read += static_cast<int64_t>(values->byte_size() - prev_bytes);
-    DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
-    return Status::OK();
-}
-
-template <typename PageParseFunc>
-Status ScalarColumnIterator::_fetch_by_rowid_v2(const rowid_t* rowids, size_t size, Column* values,
-                                                PageParseFunc&& page_parse) {
-    DCHECK(std::is_sorted(rowids, rowids + size));
-    RETURN_IF(size == 0, Status::OK());
-    size_t prev_bytes = values->byte_size();
-    bool contain_deleted_row = (values->delete_state() != DEL_NOT_SATISFIED);
-    size_t read_count = 0;
-    while (read_count < size) {
-        RETURN_IF_ERROR(seek_to_ordinal(*rowids));
-        contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
-        size_t nread = size - read_count;
-        RETURN_IF_ERROR(page_parse(values, rowids, &nread));
-        read_count += nread;
-        rowids += nread;
     }
     values->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
     _opts.stats->bytes_read += static_cast<int64_t>(values->byte_size() - prev_bytes);
@@ -708,36 +693,19 @@ Status ScalarColumnIterator::_fetch_by_rowid_v2(const rowid_t* rowids, size_t si
 }
 
 Status ScalarColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-    if (size == 0) {
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(seek_to_ordinal(*rowids));
-    if (_page->supports_read_by_rowids()) {
-        // Use _fetch_by_rowid_v2 with read_by_rowds for efficient batch reading
-        auto page_parse = [&](Column* values, const rowid_t* rowids, size_t* count) {
-            return _page->read_by_rowds(values, rowids, count);
-        };
-        return _fetch_by_rowid_v2(rowids, size, values, page_parse);
-    } else {
-        // Fallback to _fetch_by_rowid with page->read for V1 format or unsupported decoders
-        auto page_parse = [&](Column* values, size_t* count) { return _page->read(values, count); };
-        return _fetch_by_rowid(rowids, size, values, page_parse);
-    }
+    auto rowid_reader = [&](ParsedPage* page, Column* column, const rowid_t* rowid_batch, size_t* count) {
+        return page->read_by_rowds(column, rowid_batch, count);
+    };
+    auto range_reader = [&](ParsedPage* page, Column* column, size_t* count) { return page->read(column, count); };
+    return _fetch_by_rowid_helper(rowids, size, values, rowid_reader, range_reader);
 }
 
 Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-    RETURN_IF_ERROR(seek_to_ordinal(*rowids));
-    if (_page->supports_read_by_rowids()) {
-        // Use _fetch_by_rowid_v2 with read_dict_codes_by_rowids for efficient batch reading
-        auto page_parse = [&](Column* values, const rowid_t* rowids, size_t* count) {
-            return _page->read_dict_codes_by_rowids(values, rowids, count);
-        };
-        return _fetch_by_rowid_v2(rowids, size, values, page_parse);
-    } else {
-        // Fallback to _fetch_by_rowid with page->read_dict_codes for V1 format or unsupported decoders
-        auto page_parse = [&](Column* values, size_t* count) { return _page->read_dict_codes(values, count); };
-        return _fetch_by_rowid(rowids, size, values, page_parse);
-    }
+    auto rowid_reader = [&](ParsedPage* page, Column* column, const rowid_t* rowid_batch, size_t* count) {
+        return page->read_dict_codes_by_rowids(column, rowid_batch, count);
+    };
+    auto range_reader = [&](ParsedPage* page, Column* column, size_t* count) { return page->read_dict_codes(column, count); };
+    return _fetch_by_rowid_helper(rowids, size, values, rowid_reader, range_reader);
 }
 
 int ScalarColumnIterator::dict_size() {

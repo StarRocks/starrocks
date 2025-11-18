@@ -149,11 +149,9 @@ private:
     template <LogicalType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
-    template <typename ParseFunc>
-    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
-
-    template <typename PageParseFunc>
-    Status _fetch_by_rowid_v2(const rowid_t* rowids, size_t size, Column* values, PageParseFunc&& page_parse);
+    template <typename RowidReaderFunc, typename RangeReaderFunc>
+    Status _fetch_by_rowid_helper(const rowid_t* rowids, size_t size, Column* values,
+                                  RowidReaderFunc&& rowid_reader, RangeReaderFunc&& range_reader);
 
     template <LogicalType Type>
     Status _load_dict_page();
