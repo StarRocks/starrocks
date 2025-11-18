@@ -281,8 +281,8 @@ public class StatisticsCalcUtils {
             }
 
             // attempt use updateRows from basicStatsMeta to adjust estimated row counts
-            if (StatsConstants.AnalyzeType.SAMPLE == analyzeType
-                    && basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp)) {
+            if (StatsConstants.AnalyzeType.SAMPLE == analyzeType &&
+                    (basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp) || rowCount == 0)) {
                 long statsRowCount = Math.max(basicStatsMeta.getTotalRows() / table.getPartitions().size(), 1)
                         * selectedPartitions.size();
                 if (statsRowCount > rowCount) {
