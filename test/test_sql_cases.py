@@ -127,10 +127,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
 
-        # reset the scheduler interval
-        sql = "ADMIN SET FRONTEND CONFIG 'dynamic_partition_check_interval_seconds' = '600'"
-        self.execute_sql(sql)
-
         # run custom cleanup (always)
         try:
             if hasattr(self.case_info, "cleanup"):
