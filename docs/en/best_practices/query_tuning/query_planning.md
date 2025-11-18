@@ -3,9 +3,10 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# Query Plan
+# Query plan
 
 Optimizing query performance is a common challenge in analytics systems. Slow queries can impair user experience and overall cluster performance. In StarRocks, understanding and interpreting query plans and query profiles is the foundation for diagnosing and improving slow queries. These tools help you:
+
 - Identify bottlenecks and expensive operations
 - Spot suboptimal join strategies or missing indexes
 - Understand how data is filtered, aggregated, and moved
@@ -23,7 +24,7 @@ StarRocks provides several ways to inspect the query plan:
    - `EXPLAIN COSTS <query>`: Includes estimated costs for each operation, which is used to diagnose the statistics issue
 
 2. **EXPLAIN ANALYZE**:  
-   Use `EXPLAIN ANALYZE <query>` to execute the query and display the actual execution plan along with real runtime statistics.  See the [Explain Anlayze](./query_profile_text_based_analysis.md) documentation for details.
+   Use `EXPLAIN ANALYZE <query>` to execute the query and display the actual execution plan along with real runtime statistics. See the [Explain Anlayze](./query_profile_text_based_analysis.md) documentation for details.
 
    Example:
    ```sql
@@ -40,15 +41,16 @@ StarRocks provides several ways to inspect the query plan:
 Typically, the query plan is used to diagnose issues related to how a query is planned and optimized, while the query profile helps identify performance problems during query execution. In the following sections, we'll explore the key concepts of query execution and walk through a concrete example of analyzing a query plan.
 
 
-## Query Execution Flow
+## Query execution flow
 The lifecycle of a query in StarRocks consists of three main phases:
+
 1. **Planning**: The query undergoes parsing, analysis, and optimization, culminating in the generation of a query plan.
 2. **Scheduling**: The scheduler and coordinator distribute the plan to all participating backend nodes.
 3. **Execution**: The plan is executed using the pipeline execution engine.
 
 ![SQL Execution Flow](../../_assets/Profile/execution_flow.png)
 
-**Plan Structure**
+**Plan structure**
 
 The StarRocks plan is hierarchical:
 - **Fragment**: Top-level slice of work; each fragment spawns multiple **FragmentInstances** that run on different backend nodes.
@@ -57,13 +59,13 @@ The StarRocks plan is hierarchical:
 
 ![profile-3](../../_assets/Profile/profile-3.png)
 
-**Pipeline Execution Engine**
+**Pipeline execution engine**
 
 The Pipeline Engine executes the query plan in a parallel and efficient manner, handling complex plans and large data volumes for high performance and scalability.
 
 ![pipeline_opeartors](../../_assets/Profile/pipeline_operators.png)
 
-**Metric Merging Strategy**
+**Metric merging strategy**
 
 By default, StarRocks merges the FragmentInstance and PipelineDriver layers to reduce profile volume, resulting in a simplified three-layer structure:
 - Fragment
@@ -74,7 +76,7 @@ You can control this merging behavior through the session variable `pipeline_pro
 
 ## Example
 
-### How to Read a Query Plan and Profile
+### How to eead a query plan and profile
 
 1. **Understand the structure**: Query plans are split into fragments, each representing a stage of execution. Read from the bottom up: scan nodes first, then joins, aggregations, and finally the result.
 
@@ -101,7 +103,7 @@ You can control this merging behavior through the session variable `pipeline_pro
 6. **Predicate pushdown**: Filters applied early (at scan) reduce downstream data. Check `PREDICATES` or `PushdownPredicates` to see which filters are pushed down.
 
 
-### Example Query Plan
+### Example query plan
 
 :::tip
 This is query 96 from the TPC-DS benchmark.
@@ -171,7 +173,7 @@ The output is a hierarchical plan showing how StarRocks will execute the query. 
                                         predicate: 45:s_store_name = 'ese'
 ```
 
-**Reading the Plan Bottom-Up**
+**Reading the plan bottom-up**
 
 The query plan should be read from the bottom (leaf nodes) upward to the top (root node), following the data flow:
 
