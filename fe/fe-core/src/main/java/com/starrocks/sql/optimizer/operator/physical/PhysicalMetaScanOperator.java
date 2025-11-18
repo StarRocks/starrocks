@@ -29,6 +29,7 @@ import java.util.Objects;
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     private Map<Integer, String> aggColumnIdToNames;
     private List<String> selectPartitionNames;
+    private long selectedIndexId = -1;
 
     public PhysicalMetaScanOperator() {
         super(OperatorType.PHYSICAL_META_SCAN);
@@ -40,6 +41,7 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
         this.aggColumnIdToNames = scanOperator.getAggColumnIdToNames();
         this.selectPartitionNames = scanOperator.getSelectPartitionNames();
+        this.selectedIndexId = scanOperator.getSelectedIndexId();
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
@@ -48,6 +50,10 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
 
     public List<String> getSelectPartitionNames() {
         return selectPartitionNames;
+    }
+
+    public long getSelectedIndexId() {
+        return selectedIndexId;
     }
 
     @Override
@@ -72,12 +78,13 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
 
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
         return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
-                Objects.equals(selectPartitionNames, that.selectPartitionNames);
+                Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
+                selectedIndexId == that.selectedIndexId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), aggColumnIdToNames, selectPartitionNames);
+        return Objects.hash(super.hashCode(), aggColumnIdToNames, selectPartitionNames, selectedIndexId);
     }
 
     public static Builder builder() {
@@ -97,6 +104,7 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
             super.withOperator(operator);
             builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
             builder.selectPartitionNames = ImmutableList.copyOf(operator.selectPartitionNames);
+            builder.selectedIndexId = operator.selectedIndexId;
             return this;
         }
     }
