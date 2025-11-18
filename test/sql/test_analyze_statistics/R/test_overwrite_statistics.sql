@@ -193,3 +193,41 @@ function: assert_explain_costs_contains("select * from test_overwrite_statistics
 -- result:
 None
 -- !result
+delete from _statistics_.column_statistics where table_name='test_overwrite_statistics.expr_range_partitioned_table';
+-- result:
+-- !result
+drop table if exists expr_range_partitioned_table;
+-- result:
+-- !result
+create table expr_range_partitioned_table (
+    dt datetime,
+    k1 int,
+    k2 varchar(20)
+)
+partition by date_trunc('day', dt)
+properties("replication_num"="1");
+-- result:
+-- !result
+insert into expr_range_partitioned_table select '2024-01-01 08:00:00', generate_series, "data1" from table(generate_series(1, 1000));
+-- result:
+-- !result
+set dynamic_overwrite=true;
+-- result:
+-- !result
+insert overwrite expr_range_partitioned_table select '2024-01-01 08:00:00', generate_series, "data1" from table(generate_series(1, 2000));
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.expr_range_partitioned_table;", "cardinality: 2000", "2000.0")
+-- result:
+None
+-- !result
+insert overwrite expr_range_partitioned_table select '2024-01-01 08:00:00', generate_series, "data1" from table(generate_series(1, 300000));
+-- result:
+-- !result
+set dynamic_overwrite=false;
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.expr_range_partitioned_table;", "300000.0")
+-- result:
+None
+-- !result
