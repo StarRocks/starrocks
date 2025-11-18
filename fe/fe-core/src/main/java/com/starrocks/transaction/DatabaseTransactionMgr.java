@@ -1920,18 +1920,20 @@ public class DatabaseTransactionMgr {
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                if (!isCheckpoint) {
-                    LOG.info("replay a committed transaction {}", transactionState.getBrief());
+            if (db != null) {
+                if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                    if (!isCheckpoint) {
+                        LOG.info("replay a committed transaction {}", transactionState.getBrief());
+                    }
+                    LOG.debug("replay a committed transaction {}", transactionState);
+                    updateCatalogAfterCommitted(transactionState, db);
+                } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                    if (!isCheckpoint) {
+                        LOG.info("replay a visible transaction {}", transactionState.getBrief());
+                    }
+                    LOG.debug("replay a visible transaction {}", transactionState);
+                    updateCatalogAfterVisible(transactionState, db);
                 }
-                LOG.debug("replay a committed transaction {}", transactionState);
-                updateCatalogAfterCommitted(transactionState, db);
-            } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
-                if (!isCheckpoint) {
-                    LOG.info("replay a visible transaction {}", transactionState.getBrief());
-                }
-                LOG.debug("replay a visible transaction {}", transactionState);
-                updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState);
             if (transactionState.isExpired(System.currentTimeMillis())) {
