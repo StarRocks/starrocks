@@ -170,11 +170,6 @@ INSERT OVERWRITE test_overwrite_statistics.sales_data partition("p202401") VALUE
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.sales_data';
 -- result:
 2
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
->>>>>>> ad3a9cf7e9 ([BugFix] Fix statistics collection for INSERT OVERWRITE with dynamic overwrite (#65657))
 -- !result
 drop stats test_overwrite_statistics.test_overwrite_stats_table;
 -- result:
