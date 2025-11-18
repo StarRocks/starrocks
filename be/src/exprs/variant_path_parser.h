@@ -47,7 +47,6 @@ public:
     int get_index() const { return _index; }
 };
 
-// Use variant instead of polymorphic pointers
 using VariantPathExtraction = std::variant<ObjectExtraction, ArrayExtraction>;
 
 struct VariantPath {
