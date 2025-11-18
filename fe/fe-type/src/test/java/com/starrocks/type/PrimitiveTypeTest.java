@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.type;
 
-package com.starrocks.catalog;
-
-import com.starrocks.type.PrimitiveType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
