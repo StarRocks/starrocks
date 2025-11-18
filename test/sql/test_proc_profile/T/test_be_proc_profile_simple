@@ -11,7 +11,7 @@ shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_pr
 
 -- Test BE /proc_profile/file endpoint with a valid filename (if profiles exist)
 -- Get a profile filename from the main page and test accessing it
-shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | head -1 | cut -d'=' -f2 > be_profile_file.txt
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt
 [UC]shell: cat be_profile_file.txt
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
 shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
@@ -20,6 +20,23 @@ shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/
 shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz"
 shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file"
 
+-- Test BE /api/proc_profile/list endpoint (JSON API)
+-- This should return JSON with profile list (covers ProcProfileAction.cpp:55-136)
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"profiles\""
 
+-- Test BE /api/proc_profile with invalid action parameter
+-- Should return error (covers ProcProfileAction.cpp:47)
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/invalid_action" | grep -c "\"error\""
+
+-- Test BE /api/proc_profile with unsupported HTTP method (POST)
+-- Should return error (covers ProcProfileAction.cpp:50-51)
+shell: curl -s -X POST -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"error\""
+
+-- Test BE /api/proc_profile/list returns valid JSON structure
+-- Verify JSON contains expected fields and has correct content-type header
+shell: curl -s -I -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -i "content-type" | grep -c "application/json"
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"profiles\""
+
+-- Cleanup
 shell: rm -f be_profile_file.txt
 shell: rm -f be_ip.txt be_http_port.txt

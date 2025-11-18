@@ -50,8 +50,10 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -345,7 +347,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public static void checkExpressionRangeColumnType(Column column, Expr expr) throws AnalysisException {
         PrimitiveType type = column.getPrimitiveType();
         if (!type.isFixedPointType() && !type.isDateType()) {
-            throw new AnalysisException("Expr[" + expr.toSql() + "] type[" + type
+            throw new AnalysisException("Expr[" + ExprToSql.toSql(expr) + "] type[" + type
                     + "] cannot be a range partition key.");
         }
     }

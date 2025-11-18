@@ -220,7 +220,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
@@ -790,7 +790,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt, context);
+                context.getGlobalStateMgr().getMetadataMgr().truncateTable(context, stmt);
             });
             return null;
         }
@@ -1081,7 +1081,7 @@ public class DDLStmtExecutor {
                         "DROP MATERIALIZED VIEW to drop task, when the materialized view is deleted, " +
                         "the related task will be deleted automatically.");
             }
-            taskManager.dropTasks(Collections.singletonList(task.getId()), false);
+            taskManager.dropTasks(Collections.singletonList(task.getId()));
             return null;
         }
 

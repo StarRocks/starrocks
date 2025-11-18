@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -115,6 +116,7 @@ import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
@@ -660,7 +662,15 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         }
         sqlBuilder.append(visit(relation.getRight())).append(" ");
 
-        if (relation.getOnPredicate() != null) {
+        // Prioritize USING clause over ON predicate
+        // Even if onPredicate is set (by analyzeJoinUsing), output USING clause if it exists
+        if (relation.getUsingColNames() != null && !relation.getUsingColNames().isEmpty()) {
+            sqlBuilder.append("USING (");
+            sqlBuilder.append(relation.getUsingColNames().stream()
+                    .map(col -> "`" + col + "`")
+                    .collect(Collectors.joining(", ")));
+            sqlBuilder.append(")");
+        } else if (relation.getOnPredicate() != null) {
             sqlBuilder.append("ON ").append(visit(relation.getOnPredicate()));
         }
         return sqlBuilder.toString();
@@ -829,7 +839,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 sb.append(", ");
             }
             first = false;
-            sb.append(aggregation.getFunctionCallExpr().toSql());
+            sb.append(ExprToSql.toSql(aggregation.getFunctionCallExpr()));
             if (aggregation.getAlias() != null) {
                 sb.append(" AS ").append(aggregation.getAlias());
             }
@@ -881,7 +891,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     @Override
     public String visitExpression(Expr node, Void context) {
-        return node.toSql();
+        return ExprToSql.toSql(node);
     }
 
     @Override
@@ -1513,7 +1523,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
     @Override
     public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
-        return node.toSql();
+        return ExprToSql.toSql(node);
     }
 
     private String visitAstList(List<? extends ParseNode> contexts) {
@@ -1523,9 +1533,17 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     protected String printWithParentheses(ParseNode node) {
         if (node instanceof SlotRef || node instanceof LiteralExpr) {
             return visit(node);
-        } else {
-            return "(" + visit(node) + ")";
         }
+
+        if (node instanceof Parameter) {
+            Parameter parameter = (Parameter) node;
+            Expr expr = parameter.getExpr();
+            if ((expr instanceof SlotRef || expr instanceof LiteralExpr)) {
+                return visit(node);
+            }
+        }
+
+        return "(" + visit(node) + ")";
     }
 
     // --------------------------------------------Storage volume Statement ----------------------------------------

@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -47,6 +46,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -105,6 +105,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -421,7 +424,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
             return new CallOperator(
                     FunctionSet.JSON_QUERY,
-                    Type.JSON,
+                    JsonType.JSON,
                     arguments,
                     func);
         }
@@ -441,7 +444,7 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping, null);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
+            return new LambdaFunctionOperator(refs, lambda, FunctionType.FUNCTION);
         }
 
         @Override
@@ -832,7 +835,7 @@ public final class SqlToScalarOperatorTranslator {
                 LogicalApplyOperator applyOperator = LogicalApplyOperator.builder()
                         .setUseSemiAnti(false)
                         .build();
-                return new SubqueryOperator(Type.INVALID, queryStatement, applyOperator, null);
+                return new SubqueryOperator(InvalidType.INVALID, queryStatement, applyOperator, null);
             }
 
             LogicalPlan subqueryPlan = SubqueryUtils.getLogicalPlan(session, cteContext,
@@ -921,7 +924,7 @@ public final class SqlToScalarOperatorTranslator {
                     return ref;
                 }
             }
-            throw unsupportedException("unknown slot: " + node.toSql());
+            throw unsupportedException("unknown slot: " + ExprToSql.toSql(node));
         }
     }
 
@@ -939,7 +942,7 @@ public final class SqlToScalarOperatorTranslator {
                 // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
                 // (currently mainly used by some Load logic).
                 // TODO: delete old analyze in Load
-                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
+                LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + ExprToSql.toSql(node));
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
             String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();

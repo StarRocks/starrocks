@@ -20,20 +20,11 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.AnyMapType;
-import com.starrocks.catalog.AnyStructType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -45,6 +36,18 @@ import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyMapType;
+import com.starrocks.type.AnyStructType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.assertj.core.util.Sets;
@@ -115,19 +118,19 @@ public class AggStateCombinatorTest extends MVTestBase {
 
     private Type mockType(Type type) {
         if (type.isDecimalOfAnyVersion()) {
-            return ScalarType.createDecimalV3NarrowestType(10, 2);
+            return TypeFactory.createDecimalV3NarrowestType(10, 2);
         } else if (type.isChar()) {
-            return ScalarType.createCharType(100);
+            return TypeFactory.createCharType(100);
         } else if (type.isVarchar()) {
-            return ScalarType.createVarcharType(100);
+            return TypeFactory.createVarcharType(100);
         } else if (type instanceof AnyElementType) {
-            return Type.STRING;
+            return StringType.STRING;
         } else if (type instanceof AnyArrayType) {
-            return Type.ARRAY_BIGINT;
+            return ArrayType.ARRAY_BIGINT;
         } else if (type instanceof AnyMapType) {
-            return new MapType(Type.STRING, Type.STRING);
+            return new MapType(StringType.STRING, StringType.STRING);
         } else if (type instanceof AnyStructType) {
-            Type[] argsTypes = { Type.STRING };
+            Type[] argsTypes = { StringType.STRING };
             ArrayList<Type> structTypes = new ArrayList<>();
             for (Type t : argsTypes) {
                 structTypes.add(new ArrayType(t));
@@ -155,7 +158,7 @@ public class AggStateCombinatorTest extends MVTestBase {
 
     private Function getAggStateIfFunc(AggregateFunction aggFunc) {
         List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
-        argTypes.add(Type.BOOLEAN);
+        argTypes.add(BooleanType.BOOLEAN);
         String aggStateFuncName = FunctionSet.getAggStateIfName(aggFunc.functionName());
         Type[] argumentTypes = argTypes.toArray(Type[]::new);
         FunctionParams params = new FunctionParams(false, null);
@@ -404,7 +407,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 
@@ -435,7 +438,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 
@@ -1294,7 +1297,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType, intermediateType };
             Boolean[] argArgumentConstants = { false, false };
 
@@ -1327,7 +1330,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             // set agg_state_desc
             List<Type> argTypes = Stream.of(aggFunc.getArgs()).map(this::mockType).collect(Collectors.toList());
             intermediateType.setAggStateDesc(new AggStateDesc(aggFunc.functionName(),
-                    aggFunc.getReturnType(), argTypes));
+                    aggFunc.getReturnType(), argTypes, AggStateDesc.isAggFuncResultNullable(aggFunc.functionName())));
             Type[] argumentTypes = { intermediateType };
             Boolean[] argArgumentConstants = { false };
 

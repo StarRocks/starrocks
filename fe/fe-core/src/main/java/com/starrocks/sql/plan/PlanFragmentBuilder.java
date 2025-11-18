@@ -37,7 +37,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
@@ -129,6 +128,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -204,9 +204,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -215,6 +217,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -235,6 +238,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -391,7 +395,7 @@ public class PlanFragmentBuilder {
 
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
-            fragment.createDataSink(resultSinkType);
+            fragment.createDataSink(resultSinkType, execPlan);
             fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
         }
         Collections.reverse(fragments);
@@ -513,6 +517,46 @@ public class PlanFragmentBuilder {
                 node = node.getChild(0);
             }
             return context.getOptExpression(node.getId().asInt());
+        }
+
+        private boolean containsHeavyExpr(ScalarOperator expr) {
+            Predicate<ScalarOperator> isHeavyExpr = e -> {
+                if (e.getChildren().isEmpty() || !(e instanceof CallOperator)) {
+                    return false;
+                }
+                CallOperator call = (CallOperator) e;
+                return call.getFnName().toLowerCase().contains("regexp");
+            };
+            return ScalarOperatorUtil.getStream(expr).anyMatch(isHeavyExpr);
+        }
+
+        public Map<ColumnRefOperator, ScalarOperator> extractHeavyExprs(Projection projection) {
+            Map<ColumnRefOperator, ScalarOperator> commonSubExprs =
+                    Optional.ofNullable(projection.getCommonSubOperatorMap())
+                            .orElse(Collections.emptyMap());
+
+            Map<ColumnRefOperator, ScalarOperator> heavyCommonSubExprs =
+                    commonSubExprs.entrySet().stream().filter(e -> containsHeavyExpr(e.getValue()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            Map<ColumnRefOperator, ScalarOperator> exprs =
+                    Optional.ofNullable(projection.getColumnRefMap()).orElse(Collections.emptyMap());
+
+            Map<ColumnRefOperator, ScalarOperator> heavyExprs =
+                    exprs.entrySet().stream().filter(e -> containsHeavyExpr(e.getValue()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            if (heavyCommonSubExprs.isEmpty() && heavyExprs.isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            commonSubExprs.replaceAll((k, v) -> heavyCommonSubExprs.containsKey(k) ? k : v);
+
+            ReplaceColumnRefRewriter columnRefReplacer = new ReplaceColumnRefRewriter(commonSubExprs);
+            heavyExprs.replaceAll((k, v) -> columnRefReplacer.rewrite(v));
+            exprs.replaceAll((k, v) -> heavyExprs.containsKey(k) ? k : v);
+            heavyExprs.putAll(heavyCommonSubExprs);
+            return heavyExprs;
         }
 
         @Override
@@ -687,6 +731,33 @@ public class PlanFragmentBuilder {
             }
 
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
+
+            // TODO(by satanson): At present we only support OlapTable
+            if (context.getConnectContext().getSessionVariable().isPushDownHeavyExprs() &&
+                    (inputFragment.getPlanRoot() instanceof OlapScanNode)) {
+                Map<ColumnRefOperator, ScalarOperator> heavyExprs = extractHeavyExprs(node);
+                Map<SlotId, Expr> heavyExprMap = Maps.newHashMap();
+                Preconditions.checkArgument(inputFragment.getPlanRoot().getTupleIds().size() == 1);
+                TupleDescriptor tupleDescriptor =
+                        context.getDescTbl().getTupleDesc(inputFragment.getPlanRoot().getTupleIds().get(0));
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : heavyExprs.entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    node.getCommonSubOperatorMap()));
+
+                    heavyExprMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    slotDescriptor.setOriginType(expr.getType());
+                    context.getColRefToExpr()
+                            .put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+                ((OlapScanNode) inputFragment.getPlanRoot()).setHeavyExprs(heavyExprMap);
+            }
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
@@ -916,7 +987,7 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-                        List<Long> allTabletIds = selectedIndex.getTabletIds();
+                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                         for (int i = 0; i < allTabletIds.size(); i++) {
                             tabletId2BucketSeq.put(allTabletIds.get(i), i);
                         }
@@ -1026,9 +1097,10 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(scan.getTable());
             ComputeResource computeResource = ConnectContext.get() != null ?
                     ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
-                    scan.getSelectPartitionNames(),
+                    scan.getSelectPartitionNames(), scan.getSelectedIndexId(),
                     context.getConnectContext().getCurrentComputeResource());
 
             scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
@@ -1333,6 +1405,7 @@ public class PlanFragmentBuilder {
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             paimonScanNode.computeStatistics(optExpression.getStatistics());
+            paimonScanNode.setTvrVersionRange(node.getTvrVersionRange());
             currentExecGroup.add(paimonScanNode, true);
             try {
                 // set predicate
@@ -2398,7 +2471,7 @@ public class PlanFragmentBuilder {
                 final String functionName = functionCallExpr.getFnName().getFunction();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
+                    replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
                             functionCallExpr.getFn().getArgs(),
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
@@ -2412,7 +2485,7 @@ public class PlanFragmentBuilder {
                     replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
+                    replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
                             functionCallExpr.getFn().getArgs(),
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);

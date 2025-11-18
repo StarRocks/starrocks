@@ -39,11 +39,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TExprOpcode;
-import com.starrocks.thrift.TInPredicate;
 
 import java.util.List;
 
@@ -68,13 +65,11 @@ public class InPredicate extends Predicate {
         children.add(compareExpr);
         children.addAll(inList);
         this.isNotIn = isNotIn;
-        this.opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
     }
 
     protected InPredicate(InPredicate other) {
         super(other);
         isNotIn = other.isNotIn();
-        this.opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
     }
 
     public int getInElementNum() {
@@ -99,7 +94,6 @@ public class InPredicate extends Predicate {
         children.add(compareExpr);
         children.add(subquery);
         this.isNotIn = isNotIn;
-        this.opcode = isNotIn ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN;
     }
 
     /**
@@ -128,24 +122,10 @@ public class InPredicate extends Predicate {
         return true;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // Can't serialize a predicate with a subquery
-        Preconditions.checkState(!contains(Subquery.class));
-        msg.in_predicate = new TInPredicate(isNotIn);
-        msg.node_type = TExprNodeType.IN_PRED;
-        msg.setOpcode(opcode);
-        msg.setVector_opcode(vectorOpcode);
-        if (getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(getChild(0).getType().toThrift());
-        } else {
-            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-        }
-    }
 
     @Override
     public String toString() {
-        return toSql();
+        return ExprToSql.toSql(this);
     }
 
     @Override
@@ -160,10 +140,6 @@ public class InPredicate extends Predicate {
             return isNotIn == expr.isNotIn;
         }
         return false;
-    }
-
-    public void setOpcode(TExprOpcode opcode) {
-        this.opcode = opcode;
     }
 
     @Override

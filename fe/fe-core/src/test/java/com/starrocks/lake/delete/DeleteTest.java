@@ -27,7 +27,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -62,6 +61,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -113,11 +114,11 @@ public class DeleteTest {
     private Database createDb() {
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, null, "0", ""));
-        columns.add(new Column("v1", Type.ARRAY_BIGINT, false, null, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, null, "0", ""));
+        columns.add(new Column("v1", ArrayType.ARRAY_BIGINT, false, null, "0", ""));
 
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);

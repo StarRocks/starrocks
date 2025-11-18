@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
@@ -47,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.IntegerType;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.Snapshot;
@@ -375,13 +375,13 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                                      ImmutableMap.Builder<Column, ColumnRefOperator> newColumnMetaToColRefMapBuilder,
                                      boolean hasPartitionEvolution,
                                      IcebergTable icebergTable) {
-        Column column = new Column(DATA_SEQUENCE_NUMBER, Type.BIGINT, true);
+        Column column = new Column(DATA_SEQUENCE_NUMBER, IntegerType.BIGINT, true);
         ColumnRefOperator columnRef = buildNewColumnRef(column, columnRefFactory, icebergTable);
         newColRefToColumnMetaMapBuilder.put(columnRef, column);
         newColumnMetaToColRefMapBuilder.put(column, columnRef);
 
         if (hasPartitionEvolution) {
-            Column specIdcolumn = new Column(SPEC_ID, Type.INT, true);
+            Column specIdcolumn = new Column(SPEC_ID, IntegerType.INT, true);
             ColumnRefOperator specIdColumnRef = buildNewColumnRef(specIdcolumn, columnRefFactory, icebergTable);
             newColRefToColumnMetaMapBuilder.put(specIdColumnRef, specIdcolumn);
             newColumnMetaToColRefMapBuilder.put(specIdcolumn, specIdColumnRef);

@@ -35,13 +35,13 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 
 import java.nio.ByteBuffer;
 
@@ -51,7 +51,7 @@ public class NullLiteral extends LiteralExpr {
 
     static {
         try {
-            INT_EXPR = new IntLiteral("0", Type.INT);
+            INT_EXPR = new IntLiteral("0", IntegerType.INT);
         } catch (AnalysisException e) {
             throw new RuntimeException(e);
         }
@@ -63,7 +63,7 @@ public class NullLiteral extends LiteralExpr {
 
     public NullLiteral(NodePosition pos) {
         super(pos);
-        type = Type.NULL;
+        type = NullType.NULL;
     }
 
     public static NullLiteral create(Type type) {
@@ -133,7 +133,7 @@ public class NullLiteral extends LiteralExpr {
     // CHAR VARCHAR: ""
     @Override
     public ByteBuffer getHashValue(Type type) {
-        return INT_EXPR.getHashValue(Type.INT);
+        return INT_EXPR.getHashValue(IntegerType.INT);
     }
 
     @Override
@@ -147,10 +147,6 @@ public class NullLiteral extends LiteralExpr {
         return this;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.NULL_LITERAL;
-    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

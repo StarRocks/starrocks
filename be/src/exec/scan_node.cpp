@@ -52,6 +52,18 @@ const string ScanNode::_s_num_scanner_threads_started = "NumScannerThreadsStarte
 
 Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.common && tnode.common.__isset.heavy_exprs && !tnode.common.heavy_exprs.empty()) {
+        _heavy_expr_slot_ids.reserve(tnode.common.heavy_exprs.size());
+        _heavy_expr_ctxs.reserve(tnode.common.heavy_exprs.size());
+
+        for (auto const& [key, val] : tnode.common.heavy_exprs) {
+            ExprContext* context;
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            _heavy_expr_slot_ids.emplace_back(key);
+            _heavy_expr_ctxs.emplace_back(context);
+        }
+    }
+
     const TQueryOptions& options = state->query_options();
     if (options.__isset.io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = options.io_tasks_per_scan_operator;

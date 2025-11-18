@@ -176,6 +176,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
+import static com.starrocks.utframe.StarRocksTestBase.isOutputTraceLog;
 
 public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
@@ -567,7 +568,7 @@ public class UtFrameUtils {
                         UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
             Pair<ExecPlan, String> execPlanWithQuery = result.second;
             String traceLog = execPlanWithQuery.second;
-            if (!Strings.isNullOrEmpty(traceLog)) {
+            if (isOutputTraceLog && !Strings.isNullOrEmpty(traceLog)) {
                 System.out.println(traceLog);
             }
             return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
@@ -647,13 +648,13 @@ public class UtFrameUtils {
             if (statementBase instanceof InsertStmt) {
                 scheduler = new DefaultCoordinator.Factory().createInsertScheduler(context,
                             execPlan.getFragments(), execPlan.getScanNodes(),
-                            execPlan.getDescTbl().toThrift());
+                            execPlan.getDescTbl().toThrift(), execPlan);
             } else {
                 throw new RuntimeException("can only handle insert DML");
             }
         } else {
             scheduler = new DefaultCoordinator.Factory().createQueryScheduler(context,
-                        execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                        execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
         }
 
         return scheduler;
@@ -815,7 +816,8 @@ public class UtFrameUtils {
             String dropMv = String.format("drop materialized view if exists `%s`.`%s`;", dbName, mvName);
             connectContext.executeSql(dropMv);
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withAsyncMvAndRefresh(entry.getValue());
+            // no need to refresh
+            starRocksAssert.withMaterializedView(entry.getValue());
         }
 
         // mock be core stat
@@ -978,7 +980,6 @@ public class UtFrameUtils {
         replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
 
-        StarRocksTestBase.registerTrace(connectContext);
         try {
             StatementBase statementBase;
             try (Timer st = Tracers.watchScope("Parse")) {
@@ -1001,7 +1002,7 @@ public class UtFrameUtils {
             } else if (statementBase instanceof InsertStmt) {
                 return getInsertExecPlan((InsertStmt) statementBase, connectContext);
             } else {
-                Preconditions.checkState(false, "Do not support the statement");
+                Preconditions.checkState(false, "Do not support the statement:" + statementBase);
                 return null;
             }
         } finally {
@@ -1336,6 +1337,8 @@ public class UtFrameUtils {
         // Enable mv rewrite in mv refresh by default
         Config.enable_mv_refresh_query_rewrite = true;
 
+        Config.enable_materialized_view_external_table_precise_refresh = false;
+
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.runningUnitTest = true;
         Config.mv_refresh_default_planner_optimize_timeout = 300 * 1000; // 5min
@@ -1352,8 +1355,6 @@ public class UtFrameUtils {
 
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
-            // disable mv analyze stats in FE UTs
-            connectContext.getSessionVariable().setAnalyzeForMv("");
             connectContext.getSessionVariable().setTraceLogLevel(10);
         }
 

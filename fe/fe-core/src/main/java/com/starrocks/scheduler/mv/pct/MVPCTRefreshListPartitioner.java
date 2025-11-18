@@ -17,7 +17,6 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Column;
@@ -27,7 +26,6 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -48,6 +46,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -55,12 +54,14 @@ import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.Logger;
@@ -92,24 +93,26 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     public PCellSortedSet getMVPartitionsToRefreshByParams() {
         if (mvRefreshParams.isCompleteRefresh()) {
-            return PCellSortedSet.of(mv.getListPartitionItems());
+            return mv.getListPartitionItems();
         } else {
             Set<PListCell> pListCells = mvRefreshParams.getListValues();
-            Map<String, PListCell> mvPartitions = mv.getListPartitionItems();
-            Map<String, PListCell> mvFilteredPartitions = mvPartitions.entrySet().stream()
-                    .filter(e -> {
-                        PListCell mvListCell = e.getValue();
-                        if (mvListCell.getItemSize() == 1) {
-                            // if list value is a single value, check it directly
-                            return pListCells.contains(e.getValue());
-                        } else {
-                            // if list values is multi values, split it into single values and check it then.
-                            return mvListCell.toSingleValueCells().stream().anyMatch(i -> pListCells.contains(i));
-                        }
-                    })
-                    .map(Map.Entry::getKey)
-                    .collect(Collectors.toMap(k -> k, mvPartitions::get));
-            return PCellSortedSet.of(mvFilteredPartitions);
+            PCellSortedSet mvPartitions = mv.getListPartitionItems();
+            PCellSortedSet mvFilteredPartitions = PCellSortedSet.of();
+            for (PCellWithName pCellWithName : mvPartitions.getPartitions()) {
+                PListCell mvListCell = (PListCell) pCellWithName.cell();
+                if (mvListCell.getItemSize() == 1) {
+                    // if list value is a single value, check it directly
+                    if (pListCells.contains(mvListCell)) {
+                        mvFilteredPartitions.add(pCellWithName);
+                    }
+                } else {
+                    // if list values is multi values, split it into single values and check it then.
+                    if (mvListCell.toSingleValueCells().stream().anyMatch(i -> pListCells.contains(i))) {
+                        mvFilteredPartitions.add(pCellWithName);
+                    }
+                }
+            }
+            return mvFilteredPartitions;
         }
     }
 
@@ -132,13 +135,15 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
+        logger.info("The process of synchronizing materialized view [{}] partition diff result: {}",
+                mv.getName(), result);
 
         // drop old partitions and add new partitions
         final PartitionDiff partitionDiff = result.diff;
         // We should delete the old partition first and then add the new one,
         // because the old and new partitions may overlap
-        final Map<String, PCell> deletes = partitionDiff.getDeletes();
-        for (String mvPartitionName : deletes.keySet()) {
+        final PCellSortedSet deletes = partitionDiff.getDeletes();
+        for (String mvPartitionName : deletes.getPartitionNames()) {
             dropPartition(db, mv, mvPartitionName);
         }
         logger.info("The process of synchronizing materialized view [{}] delete partitions list [{}]",
@@ -147,7 +152,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         // add partitions
         final Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
         final DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
-        final Map<String, PCell> adds = partitionDiff.getAdds();
+        final PCellSortedSet adds = partitionDiff.getAdds();
         // filter by partition ttl
         filterPartitionsByTTL(adds, true);
         // add partitions for mv
@@ -156,13 +161,13 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                 mv.getName(), adds);
 
         // add into mv context
-        result.mvPartitionToCells.putAll(adds);
-        final Map<Table, Map<String, PCell>> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
+        result.mvPartitionToCells.addAll(adds);
+        final Map<Table, PCellSortedSet> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
         // base table -> Map<partition name -> mv partition names>
-        final Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+        final Map<Table, PCellSetMapping> baseToMvNameRef =
                 differ.generateBaseRefMap(refBaseTablePartitionMap, result.mvPartitionToCells);
         // mv partition name -> Map<base table -> base partition names>
-        final Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+        final Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef =
                 differ.generateMvRefMap(result.mvPartitionToCells, refBaseTablePartitionMap);
         mvContext.setMVToCellMap(result.mvPartitionToCells);
         mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
@@ -173,13 +178,13 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     @Override
-    public Expr generatePartitionPredicate(Table refBaseTable, Set<String> refBaseTablePartitionNames,
+    public Expr generatePartitionPredicate(Table refBaseTable, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) throws AnalysisException {
-        Map<Table, Map<String, PCell>> basePartitionMaps = mvContext.getRefBaseTableToCellMap();
+        Map<Table, PCellSortedSet> basePartitionMaps = mvContext.getRefBaseTableToCellMap();
         if (basePartitionMaps.isEmpty()) {
             return null;
         }
-        Map<String, PCell> baseListPartitionMap = basePartitionMaps.get(refBaseTable);
+        PCellSortedSet baseListPartitionMap = basePartitionMaps.get(refBaseTable);
         if (baseListPartitionMap == null) {
             logger.warn("Generate incremental partition predicate failed, " +
                     "basePartitionMaps:{} contains no refBaseTable:{}", basePartitionMaps, refBaseTable);
@@ -209,8 +214,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Expr generateMVPartitionPredicate(TableName tableName,
-                                             Set<String> mvPartitionNames) throws AnalysisException {
-        Map<String, PCell> mvToCellMap = mvContext.getMVToCellMap();
+                                             PCellSortedSet mvPartitionNames) throws AnalysisException {
+        PCellSortedSet mvToCellMap = mvContext.getMVToCellMap();
         if (mvToCellMap.isEmpty()) {
             return new BoolLiteral(true);
         }
@@ -226,8 +231,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             Column refPartitionColumn = mvPartitionCols.get(0);
             List<Expr> selectedPartitionValues = Lists.newArrayList();
             Type partitionType = refPartitionColumn.getType();
-            for (String tablePartitionName : mvPartitionNames) {
-                PListCell cell = (PListCell) mvToCellMap.get(tablePartitionName);
+            for (PCell pCell : mvPartitionNames.getPCells()) {
+                PListCell cell = (PListCell) pCell;
                 for (List<String> values : cell.getPartitionItems()) {
                     if (mvPartitionCols.size() != values.size()) {
                         return null;
@@ -246,14 +251,14 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
             if (isContainsNullPartition) {
                 IsNullPredicate isNullPredicate = new IsNullPredicate(mvPartitionExpr, false);
-                return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
+                return ExprUtils.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
             } else {
                 return inPredicate;
             }
         } else {
             List<Expr> partitionPredicates = Lists.newArrayList();
-            for (String tablePartitionName : mvPartitionNames) {
-                PListCell cell = (PListCell) mvToCellMap.get(tablePartitionName);
+            for (PCell pCell : mvPartitionNames.getPCells()) {
+                PListCell cell = (PListCell) pCell;
                 for (List<String> values : cell.getPartitionItems()) {
                     if (mvPartitionCols.size() != values.size()) {
                         return null;
@@ -275,10 +280,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         }
                         predicates.add(predicate);
                     }
-                    partitionPredicates.add(Expr.compoundAnd(predicates));
+                    partitionPredicates.add(ExprUtils.compoundAnd(predicates));
                 }
             }
-            return Expr.compoundOr(partitionPredicates);
+            return ExprUtils.compoundOr(partitionPredicates);
         }
     }
 
@@ -296,18 +301,18 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     private static @Nullable Expr genPartitionPredicate(
             Table refBaseTable,
-            Set<String> refBaseTablePartitionNames,
+            PCellSortedSet refBaseTablePartitionNames,
             List<Expr> refBaseTablePartitionSlotRefs,
             List<Column> refPartitionColumns,
-            Map<String, PCell> baseListPartitionMap) throws AnalysisException {
+            PCellSortedSet baseListPartitionMap) throws AnalysisException {
         Preconditions.checkArgument(refBaseTablePartitionSlotRefs.size() == refPartitionColumns.size());
         if (refPartitionColumns.size() == 1) {
             boolean isContainsNullPartition = false;
             Column refPartitionColumn = refPartitionColumns.get(0);
             List<Expr> selectedPartitionValues = Lists.newArrayList();
             Type partitionType = refPartitionColumn.getType();
-            for (String tablePartitionName : refBaseTablePartitionNames) {
-                PListCell cell = (PListCell) baseListPartitionMap.get(tablePartitionName);
+            for (PCell pCell : refBaseTablePartitionNames.getPCells()) {
+                PListCell cell = (PListCell) pCell;
                 for (List<String> values : cell.getPartitionItems()) {
                     if (refPartitionColumns.size() != values.size()) {
                         return null;
@@ -327,14 +332,14 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // contain `is null` predicate rather than `in (null) or = null` because the later one is not correct.
             if (isContainsNullPartition) {
                 IsNullPredicate isNullPredicate = new IsNullPredicate(refBaseTablePartitionSlotRef, false);
-                return Expr.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
+                return ExprUtils.compoundOr(Lists.newArrayList(inPredicate, isNullPredicate));
             } else {
                 return inPredicate;
             }
         } else {
             List<Expr> partitionPredicates = Lists.newArrayList();
-            for (String tablePartitionName : refBaseTablePartitionNames) {
-                PListCell cell = (PListCell) baseListPartitionMap.get(tablePartitionName);
+            for (PCell pCell : refBaseTablePartitionNames.getPCells()) {
+                PListCell cell = (PListCell) pCell;
                 for (List<String> values : cell.getPartitionItems()) {
                     if (refPartitionColumns.size() != values.size()) {
                         return null;
@@ -356,10 +361,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         }
                         predicates.add(predicate);
                     }
-                    partitionPredicates.add(Expr.compoundAnd(predicates));
+                    partitionPredicates.add(ExprUtils.compoundAnd(predicates));
                 }
             }
-            return Expr.compoundOr(partitionPredicates);
+            return ExprUtils.compoundOr(partitionPredicates);
         }
     }
 
@@ -392,28 +397,29 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         // Only check base table's partition values intersection with mv's to-refresh partitions later.
         return baseChangedPCellsSortedSet.entrySet()
                 .stream()
-                .anyMatch(e -> e.getValue().partitions().stream().anyMatch(l -> ((PListCell) l.cell()).getItemSize() > 1));
+                .anyMatch(e -> e.getValue().getPCells().stream().anyMatch(l -> ((PListCell) l).getItemSize() > 1));
     }
 
     @Override
     public PCellSortedSet getMVPartitionNamesWithTTL(boolean isAutoRefresh) {
         // if the user specifies the start and end ranges, only refresh the specified partitions
         boolean isCompleteRefresh = mvRefreshParams.isCompleteRefresh();
-        Map<String, PCell> mvListPartitionMap = Maps.newHashMap();
+        PCellSortedSet mvListPartitionMap;
         if (!isCompleteRefresh) {
+            mvListPartitionMap = PCellSortedSet.of();
             Set<PListCell> pListCells = mvRefreshParams.getListValues();
-            Map<String, PListCell> mvPartitions = mv.getListPartitionItems();
-            for (Map.Entry<String, PListCell> e : mvPartitions.entrySet()) {
-                PListCell mvListCell = e.getValue();
+            PCellSortedSet mvPartitions = mv.getListPartitionItems();
+            for (PCellWithName e : mvPartitions.getPartitions()) {
+                PListCell mvListCell = (PListCell) e.cell();
                 if (mvListCell.getItemSize() == 1) {
                     // if list value is a single value, check it directly
-                    if (pListCells.contains(e.getValue()))  {
-                        mvListPartitionMap.put(e.getKey(), e.getValue());
+                    if (pListCells.contains(e.cell()))  {
+                        mvListPartitionMap.add(e.name(), e.cell());
                     }
                 } else {
                     // if list values is multi values, split it into single values and check it then.
                     if (mvListCell.toSingleValueCells().stream().anyMatch(i -> pListCells.contains(i))) {
-                        mvListPartitionMap.put(e.getKey(), e.getValue());
+                        mvListPartitionMap.add(e.name(), e.cell());
                     }
                 }
             }
@@ -422,7 +428,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         // filter all valid partitions by partition_retention_condition
         filterPartitionsByTTL(mvListPartitionMap, false);
-        return PCellSortedSet.of(mvListPartitionMap);
+        return mvListPartitionMap;
     }
 
     @Override
@@ -433,15 +439,23 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         if (toRefreshPartitions == null || toRefreshPartitions.isEmpty()) {
             return;
         }
-        // filter invalid cells from input
-        toRefreshPartitions.stream()
-                .filter(cell -> !mv.getListPartitionItems().containsKey(cell.name()))
-                .forEach(toRefreshPartitions::remove);
         // dynamically get the number of partitions to be refreshed this time
         int partitionRefreshNumber = getPartitionRefreshNumberAdaptive(toRefreshPartitions, refreshStrategy);
         if (partitionRefreshNumber <= 0 || partitionRefreshNumber >= toRefreshPartitions.size()) {
             return;
         }
+
+        // filter invalid cells from input
+        PCellSortedSet mvPartitions = mv.getListPartitionItems();
+        Set<PCellWithName> invalidCells = toRefreshPartitions.stream()
+                .filter(cell -> !mvPartitions.containsName(cell.name()))
+                .collect(Collectors.toSet());
+        invalidCells.forEach(cell -> {
+            logger.warn("Materialized view [{}] to refresh partition name {}, value {} is invalid, remove it",
+                    mv.getName(), cell.name(), cell.cell());
+            toRefreshPartitions.remove(cell);
+        });
+
         int i = 0;
         // refresh the recent partitions first
         Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, 
@@ -472,7 +486,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     }
 
     private void addListPartitions(Database database, MaterializedView materializedView,
-                                   Map<String, PCell> adds, Map<String, String> partitionProperties,
+                                   PCellSortedSet adds, Map<String, String> partitionProperties,
                                    DistributionDesc distributionDesc) {
         if (adds == null || adds.isEmpty()) {
             return;
@@ -480,9 +494,9 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         // support to add partitions by batch
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
-        for (Map.Entry<String, PCell> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            PListCell partitionCell = (PListCell) addEntry.getValue();
+        for (PCellWithName addEntry : adds.getPartitions()) {
+            String mvPartitionName = addEntry.name();
+            PListCell partitionCell = (PListCell) addEntry.cell();
             List<List<String>> partitionItems = partitionCell.getPartitionItems();
             // the order is not guaranteed
             MultiItemListPartitionDesc multiItemListPartitionDesc =

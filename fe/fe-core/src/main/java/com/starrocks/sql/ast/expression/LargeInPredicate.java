@@ -14,12 +14,11 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;
@@ -161,25 +160,16 @@ public class LargeInPredicate extends InPredicate {
                rawConstantList.equals(that.rawConstantList);
     }
 
-    @Override
     public String toSql() {
         String inClause = isNotIn() ? " NOT IN " : " IN ";
         if (constantCount > 100) {
             // For very large lists, show a summary
-            return getChild(0).toSql() + inClause + "(<" + constantCount + " values>)";
+            return ExprToSql.toSql(getChild(0)) + inClause + "(<" + constantCount + " values>)";
         } else {
-            return getChild(0).toSql() + inClause + "(" + rawText + ")";
+            return ExprToSql.toSql(getChild(0)) + inClause + "(" + rawText + ")";
         }
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // LargeInPredicate should never be serialized to Thrift.
-        // It must be transformed to Left semi/anti join before execution.
-        throw new UnsupportedOperationException(
-                "LargeInPredicate cannot be serialized to Thrift. " +
-                "It should be transformed to Left semi/anti join via LargeInPredicateToJoinRule.");
-    }
 
     @Override
     public String toString() {

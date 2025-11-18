@@ -32,7 +32,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -155,6 +154,7 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.type.DateType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -914,7 +914,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (minLiteral instanceof DateLiteral) {
                 DateLiteral minDateLiteral = (DateLiteral) minLiteral;
                 DateLiteral maxDateLiteral;
-                maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
+                maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(DateType.DATE, true) :
                         (DateLiteral) maxLiteral;
                 min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
                 max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());

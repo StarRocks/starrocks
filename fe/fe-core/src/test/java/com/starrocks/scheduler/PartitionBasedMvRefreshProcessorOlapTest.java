@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
@@ -52,7 +53,6 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -949,16 +949,19 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         return processor;
     }
+
+    @Deprecated
     private PCellSortedSet getMVPCellWithNames(MaterializedView mv,
                                                Set<String> partitionNames) {
-        Map<String, PCell> mvPCellMap = mv.getPartitionCells(Optional.empty());
         if (!mv.isUnPartitioned()) {
+            PCellSortedSet mvPCellSortedSet = mv.getPartitionCells(Optional.empty());
             for (String pname : partitionNames) {
-                Assertions.assertTrue(mvPCellMap.containsKey(pname), String.format("%s is not in %s", pname, mvPCellMap));
+                Assertions.assertTrue(mvPCellSortedSet.containsName(pname),
+                        String.format("%s is not in %s", pname, mvPCellSortedSet));
             }
             List<PCellWithName> mvToRefreshPartitionNames = partitionNames
                     .stream()
-                    .map(p -> PCellWithName.of(p, mvPCellMap.get(p)))
+                    .map(p -> mvPCellSortedSet.getPCellWithName(p))
                     .collect(Collectors.toList());
             return PCellSortedSet.of(mvToRefreshPartitionNames);
         } else {
@@ -2036,6 +2039,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
     @Test
     public void testMVPartitionMappingWithOneToMany() {
+        Config.max_mv_task_run_meta_message_values_length = 1000;
         starRocksAssert.withTable(new MTable("mock_tbl", "k2",
                         List.of(
                                 "k1 date",
@@ -2130,6 +2134,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             });
                 }
         );
+        Config.max_mv_task_run_meta_message_values_length = 8;
     }
 
     @Test
@@ -2775,7 +2780,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         context.getState().reset();
                                         context.setQueryId(UUID.fromString(status.getQueryId()));
                                         context.setIsLastStmt(true);
-                                        context.getSessionVariable().setAnalyzeForMv("full");
                                         context.setThreadLocalInfo();
                                         return context;
                                     }
@@ -2788,7 +2792,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                                 final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 final String postRun = mvTaskRunContext.getPostRun();
-                                Assertions.assertFalse(postRun.contains("ANALYZE TABLE "));
+                                Assertions.assertTrue(Strings.isNullOrEmpty(postRun));
                             });
                 }
         );
@@ -2832,7 +2836,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor =
                             (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
 
-                    Set<String> result = processor.getPCTMVToRefreshedPartitions(false);
+                    Set<String> result = processor.getPCTMVToRefreshedPartitions(false).getPartitionNames();
                     Assertions.assertTrue(result.isEmpty());
                 });
     }
@@ -2875,7 +2879,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor mvRefreshProcessor =
                             (MVPCTBasedRefreshProcessor) processor.getMVRefreshProcessor();
                     MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
-                    Set<String> result = mvRefreshProcessor.getPCTMVToRefreshedPartitions(false);
+                    Set<String> result = mvRefreshProcessor.getPCTMVToRefreshedPartitions(false).getPartitionNames();
                     Assertions.assertFalse(result.isEmpty());
                     Set<String> expect = ImmutableSet.of("p0", "p1", "p2", "p3", "p4");
                     Assertions.assertEquals(expect, result);

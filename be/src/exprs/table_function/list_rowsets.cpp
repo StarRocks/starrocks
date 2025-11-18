@@ -163,7 +163,7 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     return std::make_pair(std::move(result), std::move(offsets));
 #else
     // Lake storage is disabled on macOS
-    state->set_status(Status::RuntimeError("Lake storage is disabled on macOS"));
+    base_state->set_status(Status::RuntimeError("Lake storage is disabled on macOS"));
     return {};
 #endif
 }

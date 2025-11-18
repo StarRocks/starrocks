@@ -4,6 +4,43 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
+:::warning
+
+升级至 v4.0 后，请勿直接将集群降级至 v3.5.0 和 v3.5.1，否则会导致元数据不兼容和 FE Crash。您必须降级到 v3.5.2 或更高版本以避免出现此问题。
+
+:::
+
+## 4.0.1
+
+发布日期：2025 年 11 月 17 日
+
+### 功能优化
+
+- 优化了 TaskRun 会话变量的处理逻辑，仅处理已知变量。 [#64150](https://github.com/StarRocks/starrocks/pull/64150)
+- 默认支持基于元数据收集 Iceberg 和 Delta Lake 表的统计信息。 [#64140](https://github.com/StarRocks/starrocks/pull/64140)
+- 支持收集使用 Bucket 和 Truncate 分区转换的 Iceberg 表的统计信息。 [#64122](https://github.com/StarRocks/starrocks/pull/64122)
+- 支持 FE `/proc` Profile 用于调试。 [#63954](https://github.com/StarRocks/starrocks/pull/63954)
+- 增强了 Iceberg REST Catalog 的 OAuth2 和 JWT 认证支持。 [#63882](https://github.com/StarRocks/starrocks/pull/63882)
+- 改进了 Bundle Tablet 元数据的校验与恢复机制。 [#63949](https://github.com/StarRocks/starrocks/pull/63949)
+- 优化了扫描范围的内存估算逻辑。 [#64158](https://github.com/StarRocks/starrocks/pull/64158)
+
+### 问题修复
+
+修复了以下问题：
+
+- 在发布 Bundle Tablet 时事务日志被删除。 [#64030](https://github.com/StarRocks/starrocks/pull/64030)
+- Join 算法无法保证排序属性，因为在 Join 操作后未重置排序属性。 [#64086](https://github.com/StarRocks/starrocks/pull/64086)
+- 透明物化视图改写相关问题。 [#63962](https://github.com/StarRocks/starrocks/pull/63962)
+
+### 行为变更
+
+- 为 Iceberg Catalog 新增属性 `enable_iceberg_table_cache`，可选择禁用 Iceberg 表缓存，从而始终读取最新数据。 [#64082](https://github.com/StarRocks/starrocks/pull/64082)
+- 在执行 `INSERT ... SELECT` 前刷新外部表，确保读取最新元数据。 [#64026](https://github.com/StarRocks/starrocks/pull/64026)
+- 将锁表槽位数量增加至 256，并在 Slow Lock 日志中新增 `rid` 字段。 [#63945](https://github.com/StarRocks/starrocks/pull/63945)
+- 由于与 Event-based Scheduling 不兼容，暂时禁用了 `shared_scan`。 [#63543](https://github.com/StarRocks/starrocks/pull/63543)
+- 将 Hive Catalog 的缓存 TTL 默认值修改为 24 小时，并移除了未使用的参数。 [#63459](https://github.com/StarRocks/starrocks/pull/63459)
+- 根据会话变量和插入列数量自动确定 Partial Update 模式。 [#62091](https://github.com/StarRocks/starrocks/pull/62091)
+
 ## 4.0.0
 
 发布日期：2025 年 10 月 17 日
@@ -105,3 +142,7 @@ displayed_sidebar: docs
   - `CREATE_TIME`、`SCHEDULE_TIME` 和 `FINISH_TIME` 列类型从 `DOUBLE` 改为 `DATETIME`。
 - 部分 FE 指标增加了 `is_leader` 标签。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
 - 使用 Microsoft Azure Blob Storage 以及 Data Lake Storage Gen 2 作为对象存储的存算分离集群，升级到 v4.0 后 Data Cache 失效，系统将自动重新加载。
+
+### 降级说明
+
+启用 File Bundling 功能后，您只能将集群降级到 v3.5.2 或更高版本。如果降级到 v3.5.2 之前的版本，将无法读写已启用 File Bundling 功能的表。File Bundling 功能在 v4.0 或更高版本中创建的表格中默认启用。

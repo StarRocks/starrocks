@@ -35,7 +35,6 @@
 #include "util/compression/stream_compression.h"
 
 #include <bzlib.h>
-#include <snappy/snappy.h>
 #include <zlib.h>
 
 #include <memory>

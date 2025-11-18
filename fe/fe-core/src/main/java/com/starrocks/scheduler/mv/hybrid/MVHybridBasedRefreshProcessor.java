@@ -33,10 +33,10 @@ import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.ivm.MVIVMBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.ivm.TvrTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
-import java.util.Set;
 
 public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor {
     private final MVPCTBasedRefreshProcessor pctProcessor;
@@ -150,8 +150,8 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
 
     @Override
     public void updateVersionMeta(ExecPlan execPlan,
-                                  Set<String> mvRefreshedPartitions,
-                                  Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                  PCellSortedSet mvRefreshedPartitions,
+                                  Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
         if (this.currentRefreshMode == MaterializedView.RefreshMode.INCREMENTAL) {
             ivmProcessor.updateVersionMeta(execPlan, mvRefreshedPartitions, refTableAndPartitionNames);
         } else {

@@ -538,6 +538,8 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
         ctx.txn_id = 1;
         ctx.batch_write_label = "label1";
         ctx.label = "request_id_1";
+        ctx.db = "test_db1";
+        ctx.table = "test_table1";
         ctx.receive_bytes = 10;
         ctx.load_cost_nanos = 1'200'000'000;
         ctx.mc_read_data_cost_nanos = 10'000'000;
@@ -551,6 +553,8 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
                 "{\n"
                 "    \"TxnId\": 1,\n"
                 "    \"Label\": \"label1\",\n"
+                "    \"Db\": \"test_db1\",\n"
+                "    \"Table\": \"test_table1\",\n"
                 "    \"Status\": \"Success\",\n"
                 "    \"Message\": \"OK\",\n"
                 "    \"RequestId\": \"request_id_1\",\n"
@@ -574,6 +578,8 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
         ctx.txn_id = 2;
         ctx.batch_write_label = "label2";
         ctx.label = "request_id_2";
+        ctx.db = "test_db2";
+        ctx.table = "test_table2";
         ctx.receive_bytes = 20;
         ctx.load_cost_nanos = 100'000'000;
         ctx.mc_read_data_cost_nanos = 10'000'000;
@@ -587,6 +593,8 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
                 "{\n"
                 "    \"TxnId\": 2,\n"
                 "    \"Label\": \"label2\",\n"
+                "    \"Db\": \"test_db2\",\n"
+                "    \"Table\": \"test_table2\",\n"
                 "    \"Status\": \"Fail\",\n"
                 "    \"Message\": \"TestFail\",\n"
                 "    \"RequestId\": \"request_id_2\",\n"

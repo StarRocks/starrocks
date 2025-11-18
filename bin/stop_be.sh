@@ -93,7 +93,7 @@ if [ -f $profile_pidfile ]; then
     if kill -0 $profile_pid > /dev/null 2>&1; then
         # Check if the process is actually a profile collection daemon
         profile_comm=`ps -p $profile_pid -o comm= 2>/dev/null`
-        if [[ "$profile_comm" == *"collect_be_profile"* ]]; then
+        if [[ "$profile_comm" == *"collect_be_prof"* ]]; then
             kill -9 $profile_pid > /dev/null 2>&1
             rm -f $profile_pidfile
             echo "Profile collection daemon stopped"

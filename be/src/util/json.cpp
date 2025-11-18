@@ -163,6 +163,15 @@ static inline int cmpDouble(double left, double right) {
     return 0;
 }
 
+static inline int cmpInt64(int64_t left, int64_t right) {
+    if (left < right) {
+        return -1;
+    } else if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
 static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
     if (left.isObject() && right.isObject()) {
         for (auto it : vpack::ObjectIterator(left)) {
@@ -200,7 +209,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             case vpack::ValueType::SmallInt:
             case vpack::ValueType::Int:
             case vpack::ValueType::UInt:
-                return left.getInt() - right.getInt();
+                return cmpInt64(left.getInt(), right.getInt());
             case vpack::ValueType::Double: {
                 return cmpDouble(left.getDouble(), right.getDouble());
             }
@@ -211,7 +220,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return 0;
             }
         } else if (left.isInteger() && right.isInteger()) {
-            return left.getInt() - right.getInt();
+            return cmpInt64(left.getInt(), right.getInt());
         } else {
             return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
         }

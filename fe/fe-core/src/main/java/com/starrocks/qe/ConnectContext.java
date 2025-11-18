@@ -695,6 +695,14 @@ public class ConnectContext {
         return command;
     }
 
+    public String getCommandStr() {
+        if (command == null) {
+            return "MySQL.UNKNOWN";
+        } else {
+            return "MySQL." + command;
+        }
+    }
+
     public void setCommand(MysqlCommand command) {
         this.command = command;
     }
@@ -722,6 +730,10 @@ public class ConnectContext {
 
     public void setEndTime() {
         endTime = Instant.now();
+    }
+
+    public Instant getEndTime() {
+        return endTime;
     }
 
     public void updateReturnRows(int returnRows) {

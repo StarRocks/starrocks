@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -52,6 +51,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.type.IntegerType;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -534,7 +534,7 @@ public class QueryTransformer {
             }
 
             //Build grouping_id(all grouping columns)
-            ColumnRefOperator grouping = columnRefFactory.create(GROUPING_ID, Type.BIGINT, false);
+            ColumnRefOperator grouping = columnRefFactory.create(GROUPING_ID, IntegerType.BIGINT, false);
             List<Long> groupingID = new ArrayList<>();
             for (BitSet bitSet : groupingIdsBitSets) {
                 long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
@@ -556,7 +556,7 @@ public class QueryTransformer {
             //Build grouping function in select item
             Map<ColumnRefOperator, List<ColumnRefOperator>> groupingFnArgs = Maps.newHashMap();
             for (Expr groupingFunction : groupingFunctionCallExprs) {
-                grouping = columnRefFactory.create(GROUPING, Type.BIGINT, false);
+                grouping = columnRefFactory.create(GROUPING, IntegerType.BIGINT, false);
                 List<ColumnRefOperator> fnArgs = Lists.newArrayList();
 
                 ArrayList<BitSet> tempGroupingIdsBitSets = new ArrayList<>();

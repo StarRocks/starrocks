@@ -45,7 +45,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -63,14 +62,11 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SchemaChangeTypeCompatibility;
 import com.starrocks.catalog.SchemaInfo;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -132,6 +128,10 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -172,7 +172,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // If optimized olap table contains related mvs, set those mv state to inactive.
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                 MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()), false);
 
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -2048,14 +2048,14 @@ public class SchemaChangeHandler extends AlterHandler {
                             sortKeyUniqueIds);
 
                     // If optimized olap table contains related mvs, set those mv state to inactive.
-                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
                     // If optimized olap table contains related mvs, set those mv state to inactive.
-                    AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
@@ -3046,7 +3046,7 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.rebuildFullSchema();
 
             // If modified columns are already done, inactive related mv
-            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, olapTable, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable, modifiedColumns);
 
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),

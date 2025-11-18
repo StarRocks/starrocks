@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -30,10 +30,10 @@ public class VerboseSessionVariablesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("VARIABLE_NAME", ScalarType.createVarchar(64))
-                        .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
-                        .column("DEFAULT_VALUE", ScalarType.createVarchar(1024))
-                        .column("IS_CHANGED", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("VARIABLE_NAME", TypeFactory.createVarchar(64))
+                        .column("VARIABLE_VALUE", TypeFactory.createVarchar(1024))
+                        .column("DEFAULT_VALUE", TypeFactory.createVarchar(1024))
+                        .column("IS_CHANGED", BooleanType.BOOLEAN)
                         .build(), TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES);
     }
 }

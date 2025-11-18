@@ -232,7 +232,9 @@ public class ConnectScheduler {
                 numberConnection.decrementAndGet();
                 AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
                 if (conns != null) {
-                    conns.decrementAndGet();
+                    if (conns.decrementAndGet() <= 0) {
+                        connCountByUser.remove(ctx.getQualifiedUser());
+                    }
                 }
                 LOG.info("Connection closed. remote={}, connectionId={}, qualifiedUser={}, user.currConn={}",
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
@@ -272,6 +274,10 @@ public class ConnectScheduler {
     public ConnectContext findContextByCustomQueryId(String customQueryId) {
         return connectionMap.values().stream().filter(
                 (Predicate<ConnectContext>) c -> customQueryId.equals(c.getCustomQueryId())).findFirst().orElse(null);
+    }
+
+    public int getConnectionNum() {
+        return numberConnection.get();
     }
 
     public Map<String, AtomicInteger> getUserConnectionMap() {

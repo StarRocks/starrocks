@@ -19,11 +19,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -39,6 +37,9 @@ import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -275,7 +276,7 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
             ConstantOperator op = collectionElement.getChild(1).cast();
             int index = 0;
-            Optional<ConstantOperator> res = op.castTo(Type.INT);
+            Optional<ConstantOperator> res = op.castTo(IntegerType.INT);
             if (!res.isPresent()) {
                 throw new SemanticException("Invalid index for struct element: " + collectionElement);
             } else {
@@ -309,12 +310,12 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
         if (predicate.getChild(0).getType().isMapType()) {
-            Function fn = Expr.getBuiltinFunction(FunctionSet.MAP_SIZE,
+            Function fn = ExprUtils.getBuiltinFunction(FunctionSet.MAP_SIZE,
                     new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
             CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
             return new IsNullPredicateOperator(predicate.isNotNull(), call);
         } else if (predicate.getChild(0).getType().isArrayType()) {
-            Function fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_LENGTH,
+            Function fn = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_LENGTH,
                     new Type[] {predicate.getChild(0).getType()}, Function.CompareMode.IS_SUPERTYPE_OF);
             CallOperator call = new CallOperator(fn.functionName(), fn.getReturnType(), predicate.getChildren(), fn);
             return new IsNullPredicateOperator(predicate.isNotNull(), call);

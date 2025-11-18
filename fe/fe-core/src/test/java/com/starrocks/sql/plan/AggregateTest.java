@@ -1223,7 +1223,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n"));
+                "     avgRowSize=3.0\n"), plan);
 
         sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1874,6 +1874,27 @@ public class AggregateTest extends PlanTestBase {
                 "     <id 17> : max_t1b\n" +
                 "     <id 18> : min_id_datetime\n" +
                 "     <id 19> : count_t1b");
+
+        sql = "select count(*) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type_not_null\n" +
+                "     <id 14> : rows_t1b");
+
+        sql = "select count(*) from part_t1 partitions(p1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_v4)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: part_t1\n" +
+                "     <id 7> : rows_v4\n" +
+                "     Partitions: [p1]");
 
         // The following cases will not use MetaScan because some conditions are not met
         // with group by key
@@ -3192,5 +3213,118 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            // Test basic case - should apply the rule
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)\n"
+                    + "  |  colocate: false, reason: \n"
+                    + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
+                    + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
+
+            // Test case 1: duplicatedColumns.size() > 3 - should not apply the rule
+            // This query has 4 columns in first scan: L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_LINENUMBER
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 2: conjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 AND L_DISCOUNT < 1 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 3: disconjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 OR L_DISCOUNT = 3 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 4: conjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 "
+                    + "GROUP BY L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 5: disconjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 6: duplicatedColumns.size() = 3 - should apply the rule (boundary case)
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 7: long string column (averageRowSize > 5) - should not apply the rule
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_COMMENT <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied due to long string
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_RETURNFLAG <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied for short string
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testAvoidMergeNonGroupByAgg() throws Exception {
+        String plan = getFragmentPlan("SELECT /*+SET_VAR(disable_join_reorder=true)*/ COUNT(*) " +
+                "FROM t0 RIGHT JOIN t1 ON v1 < v4");
+        assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  6:AGGREGATE (update serialize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: ");
     }
 }

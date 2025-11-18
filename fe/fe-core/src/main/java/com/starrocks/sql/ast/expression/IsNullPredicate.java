@@ -37,21 +37,21 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.Type;
 
 public class IsNullPredicate extends Predicate {
 
     static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-            new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+            new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
     static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-            new Type[] {Type.INVALID}, Type.BOOLEAN, false);
+            new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
     {
         isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
         isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
@@ -96,10 +96,6 @@ public class IsNullPredicate extends Predicate {
         return ((IsNullPredicate) obj).isNotNull == isNotNull;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.FUNCTION_CALL;
-    }
 
     /**
      * Negates an IsNullPredicate.

@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -22,21 +23,23 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.AuditInternalLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -198,6 +201,7 @@ public abstract class StatisticsCollectJob {
             if (Config.enable_print_sql) {
                 LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
             }
+            Stopwatch watch = Stopwatch.createStarted();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
@@ -218,8 +222,8 @@ public abstract class StatisticsCollectJob {
                     throw new DdlException(context.getState().getErrorMessage());
                 }
             } else {
-                AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
-                        DebugUtil.printId(context.getQueryId()), sql);
+                AuditInternalLog.handleInternalLog(AuditInternalLog.InternalType.QUERY, DebugUtil.printId(context.getQueryId()),
+                        sql, watch);
                 return;
             }
         } while (count < maxRetryTimes);
@@ -246,14 +250,14 @@ public abstract class StatisticsCollectJob {
 
     public static Expr hllDeserialize(byte[] hll) {
         String str = new String(hll, StandardCharsets.UTF_8);
-        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
+        Function unhex = ExprUtils.getBuiltinFunction("unhex", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
 
         FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
         unhexExpr.setFn(unhex);
         unhexExpr.setType(unhex.getReturnType());
 
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+        Function fn = ExprUtils.getBuiltinFunction("hll_deserialize", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
         fe.setFn(fn);
@@ -262,7 +266,7 @@ public abstract class StatisticsCollectJob {
     }
 
     public static Expr nowFn() {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("now", Lists.newArrayList());
         fe.setType(fn.getReturnType());
         return fe;

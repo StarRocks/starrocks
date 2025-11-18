@@ -105,6 +105,11 @@ if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
 endif()
 
+# The StarRocks module enables dynamic linking. This is a developer option.
+# If only certain modules are modified without altering the ABI,
+# subsequent linking stages may be skipped.
+option(ENABLE_MULTI_DYNAMIC_LIBS "Enable dynamic linking of individual StarRocks modules (developer option)" OFF)
+
 message(STATUS "WITH TENANN is: ${WITH_TENANN}")
 
 # Check gcc
@@ -120,6 +125,13 @@ endif()
 set(CMAKE_SKIP_RPATH TRUE)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
+
+set(ALL_BE_LIBS "" CACHE INTERNAL "All BE libraries")
+
+FUNCTION(FINALIZE_BE_LIBS)
+    LIST(SORT ALL_BE_LIBS)
+    MESSAGE(STATUS "ALL BE LIBS (SORTED): ${ALL_BE_LIBS}") 
+ENDFUNCTION()
 
 # Compile generated source if necessary
 message(STATUS "build gensrc if necessary")
@@ -345,8 +357,15 @@ set_target_properties(benchmark PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(benchmark_main STATIC IMPORTED)
 set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark_main.a)
 
-add_library(fmt STATIC IMPORTED)
-set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
+if (ENABLE_MULTI_DYNAMIC_LIBS)
+    add_library(fmt SHARED IMPORTED)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.8)
+    file(GLOB FMT_SO_FILES "${THIRDPARTY_DIR}/lib64/libfmt.so*")
+    install(FILES ${FMT_SO_FILES} DESTINATION ${OUTPUT_DIR}/lib)
+else()
+    add_library(fmt STATIC IMPORTED)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
+endif()
 
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
@@ -534,66 +553,10 @@ if ("${USE_STAROS}" STREQUAL "ON")
 endif()
 
 # LLVM
-set (LLVM_LIBRARIES
-    LLVMRuntimeDyld
-    LLVMBitstreamReader
-    LLVMOption
-    LLVMAsmPrinter
-    LLVMProfileData
-    LLVMAsmParser
-    LLVMOrcTargetProcess
-    LLVMExecutionEngine
-    LLVMBinaryFormat
-    LLVMDebugInfoDWARF
-    LLVMObjCARCOpts
-    LLVMPasses
-    LLVMCodeGen
-    LLVMFrontendOpenMP
-    LLVMMCDisassembler
-    LLVMJITLink
-    LLVMCFGuard
-    LLVMInstrumentation
-    LLVMInstCombine
-    LLVMipo
-    LLVMVectorize
-    LLVMIRReader
-    LLVMCore
-    LLVMTarget
-    LLVMMC
-    LLVMAnalysis
-    LLVMGlobalISel
-    LLVMScalarOpts
-    LLVMLinker
-    LLVMCoroutines
-    LLVMTargetParser
-    LLVMDemangle
-    LLVMRemarks
-    LLVMDebugInfoCodeView
-    LLVMAggressiveInstCombine
-    LLVMIRPrinter
-    LLVMOrcShared
-    LLVMOrcJIT
-    LLVMTextAPI
-    LLVMBitWriter
-    LLVMBitReader
-    LLVMObject
-    LLVMTransformUtils
-    LLVMSelectionDAG
-    LLVMMCParser
-    LLVMSupport
-)
+include(cmake_modules/FindLLVM.cmake)
 
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info LLVMX86AsmParser LLVMX86Disassembler)
-elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info LLVMAArch64Utils LLVMAArch64AsmParser LLVMAArch64Disassembler)
-endif()
-
-foreach(lib IN ITEMS ${LLVM_LIBRARIES})
-    add_library(${lib} STATIC IMPORTED GLOBAL)
-    set_target_properties(${lib} PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/llvm/lib/lib${lib}.a)
-endforeach()
-
+# install runtime libraries if needed
+include(cmake_modules/InstallSysRuntime.cmake)
 
 # Check Clang-Tidy
 include(cmake_modules/FindClangTidy.cmake)
@@ -667,6 +630,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "18.0.0")
         # ignore warning from apache-orc
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-switch-default")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=nrvo")
     endif ()
     # Add -rtlib=compiler-rt for ARM architecture to fix LLVM bug: https://bugs.llvm.org/show_bug.cgi?id=16404
     if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
@@ -1022,12 +986,10 @@ endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 
-set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${STARROCKS_DEPENDENCIES}
-    hdfs
-    jvm
-)
+set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES} hdfs jvm)
+
 set(BUILD_FOR_SANITIZE "OFF")
+set(DEP_SANITIZE_LIBS "")
 
 # Add sanitize static link flags or jemalloc
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
@@ -1036,33 +998,58 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+        set(DEP_SANITIZE_LIBS -static-libsan)
     else()
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+        set(DEP_SANITIZE_LIBS -static-libasan)
     endif()
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
+    set(DEP_SANITIZE_LIBS -static-liblsan)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libubsan jemalloc)
+    set(DEP_SANITIZE_LIBS -static-libubsan)
     set(BUILD_FOR_SANITIZE "ON")
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "TSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libtsan)
+    set(DEP_SANITIZE_LIBS -static-libtsan)
     set(BUILD_FOR_SANITIZE "ON")
 else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
+set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
+
+FUNCTION(ADD_BE_LIB LIB_NAME)
+    IF(ENABLE_MULTI_DYNAMIC_LIBS)
+        # support build and install component 
+        # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
+        ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
+        target_link_libraries(${LIB_NAME} PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
+        install(TARGETS ${LIB_NAME}
+            LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
+            ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
+        )
+    ELSE()
+        ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
+    ENDIF()
+    set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
+ENDFUNCTION()
+
+set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
+
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
+    set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    ${WL_LINK_STATIC} -lbfd
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on
@@ -1085,11 +1072,12 @@ set (STARROCKS_LINKER "$ENV{STARROCKS_LINKER}")
 include(cmake_modules/FindGlibcVersion.cmake)
 
 if (GLIBC_VERSION VERSION_LESS "2.29" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 14.0.0)
-    if (NOT DEFINED ${STARROCKS_LINKER} OR ${STARROCKS_LINKER} STREQUAL "")
+    if ("${STARROCKS_LINKER}" STREQUAL "" AND NOT "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
         set(STARROCKS_LINKER "gold")
+        message(STATUS "forcibly switch linker to: ${STARROCKS_LINKER}")
     endif()
 endif()
-message("using linker: ${STARROCKS_LINKER}")
+message(STATUS "using linker: ${STARROCKS_LINKER}")
 
 if (NOT STARROCKS_LINKER STREQUAL "")
     add_link_options("-fuse-ld=${STARROCKS_LINKER}")
@@ -1234,3 +1222,4 @@ install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)
 
+FINALIZE_BE_LIBS()

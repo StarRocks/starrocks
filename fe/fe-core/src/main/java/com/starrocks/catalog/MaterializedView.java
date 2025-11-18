@@ -27,7 +27,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
-import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
@@ -76,6 +75,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
@@ -89,6 +89,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -645,6 +647,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "currentRefreshMode")
     private RefreshMode currentRefreshMode = RefreshMode.PCT;
 
+    // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
+    // otherwise the incremental refresh may cause incorrect result.
+    // 0: no encode row id
+    // 1: encode_sort_key
+    // 2: encode_fingerprint_sha256
+    @SerializedName(value = "encodeRowIdVersion")
+    private int encodeRowIdVersion = 0;
+
     // Use a flag to prevent MV reload too many times while recursively reloading every mv at FE start time
     // and in each round of checkpoint
     private static final int RELOAD_STATE_NOT = -1;
@@ -939,6 +949,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.currentRefreshMode = currentRefreshMode;
     }
 
+    public int getEncodeRowIdVersion() {
+        return encodeRowIdVersion;
+    }
+
+    public void setEncodeRowIdVersion(int encodeRowIdVersion) {
+        this.encodeRowIdVersion = encodeRowIdVersion;
+    }
+
     /**
      * Return the partition column of the materialized view.
      * NOTE: Only supports range partition mv for now, because range partition mv only supports one partition column.
@@ -965,7 +983,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionExpr == null) {
             return Optional.empty();
         }
-        if (partitionExpr.getType() == Type.INVALID) {
+        if (partitionExpr.getType() == InvalidType.INVALID) {
             Optional<Column> partitionColOpt = getRangePartitionFirstColumn();
             if (partitionColOpt.isEmpty()) {
                 return Optional.empty();
@@ -1239,7 +1257,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(getId()));
         if (refreshTask != null) {
-            taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), replay);
+            List<Long> taskIds = Lists.newArrayList(refreshTask.getId());
+            if (replay) {
+                taskManager.replayDropTasks(taskIds);
+            } else {
+                taskManager.dropTasks(taskIds);
+            }
         }
     }
 
@@ -1249,12 +1272,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * This is method is called in mv creating, if error is met, throw exception to fail the creating operation.
+     * @param database database where the table is created
+     * @throws DdlException
+     */
+    @Override
+    public void onCreate(Database database) throws DdlException {
+        super.onCreate(database);
+        onReload(false, isActive(), true);
+    }
+
+    /**
      * Reload the materialized view with original active state.
      * NOTE: This method will not try to activate the materialized view.
      * @param isReloadAsync whether reload mv asynchronously when it is desired to be active.
      */
     public void onReload(boolean isReloadAsync) {
-        onReload(isReloadAsync, isActive());
+        onReload(isReloadAsync, isActive(), false);
     }
 
     /**
@@ -1268,7 +1302,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param isReloadAsync whether this reload is called after FE's image loading process.
      * @param desiredActive whether the materialized view should be active after reload.
      */
-    private void onReload(boolean isReloadAsync, boolean desiredActive) {
+    private void onReload(boolean isReloadAsync,
+                          boolean desiredActive,
+                          boolean isThrowException) {
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
@@ -1285,6 +1321,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // only set inactive when it is desired to be active
             if (desiredActive) {
                 setInActiveReason(InactiveReason.ofInactive("reload failed: " + e.getMessage()));
+            }
+            if (isThrowException) {
+                throw e;
             }
         } finally {
             if (!isReloadAsync || !desiredActive) {
@@ -1338,7 +1377,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the db lock
      */
     public void fixRelationship() {
-        onReload(false, true);
+        onReload(false, true, false);
     }
 
     /**
@@ -1440,7 +1479,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
                     res = InactiveReason.ofInactive(
-                            MaterializedViewExceptions.inactiveReasonForBaseTableActive(baseTableInfo.getTableName()));
+                            MaterializedViewExceptions.inactiveReasonForBaseTableInActive(baseTableInfo.getTableName()));
                 }
             }
 
@@ -1820,7 +1859,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         sb.append("\n)");
 
-        String define = this.getSimpleDefineSql();
+        // use originalViewDefineSql first which it's user's original defined ddl which it is because original
+        // defined ddl may contain some comments or formatting that we want to preserve.
+        String define = this.getOriginalViewDefineSql();
+        if (StringUtils.isEmpty(define)) {
+            define = this.getViewDefineSql();
+        }
         if (StringUtils.isEmpty(define) || !simple) {
             define = this.getViewDefineSql();
         }
@@ -2095,7 +2139,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             for (Expr partitionExpr : partitionRefTableExprs) {
                 if (partitionExpr != null) {
                     serializedPartitionRefTableExprs.add(
-                            new ExpressionSerializedObject(partitionExpr.toSql()));
+                            new ExpressionSerializedObject(ExprToSql.toSql(partitionExpr)));
                 }
             }
         }
@@ -2104,8 +2148,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             for (Map.Entry<Expr, SlotRef> entry : partitionExprMaps.entrySet()) {
                 if (entry.getKey() != null && entry.getValue() != null) {
                     serializedPartitionExprMaps.put(
-                            new ExpressionSerializedObject(entry.getKey().toSql()),
-                            new ExpressionSerializedObject(entry.getValue().toSql())
+                            new ExpressionSerializedObject(ExprToSql.toSql(entry.getKey())),
+                            new ExpressionSerializedObject(ExprToSql.toSql(entry.getValue()))
                     );
                 }
             }
@@ -2211,6 +2255,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
                     !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
                     "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
+            LOG.info("Materialized view {} ref base table partition columns: {}, exprs: {}, slots: {}",
+                    name, refBaseTablePartitionColumnsOpt.get(),
+                    refBaseTablePartitionExprsOpt.get(), refBaseTablePartitionSlotsOpt.get());
+        } else {
+            LOG.info("Materialized view {} is un-partitioned", name);
         }
     }
 
@@ -2314,10 +2363,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         refBaseTablePartitionColumnsOpt = Optional.of(result);
     }
 
-    private void analyzePartitionExpr(ConnectContext connectContext,
-                                      Table refBaseTable,
-                                      TableName tableName,
-                                      Expr partitionExpr) {
+    /**
+     * Analyze partition expr for ref base table based on mv's partition expr.
+     */
+    public static void analyzePartitionExpr(ConnectContext connectContext,
+                                            Table refBaseTable,
+                                            TableName tableName,
+                                            Expr partitionExpr) {
         if (partitionExpr == null) {
             return;
         }
@@ -2351,26 +2403,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
-    }
-
-    @Override
-    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr,
-                                     Database db, int restoreReplicationNum,
-                                     MvRestoreContext mvRestoreContext) {
-        // change db_id to new restore id
-        MvId oldMvId = new MvId(dbId, id);
-
-        this.dbId = db.getId();
-        Status status = super.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, mvRestoreContext);
-        if (!status.ok()) {
-            return status;
-        }
-        // store new mvId to for old mvId
-        MvId newMvId = new MvId(dbId, id);
-        MvBackupInfo mvBackupInfo = mvRestoreContext.getMvIdToTableNameMap()
-                .computeIfAbsent(oldMvId, x -> new MvBackupInfo(db.getFullName(), name));
-        mvBackupInfo.setLocalMvId(newMvId);
-        return Status.OK;
     }
 
     /**
@@ -2554,12 +2586,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
             if (this.defineQueryParseNode == null) {
-                try {
-                    connectContext.setDatabase(db.getOriginName());
-                    this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
-                } catch (Exception e) {
-                    // ignore
-                    LOG.warn("parse view define sql failed:", e);
+                if (!Strings.isNullOrEmpty(viewDefineSql)) {
+                    try {
+                        connectContext.setDatabase(db.getOriginName());
+                        this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                    } catch (Exception e) {
+                        // ignore
+                        LOG.warn("parse view define sql failed:", e);
+                    }
                 }
             }
         }

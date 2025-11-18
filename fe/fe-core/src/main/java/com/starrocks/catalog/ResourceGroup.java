@@ -21,6 +21,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
+import com.starrocks.type.TypeFactory;
 
 import java.text.DecimalFormat;
 import java.util.Collections;
@@ -44,12 +45,14 @@ public class ResourceGroup {
     public static final String EXCLUSIVE_CPU_CORES = "exclusive_cpu_cores";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
+    public static final String MEM_POOL = "mem_pool";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
+    public static final String DEFAULT_MEM_POOL = "default_mem_pool";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
@@ -85,45 +88,48 @@ public class ResourceGroup {
 
     private static final List<ColumnMeta> COLUMN_METAS = ImmutableList.of(
             new ColumnMeta(
-                    new Column("name", ScalarType.createVarchar(100)),
+                    new Column("name", TypeFactory.createVarchar(100)),
                     (rg, classifier) -> rg.getName()),
             new ColumnMeta(
-                    new Column("id", ScalarType.createVarchar(200)),
+                    new Column("id", TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getId()),
             new ColumnMeta(
-                    new Column(CPU_WEIGHT, ScalarType.createVarchar(200)),
+                    new Column(CPU_WEIGHT, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + rg.geNormalizedCpuWeight()),
             new ColumnMeta(
-                    new Column(EXCLUSIVE_CPU_CORES, ScalarType.createVarchar(200)),
+                    new Column(EXCLUSIVE_CPU_CORES, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores()),
             new ColumnMeta(
-                    new Column(MEM_LIMIT, ScalarType.createVarchar(200)),
+                    new Column(MEM_LIMIT, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
             new ColumnMeta(
-                    new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)),
+                    new Column(MAX_CPU_CORES, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getMaxCpuCores(), false),
             new ColumnMeta(
-                    new Column(BIG_QUERY_CPU_SECOND_LIMIT, ScalarType.createVarchar(200)),
+                    new Column(BIG_QUERY_CPU_SECOND_LIMIT, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryCpuSecondLimit(), 0)),
             new ColumnMeta(
-                    new Column(BIG_QUERY_SCAN_ROWS_LIMIT, ScalarType.createVarchar(200)),
+                    new Column(BIG_QUERY_SCAN_ROWS_LIMIT, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
             new ColumnMeta(
-                    new Column(BIG_QUERY_MEM_LIMIT, ScalarType.createVarchar(200)),
+                    new Column(BIG_QUERY_MEM_LIMIT, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryMemLimit(), 0)),
             new ColumnMeta(
-                    new Column(CONCURRENCY_LIMIT, ScalarType.createVarchar(200)),
+                    new Column(CONCURRENCY_LIMIT, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> "" + rg.getConcurrencyLimit()),
             new ColumnMeta(
-                    new Column(SPILL_MEM_LIMIT_THRESHOLD, ScalarType.createVarchar(200)),
+                    new Column(SPILL_MEM_LIMIT_THRESHOLD, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> new DecimalFormat("#.##").format(
                             Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
             new ColumnMeta(
-                    new Column(GROUP_TYPE, ScalarType.createVarchar(200)),
+                    new Column(GROUP_TYPE, TypeFactory.createVarchar(200)),
                     (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
             new ColumnMeta(
-                    new Column("classifiers", ScalarType.createVarchar(1024)),
-                    (rg, classifier) -> classifier.toString())
+                    new Column("classifiers", TypeFactory.createVarchar(1024)),
+                    (rg, classifier) -> classifier.toString()),
+            new ColumnMeta(
+                    new Column(MEM_POOL, TypeFactory.createVarchar(200)),
+                    (rg, classifier) -> rg.getMemPool(), false)
     );
 
     public static final ShowResultSetMetaData META_DATA;
@@ -158,6 +164,9 @@ public class ResourceGroup {
 
     @SerializedName(value = "memLimit")
     private Double memLimit;
+
+    @SerializedName(value = "memPool")
+    private String memPool;
     @SerializedName(value = "bigQueryMemLimit")
     private Long bigQueryMemLimit;
     @SerializedName(value = "bigQueryScanRowsLimit")
@@ -260,7 +269,9 @@ public class ResourceGroup {
         if (resourceGroupType != null) {
             twg.setWorkgroup_type(resourceGroupType);
         }
-
+        if (memPool != null) {
+            twg.setMem_pool(memPool);
+        }
         twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
 
         twg.setVersion(version);
@@ -296,6 +307,7 @@ public class ResourceGroup {
     public Integer getExclusiveCpuCores() {
         return exclusiveCpuCores;
     }
+
     public int getNormalizedExclusiveCpuCores() {
         if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
             return exclusiveCpuCores;
@@ -390,6 +402,14 @@ public class ResourceGroup {
 
     public void setClassifiers(List<ResourceGroupClassifier> classifiers) {
         this.classifiers = classifiers;
+    }
+
+    public String getMemPool() {
+        return memPool;
+    }
+
+    public void setMemPool(String memPool) {
+        this.memPool = memPool;
     }
 
     @Override

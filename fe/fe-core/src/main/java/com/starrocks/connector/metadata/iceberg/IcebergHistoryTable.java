@@ -15,8 +15,6 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -25,10 +23,13 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
 
 public class IcebergHistoryTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_history_table";
@@ -44,10 +45,10 @@ public class IcebergHistoryTable extends MetadataTable {
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
-                        .column("made_current_at", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("snapshot_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("parent_id", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("is_current_ancestor", ScalarType.createType(PrimitiveType.VARCHAR))
+                        .column("made_current_at", DATETIME)
+                        .column("snapshot_id", BIGINT)
+                        .column("parent_id", BIGINT)
+                        .column("is_current_ancestor", VarcharType.VARCHAR)
                         .build(),
                 originDb,
                 originTable,

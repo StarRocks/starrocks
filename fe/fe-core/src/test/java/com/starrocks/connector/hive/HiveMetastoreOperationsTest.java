@@ -21,8 +21,6 @@ import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -37,6 +35,8 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -118,8 +118,8 @@ public class HiveMetastoreOperationsTest {
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assertions.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assertions.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 

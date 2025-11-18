@@ -22,8 +22,6 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
@@ -31,6 +29,8 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -106,19 +106,13 @@ public final class PListCell extends PCell {
     public Set<PListCell> toSingleValueCells() {
         if (partitionItems == null) {
             return Sets.newHashSet();
+        } else if (partitionItems.size() == 1) {
+            return Set.of(this);
+        } else {
+            return partitionItems.stream()
+                    .map(item -> new PListCell(ImmutableList.of(item)))
+                    .collect(Collectors.toSet());
         }
-        return partitionItems.stream()
-                .map(item -> new PListCell(ImmutableList.of(item)))
-                .collect(Collectors.toSet());
-    }
-
-    public Set<PListAtom> toAtoms() {
-        if (partitionItems == null) {
-            return Sets.newHashSet();
-        }
-        return partitionItems.stream()
-                .map(item -> new PListAtom(item))
-                .collect(Collectors.toSet());
     }
 
     public List<PartitionKey> toPartitionKeys(List<Column> columns) throws AnalysisException {
@@ -172,10 +166,15 @@ public final class PListCell extends PCell {
                 String value1 = atom1.get(j);
                 String value2 = atom2.get(j);
                 // if one of the partition item is default partition value, prefer the other one
-                if (isDefaultPartitionValue(value1)) {
+                boolean isValue1Default = isDefaultPartitionValue(value1);
+                boolean isValue2Default = isDefaultPartitionValue(value2);
+                if (isValue1Default && isValue2Default) {
+                    continue;
+                }
+                if (isValue1Default) {
                     return -1;
                 }
-                if (isDefaultPartitionValue(value2)) {
+                if (isValue2Default) {
                     return 1;
                 }
                 ans = atom1.get(j).compareTo(atom2.get(j));

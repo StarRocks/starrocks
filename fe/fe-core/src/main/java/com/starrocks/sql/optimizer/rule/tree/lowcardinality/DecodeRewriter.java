@@ -22,10 +22,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -56,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
@@ -440,7 +440,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 fnOutputs.set(i, output);
                 fragmentUseDictExprs.union(input);
             }
-            function = (TableFunction) Expr.getBuiltinFunction(FunctionSet.UNNEST,
+            function = (TableFunction) ExprUtils.getBuiltinFunction(FunctionSet.UNNEST,
                     fnInputs.stream().map(ScalarOperator::getType).toArray(Type[]::new), function.getArgNames(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             function.setIsLeftJoin(tableFunc.getFn().isLeftJoin());

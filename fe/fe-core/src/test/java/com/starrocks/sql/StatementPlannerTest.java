@@ -16,7 +16,6 @@ package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -35,10 +34,14 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -138,7 +141,7 @@ class StatementPlannerTest extends PlanTestBase {
             TableFunctionTable tableBefore = (TableFunctionTable) relation.getTable();
             assertNotNull(tableBefore);
             assertEquals(2, tableBefore.getFullSchema().size());
-            assertEquals(Type.INT, tableBefore.getFullSchema().get(0).getType());
+            assertEquals(IntegerType.INT, tableBefore.getFullSchema().get(0).getType());
 
             AtomicBoolean pushDownApplied = new AtomicBoolean(false);
             relation.setPushDownSchemaFunc(table -> {
@@ -146,7 +149,7 @@ class StatementPlannerTest extends PlanTestBase {
                 List<Column> newSchema = table.getFullSchema().stream()
                         .map(Column::new)
                         .collect(Collectors.toList());
-                newSchema.forEach(column -> column.setType(Type.BIGINT));
+                newSchema.forEach(column -> column.setType(IntegerType.BIGINT));
                 table.setNewFullSchema(newSchema);
             });
 
@@ -154,7 +157,7 @@ class StatementPlannerTest extends PlanTestBase {
 
             TableFunctionTable tableAfter = (TableFunctionTable) relation.getTable();
             assertTrue(pushDownApplied.get());
-            assertEquals(Type.BIGINT, tableAfter.getFullSchema().get(0).getType());
+            assertEquals(IntegerType.BIGINT, tableAfter.getFullSchema().get(0).getType());
         } finally {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
@@ -368,5 +371,18 @@ class StatementPlannerTest extends PlanTestBase {
         PlanFragment fragment = plan.getFragments().get(0);
         OlapTableSink sink = (OlapTableSink) fragment.getSink();
         return sink.getPartialUpdateMode();
+    }
+
+    @Test
+    public void testTimeout() throws Exception {
+        FeConstants.runningUnitTest = false;
+        long oldValue = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(Long.MIN_VALUE);
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        Throwable exception = Assertions.assertThrows(StarRocksPlannerException.class, () ->
+                starRocksAssert.query("select * from t1").explainQuery());
+        Assertions.assertTrue(exception.getMessage().contains("current query allocated"));
+
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(oldValue);
     }
 }

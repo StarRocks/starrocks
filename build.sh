@@ -100,6 +100,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      --without-starcache
@@ -164,6 +165,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'with-dynamic' \
+  -l 'module' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
@@ -204,6 +207,8 @@ BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
 WITH_TENANN=ON
 WITH_RELATIVE_SRC_PATH=ON
+ENABLE_MULTI_DYNAMIC_LIBS=OFF
+BUILD_BE_MODULE=all
 
 # Default to OFF, turn it ON if current shell is non-interactive
 WITH_MAVEN_BATCH_MODE=OFF
@@ -304,6 +309,8 @@ else
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
+            --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
@@ -375,6 +382,8 @@ echo "Get params:
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
     WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
     DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
+    ENABLE_MULTI_DYNAMIC_LIBS   -- $ENABLE_MULTI_DYNAMIC_LIBS
+    BUILD_BE_MODULE             -- $BUILD_BE_MODULE
 "
 
 check_tool()
@@ -490,6 +499,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
@@ -503,12 +513,26 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   ..
 
-    time ${BUILD_SYSTEM} -j${PARALLEL}
+    if [ "${BUILD_BE_MODULE}" != "all" ] ; then
+        echo "build Backend module: ${BUILD_BE_MODULE}"
+        time ${BUILD_SYSTEM} -j${PARALLEL} $BUILD_BE_MODULE
+    else
+        echo "Build all Backend modules"
+        time ${BUILD_SYSTEM} -j${PARALLEL}
+    fi
+
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
         exit 0
     fi
 
-    ${BUILD_SYSTEM} install
+    # install target
+    if [ "${BUILD_BE_MODULE}" != "all" ] ; then
+        echo "install Backend module: ${BUILD_BE_MODULE}"
+        ${CMAKE_CMD} -DCOMPONENT=$BUILD_BE_MODULE -P cmake_install.cmake
+    else 
+        ${BUILD_SYSTEM} install
+    fi
+
 
     # Build Java Extensions
     if [ ${BUILD_JAVA_EXT} = "ON" ]; then
@@ -637,12 +661,18 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
+    mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
     ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
 
+    # if [ "${ENABLE_MULTI_DYNAMIC_LIBS}" == "ON" ] ; then
+    #     LIBSTDCXX_DIR=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so))
+    #     cp -r $LIBSTDCXX_DIR/libstdc++.so* ${STARROCKS_OUTPUT}/be/lib/
+    #     cp -r $LIBSTDCXX_DIR/libgcc.so* ${STARROCKS_OUTPUT}/be/lib/
+    # fi
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
@@ -668,7 +698,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
         # note that conf files will not be overwritten when doing upgrade.
         # so we have to preserve directory structure to avoid upgrade incompatibility.
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/native
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop/common
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

@@ -415,6 +415,75 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testUsingLeftOuterJoin() throws Exception {
+        String sql = "select * from t0 left join test_using using(v1) where v1 = 3;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "equal join conjunct: 4: v1 = 1: v1");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: test_using\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v1 = 3");
+        assertContains(plan, "2:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 3");
+    }
+
+    @Test
+    public void testFullOuterJoinWithUsing() throws Exception {
+        String sql = "select v1, t0.v2 from t0 full outer join test_using using(v1) where v1 = 3;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v1\n" +
+                "  |  other predicates: coalesce(1: v1, 4: v1) = 3");
+
+        sql = "select v5, v6 from t1 full outer join test_using a using(v5, v6) full outer join test_using b using(v5, v6)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9:Project\n" +
+                "  |  <slot 10> : coalesce(2: v5, CAST(7: v5 AS BIGINT))\n" +
+                "  |  <slot 11> : coalesce(3: v6, 8: v6)\n" +
+                "  |  \n" +
+                "  8:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 21: cast = 2: v5\n" +
+                "  |  equal join conjunct: 8: v6 = 3: v6");
+        assertContains("12:Project\n" +
+                "  |  <slot 18> : coalesce(10: v5, CAST(15: v5 AS BIGINT))\n" +
+                "  |  <slot 19> : coalesce(11: v6, 16: v6)\n" +
+                "  |  \n" +
+                "  11:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 20: cast = 10: v5\n" +
+                "  |  equal join conjunct: 16: v6 = 11: v6");
+
+        sql = "select v6 from t1 left outer join test_using a using(v6) full outer join test_using b using(v6)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH_PARTITIONED: 3: v6\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON");
+        assertContains("5:Project\n" +
+                "  |  <slot 3> : 3: v6\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v6 = 8: v6");
+        assertContains("9:Project\n" +
+                "  |  <slot 16> : coalesce(3: v6, 14: v6)\n" +
+                "  |  \n" +
+                "  8:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v6 = 14: v6");
+    }
+
+    @Test
     public void testJoinAssociativityConst() throws Exception {
         String sql = "SELECT x0.*\n" +
                 "FROM (\n" +

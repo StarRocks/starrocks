@@ -53,6 +53,7 @@ set(UTIL_FILES
   metrics.cpp
   misc.cpp
   murmur_hash3.cpp
+  ndv_estimator.cpp
   network_util.cpp
   parse_util.cpp
   path_builder.cpp
@@ -121,6 +122,6 @@ set(UTIL_FILES
   llm_query_service.cpp
 )
 
-add_library(Util STATIC
+ADD_BE_LIB(Util
     ${UTIL_FILES}
 )

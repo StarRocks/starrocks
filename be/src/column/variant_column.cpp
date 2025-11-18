@@ -81,4 +81,15 @@ void VariantColumn::append(VariantValue&& object) {
     BaseClass::append(std::move(object));
 }
 
+bool VariantColumn::append_nulls(size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        append(VariantValue::of_null());
+    }
+    return true;
+}
+
+std::string VariantColumn::debug_item(size_t idx) const {
+    return get_object(idx)->to_string();
+}
+
 } // namespace starrocks

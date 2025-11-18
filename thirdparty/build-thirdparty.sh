@@ -483,9 +483,9 @@ build_llvm() {
     -DLLVM_ENABLE_PIC:Bool=True \
     -DLLVM_ENABLE_TERMINFO:Bool=False \
     -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
-    -DLLVM_INCLUDE_TOOLS:BOOL=False \
-    -DLLVM_BUILD_TOOLS:BOOL=False \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON \
+    -DLLVM_INCLUDE_TOOLS:BOOL=ON \
+    -DLLVM_BUILD_TOOLS:BOOL=ON \
     -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
@@ -498,6 +498,7 @@ build_llvm() {
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+    ${BUILD_SYSTEM} install-LLVM
 
     restore_compile_flags
 }
@@ -537,7 +538,11 @@ build_glog() {
     check_if_source_exist $GLOG_SOURCE
     cd $TP_SOURCE_DIR/$GLOG_SOURCE
 
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_LIBDIR=lib
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -694,8 +699,10 @@ build_curl() {
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli
+    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static  \
+                --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 \
+                --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli \
+                --disable-symbol-hiding
     make -j$PARALLEL
     make install
 }
@@ -1076,6 +1083,18 @@ build_fmt() {
     ${BUILD_SYSTEM} install
 }
 
+build_fmt_shared() {
+    check_if_source_exist $FMT_SOURCE
+    cd $TP_SOURCE_DIR/$FMT_SOURCE
+    mkdir -p build
+    cd build
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF \
+            -DBUILD_SHARED_LIBS=ON 
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 #ryu
 build_ryu() {
     check_if_source_exist $RYU_SOURCE
@@ -1101,14 +1120,14 @@ build_breakpad() {
 }
 
 #hadoop
-build_hadoop() {
-    check_if_source_exist $HADOOP_SOURCE
-    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
-    # remove unnecessary doc and logs
-    rm -rf $TP_INSTALL_DIR/hadoop/logs/* $TP_INSTALL_DIR/hadoop/share/doc/hadoop
+build_hadoop_src() {
+    check_if_source_exist $HADOOPSRC_SOURCE
+    cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
+    cd hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs
+    make
     mkdir -p $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h $TP_INSTALL_DIR/include/hdfs
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a $TP_INSTALL_DIR/lib
 }
 
 #jdk
@@ -1344,6 +1363,8 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
+    
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1356,6 +1377,8 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
+
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
@@ -1646,6 +1669,8 @@ restore_compile_flags() {
     export CFLAGS=$GLOBAL_CFLAGS
     # c++ flags
     export CXXFLAGS=$GLOBAL_CXXFLAGS
+
+    unset LDFLAGS
 }
 
 strip_binary() {
@@ -1708,8 +1733,9 @@ declare -a all_packages=(
     croaringbitmap
     cctz
     fmt
+    fmt_shared
     ryu
-    hadoop
+    hadoop_src
     jdk
     ragel
     hyperscan

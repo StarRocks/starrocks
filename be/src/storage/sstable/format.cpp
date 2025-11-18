@@ -4,9 +4,6 @@
 
 #include "storage/sstable/format.h"
 
-#include <snappy/snappy-sinksource.h>
-#include <snappy/snappy.h>
-
 #include <string>
 
 #include "common/status.h"
@@ -14,6 +11,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/coding.h"
+#include "util/compression/compression_headers.h"
 #include "util/crc32c.h"
 
 namespace starrocks::sstable {

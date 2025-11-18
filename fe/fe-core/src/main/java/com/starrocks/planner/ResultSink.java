@@ -60,10 +60,17 @@ public class ResultSink extends DataSink {
     private String brokerName;
     private TResultFileSinkOptions fileSinkOptions;
     private boolean isBinaryRow;
+    // It is non-empty only for ARROW_FLIGHT_PROTOCAL.
+    private final List<String> outputColumnNames;
 
-    public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType) {
+    public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType, List<String> outputColumnNames) {
         this.exchNodeId = exchNodeId;
         this.sinkType = sinkType;
+        this.outputColumnNames = outputColumnNames;
+    }
+
+    public ResultSink(PlanNodeId exchNodeId, TResultSinkType sinkType) {
+        this(exchNodeId, sinkType, null);
     }
 
     @Override
@@ -76,6 +83,7 @@ public class ResultSink extends DataSink {
     @Override
     protected TDataSink toThrift() {
         TDataSink result = new TDataSink(TDataSinkType.RESULT_SINK);
+
         TResultSink tResultSink = new TResultSink();
         tResultSink.setType(sinkType);
         if (fileSinkOptions != null) {
@@ -85,6 +93,10 @@ public class ResultSink extends DataSink {
             tResultSink.setFormat(((HttpConnectContext) ConnectContext.get()).getResultSinkFormatType());
         }
         tResultSink.setIs_binary_row(isBinaryRow);
+        if (outputColumnNames != null) {
+            tResultSink.setOutput_column_names(outputColumnNames);
+        }
+
         result.setResult_sink(tResultSink);
         return result;
     }

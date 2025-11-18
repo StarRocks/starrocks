@@ -14,12 +14,11 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
-import com.google.api.client.util.Sets;
+import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -55,9 +54,11 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections4.CollectionUtils;
@@ -166,8 +167,8 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
     @Override
     public void updateVersionMeta(ExecPlan execPlan,
-                                  Set<String> mvRefreshedPartitions,
-                                  Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                  PCellSortedSet mvRefreshedPartitions,
+                                  Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
         // ivm's meta has already been commited in the transaction of executing the plan,
         // update the meta for pct-based refresh
         try {
@@ -192,13 +193,12 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
             throw new SemanticException("Base table %s.%s does not exist",
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
-        if (!snapshotTable.isIcebergTable()) {
-            throw new SemanticException("Only support Iceberg table for MVIVMBasedRefreshProcessor, " +
-                    "but got: " + snapshotTable.getType());
+        if (!IVMAnalyzer.isTableTypeIVMSupported(snapshotTable.getType())) {
+            throw new SemanticException(String.format("Only support %s tables for MVIVMBasedRefreshProcessor, " +
+                    "but got: %s", Joiner.on(",").join(IVMAnalyzer.SUPPORTED_TABLE_TYPES),
+                    snapshotTable.getType()));
         }
-        IcebergTable icebergTable = (IcebergTable) snapshotTable;
-
-        final TvrTableDelta maxTvrDelta = getMaxBaseTableChangedDelta(baseTableInfo, icebergTable, mvTvrVersionRangeMap);
+        final TvrTableDelta maxTvrDelta = getMaxBaseTableChangedDelta(baseTableInfo, snapshotTable, mvTvrVersionRangeMap);
         // if no change, return empty
         if (maxTvrDelta.isEmpty()) {
             return maxTvrDelta;
@@ -206,7 +206,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
         // check the delta traits between the max delta
         List<TvrTableDeltaTrait> tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .listTableDeltaTraits(baseTableInfo.getDbName(), icebergTable,
+                .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
                         maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
@@ -255,12 +255,12 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
     }
 
     private TvrTableDelta getMaxBaseTableChangedDelta(BaseTableInfo baseTableInfo,
-                                                      IcebergTable icebergTable,
+                                                      Table table,
                                                       Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap) {
         // For now, we always refresh the latest snapshot from the last refresh.
         // current tvr snapshot
         TvrVersionRange currentTvrSnapshot = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getCurrentTvrSnapshot(baseTableInfo.getDbName(), icebergTable);
+                .getCurrentTvrSnapshot(baseTableInfo.getDbName(), table);
         if (currentTvrSnapshot == null || !(currentTvrSnapshot instanceof TvrTableSnapshot)) {
             logger.warn("Current tvr snapshot is null for base table: {}, db: {}",
                     baseTableInfo.getTableName(), baseTableInfo.getDbName());
@@ -409,7 +409,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         InsertStmt insertStmt = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshParser")) {
             // generate insert statement from defined query
-            insertStmt = generateInsertAst(ctx, Sets.newHashSet(), mv.getIVMTaskDefinition());
+            insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition());
         }
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
