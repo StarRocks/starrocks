@@ -565,16 +565,23 @@ public class InsertOverwriteJobRunner {
                         
                         job.setTmpPartitionIds(dynamicTargetPartitionIds);
                         tmpPartitionIds = dynamicTargetPartitionIds;
-                        
-                        stats.setSourcePartitionIds(dynamicSourcePartitionIds);
-                        stats.setTargetPartitionIds(dynamicTargetPartitionIds);
-                        
-                        // Recalculate sumSourceRows for dynamic overwrite
-                        sumSourceRows = dynamicSourcePartitionIds.stream()
-                                .mapToLong(pid -> targetTable.mayGetPartition(pid).stream()
-                                        .mapToLong(Partition::getRowCount).sum())
-                                .sum();
-                        stats.setSourceRows(sumSourceRows);
+
+                        if (stats.getSourcePartitionIds().isEmpty()) {
+                            stats.setSourcePartitionIds(dynamicSourcePartitionIds);
+                        }
+
+                        if (stats.getTargetPartitionIds().isEmpty()) {
+                            stats.setTargetPartitionIds(dynamicTargetPartitionIds);
+                        }
+
+                        if (stats.getSourceRows() == 0) {
+                            // Recalculate sumSourceRows for dynamic overwrite
+                            sumSourceRows = dynamicSourcePartitionIds.stream()
+                                    .mapToLong(pid -> targetTable.mayGetPartition(pid).stream()
+                                            .mapToLong(Partition::getRowCount).sum())
+                                    .sum();
+                            stats.setSourceRows(sumSourceRows);
+                        }
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
                     ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
