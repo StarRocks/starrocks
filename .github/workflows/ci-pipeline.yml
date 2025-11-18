@@ -61,7 +61,7 @@ jobs:
         env:
           SHA: ${{ steps.upload_info.outputs.SHA }}
         run: |
-          round_limit=12
+          round_limit=10
           while [[ $round_limit -gt 0 ]]
           do
             pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
@@ -74,7 +74,7 @@ jobs:
               fi
             fi
             round_limit=$((round_limit-1))
-            sleep 10
+            sleep 30
           done
           
           echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
