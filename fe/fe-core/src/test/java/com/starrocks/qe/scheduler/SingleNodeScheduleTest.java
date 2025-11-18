@@ -24,6 +24,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,18 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
     @BeforeEach
     public void beforeEach() {
         // Clear blacklist to ensure backend is available for tests
+        SimpleScheduler.getHostBlacklist().clear();
+        // Mock out blacklist side effects that may be triggered by statistic queries
+        new MockUp<SimpleScheduler>() {
+            @Mock
+            public void addToBlocklist(Long backendID) {
+                // no-op in unit tests to keep the single BE usable
+            }
+        };
+    }
+
+    @AfterEach
+    public void afterEach() {
         SimpleScheduler.getHostBlacklist().clear();
     }
 
@@ -92,4 +105,3 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
     }
 
 }
-
