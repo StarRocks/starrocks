@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -51,11 +52,18 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshConnectionsRequest;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -452,14 +460,6 @@ public class VariableMgr {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
             
-            // Check if this is a refresh connections command (empty varNames)
-            if (info.getVarNames() != null && info.getVarNames().isEmpty()) {
-                // This is a refresh connections command
-                boolean force = root.has("force") && root.getBoolean("force");
-                refreshConnectionsInternal(force);
-                return;
-            }
-            
             for (String varName : root.keySet()) {
                 VarContext varContext = getVarContext(varName);
                 if (varContext == null) {
@@ -576,24 +576,46 @@ public class VariableMgr {
         // Refresh on current node
         refreshConnectionsInternal(force);
 
-        // Write to edit log to distribute to all FE nodes
+        // Notify other FE nodes via RPC
         if (GlobalStateMgr.getCurrentState().isLeader()) {
-            GlobalVarPersistInfo info = new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList());
-            // Use JSON to indicate refresh connections and force flag
-            if (force) {
-                info.setPersistJsonString("{\"force\":true}");
-            } else {
-                info.setPersistJsonString("{}"); // Empty JSON to indicate refresh connections
+            notifyOtherFEsToRefreshConnections(force);
+        }
+    }
+
+    /**
+     * Notify other FE nodes to refresh connections via RPC.
+     */
+    private void notifyOtherFEsToRefreshConnections(boolean force) {
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                continue;
             }
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logGlobalVariableV2(info);
+
+            try {
+                TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+                request.setForce(force);
+                TRefreshConnectionsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.refreshConnections(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("Failed to notify FE {} to refresh connections: {}",
+                            fe.getHost(), response.getStatus().getError_msgs());
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to notify FE {} to refresh connections: {}", fe.getHost(), e.getMessage());
+            }
         }
     }
 
     /**
      * Internal method to refresh connections on the current node.
+     * Made package-private so it can be called from FrontendServiceImpl via RPC.
      */
-    private void refreshConnectionsInternal(boolean force) {
+    public void refreshConnectionsInternal(boolean force) {
         if (ExecuteEnv.getInstance().getScheduler() == null) {
             LOG.warn("ConnectScheduler is not initialized, skip refresh connections");
             return;
