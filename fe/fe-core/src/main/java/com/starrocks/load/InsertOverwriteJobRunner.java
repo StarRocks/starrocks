@@ -55,11 +55,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.warehouse.cngroup.ComputeResource;
->>>>>>> c7b206ede5 ([BugFix] Fix statistics collection strategy after overwrite (#65327))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
