@@ -111,6 +111,7 @@ set(EXEC_FILES
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_json.cpp
     hdfs_scanner/hdfs_scanner_partition.cpp
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
