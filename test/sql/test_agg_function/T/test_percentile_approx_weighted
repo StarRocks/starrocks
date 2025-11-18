@@ -193,3 +193,22 @@ select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_approx_weighted(k
 -- Test array percentile with compression
 select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_approx_weighted(k, v, [0.25, 0.5, 0.75], 1000) from t2;
 select percentile_approx_weighted(k, v, array<double>[0.1, 0.5, 0.9], 2048) from t2;
+
+-- Test percentile_approx_weighted sorted streaming aggregate
+CREATE TABLE `test_sorted_streaming_agg_percentile_weighted`
+(
+    `id_int` int(11) NOT NULL COMMENT "",
+    `value` double NOT NULL COMMENT ""
+)
+ENGINE=OLAP 
+DUPLICATE KEY(`id_int`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`)
+BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+); 
+insert into test_sorted_streaming_agg_percentile_weighted values(2,1),(2,6),(4,3),(4,8);
+select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighted(value, 10, array<double>[0.5, 0.9], 5000) from test_sorted_streaming_agg_percentile_weighted group by id_int;
+select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighted(value, 0, array<double>[0.5, 0.9], 5000) from test_sorted_streaming_agg_percentile_weighted group by id_int;
+select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighted(value, value, array<double>[0.5, 0.9], 5000) from test_sorted_streaming_agg_percentile_weighted group by id_int;
