@@ -15,10 +15,10 @@
 #include "variant_util.h"
 
 #include <arrow/util/endian.h>
-#include <gutil/strings/numbers.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <charconv>
 #include <iomanip>
 
 #include "exprs/cast_expr.h"
@@ -166,6 +166,27 @@ std::string remove_trailing_zeros(const std::string& str) {
     return str;
 }
 
+template <typename FloatType>
+static std::string float_to_json_string_impl(FloatType value) {
+    if (!std::isfinite(value)) {
+        return "null";
+    }
+
+    char buffer[32];
+    auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::general);
+    if (ec != std::errc()) {
+        return "null";
+    }
+
+    std::string result(buffer, ptr - buffer);
+    if (result.find('.') == std::string::npos && result.find('e') == std::string::npos &&
+        result.find('E') == std::string::npos) {
+        result += ".0";
+    }
+
+    return result;
+}
+
 Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
                                     cctz::time_zone timezone) {
     Variant variant{metadata, value};
@@ -192,20 +213,12 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         break;
     case VariantType::FLOAT: {
         const float f = *variant.get_float();
-        if (std::isfinite(f)) {
-            json_str << SimpleFtoa(f);
-        } else {
-            append_quoted_string(json_str, std::to_string(f));
-        }
+        json_str << float_to_json_string_impl(f);
         break;
     }
     case VariantType::DOUBLE: {
         const double d = *variant.get_double();
-        if (std::isfinite(d)) {
-            json_str << SimpleDtoa(d);
-        } else {
-            append_quoted_string(json_str, std::to_string(d));
-        }
+        json_str << float_to_json_string_impl(d);
         break;
     }
     case VariantType::DECIMAL4: {

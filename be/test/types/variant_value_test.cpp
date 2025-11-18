@@ -152,7 +152,7 @@ TEST_F(VariantValueTest, FloatToJson) {
         VariantValue variant{std::string_view(double_metadata), std::string_view(double_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1234567890.1234", *json);
+        EXPECT_EQ("1.2345678901234e+09", *json);
     }
 }
 
