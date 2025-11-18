@@ -254,8 +254,7 @@ TEST_F(PageIOTest, test_no_cache_not_insert_into_cache) {
     // write an uncompressed page
     WritableFileOptions write_opts;
     write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ASSERT_FAIL(auto write_file,
-                          _fs->new_writable_file(write_opts, "/test_no_cache_not_insert_into_cache"));
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_no_cache_not_insert_into_cache"));
 
     PageFooterPB footer = _build_page_footer(uncompressed_size);
     PagePointer result;
@@ -265,8 +264,7 @@ TEST_F(PageIOTest, test_no_cache_not_insert_into_cache) {
     uint64_t file_size = write_file->size();
 
     // first read with use_page_cache = false, this must NOT insert into cache
-    ASSIGN_OR_ASSERT_FAIL(auto read_file,
-                          _fs->new_random_access_file("/test_no_cache_not_insert_into_cache"));
+    ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_no_cache_not_insert_into_cache"));
     PageReadOptions read_opts_no_cache = _build_read_options(read_file.get(), 0, file_size, false);
     {
         PageHandle handle;
