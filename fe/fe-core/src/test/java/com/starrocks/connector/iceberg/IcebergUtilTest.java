@@ -20,6 +20,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
@@ -94,5 +95,21 @@ public class IcebergUtilTest {
             assertEquals(1, result.get(3).nullValueCount);
             assertEquals(10, result.get(3).valueCount);
         }
+    }
+
+    @Test
+    public void testTableDataLocationDefaultAndCustom() {
+        org.apache.iceberg.Table table = org.mockito.Mockito.mock(org.apache.iceberg.Table.class);
+
+        org.mockito.Mockito.when(table.location()).thenReturn("s3://bucket/path/");
+        Map<String, String> properties = new HashMap<>();
+        org.mockito.Mockito.when(table.properties()).thenReturn(properties);
+
+        String defaultLocation = IcebergUtil.tableDataLocation(table);
+        assertEquals("s3://bucket/path/data", defaultLocation);
+
+        properties.put(TableProperties.WRITE_DATA_LOCATION, "s3://bucket/custom_data");
+        String customLocation = IcebergUtil.tableDataLocation(table);
+        assertEquals("s3://bucket/custom_data", customLocation);
     }
 }
