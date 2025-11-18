@@ -1258,7 +1258,13 @@ struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
     2: optional list<Descriptors.TColumn> columns
+<<<<<<< HEAD
     3: optional i32 low_cardinality_threshold;
+=======
+    3: optional i32 low_cardinality_threshold
+    4: optional list<TColumnAccessPath> column_access_paths
+    5: optional i64 schema_id
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
 }
 
 struct TDecodeNode {

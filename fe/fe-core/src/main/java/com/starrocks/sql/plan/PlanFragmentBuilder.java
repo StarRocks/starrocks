@@ -1024,12 +1024,25 @@ public class PlanFragmentBuilder {
             context.getDescTbl().addReferencedTable(scan.getTable());
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(scan.getTable());
+<<<<<<< HEAD
 
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
                     scan.getSelectPartitionNames(),
                     context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();
+=======
+            ComputeResource computeResource = ConnectContext.get() != null ?
+                    ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+
+            MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
+                    tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+                    scan.getSelectPartitionNames(), scan.getSelectedIndexId(),
+                    context.getConnectContext().getCurrentComputeResource());
+
+            scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
+            scanNode.computeRangeLocations(computeResource);
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
 

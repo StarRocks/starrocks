@@ -20,8 +20,11 @@ select count(c0) from t0[_META_];
 select count(c1) from t0[_META_];
 select count(c2) from t0[_META_];
 select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0[_META_];
+<<<<<<< HEAD
 select count(1) from t0[_META_];
 select count(*) from t0[_META_];
+=======
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
 
 create table t1 (
     c0 DATE,
@@ -47,3 +50,7 @@ select count(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0) from t1 TEMPORARY PARTITION(tp202403);
 select min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))

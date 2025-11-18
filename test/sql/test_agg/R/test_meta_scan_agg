@@ -51,6 +51,7 @@ select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0[_META_];
 -- result:
 2024-01-01	2024-01-05	1	5	1	5
 -- !result
+<<<<<<< HEAD
 select count(1) from t0[_META_];
 -- result:
 5
@@ -59,6 +60,8 @@ select count(*) from t0[_META_];
 -- result:
 5
 -- !result
+=======
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
 create table t1 (
     c0 DATE,
     c1 INT
@@ -107,4 +110,8 @@ select min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
 -- result:
 2024-03-10	2024-03-20	50	70
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))

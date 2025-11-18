@@ -125,6 +125,11 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         }
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
+<<<<<<< HEAD
+=======
+                .setSelectPartitionNames(selectedPartitionNames)
+                .setSelectedIndexId(scanOperator.getSelectedIndexId())
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToNames(aggColumnIdToNames).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),

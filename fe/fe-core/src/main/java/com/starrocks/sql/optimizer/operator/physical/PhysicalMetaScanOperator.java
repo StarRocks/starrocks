@@ -25,13 +25,26 @@ import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
+<<<<<<< HEAD
     private final Map<Integer, String> aggColumnIdToNames;
     private final List<String> selectPartitionNames;
+=======
+    private Map<Integer, String> aggColumnIdToNames;
+    private List<String> selectPartitionNames;
+    private long selectedIndexId = -1;
+
+    public PhysicalMetaScanOperator() {
+        super(OperatorType.PHYSICAL_META_SCAN);
+        this.aggColumnIdToNames = ImmutableMap.of();
+        this.selectPartitionNames = ImmutableList.of();
+    }
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
 
     public PhysicalMetaScanOperator(LogicalMetaScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
         this.aggColumnIdToNames = scanOperator.getAggColumnIdToNames();
         this.selectPartitionNames = scanOperator.getSelectPartitionNames();
+        this.selectedIndexId = scanOperator.getSelectedIndexId();
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
@@ -40,6 +53,10 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
 
     public List<String> getSelectPartitionNames() {
         return selectPartitionNames;
+    }
+
+    public long getSelectedIndexId() {
+        return selectedIndexId;
     }
 
     @Override
@@ -64,11 +81,38 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
 
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
         return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
-                Objects.equals(selectPartitionNames, that.selectPartitionNames);
+                Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
+                selectedIndexId == that.selectedIndexId;
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), aggColumnIdToNames);
+=======
+        return Objects.hash(super.hashCode(), aggColumnIdToNames, selectPartitionNames, selectedIndexId);
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder
+            extends PhysicalScanOperator.Builder<PhysicalMetaScanOperator, PhysicalScanOperator.Builder> {
+
+        @Override
+        protected PhysicalMetaScanOperator newInstance() {
+            return new PhysicalMetaScanOperator();
+        }
+
+        @Override
+        public PhysicalMetaScanOperator.Builder withOperator(PhysicalMetaScanOperator operator) {
+            super.withOperator(operator);
+            builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
+            builder.selectPartitionNames = ImmutableList.copyOf(operator.selectPartitionNames);
+            builder.selectedIndexId = operator.selectedIndexId;
+            return this;
+        }
+>>>>>>> 1b369d591f ([BugFix] fix meta scan rewrite bugs on temporay partition and random buckets (#65617))
     }
 }
