@@ -317,7 +317,7 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
 #ifdef __APPLE__
     bool page_cache_available = false;
 #else
-    bool page_cache_available = (cache != nullptr) && cache->available();
+    bool page_cache_available = (cache != nullptr) && cache->available() && opts.use_page_cache;
 #endif
     PageCacheHandle cache_handle;
     std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
