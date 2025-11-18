@@ -11,6 +11,37 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.20
+
+Release Date: November 18, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- CVE-2024-47561. [#64193](https://github.com/StarRocks/starrocks/pull/64193)  
+- CVE-2025-59419. [#64142](https://github.com/StarRocks/starrocks/pull/64142)  
+- Incorrect row count for lake Primary Key tables. [#64007](https://github.com/StarRocks/starrocks/pull/64007)  
+- Window function with IGNORE NULLS flags can not be consolidated with its counterpart without IGNORE NULLS flag. [#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- ASAN error in `PartitionedSpillerWriter::_remove_partition`. [#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- Wrong results for sorted aggregation in shared-data clusters. [#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- NPE when creating a partitioned materialized view. [#63830](https://github.com/StarRocks/starrocks/pull/63830)
+- Partitioned Spill crash when removing partitions. [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- NPE when removing expired load jobs in FE. [#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- A potential deadlock during initialization of `ExceptionStackContext`. [#63776](https://github.com/StarRocks/starrocks/pull/63776)  
+- Degraded scan performance caused by the profitless simplification of CASE WHEN with complex functions. [#63732](https://github.com/StarRocks/starrocks/pull/63732)  
+- Materialized view rewrite failures caused by type mismatch. [#63659](https://github.com/StarRocks/starrocks/pull/63659)  
+- Materialized view rewrite throws `IllegalStateException` under certain plans. [#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- LZ4 compression and decompression errors cannot be perceived. [#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- Stability issue caused by incorrect overflow detection when casting LARGEINT to DECIMAL128 at sign-edge cases (for example, INT128_MIN) [#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- `date_trunc` partition pruning with combined predicates that mistakenly produced EMPTYSET. [#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- Incomplete `Left Join` results caused by ARRAY low-cardinality optimization. [#63419](https://github.com/StarRocks/starrocks/pull/63419)
+- An issue caused by the aggregate intermediate type uses `ARRAY<NULL_TYPE>`. [#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- Metadata inconsistency in partial updates based on auto-increment columns. [#63370](https://github.com/StarRocks/starrocks/pull/63370)
+- Incompatible Bitmap index reuse for Fast Schema Evolution in shared-data clusters. [#63315](https://github.com/StarRocks/starrocks/pull/63315)  
+- Unnecessary CN deregistration during pod restart/upgrade. [#63085](https://github.com/StarRocks/starrocks/pull/63085)  
+- Profiles showing SQL as `omit` for returns of the PREPARE/EXECUTE statements. [#62988](https://github.com/StarRocks/starrocks/pull/62988)
+
 ## 3.3.19
 
 Release Date: October 14, 2025
