@@ -25,9 +25,9 @@ namespace starrocks {
 class VariantFunctions {
 public:
     /**
-     * @param: [variant, json_path, result_type]
-     * @paramType: [VariantColumn, BinaryColumn, BinaryColumn]
-     * @return: result column with type `result_type`
+     * @param: [variant, path]
+     * @paramType: [VariantColumn, BinaryColumn]
+     * @return: VariantColumn
      */
     DEFINE_VECTORIZED_FN(variant_query);
 
