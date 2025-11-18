@@ -161,7 +161,7 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
 
     private static MaterializedView.BasePartitionInfo toBasePartitionInfo(Partition partition) {
         PhysicalPartition defaultPartition = partition.getDefaultPhysicalPartition();
-        if (partition.getSubPartitions() != null && partition.getSubPartitions().size() > 1) {
+        if (!partition.getSubPartitions().isEmpty()) {
             defaultPartition = partition.getSubPartitions()
                     .stream()
                     .max(Comparator.comparing(PhysicalPartition::getVisibleVersionTime))

@@ -138,7 +138,7 @@ public class OlapPartitionTraits extends DefaultTraits {
         }
         long lastRefreshTime = mvRefreshedPartitionInfo.getLastRefreshTime();
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
-        if (subPartitions != null && !subPartitions.isEmpty()) {
+        if (!subPartitions.isEmpty()) {
             for (PhysicalPartition subPartition : subPartitions) {
                 if (subPartition.getVisibleVersionTime() > lastRefreshTime) {
                     return true;
