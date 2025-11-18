@@ -20,7 +20,7 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_view/column_view_helper.h"
-#include "column/json_column.h"
+#include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -30,8 +30,6 @@
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/date_func.h"
-#include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {

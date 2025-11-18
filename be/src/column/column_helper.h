@@ -14,6 +14,7 @@
 
 #pragma once
 
+// NOTE: This file is included by a large number of files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <utility>
 
 #include "column/nullable_column.h"
@@ -30,10 +31,8 @@
 #include "column/const_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/phmap/phmap.h"
