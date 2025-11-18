@@ -93,3 +93,12 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 alter table test_overwrite_statistics.sales_data set("enable_statistic_collect_on_first_load"="true");
 INSERT OVERWRITE test_overwrite_statistics.sales_data partition("p202401") VALUES (102, '2024-01-10');
 select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics.sales_data';
+
+drop stats test_overwrite_statistics.test_overwrite_stats_table;
+drop table test_overwrite_statistics.test_overwrite_stats_table;
+delete from _statistics_.column_statistics where table_name='test_overwrite_statistics.test_overwrite_stats_table';
+create table test_overwrite_stats_table (k1 int) properties("replication_num"="1");
+insert into test_overwrite_stats_table select generate_series from table(generate_series(1, 1000));
+insert overwrite test_overwrite_stats_table select generate_series from table(generate_series(10000, 20000));
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_stats_table;", "20000.0")
+

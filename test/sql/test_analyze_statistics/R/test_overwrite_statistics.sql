@@ -171,3 +171,25 @@ select count(*) from _statistics_.column_statistics where table_name = 'test_ove
 -- result:
 2
 -- !result
+drop stats test_overwrite_statistics.test_overwrite_stats_table;
+-- result:
+-- !result
+drop table test_overwrite_statistics.test_overwrite_stats_table;
+-- result:
+-- !result
+delete from _statistics_.column_statistics where table_name='test_overwrite_statistics.test_overwrite_stats_table';
+-- result:
+-- !result
+create table test_overwrite_stats_table (k1 int) properties("replication_num"="1");
+-- result:
+-- !result
+insert into test_overwrite_stats_table select generate_series from table(generate_series(1, 1000));
+-- result:
+-- !result
+insert overwrite test_overwrite_stats_table select generate_series from table(generate_series(10000, 20000));
+-- result:
+-- !result
+function: assert_explain_costs_contains("select * from test_overwrite_statistics.test_overwrite_stats_table;", "20000.0")
+-- result:
+None
+-- !result
