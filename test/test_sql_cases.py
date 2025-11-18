@@ -127,17 +127,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
 
-        # run custom cleanup (always)
-        try:
-            if hasattr(self.case_info, "cleanup"):
-                for stmt in self.case_info.cleanup:
-                    try:
-                        self.execute_single_statement(stmt, -1, False)
-                    except Exception as e:
-                        log.warning(f"cleanup stmt error: {e}")
-        except Exception as e:
-            log.warning(f"cleanup error: {e}")
-
         for each_db in self.db:
             self.drop_database(each_db)
 
