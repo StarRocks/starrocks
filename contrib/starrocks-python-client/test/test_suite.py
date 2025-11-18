@@ -15,32 +15,40 @@
 import decimal
 import logging
 
+from sqlalchemy import (
+    Integer,
+    MetaData,
+    Table,
+    and_,
+    cast,
+    column,
+    literal,
+    schema,
+    select,
+    table,
+    testing,
+    type_coerce,
+    union,
+)
+from sqlalchemy.engine import ObjectKind, ObjectScope
+from sqlalchemy.sql.sqltypes import CHAR, Float
+from sqlalchemy.testing import config, fixtures
+from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
+from sqlalchemy.testing.schema import Column
 from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
     ComponentReflectionTest as _ComponentReflectionTest,
-    FetchLimitOffsetTest as _FetchLimitOffsetTest,
-    NumericTest as _NumericTest,
-    StringTest as _StringTest,
     CTETest as _CTETest,
+    FetchLimitOffsetTest as _FetchLimitOffsetTest,
     JSONTest as _JSONTest,
+    NumericTest as _NumericTest,
     ServerSideCursorsTest as _ServerSideCursorsTest,
+    StringTest as _StringTest,
 )
+from sqlalchemy.testing.util import mock
 
-from sqlalchemy.testing.assertions import AssertsCompiledSQL
-from sqlalchemy import Table, Integer, MetaData, select
-from sqlalchemy import schema, type_coerce, and_, cast
-
-from sqlalchemy.testing import fixtures, config
-from sqlalchemy.testing.schema import Column
-from sqlalchemy import testing, literal
-from sqlalchemy.testing.assertions import eq_
-from sqlalchemy.sql.sqltypes import Float, CHAR
-from sqlalchemy.engine import ObjectKind
-from sqlalchemy.engine import ObjectScope
-from sqlalchemy.engine import Inspector
-
-from starrocks.datatype import INTEGER, VARCHAR
-from test.unit import test_utils
+from starrocks.datatype import INTEGER
+from test import test_utils
 
 
 logger = logging.getLogger(__name__)

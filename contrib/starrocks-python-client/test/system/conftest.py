@@ -44,14 +44,22 @@ class AlembicTestHarness:
         """
         command.stamp(self.env.alembic_cfg, "head")
 
-    def generate_autogen_revision(self, metadata: MetaData, message: str) -> None:
+    def generate_autogen_revision(self, metadata: MetaData, message: str, include_object=None) -> None:
         """
         Dynamically sets the target metadata and runs the autogenerate revision.
+
+        Args:
+            metadata: The SQLAlchemy metadata to compare
+            message: The revision message
+            include_object: Optional custom include_object filter function
         """
         # Ensure the version table is created and stamped before autogenerate
         self.ensure_version_table()
         # Inject the metadata into the Alembic script context
         self.env.alembic_cfg.attributes['target_metadata'] = metadata
+        # Inject custom include_object if provided
+        if include_object is not None:
+            self.env.alembic_cfg.attributes['include_object'] = include_object
         self.revision(message=message, autogenerate=True)
 
     def revision(self, message: str, autogenerate: bool = False) -> None:
