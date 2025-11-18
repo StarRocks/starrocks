@@ -86,7 +86,7 @@ TEST_F(LakeDelvecLoaderTest, test_load_from_meta_with_empty_pdelvec) {
     DelvecPagePB delvec_page = iter->second;
 
     // 3. Test load_from_meta with empty pdelvec pointer
-    DelVectorPtr pdelvec; // This is an empty shared_ptr
+    DelVectorPtr pdelvec;  // This is an empty shared_ptr
     ASSERT_FALSE(pdelvec); // Verify it's null
 
     LakeIOOptions lake_io_opts;
