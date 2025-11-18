@@ -2595,18 +2595,26 @@ Status SegmentIterator::_init_context() {
 
 void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
     bool has_or_predicates = _non_expr_pred_tree.has_or_predicate() || _expr_pred_tree.has_or_predicate();
+    // `_context` is not initialized while building ScanContext instances (e.g. during `_init_context`).
+    // Using the argument `ctx` ensures the enablement decision is evaluated for the context under construction
+    // instead of dereferencing the yet-to-be-initialized `_context`, which caused crashes on empty tablets.
     ctx->_enable_predicate_col_late_materialize =
-            !has_or_predicates && _context->_late_materialize && _opts.enable_predicate_col_late_materialize;
+            !has_or_predicates && ctx->_late_materialize && _opts.enable_predicate_col_late_materialize;
+
+    const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
+    if (column_predicate_map.empty()) {
+        ctx->_only_output_one_predicate_col_with_filter_push_down = false;
+        return;
+    }
 
     // For case like : select col from table where col like "%jerry%"
     // we only need output one predicate column, so context's _late_materialize is always false
     // but we still can push down predicate into page level
-    const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
     ctx->_only_output_one_predicate_col_with_filter_push_down =
             !has_or_predicates && (_predicate_columns == 1 && _schema.num_fields() == 1) &&
             ctx->_column_iterators[0]->support_push_down_predicate(column_predicate_map.begin()->second);
 
-    if (!ctx->_enable_predicate_col_late_materialize || !ctx->_only_output_one_predicate_col_with_filter_push_down) {
+    if (!ctx->_enable_predicate_col_late_materialize && !ctx->_only_output_one_predicate_col_with_filter_push_down) {
         return;
     }
 
@@ -2634,7 +2642,8 @@ void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
 
     // Build column-specific RuntimeFilterPredicates for late materialization
     // Group runtime filter predicates by ColumnId
-    if (!_runtime_filter_preds.empty() && _opts.enable_join_runtime_filter_pushdown) {
+    if (!_runtime_filter_preds.empty() && _opts.enable_join_runtime_filter_pushdown &&
+        _column_to_runtime_filters_map.empty()) {
         // First, collect predicates by column id
         std::unordered_map<ColumnId, std::vector<RuntimeFilterPredicate*>> column_rf_map;
         for (auto* rf_pred : _runtime_filter_preds.rf_predicates()) {
@@ -2671,6 +2680,8 @@ void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
     // all predicate columns + rowId column == _column_iterators size
     DCHECK(ctx->_predicate_order.size() + 1 == ctx->_column_iterators.size() ||
            ctx->_only_output_one_predicate_col_with_filter_push_down);
+
+    DCHECK(!ctx->_predicate_order.empty());
 
     const ColumnId first_column_id = ctx->_predicate_order.front();
     ctx->_column_iterators_for_predicate_late_materialize.clear();
