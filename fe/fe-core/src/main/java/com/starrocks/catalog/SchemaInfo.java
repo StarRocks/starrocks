@@ -121,6 +121,14 @@ public class SchemaInfo {
         return bloomFilterFpp;
     }
 
+    public TCompressionType getCompressionType() {
+        return compressionType;
+    }
+
+    public int getCompressionLevel() {
+        return compressionLevel;
+    }
+
     public TTabletSchema toTabletSchema() {
         TTabletSchema tSchema = new TTabletSchema();
         tSchema.setShort_key_column_count(shortKeyColumnCount);
