@@ -221,6 +221,11 @@ public class StatisticsCollectionTrigger {
                     job.setPartitionTabletRowCounts(partitionTabletRowCounts);
                 }
                 statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
+
+                if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
+                    AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+                    overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                }
             };
 
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
