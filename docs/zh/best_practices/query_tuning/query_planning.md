@@ -106,7 +106,8 @@ StarRocks计划是分层的：
 :::
 
 ```sql
-EXPLAIN select  count(*)
+explain logical
+select  count(*)
 from store_sales
     ,household_demographics
     ,time_dim
@@ -121,33 +122,83 @@ where ss_sold_time_sk = time_dim.t_time_sk
 order by count(*) limit 100;
 ```
 
-输出是一个分层计划，显示StarRocks将如何执行查询，分为片段和操作符。以下是一个简化的查询计划片段示例：
+输出是一个分层计划，显示StarRocks将如何执行查询。计划结构为操作符树，从下往上阅读。逻辑计划显示了带有成本估算的操作序列：
 
 ```
-PLAN FRAGMENT 1
-  6:HASH JOIN (BROADCAST)
-    |-- 4:HASH JOIN (BROADCAST)
-    |     |-- 2:HASH JOIN (BROADCAST)
-    |     |     |-- 0:OlapScanNode (store_sales)
-    |     |     |-- 1:OlapScanNode (time_dim)
-    |     |-- 3:OlapScanNode (household_demographics)
-    |-- 5:OlapScanNode (store)
+- Output => [69:count]
+    - TOP-100(FINAL)[69: count ASC NULLS FIRST]
+            Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 8.00, cost: 68669801.20}
+        - TOP-100(PARTIAL)[69: count ASC NULLS FIRST]
+                Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 8.00, cost: 68669769.20}
+            - AGGREGATE(GLOBAL) []
+                    Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 0.00, cost: 68669737.20}
+                    69:count := count(69:count)
+                - EXCHANGE(GATHER)
+                        Estimates: {row: 1, cpu: 8.00, memory: 0.00, network: 8.00, cost: 68669717.20}
+                    - AGGREGATE(LOCAL) []
+                            Estimates: {row: 1, cpu: 3141.35, memory: 0.80, network: 0.00, cost: 68669701.20}
+                            69:count := count()
+                        - HASH/INNER JOIN [9:ss_store_sk = 40:s_store_sk] => [71:auto_fill_col]
+                                Estimates: {row: 3490, cpu: 111184.52, memory: 8.80, network: 0.00, cost: 68668128.93}
+                                71:auto_fill_col := 1
+                            - HASH/INNER JOIN [7:ss_hdemo_sk = 25:hd_demo_sk] => [9:ss_store_sk]
+                                    Estimates: {row: 19940, cpu: 1841177.20, memory: 2880.00, network: 0.00, cost: 68612474.92}
+                                - HASH/INNER JOIN [4:ss_sold_time_sk = 30:t_time_sk] => [7:ss_hdemo_sk, 9:ss_store_sk]
+                                        Estimates: {row: 199876, cpu: 69221191.15, memory: 7077.97, network: 0.00, cost: 67671726.32}
+                                    - SCAN [store_sales] => [4:ss_sold_time_sk, 7:ss_hdemo_sk, 9:ss_store_sk]
+                                            Estimates: {row: 5501341, cpu: 66016092.00, memory: 0.00, network: 0.00, cost: 33008046.00}
+                                            partitionRatio: 1/1, tabletRatio: 192/192
+                                            predicate: 7:ss_hdemo_sk IS NOT NULL
+                                    - EXCHANGE(BROADCAST)
+                                            Estimates: {row: 1769, cpu: 7077.97, memory: 7077.97, network: 7077.97, cost: 38928.81}
+                                        - SCAN [time_dim] => [30:t_time_sk]
+                                                Estimates: {row: 1769, cpu: 21233.90, memory: 0.00, network: 0.00, cost: 10616.95}
+                                                partitionRatio: 1/1, tabletRatio: 5/5
+                                                predicate: 33:t_hour = 8 AND 34:t_minute >= 30
+                                - EXCHANGE(BROADCAST)
+                                        Estimates: {row: 720, cpu: 2880.00, memory: 2880.00, network: 2880.00, cost: 14400.00}
+                                    - SCAN [household_demographics] => [25:hd_demo_sk]
+                                            Estimates: {row: 720, cpu: 5760.00, memory: 0.00, network: 0.00, cost: 2880.00}
+                                            partitionRatio: 1/1, tabletRatio: 1/1
+                                            predicate: 28:hd_dep_count = 5
+                            - EXCHANGE(BROADCAST)
+                                    Estimates: {row: 2, cpu: 8.80, memory: 8.80, network: 8.80, cost: 44.15}
+                                - SCAN [store] => [40:s_store_sk]
+                                        Estimates: {row: 2, cpu: 17.90, memory: 0.00, network: 0.00, cost: 8.95}
+                                        partitionRatio: 1/1, tabletRatio: 1/1
+                                        predicate: 45:s_store_name = 'ese'
 ```
 
-- **OlapScanNode**: 扫描一个表，可能带有过滤器和预聚合。
-- **HASH JOIN (BROADCAST)**: 通过广播较小的表来连接两个表。
-- **Fragments**: 每个片段可以在不同的节点上并行执行。
+**自下而上阅读计划**
 
-查询96的查询计划分为五个片段，从0到4编号。查询计划可以自下而上逐一阅读。
+查询计划应该从底部（叶节点）向上到顶部（根节点）阅读，遵循数据流：
 
-片段4负责扫描 `time_dim` 表并提前执行相关查询条件（即 `time_dim.t_hour = 8 and time_dim.t_minute >= 30`）。这一步也称为谓词下推。StarRocks决定是否为聚合表启用 `PREAGGREGATION`。在前面的图中，`time_dim` 的预聚合被禁用。在这种情况下，`time_dim` 的所有维度列都被读取，如果表中有很多维度列，可能会对性能产生负面影响。如果 `time_dim` 表选择 `range partition` 进行数据划分，查询计划中将命中几个分区，并自动过滤掉不相关的分区。如果存在物化视图，StarRocks将根据查询自动选择物化视图。如果没有物化视图，查询将自动命中基表（例如，前图中的 `rollup: time_dim`）。
+1. **扫描操作（底层）**: 底部的 `SCAN` 操作符从基表读取数据：
+   - `SCAN [store_sales]` 读取主事实表，带有谓词 `ss_hdemo_sk IS NOT NULL`
+   - `SCAN [time_dim]` 读取时间维度表，带有谓词 `t_hour = 8 AND t_minute >= 30`
+   - `SCAN [household_demographics]` 读取人口统计表，带有谓词 `hd_dep_count = 5`
+   - `SCAN [store]` 读取商店表，带有谓词 `s_store_name = 'ese'`
 
-扫描完成后，片段4结束。数据将传递给其他片段，如前图中所示的 EXCHANGE ID : 09，传递到标记为9的接收节点。
+   每个扫描操作显示：
+   - **估算值**: 行数、CPU、内存、网络和成本估算
+   - **分区和tablet比率**: 扫描了多少分区/tablet（例如，`partitionRatio: 1/1, tabletRatio: 192/192`）
+   - **谓词**: 下推到扫描级别的查询条件，减少读取的数据量
 
-对于查询96的查询计划，片段2、3和4具有相似的功能，但它们负责扫描不同的表。具体来说，查询中的 `Order/Aggregation/Join` 操作在片段1中执行。
+2. **数据交换（广播）**: `EXCHANGE(BROADCAST)` 操作将较小的维度表分发到处理较大事实表的所有节点。当维度表相对于事实表较小时，这种方法很高效，如 `time_dim`、`household_demographics` 和 `store` 被广播的情况。
 
-片段1使用 `BROADCAST` 方法执行 `Order/Aggregation/Join` 操作，即将小表广播到大表。如果两个表都很大，我们建议使用 `SHUFFLE` 方法。目前，StarRocks仅支持 `HASH JOIN`。`colocate` 字段用于显示两个连接的表是以相同方式分区和分桶的，因此可以在本地执行连接操作而无需迁移数据。当连接操作完成后，将执行上层的 `aggregation`、`order by` 和 `top-n` 操作。
+3. **连接操作（中层）**: 数据通过 `HASH/INNER JOIN` 操作向上流动：
+   - 首先，`store_sales` 与 `time_dim` 在 `ss_sold_time_sk = t_time_sk` 上连接
+   - 然后，结果与 `household_demographics` 在 `ss_hdemo_sk = hd_demo_sk` 上连接
+   - 最后，结果与 `store` 在 `ss_store_sk = s_store_sk` 上连接
 
-通过去除特定表达式（仅保留操作符），查询计划可以以更宏观的视角呈现，如下图所示。
+   每个连接显示连接条件和结果行数及资源使用的估算值。
 
-![8-5](../../_assets/8-5.png)
+4. **聚合（上层）**: 
+   - `AGGREGATE(LOCAL)` 在每个节点上执行本地聚合，计算 `count()`
+   - `EXCHANGE(GATHER)` 从所有节点收集结果
+   - `AGGREGATE(GLOBAL)` 将本地结果合并为最终计数
+
+5. **最终操作（顶层）**: 
+   - `TOP-100(PARTIAL)` 和 `TOP-100(FINAL)` 操作处理 `ORDER BY count(*) LIMIT 100` 子句，在排序后选择前100个结果
+
+逻辑计划为每个操作提供成本估算，帮助您了解查询在哪些地方消耗了最多的资源。实际的物理执行计划（来自 `EXPLAIN` 或 `EXPLAIN VERBOSE`）包含有关操作如何在节点间分布和并行执行的更多详细信息。
