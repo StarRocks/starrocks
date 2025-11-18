@@ -14,7 +14,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TRedisTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;

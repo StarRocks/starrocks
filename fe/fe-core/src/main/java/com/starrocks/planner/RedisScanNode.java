@@ -16,11 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.RedisTable;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -82,7 +81,7 @@ public class RedisScanNode extends ScanNode {
             return;
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
-        Expr.collectList(conjuncts, SlotRef.class, slotRefs);
+        ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
         for (SlotRef slotRef : slotRefs) {
             SlotRef tmpRef = (SlotRef) slotRef.clone();
@@ -91,7 +90,7 @@ public class RedisScanNode extends ScanNode {
             sMap.put(slotRef, tmpRef);
         }
 
-        ArrayList<Expr> redisConjuncts = Expr.cloneList(conjuncts, sMap);
+        ArrayList<Expr> redisConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : redisConjuncts) {
             filters.add(AstToStringBuilder.toString(p));
         }

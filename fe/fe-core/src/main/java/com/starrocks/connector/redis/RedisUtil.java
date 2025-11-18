@@ -15,8 +15,10 @@
 package com.starrocks.connector.redis;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,11 +44,11 @@ public class RedisUtil {
     public static Type convertType(String redisType) {
         switch (redisType.toLowerCase()) {
             case "varchar":
-                return Type.VARCHAR;
+                return VarcharType.VARCHAR;
             case "bigint":
-                return Type.BIGINT;
+                return IntegerType.BIGINT;
             default:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
         }
     }
 }

@@ -16,10 +16,9 @@ package com.starrocks.connector.redis;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.RedisTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -34,6 +33,8 @@ import com.starrocks.sql.optimizer.rule.implementation.RedisScanImplementationRu
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -46,13 +47,13 @@ import java.util.Map;
 
 public class RedisScanTest {
 
-    static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
-    static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
+    static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+    static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, VarcharType.VARCHAR, "name", true);
 
     static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<>() {
         {
-            put(intColumnOperator, new Column("id", Type.INT));
-            put(strColumnOperator, new Column("name", Type.STRING));
+            put(intColumnOperator, new Column("id", IntegerType.INT));
+            put(strColumnOperator, new Column("name", VarcharType.VARCHAR));
         }
     };
 
@@ -70,7 +71,7 @@ public class RedisScanTest {
         logicalRedisScanOperator = new LogicalRedisScanOperator(redisTable,
                 scanColumnMap, Maps.newHashMap(), -1,
                 new BinaryPredicateOperator(BinaryType.EQ,
-                        new ColumnRefOperator(1, Type.INT, "id", true),
+                        new ColumnRefOperator(1, IntegerType.INT, "id", true),
                         ConstantOperator.createInt(1)));
         OptExpression scan = new OptExpression(logicalRedisScanOperator);
         List<OptExpression> transform = redisRule.transform(scan, optimizerContext);
