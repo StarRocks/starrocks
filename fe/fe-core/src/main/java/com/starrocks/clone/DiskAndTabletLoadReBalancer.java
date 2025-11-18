@@ -41,12 +41,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -82,9 +84,43 @@ import java.util.stream.Collectors;
  */
 public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private static final Logger LOG = LogManager.getLogger(DiskAndTabletLoadReBalancer.class);
+    // Minimum lock hold time threshold. Values less than 100ms are too aggressive
+    // and may cause excessive lock acquire/release cycles with minimal benefit.
+    private static final long MIN_LOCK_HOLD_TIME_MS = 100L;
+    // Threshold for logging partition stats collection as slow operation (30 seconds)
+    private static final long SLOW_OPERATION_THRESHOLD_MS = 30 * 1000;
     // tabletId -> replicaId
     // used to delete src replica after copy task success
     private final Map<Long, Long> cachedReplicaId = new ConcurrentHashMap<>();
+
+    /**
+     * Tracks lock acquisition and release statistics during partition stats collection.
+     */
+    private static class LockStatistics {
+        /** Total time (in milliseconds) that locks were held */
+        public long lockHoldTotalTime = 0L;
+        /** Number of times locks were acquired */
+        public long lockAcquireCount = 0L;
+        /** Number of times locks were proactively released to reduce contention */
+        public long proactiveReleaseCount = 0L;
+    }
+
+    /**
+     * Context object encapsulating parameters for partition statistics collection.
+     *
+     * @param medium Storage medium type (SSD/HDD) to filter partitions
+     * @param isLocalBalance Whether to perform local balance (within backend) or cluster balance
+     * @param beIds List of backend IDs to calculate skew between backends (nullable)
+     * @param bePaths Pair of backend ID and path hashes to calculate skew between paths (nullable)
+     * @param partitionStats Output map to store calculated partition statistics
+     */
+    record GetPartitionStatContext(
+            TStorageMedium medium,
+            boolean isLocalBalance,
+            List<Long> beIds,
+            Pair<Long, List<Long>> bePaths,
+            Map<Pair<Long, Long>, PartitionStat> partitionStats
+    ) {}
 
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
@@ -754,11 +790,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tblId, LockType.READ);
         try {
-            locker.lockDatabase(db.getId(), LockType.READ);
             return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(dbId, tblId, LockType.READ);
         }
     }
 
@@ -1058,7 +1094,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
@@ -1093,7 +1129,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             return cnt;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
     }
 
@@ -1503,8 +1539,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return result;
         }
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
         try {
-            locker.lockDatabase(db.getId(), LockType.READ);
             OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
@@ -1579,7 +1615,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 result.add(new Pair<>(entry.getKey(), entry.getValue()));
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
         }
 
         return result;
@@ -1594,8 +1630,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, olapTable.getId(), LockType.READ);
         try {
-            locker.lockDatabase(db.getId(), LockType.READ);
             PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
             if (physicalPartition == null) {
@@ -1630,7 +1666,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return statusPair.first != LocalTablet.TabletHealthStatus.LOCATION_MISMATCH &&
                     statusPair.first != LocalTablet.TabletHealthStatus.HEALTHY;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(dbId, olapTable.getId(), LockType.READ);
         }
     }
 
@@ -1663,183 +1699,232 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (bePaths != null) {
             Preconditions.checkArgument(bePaths.first != -1 && bePaths.second.size() > 1);
         }
-
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        long startTime = System.currentTimeMillis();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        LockStatistics lockStatistics = new LockStatistics();
         Map<Pair<Long, Long>, PartitionStat> partitionStats = Maps.newHashMap();
-        long start = System.nanoTime();
-        long lockTotalTime = 0;
-        long lockStart;
-        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIdsIncludeRecycleBin();
-        DATABASE:
+        GetPartitionStatContext context =
+                new GetPartitionStatContext(medium, isLocalBalance, beIds, bePaths, partitionStats);
+        List<Long> dbIds = metastore.getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = metastore.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
-
             if (db.isSystemDatabase()) {
                 continue;
             }
+            getPartitionStatsFromOneDatabase(db, lockStatistics, context);
+        }
+        long cost = System.currentTimeMillis() - startTime;
+        Level logLevel = (lockStatistics.lockHoldTotalTime < Config.slow_lock_threshold_ms &&
+                          cost < SLOW_OPERATION_THRESHOLD_MS) ? Level.DEBUG : Level.INFO;
+        LOG.log(logLevel,
+                "finished to calculate partition stats. cost {} ms, in lock time: {} ms," +
+                " lock acquire count: {}, proactive release count: {}",
+                cost, lockStatistics.lockHoldTotalTime, lockStatistics.lockAcquireCount,
+                lockStatistics.proactiveReleaseCount);
+        return context.partitionStats;
+    }
 
-            // set the config to a local variable to avoid config params changed.
-            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
-            int partitionChecked = 0;
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            lockStart = System.nanoTime();
-            try {
-                TABLE:
-                for (Table table : globalStateMgr.getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    // check table is olap table or colocate table
-                    if (!table.needSchedule(isLocalBalance)) {
-                        continue;
+    /**
+     * Collects partition statistics for the given database.
+     * This method processes all tables in the database using fine-grained table-level locking.
+     *
+     * @param db The database to process
+     * @param lockStatistics Statistics tracker for lock operations
+     * @param context Context containing partition stats collection parameters
+     */
+    private void getPartitionStatsFromOneDatabase(Database db, LockStatistics lockStatistics,
+                                                  GetPartitionStatContext context) {
+        List<Long> tableIds =
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db).stream()
+                        .map(Table::getId).collect(Collectors.toUnmodifiableList());
+        for (long tableId : tableIds) {
+            getPartitionStatsFromOneTable(db, tableId, lockStatistics, context);
+        }
+    }
+
+    /**
+     * Collects partition statistics for the given table with fine-grained locking.
+     * This method implements proactive lock release to avoid holding locks for too long,
+     * which could block other critical operations.
+     *
+     * @param db The database containing the table
+     * @param tableId The ID of the table to process
+     * @param lockStatistics Statistics tracker for lock operations
+     * @param context Context containing partition stats collection parameters
+     */
+    private void getPartitionStatsFromOneTable(Database db, long tableId, LockStatistics lockStatistics,
+                                               GetPartitionStatContext context) {
+        long maxLockHoldTimeMs = Config.tablet_checker_lock_time_per_cycle_ms;
+        if (maxLockHoldTimeMs < MIN_LOCK_HOLD_TIME_MS) {
+            // Value less than 100ms is not reasonable.
+            maxLockHoldTimeMs = MIN_LOCK_HOLD_TIME_MS;
+        }
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+        lockStatistics.lockAcquireCount++;
+        boolean locked = true;
+        long lockStartTime = 0;
+        try {
+            lockStartTime = System.currentTimeMillis();
+            Table table = metastore.getTableIncludeRecycleBin(db, tableId);
+            if (table == null) {
+                return;
+            }
+            if (!table.needSchedule(context.isLocalBalance)) {
+                return;
+            }
+            if (table.isCloudNativeTableOrMaterializedView()) {
+                // replicas are managed by StarOS and cloud storage.
+                return;
+            }
+
+            OlapTable olapTbl = (OlapTable) table;
+            // Table not in NORMAL state is not allowed to do balance,
+            // because the change of tablet location can cause Schema change or rollup failed
+            if (olapTbl.getState() != OlapTable.OlapTableState.NORMAL) {
+                return;
+            }
+            for (Partition p : metastore.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                // The partition could be invalid because of the lock release-reacquisition in between.
+                Partition partition = metastore.getPartitionIncludeRecycleBin(olapTbl, p.getId());
+                if (partition == null) {
+                    continue;
+                }
+                if (partition.getState() != PartitionState.NORMAL) {
+                    // when alter job is in FINISHING state, partition state will be set to NORMAL,
+                    // and we can schedule the tablets in it.
+                    continue;
+                }
+                DataProperty dataProperty =
+                        metastore.getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
+                if (dataProperty == null || dataProperty.getStorageMedium() != context.medium) {
+                    continue;
+                }
+
+                // NOTE: Process all the physical partitions in this partition all together to reduce lock times.
+                // May need to optimize further if there are too many physical partitions.
+                getPartitionStatsFromOnePartition(db, olapTbl, partition, context);
+
+                // Make change with caution: lock hold time may be too long.
+                long lockElapsedTime = System.currentTimeMillis() - lockStartTime;
+                if (lockElapsedTime >= maxLockHoldTimeMs) {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                    locked = false;
+                    lockStatistics.lockHoldTotalTime += lockElapsedTime;
+                    lockStatistics.proactiveReleaseCount++;
+                    LOG.debug("proactively release lock on db {} table {} after holding it for {} ms",
+                            db.getId(), olapTbl.getId(), lockElapsedTime);
+
+                    // Unlock and lock again, if someone is waiting for this lock, let it have a chance to get the lock.
+                    locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                    locked = true;
+                    lockStatistics.lockAcquireCount++;
+                    lockStartTime = System.currentTimeMillis();
+
+                    // IMPORTANT! Recheck db and table existence after lock reacquisition.
+                    if (metastore.getDbIncludeRecycleBin(db.getId()) == null) {
+                        return;
                     }
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        // replicas are managed by StarOS and cloud storage.
-                        continue;
+                    if (metastore.getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
+                        return;
                     }
+                }
+            }
+        } finally {
+            if (locked) {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                lockStatistics.lockHoldTotalTime += System.currentTimeMillis() - lockStartTime;
+            }
+        }
+    }
 
-                    OlapTable olapTbl = (OlapTable) table;
-                    // Table not in NORMAL state is not allowed to do balance,
-                    // because the change of tablet location can cause Schema change or rollup failed
-                    if (olapTbl.getState() != OlapTable.OlapTableState.NORMAL) {
-                        continue;
-                    }
+    /**
+     * Collects partition statistics for a single partition.
+     * Calculates replica distribution skew across backends or paths.
+     *
+     * @param db The database containing the partition
+     * @param olapTbl The table containing the partition
+     * @param partition The partition to analyze
+     * @param context Context containing partition stats collection parameters
+     */
+    private void getPartitionStatsFromOnePartition(Database db, OlapTable olapTbl, Partition partition,
+                                                   GetPartitionStatContext context) {
+        boolean isLabelLocationTable = olapTbl.getLocation() != null;
+        int replicationFactor = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
+        int replicaNum = partition.getDistributionInfo().getBucketNum() * replicationFactor;
+        // replicaNum may be negative, cause getReplicationNumIncludeRecycleBin can return -1
+        if (replicaNum < 0) {
+            return;
+        }
 
-                    boolean isLabelLocationTable = olapTbl.getLocation() != null;
-
-                    for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
-                        partitionChecked++;
-                        if (partitionChecked % partitionBatchNum == 0) {
-                            lockTotalTime += System.nanoTime() - lockStart;
-                            // release lock, so that lock can be acquired by other threads.
-                            LOG.debug("partition checked reached batch value, release lock");
-                            locker.unLockDatabase(db.getId(), LockType.READ);
-                            locker.lockDatabase(db.getId(), LockType.READ);
-                            LOG.debug("balancer get lock again");
-                            lockStart = System.nanoTime();
-                            if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
-                                continue DATABASE;
-                            }
-                            if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
-                                continue TABLE;
-                            }
-                            if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTbl, partition.getId()) ==
-                                    null) {
+        // Tablet in SHADOW index cannot be repaired or balanced
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                PartitionStat pStat = new PartitionStat(db.getId(), olapTbl.getId(), 0, replicaNum, replicationFactor);
+                context.partitionStats.put(new Pair<>(physicalPartition.getId(), idx.getId()), pStat);
+                if (context.beIds == null && context.bePaths == null) {
+                    continue;
+                }
+                // calculate skew
+                // replicaNum on be|path
+                Map<Long, Integer> replicaNums = getBackendOrPathToReplicaNum(context.beIds, context.bePaths);
+                for (Tablet tablet : idx.getTablets()) {
+                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    if (replicas != null) {
+                        for (Replica replica : replicas) {
+                            if (replica.getState() != ReplicaState.NORMAL) {
                                 continue;
                             }
-                        }
-                        if (partition.getState() != PartitionState.NORMAL) {
-                            // when alter job is in FINISHING state, partition state will be set to NORMAL,
-                            // and we can schedule the tablets in it.
-                            continue;
-                        }
-
-                        DataProperty dataProperty = globalStateMgr.getLocalMetastore()
-                                .getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
-                        if (dataProperty == null) {
-                            continue;
-                        }
-                        TStorageMedium pMedium = dataProperty.getStorageMedium();
-                        if (pMedium != medium) {
-                            continue;
-                        }
-
-                        int replicationFactor = globalStateMgr.getLocalMetastore()
-                                .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
-                        int replicaNum = partition.getDistributionInfo().getBucketNum() * replicationFactor;
-                        // replicaNum may be negative, cause getReplicationNumIncludeRecycleBin can return -1
-                        if (replicaNum < 0) {
-                            continue;
-                        }
-                        /*
-                         * Tablet in SHADOW index can not be repaired of balanced
-                         */
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            for (MaterializedIndex idx : physicalPartition
-                                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                                PartitionStat pStat = new PartitionStat(dbId, table.getId(), 0, replicaNum,
-                                        replicationFactor);
-                                partitionStats.put(new Pair<>(physicalPartition.getId(), idx.getId()), pStat);
-
-                                if (beIds == null && bePaths == null) {
+                            if (context.beIds != null) {
+                                replicaNums.computeIfPresent(replica.getBackendId(), (k, v) -> (v + 1));
+                            } else {
+                                if (replica.getBackendId() != context.bePaths.first) {
                                     continue;
                                 }
-
-                                // calculate skew
-                                // replicaNum on be|path
-                                Map<Long, Integer> replicaNums = getBackendOrPathToReplicaNum(beIds, bePaths);
-                                for (Tablet tablet : idx.getTablets()) {
-                                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                                    if (replicas != null) {
-                                        for (Replica replica : replicas) {
-                                            if (replica.getState() != ReplicaState.NORMAL) {
-                                                continue;
-                                            }
-
-                                            if (beIds != null) {
-                                                replicaNums.computeIfPresent(replica.getBackendId(), (k, v) -> (v + 1));
-                                            } else {
-                                                if (replica.getBackendId() != bePaths.first) {
-                                                    continue;
-                                                }
-
-                                                replicaNums.computeIfPresent(replica.getPathHash(), (k, v) -> (v + 1));
-                                            }
-                                        }
-                                    }
-                                }
-                                int maxNum = Integer.MIN_VALUE;
-                                int minNum = Integer.MAX_VALUE;
-                                long maxKey = -1L;
-                                long minKey = -1L;
-                                for (Map.Entry<Long, Integer> entry : replicaNums.entrySet()) {
-                                    long key = entry.getKey();
-                                    int num = entry.getValue();
-                                    if (maxNum < num) {
-                                        maxNum = num;
-                                        maxKey = key;
-                                    }
-                                    if (minNum > num) {
-                                        minNum = num;
-                                        minKey = key;
-                                    }
-                                }
-
-                                pStat.skew = maxNum - minNum;
-
-                                boolean isTabletBalanced = pStat.skew >= 0 && pStat.skew <= 1;
-                                if (isTabletBalanced) {
-                                    if (isLocalBalance || !isLabelLocationTable) {
-                                        idx.setBalanceStat(BalanceStat.BALANCED_STAT);
-                                    }
-                                } else if (isLocalBalance) {
-                                    // tablet not balanced && is local balance
-                                    idx.setBalanceStat(BalanceStat.createBackendTabletBalanceStat(
-                                            bePaths.first, getPath(maxKey), getPath(minKey), maxNum, minNum));
-                                } else if (!isLabelLocationTable) {
-                                    // tablet not balanced && not local balance && table not use label location
-                                    idx.setBalanceStat(
-                                            BalanceStat.createClusterTabletBalanceStat(maxKey, minKey, maxNum, minNum));
-                                }
+                                replicaNums.computeIfPresent(replica.getPathHash(), (k, v) -> (v + 1));
                             }
                         }
                     }
                 }
-            } finally {
-                lockTotalTime += System.nanoTime() - lockStart;
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                int maxNum = Integer.MIN_VALUE;
+                int minNum = Integer.MAX_VALUE;
+                long maxKey = -1L;
+                long minKey = -1L;
+                for (Map.Entry<Long, Integer> entry : replicaNums.entrySet()) {
+                    long key = entry.getKey();
+                    int num = entry.getValue();
+                    if (maxNum < num) {
+                        maxNum = num;
+                        maxKey = key;
+                    }
+                    if (minNum > num) {
+                        minNum = num;
+                        minKey = key;
+                    }
+                }
+                pStat.skew = maxNum - minNum;
+                boolean isTabletBalanced = pStat.skew >= 0 && pStat.skew <= 1;
+                if (isTabletBalanced) {
+                    if (context.isLocalBalance || !isLabelLocationTable) {
+                        idx.setBalanceStat(BalanceStat.BALANCED_STAT);
+                    }
+                } else if (context.isLocalBalance) {
+                    // tablet not balanced && is local balance
+                    idx.setBalanceStat(
+                            BalanceStat.createBackendTabletBalanceStat(context.bePaths.first, getPath(maxKey),
+                                    getPath(minKey), maxNum, minNum));
+                } else if (!isLabelLocationTable) {
+                    // tablet not balanced && not local balance && table not use label location
+                    idx.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(maxKey, minKey, maxNum, minNum));
+                }
             }
         }
-
-        long cost = (System.nanoTime() - start) / 1000000;
-        lockTotalTime = lockTotalTime / 1000000;
-        if (lockTotalTime > Config.slow_lock_threshold_ms || cost > 30000) {
-            LOG.info("finished to calculate partition stats. cost: {} ms, in lock time: {} ms",
-                    cost, lockTotalTime);
-        }
-
-        return partitionStats;
     }
 
     @NotNull
@@ -1858,11 +1943,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     }
 
     private Map<Long, Integer> getPartitionReplicaCnt() {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         Map<Long, Integer> partitionReplicaCnt = new HashMap<>();
-        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIdsIncludeRecycleBin();
+        List<Long> dbIds = metastore.getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
-            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Database db = metastore.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -1872,9 +1957,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                for (Table table : globalStateMgr.getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+            for (Table t : metastore.getTablesIncludeRecycleBin(db)) {
+                locker.lockTableWithIntensiveDbLock(db.getId(), t.getId(), LockType.READ);
+                try {
+                    Table table = metastore.getTableIncludeRecycleBin(db, t.getId());
+                    if (table == null) {
+                        continue;
+                    }
                     // check table is olap table or colocate table
                     if (!table.needSchedule(false)) {
                         continue;
@@ -1885,18 +1974,17 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
-                    for (Partition partition : globalStateMgr.getLocalMetastore().getAllPartitionsIncludeRecycleBin(olapTbl)) {
-                        int replicaTotalCnt = partition.getDistributionInfo().getBucketNum()
-                                *
-                                globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
+                    for (Partition partition : metastore.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                        int replicaTotalCnt = partition.getDistributionInfo().getBucketNum() *
+                                metastore.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                         partition.getId());
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             partitionReplicaCnt.put(physicalPartition.getId(), replicaTotalCnt);
                         }
                     }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), t.getId(), LockType.READ);
                 }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
