@@ -5898,21 +5898,19 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testCreateMVWithComment() throws Exception {
         String sql = "create materialized view mv1 " +
                 "comment \"this is a comment2\" " +
-                "partition by date_trunc('month', date) " +
                 "distributed by random " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
                 "'replication_num' = '1'\n" +
                 ") \n" +
                 "as select 'This is a test', --mocked \n" +
-                "123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1; ";
+                "123,v1.a, v1.b from iceberg0.partitioned_db.part_tbl1 as v1; ";
         starRocksAssert.withMaterializedView(sql);
         MaterializedView mv = getMv("mv1");
         {
             String ddl = mv.getMaterializedViewDdlStmt(true, false);
-            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
+            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `a`, `b`)\n" +
                     "COMMENT \"this is a comment2\"\n" +
-                    "PARTITION BY (date_trunc('month', `date`))\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "REFRESH DEFERRED MANUAL\n" +
                     "PROPERTIES (\n" +
@@ -5921,13 +5919,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
                     "AS select 'This is a test', --mocked \n" +
-                    "123,v1.date, v1.id from iceberg0.partitioned_db.t2 as v1;", ddl);
+                    "123,v1.a, v1.b from iceberg0.partitioned_db.part_tbl1 as v1;", ddl);
         }
         {
             String ddl = mv.getMaterializedViewDdlStmt(false, false);
-            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `date`, `id`)\n" +
+            Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv1` (`'This is a test'`, `123`, `a`, `b`)\n" +
                     "COMMENT \"this is a comment2\"\n" +
-                    "PARTITION BY (date_trunc('month', `date`))\n" +
                     "DISTRIBUTED BY RANDOM\n" +
                     "REFRESH DEFERRED MANUAL\n" +
                     "PROPERTIES (\n" +
@@ -5935,8 +5932,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "\"replication_num\" = \"1\",\n" +
                     "\"storage_medium\" = \"HDD\"\n" +
                     ")\n" +
-                    "AS SELECT 'This is a test' AS `'This is a test'`, 123 AS `123`, `iceberg0`.`partitioned_db`.`v1`.`date`, `iceberg0`.`partitioned_db`.`v1`.`id`\n" +
-                    "FROM `iceberg0`.`partitioned_db`.`t2` AS `v1`;", ddl);
+                    "AS SELECT 'This is a test' AS `'This is a test'`, 123 AS `123`, `iceberg0`.`partitioned_db`.`v1`.`a`, `iceberg0`.`partitioned_db`.`v1`.`b`\n" +
+                    "FROM `iceberg0`.`partitioned_db`.`part_tbl1` AS `v1`;", ddl);
         }
     }
 }
