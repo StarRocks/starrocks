@@ -50,7 +50,7 @@ public:
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
-    size_t truncated_bytes() noexcept;
+    size_t truncated_bytes() const noexcept;
 
 private:
     Status _get_current_impl(simdjson::ondemand::object* row);
