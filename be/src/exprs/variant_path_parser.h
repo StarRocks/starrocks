@@ -66,7 +66,7 @@ struct VariantPath {
     static StatusOr<Variant> seek(const Variant* variant, const VariantPath* variant_path);
 };
 
-struct NativeVariantPath {
+struct VariantState {
     VariantPath variant_path;
 };
 
