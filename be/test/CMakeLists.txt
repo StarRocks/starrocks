@@ -491,6 +491,7 @@ SET(DW_TEST_FILES
     ./storage/lake/condition_update_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/lake_data_source_test.cpp
+    ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
