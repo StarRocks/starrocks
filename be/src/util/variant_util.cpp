@@ -173,7 +173,10 @@ static std::string float_to_json_string_impl(FloatType value) {
     }
 
     char buffer[32];
-    auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::general);
+    int precision = std::is_same_v<FloatType, float> ? std::numeric_limits<float>::max_digits10
+                                                     : std::numeric_limits<double>::max_digits10;
+
+    auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::general, precision);
     if (ec != std::errc()) {
         return "null";
     }
