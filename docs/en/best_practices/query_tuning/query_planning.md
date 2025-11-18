@@ -3,9 +3,10 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# Query Plan
+# Query plan
 
 Optimizing query performance is a common challenge in analytics systems. Slow queries can impair user experience and overall cluster performance. In StarRocks, understanding and interpreting query plans and query profiles is the foundation for diagnosing and improving slow queries. These tools help you:
+
 - Identify bottlenecks and expensive operations
 - Spot suboptimal join strategies or missing indexes
 - Understand how data is filtered, aggregated, and moved
@@ -23,7 +24,7 @@ StarRocks provides several ways to inspect the query plan:
    - `EXPLAIN COSTS <query>`: Includes estimated costs for each operation, which is used to diagnose the statistics issue
 
 2. **EXPLAIN ANALYZE**:  
-   Use `EXPLAIN ANALYZE <query>` to execute the query and display the actual execution plan along with real runtime statistics.  See the [Explain Anlayze](./query_profile_text_based_analysis.md) documentation for details.
+   Use `EXPLAIN ANALYZE <query>` to execute the query and display the actual execution plan along with real runtime statistics. See the [Explain Anlayze](./query_profile_text_based_analysis.md) documentation for details.
 
    Example:
    ```sql
@@ -40,15 +41,16 @@ StarRocks provides several ways to inspect the query plan:
 Typically, the query plan is used to diagnose issues related to how a query is planned and optimized, while the query profile helps identify performance problems during query execution. In the following sections, we'll explore the key concepts of query execution and walk through a concrete example of analyzing a query plan.
 
 
-## Query Execution Flow
+## Query execution flow
 The lifecycle of a query in StarRocks consists of three main phases:
+
 1. **Planning**: The query undergoes parsing, analysis, and optimization, culminating in the generation of a query plan.
 2. **Scheduling**: The scheduler and coordinator distribute the plan to all participating backend nodes.
 3. **Execution**: The plan is executed using the pipeline execution engine.
 
 ![SQL Execution Flow](../../_assets/Profile/execution_flow.png)
 
-**Plan Structure**
+**Plan structure**
 
 The StarRocks plan is hierarchical:
 - **Fragment**: Top-level slice of work; each fragment spawns multiple **FragmentInstances** that run on different backend nodes.
@@ -57,13 +59,13 @@ The StarRocks plan is hierarchical:
 
 ![profile-3](../../_assets/Profile/profile-3.png)
 
-**Pipeline Execution Engine**
+**Pipeline execution engine**
 
 The Pipeline Engine executes the query plan in a parallel and efficient manner, handling complex plans and large data volumes for high performance and scalability.
 
 ![pipeline_opeartors](../../_assets/Profile/pipeline_operators.png)
 
-**Metric Merging Strategy**
+**Metric merging strategy**
 
 By default, StarRocks merges the FragmentInstance and PipelineDriver layers to reduce profile volume, resulting in a simplified three-layer structure:
 - Fragment
@@ -74,7 +76,7 @@ You can control this merging behavior through the session variable `pipeline_pro
 
 ## Example
 
-### How to Read a Query Plan and Profile
+### How to eead a query plan and profile
 
 1. **Understand the structure**: Query plans are split into fragments, each representing a stage of execution. Read from the bottom up: scan nodes first, then joins, aggregations, and finally the result.
 
@@ -101,14 +103,15 @@ You can control this merging behavior through the session variable `pipeline_pro
 6. **Predicate pushdown**: Filters applied early (at scan) reduce downstream data. Check `PREDICATES` or `PushdownPredicates` to see which filters are pushed down.
 
 
-### Example Query Plan
+### Example query plan
 
 :::tip
 This is query 96 from the TPC-DS benchmark.
 :::
 
 ```sql
-EXPLAIN select  count(*)
+explain logical
+select  count(*)
 from store_sales
     ,household_demographics
     ,time_dim
@@ -123,33 +126,83 @@ where ss_sold_time_sk = time_dim.t_time_sk
 order by count(*) limit 100;
 ```
 
-The output is a hierarchical plan showing how StarRocks will execute the query, broken into fragments and operators. Here is a simplified example of a query plan fragment:
+The output is a hierarchical plan showing how StarRocks will execute the query. The plan is structured as a tree of operators, read from bottom to top. The logical plan shows the sequence of operations with cost estimates:
 
 ```
-PLAN FRAGMENT 1
-  6:HASH JOIN (BROADCAST)
-    |-- 4:HASH JOIN (BROADCAST)
-    |     |-- 2:HASH JOIN (BROADCAST)
-    |     |     |-- 0:OlapScanNode (store_sales)
-    |     |     |-- 1:OlapScanNode (time_dim)
-    |     |-- 3:OlapScanNode (household_demographics)
-    |-- 5:OlapScanNode (store)
+- Output => [69:count]
+    - TOP-100(FINAL)[69: count ASC NULLS FIRST]
+            Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 8.00, cost: 68669801.20}
+        - TOP-100(PARTIAL)[69: count ASC NULLS FIRST]
+                Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 8.00, cost: 68669769.20}
+            - AGGREGATE(GLOBAL) []
+                    Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 0.00, cost: 68669737.20}
+                    69:count := count(69:count)
+                - EXCHANGE(GATHER)
+                        Estimates: {row: 1, cpu: 8.00, memory: 0.00, network: 8.00, cost: 68669717.20}
+                    - AGGREGATE(LOCAL) []
+                            Estimates: {row: 1, cpu: 3141.35, memory: 0.80, network: 0.00, cost: 68669701.20}
+                            69:count := count()
+                        - HASH/INNER JOIN [9:ss_store_sk = 40:s_store_sk] => [71:auto_fill_col]
+                                Estimates: {row: 3490, cpu: 111184.52, memory: 8.80, network: 0.00, cost: 68668128.93}
+                                71:auto_fill_col := 1
+                            - HASH/INNER JOIN [7:ss_hdemo_sk = 25:hd_demo_sk] => [9:ss_store_sk]
+                                    Estimates: {row: 19940, cpu: 1841177.20, memory: 2880.00, network: 0.00, cost: 68612474.92}
+                                - HASH/INNER JOIN [4:ss_sold_time_sk = 30:t_time_sk] => [7:ss_hdemo_sk, 9:ss_store_sk]
+                                        Estimates: {row: 199876, cpu: 69221191.15, memory: 7077.97, network: 0.00, cost: 67671726.32}
+                                    - SCAN [store_sales] => [4:ss_sold_time_sk, 7:ss_hdemo_sk, 9:ss_store_sk]
+                                            Estimates: {row: 5501341, cpu: 66016092.00, memory: 0.00, network: 0.00, cost: 33008046.00}
+                                            partitionRatio: 1/1, tabletRatio: 192/192
+                                            predicate: 7:ss_hdemo_sk IS NOT NULL
+                                    - EXCHANGE(BROADCAST)
+                                            Estimates: {row: 1769, cpu: 7077.97, memory: 7077.97, network: 7077.97, cost: 38928.81}
+                                        - SCAN [time_dim] => [30:t_time_sk]
+                                                Estimates: {row: 1769, cpu: 21233.90, memory: 0.00, network: 0.00, cost: 10616.95}
+                                                partitionRatio: 1/1, tabletRatio: 5/5
+                                                predicate: 33:t_hour = 8 AND 34:t_minute >= 30
+                                - EXCHANGE(BROADCAST)
+                                        Estimates: {row: 720, cpu: 2880.00, memory: 2880.00, network: 2880.00, cost: 14400.00}
+                                    - SCAN [household_demographics] => [25:hd_demo_sk]
+                                            Estimates: {row: 720, cpu: 5760.00, memory: 0.00, network: 0.00, cost: 2880.00}
+                                            partitionRatio: 1/1, tabletRatio: 1/1
+                                            predicate: 28:hd_dep_count = 5
+                            - EXCHANGE(BROADCAST)
+                                    Estimates: {row: 2, cpu: 8.80, memory: 8.80, network: 8.80, cost: 44.15}
+                                - SCAN [store] => [40:s_store_sk]
+                                        Estimates: {row: 2, cpu: 17.90, memory: 0.00, network: 0.00, cost: 8.95}
+                                        partitionRatio: 1/1, tabletRatio: 1/1
+                                        predicate: 45:s_store_name = 'ese'
 ```
 
-- **OlapScanNode**: Scans a table, possibly with filters and pre-aggregation.
-- **HASH JOIN (BROADCAST)**: Joins two tables by broadcasting the smaller one.
-- **Fragments**: Each fragment can be executed in parallel on different nodes.
+**Reading the plan bottom-up**
 
-The query plan of Query 96 is divided into five fragments, numbered from 0 to 4. The query plan can be read one by one in a bottom-up manner.
+The query plan should be read from the bottom (leaf nodes) upward to the top (root node), following the data flow:
 
-Fragment 4 is responsible for scanning the `time_dim` table and executing the related query condition (i.e. `time_dim.t_hour = 8 and time_dim.t_minute >= 30`) in advance. This step is also known as predicate pushdown. StarRocks decides whether to enable `PREAGGREGATION` for aggregation tables. In the previous figure, preaggregation of `time_dim` is disabled. In this case, all dimension columns of `time_dim` are read, which may negatively affect performance if there are many dimension columns in the table. If the `time_dim` table selects `range partition` for data division, several partitions will be hit in the query plan and irrelevant partitions will be automatically filtered out. If there is a materialized view, StarRocks will automatically select the materialized view based on the query. If there is no materialized view, the query will automatically hit the base table (for example, `rollup: time_dim` in the previous figure).
+1. **Scan Operations (Bottom Level)**: The `SCAN` operators at the bottom read data from the base tables:
+   - `SCAN [store_sales]` reads the main fact table with predicate `ss_hdemo_sk IS NOT NULL`
+   - `SCAN [time_dim]` reads the time dimension table with predicates `t_hour = 8 AND t_minute >= 30`
+   - `SCAN [household_demographics]` reads the demographics table with predicate `hd_dep_count = 5`
+   - `SCAN [store]` reads the store table with predicate `s_store_name = 'ese'`
 
-When the scan is complete, Fragment 4 ends. Data will be passed to other fragments, as indicated by EXCHANGE ID : 09 in the previous figure, to the receiving node labeled 9.
+   Each scan operation shows:
+   - **Estimates**: Row count, CPU, memory, network, and cost estimates
+   - **Partition and tablet ratios**: How many partitions/tablets are scanned (e.g., `partitionRatio: 1/1, tabletRatio: 192/192`)
+   - **Predicates**: Query conditions that are pushed down to the scan level, reducing the amount of data read
 
-For the query plan of Query 96, Fragment 2, 3, and 4 have similar functions but they are responsible for scanning different tables. Specifically, the `Order/Aggregation/Join` operations in the query are performed in Fragment 1.
+2. **Data Exchange (Broadcast)**: The `EXCHANGE(BROADCAST)` operations distribute smaller dimension tables to all nodes processing the larger fact table. This is efficient when dimension tables are small compared to the fact table, as seen with `time_dim`, `household_demographics`, and `store` being broadcast.
 
-Fragment 1 uses the `BROADCAST` method to perform `Order/Aggregation/Join` operations, that is, to broadcast the small table to the large table. If both tables are large, we recommend that you use the `SHUFFLE` method. Currently, StarRocks only supports `HASH JOIN`. The `colocate` field is used to show that the two joined tables are partitioned and bucketed in the same way, so that the join operation can be performed locally without migrating the data. When the Join operation is complete, the upper-level `aggregation`, `order by`, and `top-n` operations will be performed.
+3. **Join Operations (Middle Level)**: Data flows upward through `HASH/INNER JOIN` operations:
+   - First, `store_sales` is joined with `time_dim` on `ss_sold_time_sk = t_time_sk`
+   - Then, the result is joined with `household_demographics` on `ss_hdemo_sk = hd_demo_sk`
+   - Finally, the result is joined with `store` on `ss_store_sk = s_store_sk`
 
-By removing the specific expressions (only keep the operators), the query plan can be presented in a more macroscopic view, as shown in the following figure.
+   Each join shows the join condition and estimates for the resulting row count and resource usage.
 
-![8-5](../../_assets/8-5.png)
+4. **Aggregation (Upper Level)**: 
+   - `AGGREGATE(LOCAL)` performs local aggregation on each node, computing `count()` 
+   - `EXCHANGE(GATHER)` collects results from all nodes
+   - `AGGREGATE(GLOBAL)` merges the local results into the final count
+
+5. **Final Operations (Top Level)**: 
+   - `TOP-100(PARTIAL)` and `TOP-100(FINAL)` operations handle the `ORDER BY count(*) LIMIT 100` clause, selecting the top 100 results after ordering
+
+The logical plan provides cost estimates for each operation, helping you understand where the query spends most of its resources. The actual physical execution plan (from `EXPLAIN` or `EXPLAIN VERBOSE`) includes additional details about how operations are distributed across nodes and executed in parallel.
