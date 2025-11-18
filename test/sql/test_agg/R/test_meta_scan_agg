@@ -51,3 +51,52 @@ select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0[_META_];
 -- result:
 2024-01-01	2024-01-05	1	5	1	5
 -- !result
+create table t1 (
+    c0 DATE,
+    c1 INT
+) DUPLICATE key (c0) 
+PARTITION BY RANGE(c0) (
+    PARTITION p202401 VALUES [("2024-01-01"), ("2024-02-01")),
+    PARTITION p202402 VALUES [("2024-02-01"), ("2024-03-01"))
+)
+DISTRIBUTED BY HASH(c1) BUCKETS 3 
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t1 values ('2024-01-15', 10), ('2024-01-20', 20), ('2024-02-10', 30), ('2024-02-15', 40);
+-- result:
+-- !result
+alter table t1 add temporary partition tp202403 VALUES [("2024-03-01"), ("2024-04-01"));
+-- result:
+-- !result
+insert into t1 TEMPORARY PARTITION(tp202403) values ('2024-03-10', 50), ('2024-03-15', 60), ('2024-03-20', 70);
+-- result:
+-- !result
+select count(*) from t1 partition(p202401);
+-- result:
+2
+-- !result
+select count(*) from t1 TEMPORARY PARTITION(tp202403);
+-- result:
+3
+-- !result
+select count(c0) from t1 TEMPORARY PARTITION(tp202403);
+-- result:
+3
+-- !result
+select count(c1) from t1 TEMPORARY PARTITION(tp202403);
+-- result:
+3
+-- !result
+select min(c0), max(c0) from t1 TEMPORARY PARTITION(tp202403);
+-- result:
+2024-03-10	2024-03-20
+-- !result
+select min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
+-- result:
+50	70
+-- !result
+select min(c0), max(c0), min(c1), max(c1) from t1 TEMPORARY PARTITION(tp202403);
+-- result:
+2024-03-10	2024-03-20	50	70
+-- !result
