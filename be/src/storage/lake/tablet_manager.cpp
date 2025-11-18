@@ -310,6 +310,7 @@ Status TabletManager::cache_tablet_metadata(const TabletMetadataPtr& metadata) {
         return Status::OK();
     }
     _metacache->cache_tablet_metadata(metadata_location, metadata);
+    _metacache->cache_tablet_metadata(tablet_latest_metadata_cache_key(metadata->id()), metadata);
     return Status::OK();
 }
 
