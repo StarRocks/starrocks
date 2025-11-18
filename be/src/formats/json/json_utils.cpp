@@ -17,9 +17,28 @@
 namespace starrocks {
 TypeDescriptor JsonUtils::construct_json_type(const TypeDescriptor& src_type) {
     switch (src_type.type) {
-    case TYPE_ARRAY:
-    case TYPE_STRUCT:
-    case TYPE_MAP:
+    case TYPE_ARRAY: {
+        TypeDescriptor json_type(TYPE_ARRAY);
+        const auto& child_type = src_type.children[0];
+        json_type.children.emplace_back(construct_json_type(child_type));
+        return json_type;
+    }
+    case TYPE_STRUCT: {
+        TypeDescriptor json_type(TYPE_STRUCT);
+        json_type.field_names = src_type.field_names;
+        for (auto& child_type : src_type.children) {
+            json_type.children.emplace_back(construct_json_type(child_type));
+        }
+        return json_type;
+    }
+    case TYPE_MAP: {
+        TypeDescriptor json_type(TYPE_MAP);
+        const auto& key_type = src_type.children[0];
+        const auto& value_type = src_type.children[1];
+        json_type.children.emplace_back(construct_json_type(key_type));
+        json_type.children.emplace_back(construct_json_type(value_type));
+        return json_type;
+    }
     case TYPE_FLOAT:
     case TYPE_DOUBLE:
     case TYPE_BIGINT:
