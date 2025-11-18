@@ -315,123 +315,107 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     ASSERT_FALSE(st.ok());
 }
 
-TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_6) {
-    config::json_parse_many_batch_size = 1;
-    // ndjson with ' ', '/t', '\n'
-    std::string input = R"(   {"key1": 1} 
-    {"keyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2": 2}    
-    {"key3": 3}
-    {"key4": 4})";
-    // Reserved for simdjson padding.
-    auto size = input.size();
-    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
-    auto padded_size = input.size();
+class JsonDocumentStreamParserTest : public ::testing::Test {
+public:
+    void SetUp() override;
 
-    simdjson::ondemand::parser simdjson_parser;
+protected:
+    void _check_row(simdjson::ondemand::object& row, const std::string& key, int64_t value);
 
-    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+    simdjson::ondemand::parser _simdjson_parser;
+    std::unique_ptr<JsonDocumentStreamParser> _parser;
+    faststring _buf;
+};
 
-    auto st = parser->parse(input.data(), size, padded_size);
-
-    ASSERT_TRUE(st.ok());
-
-    simdjson::ondemand::object row;
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    int64_t val = row.find_field("key1").get_int64();
-    ASSERT_EQ(val, 1);
-
-    // double get.
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key1").get_int64();
-    ASSERT_EQ(val, 1);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("keyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2").get_int64();
-    ASSERT_EQ(val, 2);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key3").get_int64();
-    ASSERT_EQ(val, 3);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key4").get_int64();
-    ASSERT_EQ(val, 4);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.is_end_of_file());
+void JsonDocumentStreamParserTest::SetUp() {
+    _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
 }
 
-PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser) {
+void JsonDocumentStreamParserTest::_check_row(simdjson::ondemand::object& row, const std::string& key, int64_t value) {
+    ASSERT_EQ(1, row.count_fields().value());
+    auto field = *row.begin();
+    simdjson::ondemand::value simd_value = field.value().value();
+    ASSERT_EQ(key, field.key().value());
+    ASSERT_EQ(value, simd_value.get_int64().value());
+}
+
+TEST_F(JsonDocumentStreamParserTest, test_truncated_bytes) {
+    std::string input = R"({"key1": 1} {"key2": 2} {"key3": 3} {"key4":)";
+    size_t size = input.size();
+    size_t padded_size = size + simdjson::SIMDJSON_PADDING;
+    input.resize(padded_size);
+
+    ASSERT_OK(_parser->parse(input.data(), size, padded_size));
+    ASSERT_EQ(8, _parser->truncated_bytes());
+}
+
+TEST_F(JsonDocumentStreamParserTest, with_dynamic_batch_size_6) {
+    config::json_parse_many_batch_size = 1;
+    // ndjson with ' ', '/t', '\n'
+    std::string input = R"(   {"key1": 1}
+    {"keyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2": 2}
+    {"key3": 3}
+    {"key4": 4})";
+    size_t size = input.size();
+    size_t padded_size = size + simdjson::SIMDJSON_PADDING;
+    input.resize(padded_size);
+
+    ASSERT_OK(_parser->parse(input.data(), size, padded_size));
+
+    simdjson::ondemand::object row;
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key1", 1);
+
+    // double get.
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key1", 1);
+
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "keyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx2", 2);
+
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key3", 3);
+
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key4", 4);
+
+    EXPECT_STATUS(Status::EndOfFile(""), _parser->advance());
+}
+
+TEST_F(JsonDocumentStreamParserTest, stream_processing) {
     // ndjson with ' ', '/t', '\n'
     std::string input = R"(   {"key1": 1} {"key2": 2}    {"key3": 3}
     {"key4": 4})";
-    // Reserved for simdjson padding.
-    auto size = input.size();
-    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
-    auto padded_size = input.size();
+    size_t size = input.size();
+    size_t padded_size = size + simdjson::SIMDJSON_PADDING;
+    input.resize(padded_size);
 
-    simdjson::ondemand::parser simdjson_parser;
-
-    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
-
-    auto st = parser->parse(input.data(), size, padded_size);
-
-    ASSERT_TRUE(st.ok());
-
+    ASSERT_OK(_parser->parse(input.data(), size, padded_size));
     simdjson::ondemand::object row;
 
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    int64_t val = row.find_field("key1").get_int64();
-    ASSERT_EQ(val, 1);
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key1", 1);
 
     // double get.
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key1").get_int64();
-    ASSERT_EQ(val, 1);
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key1", 1);
 
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key2", 2);
 
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key2").get_int64();
-    ASSERT_EQ(val, 2);
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key3", 3);
 
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key4", 4);
 
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key3").get_int64();
-    ASSERT_EQ(val, 3);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key4").get_int64();
-    ASSERT_EQ(val, 4);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.is_end_of_file());
+    EXPECT_STATUS(Status::EndOfFile(""), _parser->advance());
 }
 
 PARALLEL_TEST(JsonParserTest, test_json_array_parser) {
