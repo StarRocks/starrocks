@@ -573,11 +573,8 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
 
     auto scanner = create_json_scanner(types, ranges, {"value"});
 
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
-
-    ChunkPtr chunk = scanner->get_next().value();
+    ASSERT_OK(scanner->open());
+    ASSIGN_OR_ASSERT_FAIL(auto chunk, scanner->get_next());
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
 
