@@ -24,6 +24,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -69,6 +70,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -175,6 +177,16 @@ public class StatisticExecutor {
                         .filter(x -> x.getType() == StatsConstants.AnalyzeType.SAMPLE)
                         .collect(Collectors.toList());
 
+        List<Long> partitionIds = null;
+        if (table instanceof OlapTable olapTable) {
+            Collection<Partition> partitions = olapTable.getPartitions();
+            if (partitions.size() <= Config.statistic_load_max_partition_filter_num) {
+                partitionIds = partitions.stream()
+                        .map(Partition::getId)
+                        .collect(Collectors.toList());
+            }
+        }
+
         List<TStatisticData> columnStats = Lists.newArrayList();
         if (CollectionUtils.isNotEmpty(columnWithFullStats)) {
             List<String> columnNamesForStats = columnWithFullStats.stream().map(ColumnStatsMeta::getColumnName)
@@ -183,7 +195,8 @@ public class StatisticExecutor {
                             .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                             .collect(Collectors.toList());
 
-            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats, columnTypesForStats);
+            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats, 
+                    columnTypesForStats, partitionIds);
             List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
             columnStats.addAll(tStatisticData);
         }
@@ -195,7 +208,7 @@ public class StatisticExecutor {
                         .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                         .collect(Collectors.toList());
                 String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
-                        tableId, columnNamesForStats, columnTypesForStats);
+                        tableId, columnNamesForStats, columnTypesForStats, partitionIds);
                 List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
                 columnStats.addAll(tStatisticData);
             } else {
