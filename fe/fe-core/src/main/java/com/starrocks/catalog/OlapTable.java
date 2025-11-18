@@ -2678,6 +2678,22 @@ public class OlapTable extends Table {
         tableProperty.buildReplicatedStorage();
     }
 
+    public boolean enableStatisticCollectOnFirstLoad() {
+        if (tableProperty != null) {
+            return tableProperty.enableStatisticCollectOnFirstLoad();
+        }
+        return true;
+    }
+
+    public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                Boolean.valueOf(enable).toString());
+        tableProperty.buildEnableStatisticCollectOnFirstLoad();
+    }
+
     public Long getAutomaticBucketSize() {
         if (!(defaultDistributionInfo instanceof RandomDistributionInfo) || !Config.enable_automatic_bucket) {
             return (long) 0;
@@ -3469,6 +3485,11 @@ public class OlapTable extends Table {
         Boolean enableLoadProfile = enableLoadProfile();
         if (enableLoadProfile) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+        }
+
+        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
+        if (!enableStatisticCollectOnFirstLoad) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
         }
 
         // base compaction forbidden time ranges
