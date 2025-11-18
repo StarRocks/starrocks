@@ -704,7 +704,9 @@ Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, si
     auto rowid_reader = [&](ParsedPage* page, Column* column, const rowid_t* rowid_batch, size_t* count) {
         return page->read_dict_codes_by_rowids(column, rowid_batch, count);
     };
-    auto range_reader = [&](ParsedPage* page, Column* column, size_t* count) { return page->read_dict_codes(column, count); };
+    auto range_reader = [&](ParsedPage* page, Column* column, size_t* count) {
+        return page->read_dict_codes(column, count);
+    };
     return _fetch_by_rowid_helper(rowids, size, values, rowid_reader, range_reader);
 }
 

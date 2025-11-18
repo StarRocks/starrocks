@@ -184,8 +184,9 @@ private:
 
         // If the column is pruneable, it means that we can skip the page read for it.
         // Currently, it only can be happend if the column is a pure pushdown predicate
-        // for inverted index.
-        std::unordered_set<size_t> _prune_cols;
+        // for inverted index. Store ColumnId instead of column index so checks remain
+        // valid even when iterator ordering changes.
+        std::unordered_set<ColumnId> _prune_cols;
         bool _prune_column_after_index_filter = false;
         bool _enable_predicate_col_late_materialize = false;
         bool _only_output_one_predicate_col_with_filter_push_down = false;
@@ -489,16 +490,16 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
                     : false;
 
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
-    std::vector<size_t> pruned_cols;
+    std::vector<ColumnId> pruned_cols;
     size_t pruned_col_size = 0;
     for (size_t i = 0; i < column_iterators.size(); i++) {
-        ColumnPtr& col = predicate_col_late_materialize_read
-                                 ? chunk->get_column_by_id(_column_id_for_predicate_late_materialize[i])
-                                 : chunk->get_column_by_index(i);
-        if (_prune_column_after_index_filter && _prune_cols.count(i)) {
-            pruned_cols.push_back(i);
+        ColumnId column_id = predicate_col_late_materialize_read ? _column_id_for_predicate_late_materialize[i]
+                                                                 : _read_schema.field(i)->id();
+        if (_prune_column_after_index_filter && _prune_cols.count(column_id)) {
+            pruned_cols.push_back(column_id);
             continue;
         }
+        ColumnPtr& col = chunk->get_column_by_id(column_id);
 
         // reserve std::min(chunk_size, segment rows) rows
         // for binary column, we must reserve enough memory to avoid extra memcpy
@@ -545,8 +546,8 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
         DCHECK_EQ(pruned_col_size, col->size());
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
     }
-    for (size_t i : pruned_cols) {
-        ColumnPtr& col = chunk->get_column_by_index(i);
+    for (ColumnId cid : pruned_cols) {
+        ColumnPtr& col = chunk->get_column_by_id(cid);
         // make sure each pruned column has the same size as the unpruneable one.
         col->resize(pruned_col_size);
     }
@@ -603,9 +604,9 @@ std::string SegmentIterator::ScanContext::to_string() const {
     oss << "\"_has_force_dict_encode\": " << (_has_force_dict_encode ? "true" : "false") << ",";
     oss << "\"_prune_cols\": [";
     size_t prune_count = 0;
-    for (auto idx : _prune_cols) {
+    for (auto cid : _prune_cols) {
         if (prune_count++ > 0) oss << ", ";
-        oss << idx;
+        oss << cid;
     }
     oss << "],";
     oss << "\"_prune_column_after_index_filter\": " << (_prune_column_after_index_filter ? "true" : "false");
@@ -2425,7 +2426,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
                 // 3. column is not one of the delete predicate columns
                 // 4. column must not be dict decoded when the read is finished
                 // 5. column not in record predicate
-                ctx->_prune_cols.insert(i);
+                ctx->_prune_cols.insert(cid);
             }
         }
 
