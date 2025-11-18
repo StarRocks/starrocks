@@ -338,7 +338,7 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
     RETURN_IF_ERROR(StoragePageDecoder::decode_page(footer, footer_size + 4, opts.encoding_type, &page, &page_slice));
 
     *body = Slice(page_slice.data, page_slice.size - 4 - footer_size);
-    RETURN_IF_ERROR(insert_page_cache(page_cache_available, cache, cache_key, std::move(page), handle));
+    RETURN_IF_ERROR(insert_page_cache(page_cache_available, opts, cache, cache_key, std::move(page), handle));
 
     return Status::OK();
 }
