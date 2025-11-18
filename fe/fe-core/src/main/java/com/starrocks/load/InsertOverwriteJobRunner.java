@@ -470,7 +470,67 @@ public class InsertOverwriteJobRunner {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+<<<<<<< HEAD
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+=======
+                if (job.isDynamicOverwrite()) {
+                    if (!isReplay) {
+                        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                                .getTransactionState(dbId, insertStmt.getTxnId());
+                        if (txnState == null) {
+                            throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                        }
+                        tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
+                        
+                        List<Long> dynamicSourcePartitionIds = new ArrayList<>();
+                        for (String tempPartitionName : tmpPartitionNames) {
+                            String oldPartitionName = tempPartitionName.substring(
+                                    tempPartitionName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT) + 1);
+                            Partition oldPartition = targetTable.getPartition(oldPartitionName, false);
+                            if (oldPartition != null) {
+                                dynamicSourcePartitionIds.add(oldPartition.getId());
+                            }
+                        }
+                        
+                        // Collect target partition IDs for stats (the new temp partitions)
+                        List<Long> dynamicTargetPartitionIds = tmpPartitionNames.stream()
+                                .map(name -> {
+                                    Partition partition = targetTable.getPartition(name, true);
+                                    if (partition == null) {
+                                        throw new DmlException("temp partition %s does not exist", name);
+                                    }
+                                    return partition.getId();
+                                })
+                                .collect(Collectors.toList());
+                        
+                        job.setTmpPartitionIds(dynamicTargetPartitionIds);
+                        tmpPartitionIds = dynamicTargetPartitionIds;
+
+                        if (stats.getSourcePartitionIds().isEmpty()) {
+                            stats.setSourcePartitionIds(dynamicSourcePartitionIds);
+                        }
+
+                        if (stats.getTargetPartitionIds().isEmpty()) {
+                            stats.setTargetPartitionIds(dynamicTargetPartitionIds);
+                        }
+
+                        if (stats.getSourceRows() == 0) {
+                            // Recalculate sumSourceRows for dynamic overwrite
+                            sumSourceRows = dynamicSourcePartitionIds.stream()
+                                    .mapToLong(pid -> targetTable.mayGetPartition(pid).stream()
+                                            .mapToLong(Partition::getRowCount).sum())
+                                    .sum();
+                            stats.setSourceRows(sumSourceRows);
+                        }
+                    }
+                    LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                    ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
+                    targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
+                } else {
+                    ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
+                    targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
+                }
+>>>>>>> d915288d42 ([BugFix] Fix statistics collection for INSERT OVERWRITE with dynamic overwrite (#65657))
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
