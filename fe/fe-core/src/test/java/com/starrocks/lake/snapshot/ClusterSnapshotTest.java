@@ -489,7 +489,7 @@ public class ClusterSnapshotTest {
                     new ClusterSnapshotCheckpointScheduler(feController, starMgrController);
             Assertions.assertTrue(feController != null);
             try {
-                scheduler.runCheckpointScheduler(job);
+                job.run(scheduler);
             } catch (Exception ignore) {
             }
     
@@ -515,4 +515,5 @@ public class ClusterSnapshotTest {
         }
         Assertions.assertTrue(info.isEmpty());
     }
+
 }

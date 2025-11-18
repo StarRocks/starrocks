@@ -15,6 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -22,7 +23,7 @@ import com.starrocks.thrift.TClusterSnapshotJobsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class ClusterSnapshotJob implements Writable {
+public abstract class ClusterSnapshotJob implements Writable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJob.class);
 
     /*
@@ -41,13 +42,13 @@ public class ClusterSnapshotJob implements Writable {
     }
 
     @SerializedName(value = "snapshot")
-    private ClusterSnapshot snapshot;
+    protected ClusterSnapshot snapshot;
     @SerializedName(value = "state")
-    private ClusterSnapshotJobState state;
+    protected ClusterSnapshotJobState state;
     @SerializedName(value = "errMsg")
-    private String errMsg;
+    protected String errMsg;
     @SerializedName(value = "detailInfo")
-    private String detailInfo;
+    protected String detailInfo;
 
     public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         this.snapshot = createClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs);
@@ -183,4 +184,49 @@ public class ClusterSnapshotJob implements Writable {
         item.setError_message(errMsg);
         return item;
     }
+
+    protected abstract void runInitializingJob(SnapshotJobContext context) throws StarRocksException;
+    protected abstract void runSnapshottingJob(SnapshotJobContext context) throws StarRocksException;
+    protected abstract void runUploadingJob(SnapshotJobContext context) throws StarRocksException;
+
+    protected void runFinishedJob() throws StarRocksException{
+        // Default implementation: do nothing
+    }
+
+    public synchronized void run(SnapshotJobContext context) {
+        try {
+            while (true) {
+                ClusterSnapshotJobState prevState = state;
+                switch (prevState) {
+                    case INITIALIZING:
+                        runInitializingJob(context);
+                        break;
+                    case SNAPSHOTING:
+                        runSnapshottingJob(context);
+                        break;
+                    case UPLOADING:
+                        runUploadingJob(context);
+                        break;
+                    case FINISHED:
+                    case EXPIRED:
+                    case DELETED:
+                    case ERROR:
+                        runFinishedJob();
+                        break;
+                    default:
+                        break;
+                }
+                if (state == prevState) {
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to run cluster snapshot job {}", getId(), e);
+            setState(ClusterSnapshotJobState.ERROR);
+            setErrMsg(e.getMessage());
+            logJob();
+            return;
+        }
+    }
+
 }
