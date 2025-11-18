@@ -683,7 +683,6 @@ void StorageEngine::stop() {
         _local_pk_index_manager->stop();
     }
 #endif
-
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
