@@ -106,20 +106,20 @@ public class AstBuilderTest {
         for (MatchType type : MatchType.values()) {
             String sql = "select * from tbl where col1 " + type.toString() + " 'text'";
             List<StatementBase> statementBases = SqlParser.parse(sql, connectContext.getSessionVariable());
-            Assert.assertEquals(1, statementBases.size());
-            Assert.assertTrue(statementBases.get(0) instanceof QueryStatement);
+            Assertions.assertEquals(1, statementBases.size());
+            Assertions.assertTrue(statementBases.get(0) instanceof QueryStatement);
 
             QueryStatement query = (QueryStatement) statementBases.get(0);
             QueryRelation relation = query.getQueryRelation();
-            Assert.assertTrue(relation instanceof SelectRelation);
+            Assertions.assertTrue(relation instanceof SelectRelation);
 
             SelectRelation selectRelation = (SelectRelation) relation;
             Expr predExpr = selectRelation.getWhereClause();
-            Assert.assertTrue(predExpr instanceof MatchExpr);
+            Assertions.assertTrue(predExpr instanceof MatchExpr);
 
             MatchExpr matchExpr = (MatchExpr) predExpr;
             MatchType matchType = matchExpr.getMatchType();
-            Assert.assertEquals(type, matchType);
+            Assertions.assertEquals(type, matchType);
         }
     }
 }

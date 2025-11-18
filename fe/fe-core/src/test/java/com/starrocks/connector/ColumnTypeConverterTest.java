@@ -344,7 +344,7 @@ public class ColumnTypeConverterTest {
     @Test
     public void testPaimonSchema() {
         org.apache.paimon.types.TimeType type = new org.apache.paimon.types.TimeType(3);
-        Assert.assertEquals(ScalarType.createType(PrimitiveType.TIME), fromPaimonType(type));
+        Assertions.assertEquals(ScalarType.createType(PrimitiveType.TIME), fromPaimonType(type));
     }
 
     @Test

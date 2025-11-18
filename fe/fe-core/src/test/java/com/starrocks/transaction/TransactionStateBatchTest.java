@@ -142,16 +142,16 @@ public class TransactionStateBatchTest {
         TransactionStateBatch stateBatch = generateSimpleTransactionStateBatch();
         stateBatch.updateSendTaskTime();
         List<TransactionState> states = stateBatch.getTransactionStates();
-        Assert.assertEquals(2, states.size());
-        Assert.assertEquals(states.get(0).getPublishVersionTime(), states.get(1).getPublishVersionTime());
+        Assertions.assertEquals(2, states.size());
+        Assertions.assertEquals(states.get(0).getPublishVersionTime(), states.get(1).getPublishVersionTime());
     }
     @Test
     public void tesUpdatePublishTaskFinishTime() {
         TransactionStateBatch stateBatch = generateSimpleTransactionStateBatch();
         stateBatch.updatePublishTaskFinishTime();
         List<TransactionState> states = stateBatch.getTransactionStates();
-        Assert.assertEquals(2, states.size());
-        Assert.assertEquals(states.get(0).getPublishTaskFinishTime(), states.get(1).getPublishTaskFinishTime());
+        Assertions.assertEquals(2, states.size());
+        Assertions.assertEquals(states.get(0).getPublishTaskFinishTime(), states.get(1).getPublishTaskFinishTime());
     }
 
 }

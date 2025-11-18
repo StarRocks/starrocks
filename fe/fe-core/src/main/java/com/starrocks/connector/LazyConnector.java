@@ -14,6 +14,8 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.authorization.BlankAccessController;
+import com.starrocks.authorization.DlfAccessController;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
@@ -21,8 +23,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonConnector;
-import com.starrocks.privilege.BlankAccessController;
-import com.starrocks.privilege.DlfAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

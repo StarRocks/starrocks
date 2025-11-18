@@ -146,7 +146,8 @@ public class PaimonScanNode extends ScanNode {
                 GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit)
                         .build();
         List<RemoteFileInfo> fileInfos;
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL,
+                paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
             fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
         }
 
@@ -216,7 +217,7 @@ public class PaimonScanNode extends ScanNode {
             totalReaderCount++;
             totalReaderLength += hdfsScanRange.length;
         }
-        String prefix = "Paimon.metadata.reader." + paimonTable.getTableName() + "-" + predicateHash + ".";
+        String prefix = "Paimon.metadata.reader." + paimonTable.getCatalogTableName() + "-" + predicateHash + ".";
         Tracers.record(EXTERNAL, prefix + "nativeReaderReadNum", String.valueOf(totalReaderCount - jniReaderCount));
         Tracers.record(EXTERNAL, prefix + "nativeReaderReadBytes", (totalReaderLength - jniReaderLength) + " B");
         Tracers.record(EXTERNAL, prefix + "jniReaderReadNum", String.valueOf(jniReaderCount));
@@ -224,7 +225,8 @@ public class PaimonScanNode extends ScanNode {
     }
 
     private void traceDeletionVectorMetrics(String predicateHash) {
-        String prefix = "Paimon.metadata.deletionVector." + paimonTable.getTableName() + "-" + predicateHash + ".";
+        String prefix = "Paimon.metadata.deletionVector." + paimonTable.getCatalogTableName() +
+                "-" + predicateHash + ".";
         int deletionVectorCount = 0;
         long deletionVectorReaderScanRange = 0;
         for (TScanRangeLocations rangeLocation : scanRangeLocationsList) {
@@ -398,7 +400,8 @@ public class PaimonScanNode extends ScanNode {
             }
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
+                    paimonTable.getCatalogName(), paimonTable.getCatalogDBName(),
+                    paimonTable.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
                             partitionNames.size() == 0 ? 1 : partitionNames.size()));

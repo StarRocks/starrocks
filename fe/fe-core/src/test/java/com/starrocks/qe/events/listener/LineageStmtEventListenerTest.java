@@ -1678,7 +1678,7 @@ public class LineageStmtEventListenerTest {
         table.setName("mv9");
         table.setState(OlapTableState.NORMAL);
         table.setId(123);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table);
         String sql2 = "alter materialized view mv9 rename mv10";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
@@ -1695,7 +1695,7 @@ public class LineageStmtEventListenerTest {
         table.setName("mv4");
         table.setState(OlapTableState.NORMAL);
         table.setId(123);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table);
         String sql2 = "ALTER MATERIALIZED VIEW mv4 REFRESH ASYNC EVERY(INTERVAL 1 DAY);";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
@@ -1713,7 +1713,7 @@ public class LineageStmtEventListenerTest {
         table.setName("mv5");
         table.setState(OlapTableState.NORMAL);
         table.setId(123);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table);
         String sql2 = "ALTER MATERIALIZED VIEW mv5 REFRESH  Manual;";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
@@ -1731,7 +1731,7 @@ public class LineageStmtEventListenerTest {
         table.setName("mv11");
         table.setState(OlapTableState.NORMAL);
         table.setId(123);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table);
         String sql2 = "ALTER MATERIALIZED VIEW mv11 ACTIVE;";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
@@ -1748,12 +1748,12 @@ public class LineageStmtEventListenerTest {
         table.setName("mv6");
         table.setState(OlapTableState.NORMAL);
         table.setId(123);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table);
         MaterializedView table2 = new MaterializedView();
         table2.setName("mv7");
         table2.setState(OlapTableState.NORMAL);
         table2.setId(124);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table2);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table2);
 
         String sql2 = "ALTER MATERIALIZED VIEW mv6 SWAP WITH mv7;";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
@@ -1773,7 +1773,7 @@ public class LineageStmtEventListenerTest {
         table.setName("mv8");
         table.setState(OlapTableState.NORMAL);
         table.setId(123);
-        GlobalStateMgr.getCurrentState().getDb("test").registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").registerTableUnlocked(table);
         String sql2 = "ALTER MATERIALIZED VIEW mv8   SET (\"session.query_timeout\" = \"40000\");";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
@@ -2417,7 +2417,7 @@ public class LineageStmtEventListenerTest {
         Type[] argTypes = {Type.INT, Type.INT};
         starRocksAssert.useDatabase("test");
         Function desc = new ScalarFunction(new FunctionName("test", "sumint"), argTypes, Type.INT, false);
-        GlobalStateMgr.getCurrentState().getDb("test").addFunction(desc);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").addFunction(desc);
         String sql = "drop function sumint(int,int)";
         ConnectContext ctx = starRocksAssert.useDatabase("test").getCtx();
         DropFunctionStmt stmt = (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

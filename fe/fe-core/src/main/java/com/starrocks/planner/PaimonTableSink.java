@@ -76,8 +76,8 @@ public class PaimonTableSink extends DataSink {
     public PaimonTableSink(PaimonTable paimonTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
         this.paimonNativeTable = paimonTable.getNativeTable();
         this.catalogName = paimonTable.getCatalogName();
-        this.databaseName = paimonTable.getDbName();
-        this.tableName = paimonTable.getTableName();
+        this.databaseName = paimonTable.getCatalogDBName();
+        this.tableName = paimonTable.getCatalogTableName();
         this.location = paimonTable.getNativeTable().name();
         this.targetTableId = paimonTable.getId();
         this.desc = desc;

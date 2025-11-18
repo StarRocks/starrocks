@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;

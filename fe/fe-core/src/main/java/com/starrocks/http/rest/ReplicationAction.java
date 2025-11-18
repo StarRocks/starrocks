@@ -36,11 +36,11 @@ package com.starrocks.http.rest;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.replication.ReplicationMgr;

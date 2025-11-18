@@ -105,6 +105,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     public IcebergHiveCatalog(HiveCatalog hiveCatalog, Configuration conf) {
         this.delegate = hiveCatalog;
         this.conf = conf;
+        this.properties = null;
     }
 
     @Override

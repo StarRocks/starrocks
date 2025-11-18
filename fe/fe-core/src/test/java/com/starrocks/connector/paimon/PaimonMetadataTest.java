@@ -102,7 +102,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.SerializationUtils;
-import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -231,11 +231,12 @@ public class PaimonMetadataTest {
                 result = scan;
             }
         };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1$manifests");
         List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
-        List<RemoteFileInfo> result =
-                metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
-        Assert.assertEquals(1, result.size());
+        List<RemoteFileInfo> result = metadata.getRemoteFiles(paimonTable,
+                GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
+
+        Assertions.assertEquals(1, result.size());
     }
 
     @Test
@@ -247,7 +248,7 @@ public class PaimonMetadataTest {
                 result = new Catalog.DatabaseNotExistException("Database does not exist");
             }
         };
-        org.junit.jupiter.api.Assertions.assertNull(metadata.getDb(connectContext, "nonexistentDb"));
+        Assertions.assertNull(metadata.getDb(connectContext, "nonexistentDb"));
     }
 
     @Test
@@ -261,88 +262,6 @@ public class PaimonMetadataTest {
         };
         org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
         org.junit.jupiter.api.Assertions.assertNull(metadata.getTable(connectContext, "nonexistentDb", "nonexistentTbl"));
-    }
-
-    @Test
-    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
-                                       @Mocked PartitionsTable mockPartitionTable,
-                                       @Mocked RecordReader<InternalRow> mockRecordReader)
-            throws Catalog.TableNotExistException {
-
-        RowType tblRowType = RowType.of(
-                new DataType[] {
-                        new IntType(true),
-                        new IntType(true)
-                },
-                new String[] {"year", "month"});
-
-        List<String> partitionNames = Lists.newArrayList("year", "month");
-
-        Identifier tblIdentifier = new Identifier("db1", "tbl1");
-        Identifier partitionTblIdentifier = new Identifier("db1", "tbl1$partitions");
-
-        RowType partitionRowType = new RowType(
-                Arrays.asList(
-                        new DataField(0, "partition", SerializationUtils.newStringType(true)),
-                        new DataField(1, "record_count", new BigIntType(false)),
-                        new DataField(2, "file_size_in_bytes", new BigIntType(false)),
-                        new DataField(3, "file_count", new BigIntType(false)),
-                        new DataField(4, "last_update_time", DataTypes.TIMESTAMP_MILLIS())
-                ));
-
-        GenericRow row1 = new GenericRow(2);
-        row1.setField(0, BinaryString.fromString("[2020, 1]"));
-        row1.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
-
-        GenericRow row2 = new GenericRow(2);
-        row2.setField(0, BinaryString.fromString("[2020, 2]"));
-        row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
-        new MockUp<RecordReaderIterator>() {
-            private int callCount;
-            private final GenericRow[] elements = {row1, row2};
-            private final boolean[] hasNextOutputs = {true, true, false};
-
-            @Mock
-            public boolean hasNext() {
-                if (callCount < hasNextOutputs.length) {
-                    return hasNextOutputs[callCount];
-                }
-                return false;
-            }
-
-            @Mock
-            public InternalRow next() {
-                if (callCount < elements.length) {
-                    return elements[callCount++];
-                }
-                return null;
-            }
-        };
-        org.junit.jupiter.api.Assertions.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
-        org.junit.jupiter.api.Assertions.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
-    }
-
-    @Test
-    public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
-                                   @Mocked ReadBuilder readBuilder,
-                                   @Mocked InnerTableScan scan) throws Exception {
-        new Expectations() {
-            {
-                paimonNativeCatalog.getTable((Identifier) any);
-                result = paimonSystemTable;
-                paimonSystemTable.latestSnapshot();
-                result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
-                paimonSystemTable.newReadBuilder();
-                result = readBuilder;
-                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan();
-                result = scan;
-            }
-        };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1$manifests");
-        List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
-        List<RemoteFileInfo> result =
-                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
-        assertEquals(1, result.size());
     }
 
     @Test
@@ -375,7 +294,7 @@ public class PaimonMetadataTest {
         List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
         assertEquals(2, result.size());
         List<String> expectations = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
-        Assertions.assertThat(result).hasSameElementsAs(expectations);
+        org.assertj.core.api.Assertions.assertThat(result).hasSameElementsAs(expectations);
         Config.enable_paimon_refresh_manifest_files = true;
         metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), new ArrayList<>(), false);
         metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), expectations, false);

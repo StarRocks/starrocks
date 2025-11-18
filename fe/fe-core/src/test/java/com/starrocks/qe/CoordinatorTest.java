@@ -150,13 +150,13 @@ public class CoordinatorTest extends PlanTestBase {
                 "020000000002f71a50416c3b648adfc3c79014dcc6546eb0_0.dat," +
                 " query_id=47e5ca28-f4be-11ef-91f4-f2646351dfcf," +
                 " instance_id=47e5ca28-f4be-11ef-91f4-f2646351dfd4, backend_id=18092";
-        Assert.assertTrue(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CORRUPTION, badPageError)));
+        Assertions.assertTrue(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CORRUPTION, badPageError)));
 
         String unknownError = "Unknown error: java.lang.NullPointerException, " +
                 "query_id=47e5ca28-f4be-11ef-91f4-f2646351dfcf," +
                 " instance_id=47e5ca28-f4be-11ef-91f4-f2646351dfd4, backend_id=18092";
-        Assert.assertFalse(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CORRUPTION, unknownError)));
-        Assert.assertFalse(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CANCELLED, "")));
+        Assertions.assertFalse(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CORRUPTION, unknownError)));
+        Assertions.assertFalse(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CANCELLED, "")));
     }
 
     @Test

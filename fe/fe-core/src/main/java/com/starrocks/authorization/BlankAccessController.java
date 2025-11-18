@@ -12,38 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.privilege;
+package com.starrocks.authorization;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.sql.ast.UserIdentity;
-
-import java.util.Set;
+import com.starrocks.qe.ConnectContext;
 
 public class BlankAccessController extends ExternalAccessController implements AccessController {
     public BlankAccessController() {
     }
 
     @Override
-    public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
+    public void checkDbAction(ConnectContext context, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
     }
 
     @Override
-    public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db) {
+    public void checkAnyActionOnDb(ConnectContext context, String catalogName, String db) {
     }
 
     @Override
-    public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+    public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
     }
 
     @Override
-    public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+    public void checkAnyActionOnTable(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
     }
 
     @Override
-    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+    public void checkColumnAction(ConnectContext context, TableName tableName,
                                   String column, PrivilegeType privilegeType) {
     }
 }

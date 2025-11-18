@@ -60,7 +60,6 @@ import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.MVPCTMetaRepairer;
 import com.starrocks.scheduler.mv.MVPCTRefreshListPartitioner;

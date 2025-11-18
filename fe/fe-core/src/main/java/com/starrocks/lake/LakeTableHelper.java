@@ -184,7 +184,8 @@ public class LakeTableHelper {
             shardInfos.add(shardInfo);
         }
         if (!tablets.isEmpty()) {
-            removeTabletCache(tablets, partition.getId(), partition.getVisibleVersion(), warehouseId);
+            removeTabletCache(tablets, partition.getId(),
+                    partition.getDefaultPhysicalPartition().getVisibleVersion(), warehouseId);
         }
         for (ShardInfo shardInfo : shardInfos) {
             ret &= removeShardRootDirectory(shardInfo);

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.privilege;
+package com.starrocks.authorization;
 
 import com.aliyun.datalake.auth.AuthClient;
 import com.aliyun.datalake.auth.DlfAuth;
@@ -25,10 +25,6 @@ import com.aliyun.datalake.auth.resource.TableResource;
 import com.aliyun.datalake.auth.result.CheckPermissionsResult;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authorization.AccessController;
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.ExternalAccessController;
-import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.util.DlfUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
@@ -39,7 +35,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 
 import static com.aliyun.datalake.core.constant.DataLakeConfig.CATALOG_ID;
 import static com.aliyun.datalake.core.constant.DataLakeConfig.DLF_ENDPOINT;
@@ -56,27 +51,27 @@ public class DlfAccessController extends ExternalAccessController implements Acc
     }
 
     @Override
-    public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
+    public void checkDbAction(ConnectContext context, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
         hasPermission(new PrivilegeResource()
                         .setAccess(convertToAccessType(privilegeType))
                         .setMetaResource(new MetaResource().setResourceType("DATABASE")
                                 .setDatabaseResource(new DatabaseResource().setDatabaseName(db))),
-                currentUser);
+                context.getCurrentUserIdentity());
     }
 
     @Override
-    public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+    public void checkAnyActionOnDb(ConnectContext context, String catalogName, String db)
             throws AccessDeniedException {
         hasPermission(new PrivilegeResource()
                         .setAccess("DESCRIBE")
                         .setMetaResource(new MetaResource().setResourceType("DATABASE")
                                 .setDatabaseResource(new DatabaseResource().setDatabaseName(db))),
-                currentUser);
+                context.getCurrentUserIdentity());
     }
 
     @Override
-    public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+    public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         tableName.setTbl(tableName.getTbl().replaceAll("\\$.*", ""));
         hasPermission(new PrivilegeResource()
@@ -85,11 +80,11 @@ public class DlfAccessController extends ExternalAccessController implements Acc
                                 .setTableResource(new TableResource()
                                         .setDatabaseName(tableName.getDb())
                                         .setTableName(tableName.getTbl()))),
-                currentUser);
+                context.getCurrentUserIdentity());
     }
 
     @Override
-    public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+    public void checkAnyActionOnTable(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
         tableName.setTbl(tableName.getTbl().replaceAll("\\$.*", ""));
         hasPermission(new PrivilegeResource()
@@ -98,14 +93,14 @@ public class DlfAccessController extends ExternalAccessController implements Acc
                                 .setTableResource(new TableResource()
                                         .setDatabaseName(tableName.getDb())
                                         .setTableName(tableName.getTbl()))),
-                currentUser);
+                context.getCurrentUserIdentity());
     }
 
     @Override
-    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+    public void checkColumnAction(ConnectContext context, TableName tableName,
                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {
         // DLF does not support column level permission check
-        checkTableAction(currentUser, roleIds, tableName, privilegeType);
+        checkTableAction(context, tableName, privilegeType);
     }
 
     // @Override

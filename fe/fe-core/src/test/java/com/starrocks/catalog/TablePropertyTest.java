@@ -157,10 +157,10 @@ public class TablePropertyTest {
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         TableProperty readTableProperty = TableProperty.read(in);
         // test setting datacache.enable while the storageInfo of TableProperty is null
-        Assert.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
+        Assertions.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
         // test setting datacache.enable after setting the storageInfo of TableProperty
         readTableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
-        Assert.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
+        Assertions.assertNotNull(readTableProperty.buildProperty(OperationType.OP_ALTER_TABLE_PROPERTIES));
         in.close();
     }
 

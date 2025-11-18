@@ -851,8 +851,9 @@ public class LineageStmtEventListener implements StmtEventListener {
             if (stmt.getProperties() != null) {
                 target.putExtra("properties", stmt.getProperties());
             }
-            if (stmt.getPartitionColumn() != null) {
-                target.putExtra("partitionColumn", stmt.getPartitionColumn().getName());
+
+            if (stmt.getPartitionColumns() != null && !stmt.getPartitionColumns().isEmpty()) {
+                target.putExtra("partitionColumn", stmt.getPartitionColumns().get(0).getName());
             }
             if (stmt.getDistributionDesc() != null) {
                 target.putExtra("distributionInfo", parseDistributionDesc(stmt.getDistributionDesc(), stmt.getMvColumnItems()));

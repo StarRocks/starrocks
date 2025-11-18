@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -105,6 +106,9 @@ import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -172,7 +176,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws DdlException {
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws DdlException {
         try {
             paimonNativeCatalog.dropDatabase(dbName, false, isForceDrop);
         } catch (Exception e) {
@@ -329,6 +333,13 @@ public class PaimonMetadata implements ConnectorMetadata {
                 recordCount, fileSizeInBytes, fileCount);
     }
 
+    private Long convertToSystemDefaultTime(org.apache.paimon.data.Timestamp lastUpdateTime) {
+        LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
+        ZoneId zoneId = ZoneId.systemDefault();
+        ZonedDateTime zonedDateTime = localDateTime.atZone(zoneId);
+        return zonedDateTime.toInstant().toEpochMilli();
+    }
+
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         Identifier identifier = new Identifier(databaseName, tableName);
@@ -430,8 +441,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
             List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
-            traceScanMetrics(paimonMetricRegistry, splits, ((PaimonTable) table).getTableName(), predicates,
-                    String.valueOf(Objects.hash(predicate)));
+            traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates,
+                    String.valueOf(Objects.hash(params.getPredicate())));
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
@@ -547,8 +558,10 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         if (session.getSessionVariable().enablePaimonEstimatedStatistics()) {
             List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
-            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                    catalogName, table, null, -1, predicate, fieldNames, limit);
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                    .setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getRemoteFiles(table, params);
             PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
             List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
             long rowCount = getRowCount(splits);
@@ -666,7 +679,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         PaimonTable paimonTable = (PaimonTable) table;
-        Identifier identifier = new Identifier(paimonTable.getDbName(), paimonTable.getTableName());
+        Identifier identifier = new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
         List<PartitionInfo> result = new ArrayList<>();
         if (table.isUnPartitioned()) {
 
@@ -838,7 +851,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void finishSink(String dbName, String tblName, List<TSinkCommitInfo> commitInfos) {
+    public void finishSink(String dbName, String tblName, List<TSinkCommitInfo> commitInfos, String branch) {
         Identifier identifier = new Identifier(dbName, tblName);
         List<TPaimonCommitMessage> commitMessageList = commitInfos.stream()
                 .map(TSinkCommitInfo::getPaimon_commit_message).collect(Collectors.toList());
