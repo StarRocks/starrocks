@@ -24,7 +24,7 @@ from sqlalchemy import (
     literal_column,
 )
 
-from starrocks import (
+from starrocks.dml import (
     InsertIntoFiles,
     FilesTarget,
     FilesTargetOptions,

@@ -222,7 +222,7 @@ class StarRocksTableDefinitionParser(object):
                 k: v for k, v in kwargs.items() if v is not None
             }
         }
-        if column.GENERATION_EXPRESSION is not None:
+        if column.GENERATION_EXPRESSION:
             col_data["computed"] = {
                 "sqltext": column.GENERATION_EXPRESSION
             }

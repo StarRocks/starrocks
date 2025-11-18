@@ -151,7 +151,7 @@ ischema_names = {
     # === Date and time ===
     "date": DATE,
     "datetime": DATETIME,
-    "timestamp": sqltypes.DATETIME,
+    "timestamp": DATETIME,
     # == binary ==
     "binary": BINARY,
     "varbinary": VARBINARY,
@@ -302,23 +302,20 @@ class StarRocksSQLCompiler(MySQLCompiler):
         files_str = ",\n".join(target_items)
         return f"FILES(\n{files_str}\n)"
 
-    def visit_cloud_storage(self, storage, **kw):
+    def _key_value_format(self, items: dict):
         return ',\n'.join([
             f'{repr(k)} = {repr(v)}'
-            for k, v in storage.options.items()
+            for k, v in items.items()
         ])
+
+    def visit_cloud_storage(self, storage, **kw):
+        return self._key_value_format(storage.options)
 
     def visit_files_format(self, files_format, **kw):
-        return ',\n'.join([
-            f'{repr(k)} = {repr(v)}'
-            for k, v in files_format.options.items()
-        ])
+        return self._key_value_format(files_format.options)
 
     def visit_files_options(self, files_options, **kw):
-        return ',\n'.join([
-            f'{repr(k)} = {repr(v)}'
-            for k, v in files_options.options.items()
-        ])
+        return self._key_value_format(files_options.options)
 
     def visit_insert_from_files(self, insert_from, **kw):
         target = (

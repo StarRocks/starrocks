@@ -22,6 +22,13 @@ from sqlalchemy.sql.roles import FromClauseRole
 
 
 class FilesClause(ClauseElement, FromClauseRole):
+    """FILES Base Class
+
+    This class represents the base class for a FILES <https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files/> table function in Starrocks
+
+    Usage is through descending classes FilesSource and FilesTarget.
+
+    """
     __visit_name__ = 'files'
 
     def __init__(self, format: "FilesFormat", options: "_FilesOptions" = None):
@@ -45,6 +52,10 @@ class _FilesOptions(ClauseElement):
         self.options.update(kwargs)  # Allow use of any other parameters
 
     def __repr__(self):
+        """
+        repr for debugging / logging purposes only. For compilation logic, see
+        the corresponding visitor in dialect.py
+        """
         return "\n".join([f"{k} = {v}" for k, v in self.options.items()])
 
 
@@ -107,6 +118,40 @@ class InsertFromFiles(UpdateBase):
 
 
 class FilesTarget(FilesClause):
+    """Represents a FILES table function in Starrocks when used for unloading data
+
+    Example Usage, used with InsertIntoFiles class:
+
+        m = MetaData()
+        tbl = Table(
+            "atable",
+            m,
+            Column("id", Integer),
+            schema="test_schema",
+        )
+        insert_into_files = InsertIntoFiles(
+            target=FilesTarget(
+                storage=GoogleCloudStorage(
+                    uri='gs://starrocks/atable',
+                    service_account_email='x@y.z',
+                    service_account_private_key_id='mykey',
+                    service_account_private_key='some_private_key',
+                ),
+                format=CSVFormat(
+                    column_separator=',',
+                    line_delimiter='\n',
+                    enclose='"',
+                    skip_header=1,
+                ),
+                options=FilesTargetOptions(
+                    single=True,
+                )
+            ),
+            from_=tbl.select(),
+        )
+
+    """
+
     __visit_name__ = 'files_target'
 
     def __init__(
@@ -146,6 +191,33 @@ class FilesTargetOptions(_FilesOptions):
 
 
 class FilesSource(FilesClause):
+    """Represents a FILES table function in Starrocks when used for loading data
+
+    Example Usage, used with InsertFromFiles class:
+
+        m = MetaData()
+        tbl = Table(
+            "atable",
+            m,
+            Column("id", Integer),
+            schema="test_schema",
+        )
+        insert_from_files = InsertFromFiles(
+            target=tbl,
+            from_=FilesSource(
+                storage=GoogleCloudStorage(
+                    uri='gs://starrocks/atable.parquet',
+                    service_account_email='x@y.z',
+                    service_account_private_key_id='mykey',
+                    service_account_private_key='some_private_key',
+                ),
+                format=ParquetFormat(
+                    compression=Compression.SNAPPY
+                ),
+            ),
+        )
+
+    """
     __visit_name__ = 'files_source'
 
     def __init__(
@@ -202,12 +274,15 @@ class FilesFormat(ClauseElement):
     __visit_name__ = "files_format"
     __format_type__ = None
 
-    def __init__(self, compression: Compression = None, **kwargs):
+    def __init__(self, compression: Compression|str = None, **kwargs):
         self.options = dict()
         if self.__format_type__:
             self.options['format'] = self.__format_type__
         if compression:
-            self.options["compression"] = compression.value
+            if isinstance(compression, Compression):
+                self.options["compression"] = compression.value
+            else:
+                self.options["compression"] = compression
 
     def __repr__(self):
         """
@@ -235,7 +310,7 @@ class CSVFormat(FilesFormat):
         escape: str = None,
         skip_header: int = None,
         trim_space: bool = None,
-        compression: Compression = None,
+        compression: Compression|str = None,
         **kwargs,
     ):
         super().__init__(compression, **kwargs)
@@ -283,7 +358,7 @@ class ParquetFormat(FilesFormat):
         *,
         use_legacy_encoding: bool = None, # for unloading only
         version: str = None, # for unloading only
-        compression: Compression = None,
+        compression: Compression|str = None,
         **kwargs,
     ):
         super().__init__(compression, **kwargs)
@@ -306,7 +381,7 @@ class ORCFormat(FilesFormat):
     def __init__(
         self,
         *,
-        compression: Compression = None,
+        compression: Compression|str = None,
         **kwargs,
     ):
         super().__init__(compression, **kwargs)
@@ -364,6 +439,10 @@ class _StorageClause(ClauseElement):
         self.options[f'{self.__option_prefix__}.{option_name}'] = value
 
     def __repr__(self):
+        """
+        repr for debugging / logging purposes only. For compilation logic, see
+        the corresponding visitor in dialect.py
+        """
         return ",\n".join([f"{k} = {v}" for k, v in self.options.items()])
 
 class AmazonS3(_StorageClause):
