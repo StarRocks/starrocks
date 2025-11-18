@@ -122,6 +122,15 @@ void UpdateManager::stop() {
     if (_apply_thread_pool) {
         _apply_thread_pool->shutdown();
     }
+<<<<<<< HEAD
+=======
+    if (_pindex_load_executor) {
+        _pindex_load_executor->shutdown();
+    }
+    if (_persistent_index_compaction_mgr) {
+        _persistent_index_compaction_mgr->stop();
+    }
+>>>>>>> bdc1698885 ([BugFix] Fix use-after-free when storage engine is stopped in local pk index manager. (#65534))
 }
 
 int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {

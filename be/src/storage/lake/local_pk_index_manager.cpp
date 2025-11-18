@@ -27,12 +27,6 @@
 
 namespace starrocks::lake {
 
-LocalPkIndexManager::~LocalPkIndexManager() {
-    if (_worker_thread_pool != nullptr) {
-        _worker_thread_pool->shutdown();
-    }
-}
-
 Status LocalPkIndexManager::clear_persistent_index(int64_t tablet_id) {
     // remove meta in RocksDB
     auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
