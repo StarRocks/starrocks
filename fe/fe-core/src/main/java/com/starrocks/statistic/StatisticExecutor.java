@@ -24,10 +24,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Partition;
->>>>>>> 105a79c1c0 ([Enhancement] Add partition filter when loading statistics to avoid stale data after INSERT OVERWRITE (#65578))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
