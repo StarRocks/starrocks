@@ -2386,6 +2386,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Whether to allow auto collection of the NDV of array columns")
     public static boolean enable_auto_collect_array_ndv = false;
 
+    @ConfField(mutable = true, comment = "Maximum number of partitions to include in partition_id filter " +
+            "when loading statistics. If a table has more partitions than this threshold, " +
+            "the partition_id filter will be skipped to avoid performance overhead. Default 1000.")
+    public static int statistic_load_max_partition_filter_num = 1000;
+
     @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
     public static boolean enable_sync_statistics_load = false;
 
