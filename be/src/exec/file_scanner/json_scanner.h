@@ -17,15 +17,11 @@
 #include <string_view>
 
 #include "column/nullable_column.h"
-#include "common/compiler_util.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
-#include "util/compression/stream_compression.h"
-#include "util/raw_container.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -118,7 +114,6 @@ private:
     Status _read_and_parse_json();
     Status _read_file_stream();
     Status _read_file_broker();
-    Status _parse_payload();
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
@@ -132,7 +127,6 @@ private:
 
     void _append_error_msg(const std::string&, const std::string& error_msg);
 
-private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
     JsonScanner* _scanner = nullptr;
