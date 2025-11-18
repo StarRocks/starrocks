@@ -158,6 +158,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
                 .setSelectPartitionNames(selectedPartitionNames)
+                .setSelectedIndexId(scanOperator.getSelectedIndexId())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToNames(aggColumnIdToNames).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),

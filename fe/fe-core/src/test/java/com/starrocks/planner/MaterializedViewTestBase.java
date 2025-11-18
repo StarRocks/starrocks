@@ -92,11 +92,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
-        starRocksAssert.getCtx().getSessionVariable().setEnableLocalShuffleAgg(false);
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
-        starRocksAssert.getCtx().getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @BeforeEach

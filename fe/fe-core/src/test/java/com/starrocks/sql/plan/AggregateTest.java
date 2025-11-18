@@ -1872,12 +1872,12 @@ public class AggregateTest extends PlanTestBase {
         sql = "select count(*) from test_all_type_not_null";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(rows_t1b)\n" +
+                "  |  output: sum(rows_t1a)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type_not_null\n" +
-                "     <id 14> : rows_t1b");
+                "     <id 12> : rows_t1a");
 
         sql = "select count(*) from part_t1 partitions(p1)";
         plan = getFragmentPlan(sql);
@@ -1887,7 +1887,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: part_t1\n" +
-                "     <id 7> : rows_v4\n" +
+                "     <id 5> : rows_v4\n" +
                 "     Partitions: [p1]");
 
         // The following cases will not use MetaScan because some conditions are not met

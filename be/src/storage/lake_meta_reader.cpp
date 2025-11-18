@@ -82,8 +82,7 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
 
         // only collect the field of dict need read data page
         // others just depend on footer
-        if (collect_field == META_DICT_MERGE || collect_field == META_COUNT_COL ||
-            collect_field == META_COLUMN_COMPRESSED_SIZE) {
+        if (collect_field == META_DICT_MERGE || collect_field == META_COUNT_COL) {
             _collect_context.seg_collecter_params.read_page.emplace_back(true);
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
