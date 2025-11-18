@@ -29,9 +29,12 @@ dependencies {
     implementation("com.google.code.gson:gson")
     implementation("org.apache.commons:commons-lang3")
     implementation("org.apache.logging.log4j:log4j-api")
+    testImplementation("org.junit.jupiter:junit-jupiter")
 }
 
 tasks.withType<Test> {
+    useJUnitPlatform()
+    
     // Configure JMockit agent for tests
     jvmArgs("-javaagent:${repositories.mavenLocal().url.path}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar")
 
