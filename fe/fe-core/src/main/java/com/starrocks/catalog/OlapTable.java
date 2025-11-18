@@ -2678,8 +2678,6 @@ public class OlapTable extends Table {
         tableProperty.buildReplicatedStorage();
     }
 
-<<<<<<< HEAD
-=======
     public boolean enableStatisticCollectOnFirstLoad() {
         if (tableProperty != null) {
             return tableProperty.enableStatisticCollectOnFirstLoad();
@@ -2696,11 +2694,6 @@ public class OlapTable extends Table {
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
     }
 
-    public boolean allowBucketSizeSetting() {
-        return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
-    }
-
->>>>>>> 90d12c2b3e ([Enhancement] Support enable_statistic_collect_on_first_load at table granularity (#65463))
     public Long getAutomaticBucketSize() {
         if (!(defaultDistributionInfo instanceof RandomDistributionInfo) || !Config.enable_automatic_bucket) {
             return (long) 0;
