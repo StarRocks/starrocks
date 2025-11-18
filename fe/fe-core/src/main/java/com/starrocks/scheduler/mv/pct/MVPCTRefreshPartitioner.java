@@ -98,9 +98,6 @@ public abstract class MVPCTRefreshPartitioner {
     protected final MVRefreshParams mvRefreshParams;
     private final Logger logger;
 
-    // The partitions to refresh for mv which is filtered before various filter actions.
-    protected final PCellSortedSet mvToRefreshPotentialPartitions = PCellSortedSet.of();
-
     public MVPCTRefreshPartitioner(MvTaskRunContext mvContext,
                                    TaskRunContext context,
                                    Database db,
@@ -242,8 +239,7 @@ public abstract class MVPCTRefreshPartitioner {
             SyncPartitionUtils.calcPotentialRefreshPartition(result,
                     baseChangedPartitionNames,
                     mvContext.getRefBaseTableMVIntersectedPartitions(),
-                    mvContext.getMvRefBaseTableIntersectedPartitions(),
-                    mvToRefreshPotentialPartitions);
+                    mvContext.getMvRefBaseTableIntersectedPartitions());
             Set<String> newMvToRefreshPartitionNames =
                     Sets.difference(potentialMvToRefreshPartitionNames, mvToRefreshPartitionNames);
             for (String partitionName : newMvToRefreshPartitionNames) {
@@ -309,9 +305,9 @@ public abstract class MVPCTRefreshPartitioner {
 
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
-                            "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
-                    partitionRefreshNumber, mvToRefreshedPartitions, mvToRefreshPotentialPartitions,
-                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
+                            "next start:{}, next end:{}, next list values:{}",
+                    partitionRefreshNumber, mvToRefreshedPartitions, mvContext.getNextPartitionStart(),
+                    mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
@@ -393,7 +389,7 @@ public abstract class MVPCTRefreshPartitioner {
             }
         } catch (Exception e) {
             logger.warn("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
-                    refreshStrategy, e.getMessage(), e);
+                    refreshStrategy, e.getMessage());
             return getRefreshNumberByDefaultMode(toRefreshPartitions);
         }
     }

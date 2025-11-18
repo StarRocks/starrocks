@@ -723,11 +723,11 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         testMVRefreshWithOnePartitionAndOneUnPartitionTable(partitionTable, partitionTableValue, mvQuery,
                 "     TABLE: partition_table\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: (1: dt1 < '2020-09-01') OR (1: dt1 IS NULL)\n" +
-                        "     partitions=3/3",
+                        "     PREDICATES: 1: dt1 >= '2020-08-31'\n" +
+                        "     partitions=1/3",
                 "     TABLE: non_partition_table\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: (4: dt2 < '2020-09-01') OR (4: dt2 IS NULL)\n" +
+                        "     PREDICATES: 4: dt2 >= '2020-08-31', 4: dt2 < '2020-09-01'\n" +
                         "     partitions=1/1");
     }
 

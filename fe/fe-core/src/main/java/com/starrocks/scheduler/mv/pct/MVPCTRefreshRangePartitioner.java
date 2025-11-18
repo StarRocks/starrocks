@@ -450,31 +450,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             PCellWithName pCell = iterator.next();
             logger.debug("need to refresh partition name {}, value {}",
                     mv.getName(), pCell.name(), pCell.cell());
-            // NOTE: if mv's need to refresh partitions in the many-to-many mappings, no need to filter to
-            // avoid data lose.
-            // eg:
-            // ref table's partitions:
-            //  p0:   [2023-07-27, 2023-07-30)
-            //  p1:   [2023-07-30, 2023-08-02) X
-            //  p2:   [2023-08-02, 2023-08-05)
-            // materialized view's partition:
-            //  p0:   [2023-07-01, 2023-08-01)
-            //  p1:   [2023-08-01, 2023-09-01)
-            //  p2:   [2023-09-01, 2023-10-01)
-            //
-            // If partitionRefreshNumber is 1, ref table's p1 has been updated, then mv's partition [p0, p1]
-            // needs to be refreshed.
-            // Run1: mv's p0, refresh will update ref-table's p1 into version mapping(since incremental refresh)
-            // Run2: mv's p1, refresh check ref-table's p1 has been refreshed, skip to refresh.
-            // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
-            // more mv's partitions as more as possible.
-            // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
-            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.containsName(pCell.name())) {
-                logger.info("partition {} is in the many-to-many mappings, " +
-                        "skip to filter it, mvToRefreshPotentialPartitions:{}", mv.getName(),
-                        pCell.name(), mvToRefreshPotentialPartitions);
-                return;
-            }
         }
 
         // no matter ascending or descending, we should always keep start is less than end

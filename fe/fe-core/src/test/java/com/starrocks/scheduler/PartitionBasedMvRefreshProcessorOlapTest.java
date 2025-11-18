@@ -1957,7 +1957,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                     "partition by date_trunc('month',k1) \n" +
                                     "distributed by hash(k2) buckets 3 \n" +
                                     "refresh deferred manual\n" +
-                                    "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
+                                    "properties('replication_num' = '1', 'partition_refresh_number'='-1')\n" +
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
                                 Database testDb =
