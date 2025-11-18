@@ -16,7 +16,6 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -46,7 +45,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -97,6 +95,9 @@ public abstract class MVPCTRefreshPartitioner {
     protected final MaterializedView mv;
     protected final MVRefreshParams mvRefreshParams;
     private final Logger logger;
+
+    // The partitions to refresh for mv which is filtered before various filter actions.
+    protected final PCellSortedSet mvToRefreshPotentialPartitions = PCellSortedSet.of();
 
     public MVPCTRefreshPartitioner(MvTaskRunContext mvContext,
                                    TaskRunContext context,
@@ -228,28 +229,17 @@ public abstract class MVPCTRefreshPartitioner {
 
         // use base table's changed partitions instead of to-refresh partitions to decide
         Map<Table, PCellSortedSet> baseChangedPCellsSortedSet = toBaseTableWithSortedSet(baseChangedPartitionNames);
-        PCellSortedSet mvRangePartitionMap = mvContext.getMVToCellMap();
-        Set<String> mvToRefreshPartitionNames = result.getPartitionNames();
         if (isCalcPotentialRefreshPartition(baseChangedPCellsSortedSet, result)) {
             // because the relation of partitions between materialized view and base partition table is n : m,
             // should calculate the candidate partitions recursively.
             logger.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                     " baseChangedPartitionNames: {}", result, baseChangedPCellsSortedSet);
-            Set<String> potentialMvToRefreshPartitionNames = result.getPartitionNames();
             SyncPartitionUtils.calcPotentialRefreshPartition(result,
                     baseChangedPartitionNames,
                     mvContext.getRefBaseTableMVIntersectedPartitions(),
-                    mvContext.getMvRefBaseTableIntersectedPartitions());
-            Set<String> newMvToRefreshPartitionNames =
-                    Sets.difference(potentialMvToRefreshPartitionNames, mvToRefreshPartitionNames);
-            for (String partitionName : newMvToRefreshPartitionNames) {
-                PCell pCell = mvRangePartitionMap.getPCell(partitionName);
-                if (pCell == null) {
-                    logger.warn("Cannot find mv partition name range cell:{}", partitionName);
-                    continue;
-                }
-                result.add(PCellWithName.of(partitionName, pCell));
-            }
+                    mvContext.getMvRefBaseTableIntersectedPartitions(),
+                    mvToRefreshPotentialPartitions);
+            result.addAll(mvToRefreshPotentialPartitions);
             logger.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                     " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
         }
@@ -305,9 +295,9 @@ public abstract class MVPCTRefreshPartitioner {
 
             int partitionRefreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
             logger.info("filter partitions to refresh partitionRefreshNumber={}, partitionsToRefresh:{}, " +
-                            "next start:{}, next end:{}, next list values:{}",
-                    partitionRefreshNumber, mvToRefreshedPartitions, mvContext.getNextPartitionStart(),
-                    mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
+                            "mvPotentialPartitionNames:{}, next start:{}, next end:{}, next list values:{}",
+                    partitionRefreshNumber, mvToRefreshedPartitions, mvToRefreshPotentialPartitions,
+                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), mvContext.getNextPartitionValues());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }

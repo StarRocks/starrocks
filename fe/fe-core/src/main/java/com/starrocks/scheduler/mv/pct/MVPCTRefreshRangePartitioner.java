@@ -39,6 +39,7 @@ import com.starrocks.scheduler.mv.MVTraceUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -446,8 +447,13 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         boolean isAscending = Config.materialized_view_refresh_ascending;
         Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(mvPartitionsToRefresh, isAscending);
         int i = 0;
-        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+        while (i < partitionRefreshNumber && iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
+            // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
+            if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
+            i++;
             logger.debug("need to refresh partition name {}, value {}",
                     mv.getName(), pCell.name(), pCell.cell());
         }
@@ -457,11 +463,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         String start = null;
         String end = null;
         PCellWithName endCell = null;
-        if (iterator.hasNext()) {
+        while (iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
+            // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
+            if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
             start = getNextPartitionVal(pCell, isAscending, true);
             endCell = pCell;
             iterator.remove();
+            break;
         }
         while (iterator.hasNext()) {
             endCell = iterator.next();
@@ -469,18 +480,31 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
 
         if (!mvRefreshParams.isTentative()) {
+            String prevStart = mvRefreshParams.getRangeStart();
+            String prevEnd = mvRefreshParams.getRangeEnd();
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
             if (endCell != null) {
                 end = getNextPartitionVal(endCell, isAscending, false);
             }
+            String newStart = isAscending ? start : end;
+            String newEnd = isAscending ? end : start;
+            // check new start/end whether is fine
             if (isAscending) {
-                mvContext.setNextPartitionStart(start);
-                mvContext.setNextPartitionEnd(end);
+                if (prevStart != null && prevStart.equals(newStart)) {
+                    // in ascending start should not be equal to prevStart, otherwise dead loop may happen
+                    throw new SemanticException("Generate new task run start is the same to the previous in ascending, dead " +
+                            "loop happens. start:%s, end:%s", newStart, newEnd);
+                }
             } else {
-                mvContext.setNextPartitionStart(end);
-                mvContext.setNextPartitionEnd(start);
+                if (prevEnd != null && prevEnd.equals(newEnd)) {
+                    // end descending end should not be equal to prevEnd, otherwise dead loop may happen
+                    throw new SemanticException("Generate new task run end is the same to the previous in descending, dead " +
+                            "loop happens. start:%s, end:%s", newStart, newEnd);
+                }
             }
+            mvContext.setNextPartitionStart(newStart);
+            mvContext.setNextPartitionEnd(newEnd);
         }
     }
     private String getNextPartitionVal(PCellWithName pCell,
