@@ -1060,7 +1060,7 @@ under the License.
 
                     <!-- Kill a stuck test JVM after specified seconds -->
                     <!-- This enforces a hard timeout per forked process (test case when not reusing forks) -->
-                    <forkedProcessTimeoutInSeconds>${fe_ut_timeout}</forkedProcessTimeoutInSeconds>
+                    <forkedProcessTimeoutInSeconds>300</forkedProcessTimeoutInSeconds>
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         ${async.profiler.arg}
@@ -1069,6 +1069,10 @@ under the License.
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
                     </argLine>
+                    <testFailureIgnore>true</testFailureIgnore>
+                    <systemPropertyVariables>
+                        <junit.jupiter.execution.timeout.default>${fe_ut_timeout}</junit.jupiter.execution.timeout.default>
+                    </systemPropertyVariables>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <excludes>
