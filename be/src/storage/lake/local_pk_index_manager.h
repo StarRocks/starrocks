@@ -34,7 +34,7 @@ class LocalPkIndexManager : public PersistentIndexCompactionManager {
 public:
     LocalPkIndexManager() = default;
 
-    ~LocalPkIndexManager();
+    ~LocalPkIndexManager() override = default;
 
     static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
