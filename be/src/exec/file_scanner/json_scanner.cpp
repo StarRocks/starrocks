@@ -28,6 +28,7 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "exprs/json_functions.h"
+#include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
@@ -118,48 +119,6 @@ void JsonScanner::close() {
     FileScanner::close();
 }
 
-static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
-    switch (src_type.type) {
-    case TYPE_ARRAY: {
-        TypeDescriptor json_type(TYPE_ARRAY);
-        const auto& child_type = src_type.children[0];
-        json_type.children.emplace_back(construct_json_type(child_type));
-        return json_type;
-    }
-    case TYPE_STRUCT: {
-        TypeDescriptor json_type(TYPE_STRUCT);
-        json_type.field_names = src_type.field_names;
-        for (auto& child_type : src_type.children) {
-            json_type.children.emplace_back(construct_json_type(child_type));
-        }
-        return json_type;
-    }
-    case TYPE_MAP: {
-        TypeDescriptor json_type(TYPE_MAP);
-        const auto& key_type = src_type.children[0];
-        const auto& value_type = src_type.children[1];
-        json_type.children.emplace_back(construct_json_type(key_type));
-        json_type.children.emplace_back(construct_json_type(value_type));
-        return json_type;
-    }
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_BIGINT:
-    case TYPE_INT:
-    case TYPE_SMALLINT:
-    case TYPE_TINYINT:
-    case TYPE_BOOLEAN:
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_JSON: {
-        return src_type;
-    }
-    default:
-        // Treat other types as VARCHAR.
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    }
-}
-
 Status JsonScanner::_construct_json_types() {
     size_t slot_size = _src_slot_descriptors.size();
     _json_types.resize(slot_size);
@@ -169,7 +128,7 @@ Status JsonScanner::_construct_json_types() {
             continue;
         }
 
-        _json_types[column_pos] = construct_json_type(slot_desc->type());
+        _json_types[column_pos] = JsonUtils::construct_json_type(slot_desc->type());
     }
     return Status::OK();
 }
@@ -313,7 +272,7 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
     return cast_chunk;
 }
 
-JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter* counter, JsonScanner* scanner,
+JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner,
                        std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs,
                        std::vector<TypeDescriptor> type_descs, const TBrokerRangeDesc& range_desc)
         : _state(state),
