@@ -62,6 +62,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.RoutineLoadDesc;
@@ -120,7 +121,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
@@ -308,7 +309,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+    protected QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
@@ -480,19 +481,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected void readLock() {
-        lock.readLock().lock();
+        lock.sharedLockDetectingSlowLock(Config.slow_lock_threshold_ms, TimeUnit.MILLISECONDS);
     }
 
     protected void readUnlock() {
-        lock.readLock().unlock();
+        lock.sharedUnlock();
     }
 
     protected void writeLock() {
-        lock.writeLock().lock();
+        lock.exclusiveLockDetectingSlowLock(Config.slow_lock_threshold_ms, TimeUnit.MILLISECONDS);
     }
 
     protected void writeUnlock() {
-        lock.writeLock().unlock();
+        lock.exclusiveUnlock();
     }
 
     public long getTaskConsumeSecond() {
