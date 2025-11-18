@@ -211,26 +211,18 @@ public class StatisticsCollectionTrigger {
                         }
                         statsConnectCtx.setThreadLocalInfo();
 
-<<<<<<< HEAD
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
                                         new ArrayList<>(partitionIds), null, null,
                                         analyzeType, StatsConstants.ScheduleType.ONCE,
                                         analyzeStatus.getProperties()), analyzeStatus, false);
-                    });
-=======
-                statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
-                        true /* resetWarehouse */);
-                if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
-                    AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
-                    overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
-                }
-            };
 
-            CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
-            this.future = cancelableTask;
->>>>>>> 0b749afda5 ([BugFix] drop old partition stats after statistics collection triggered by insert overwrite (#65586))
+                        if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null &&
+                                overwriteJobStats.getSourcePartitionIds() != null) {
+                            AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+                            overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                        }
+                    });
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
         }
