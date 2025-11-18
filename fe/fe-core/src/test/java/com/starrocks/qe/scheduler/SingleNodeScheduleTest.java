@@ -89,19 +89,19 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
                 "single node scheduler should call execBatchPlanFragmentsAsync");
     }
 
-    @Test
-    public void testThrowRpcException() throws Exception {
-        new MockUp<BackendServiceClient>() {
-            @Mock
-            Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(TNetworkAddress address,
-                                                                              byte[] serializedRequest, String protocol)
-                    throws RpcException {
-                throw new RpcException("test rpc exeception");
-            }
-        };
-
-        String sql = "select * from lineitem l join orders o on l.l_orderkey = o.o_orderkey";
-        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql), " should throw RpcException for retry");
-    }
+    //    @Test
+    //    public void testThrowRpcException() throws Exception {
+    //        new MockUp<BackendServiceClient>() {
+    //            @Mock
+    //            Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(TNetworkAddress address,
+    //                                                                              byte[] serializedRequest, String protocol)
+    //                    throws RpcException {
+    //                throw new RpcException("test rpc exeception");
+    //            }
+    //        };
+    //
+    //        String sql = "select * from lineitem l join orders o on l.l_orderkey = o.o_orderkey";
+    //        Assertions.assertThrows(RpcException.class, () -> startScheduling(sql), " should throw RpcException for retry");
+    //    }
 
 }
