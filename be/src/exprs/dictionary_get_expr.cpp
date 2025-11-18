@@ -18,6 +18,7 @@
 
 #include "column/column_helper.h"
 #include "column/struct_column.h"
+#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 
