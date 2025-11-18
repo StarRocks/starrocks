@@ -50,7 +50,7 @@ Status VariantFunctions::variant_segments_prepare(FunctionContext* context, Func
     std::string path_string = variant_path.to_string();
     auto variant_path_status = VariantPathParser::parse(path_string);
     RETURN_IF(!variant_path_status.ok(), variant_path_status.status());
-    auto* path_state = new NativeVariantPath();
+    auto* path_state = new VariantState();
     path_state->variant_path.reset(std::move(variant_path_status.value()));
     context->set_function_state(scope, path_state);
     VLOG(10) << "Preloaded variant path: " << path_string;
@@ -60,7 +60,7 @@ Status VariantFunctions::variant_segments_prepare(FunctionContext* context, Func
 
 static StatusOr<VariantPath*> get_or_parse_variant_segments(FunctionContext* context, const Slice path_slice,
                                                             VariantPath* variant_path) {
-    auto* cached = reinterpret_cast<NativeVariantPath*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* cached = reinterpret_cast<VariantState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (cached != nullptr) {
         // If we already have parsed segments, return them
@@ -77,8 +77,8 @@ static StatusOr<VariantPath*> get_or_parse_variant_segments(FunctionContext* con
 
 Status VariantFunctions::variant_segments_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* variant_path = reinterpret_cast<NativeVariantPath*>(context->get_function_state(scope));
-        delete variant_path;
+        auto* variant_state = reinterpret_cast<VariantState*>(context->get_function_state(scope));
+        delete variant_state;
     }
 
     return Status::OK();
