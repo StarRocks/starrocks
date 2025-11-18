@@ -157,6 +157,12 @@ public class AuditEvent {
     @AuditField(value = "QuerySource")
     public String querySource = "";
 
+    @AuditField(value = "Command")
+    public String command = "";
+
+    @AuditField(value = "PreparedStmtId", ignore_zero = true)
+    public String preparedStmtId = null;
+
     public static class AuditEventBuilder {
 
         private AuditEvent auditEvent = new AuditEvent();
@@ -406,6 +412,16 @@ public class AuditEvent {
 
         public AuditEventBuilder setQuerySource(String querySource) {
             auditEvent.querySource = querySource;
+            return this;
+        }
+
+        public AuditEventBuilder setCommand(String command) {
+            auditEvent.command = command;
+            return this;
+        }
+
+        public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
+            auditEvent.preparedStmtId = preparedStmtId;
             return this;
         }
 
