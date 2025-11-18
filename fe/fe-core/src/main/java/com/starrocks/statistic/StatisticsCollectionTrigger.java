@@ -228,6 +228,10 @@ public class StatisticsCollectionTrigger {
 
                 statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
                         true /* resetWarehouse */);
+                if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
+                    AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+                    overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                }
             };
 
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
