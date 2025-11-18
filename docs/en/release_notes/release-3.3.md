@@ -13,7 +13,7 @@ displayed_sidebar: docs
 
 ## 3.3.20
 
-Release Date: November xx, 2025
+Release Date: November 18, 2025
 
 ### Bug Fixes
 
