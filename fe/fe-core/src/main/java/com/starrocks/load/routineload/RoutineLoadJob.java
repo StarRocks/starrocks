@@ -309,14 +309,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-<<<<<<< HEAD
-    protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
-=======
-    @SerializedName("wcr")
-    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
-
     protected QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
->>>>>>> ff6e2ee095 ([BugFix] Add slow lock detection for critical locks (#65559))
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
