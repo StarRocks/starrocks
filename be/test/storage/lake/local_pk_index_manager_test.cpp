@@ -277,6 +277,14 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
 }
 
+TEST_F(LocalPkIndexManagerTest, test_stop_is_idempotent) {
+    LocalPkIndexManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.stop();
+    // stop() should be safe to call multiple times for derived class as well.
+    mgr.stop();
+}
+
 TEST_F(LocalPkIndexManagerTest, test_evict) {
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->SetCallBack("LocalPkIndexManager::evict:1", [](void* arg) { *(bool*)arg = true; });

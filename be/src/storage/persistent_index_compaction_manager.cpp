@@ -23,9 +23,17 @@
 namespace starrocks {
 
 PersistentIndexCompactionManager::~PersistentIndexCompactionManager() {
+    stop();
+}
+
+void PersistentIndexCompactionManager::stop() {
+    if (_stopped) {
+        return;
+    }
     if (_worker_thread_pool != nullptr) {
         _worker_thread_pool->shutdown();
     }
+    _stopped = true;
 }
 
 Status PersistentIndexCompactionManager::init() {

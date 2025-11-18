@@ -3257,6 +3257,14 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
     ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
 }
 
+TEST_P(PersistentIndexTest, pindex_compaction_stop_is_idempotent) {
+    PersistentIndexCompactionManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.stop();
+    // stop() should be safe to call multiple times.
+    mgr.stop();
+}
+
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {
     int64_t old_config = config::max_allow_pindex_l2_num;
     config::max_allow_pindex_l2_num = 100;
