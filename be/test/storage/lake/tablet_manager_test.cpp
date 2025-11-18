@@ -855,6 +855,7 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
     ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+    ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
 }
 
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
