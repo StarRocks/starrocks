@@ -223,9 +223,15 @@ public class StatisticsCalcUtils {
             }
 
             // attempt use updateRows from basicStatsMeta to adjust estimated row counts
+<<<<<<< HEAD
             if (StatsConstants.AnalyzeType.SAMPLE == analyzeType
                     && basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp)) {
                 long statsRowCount = Math.max(basicStatsMeta.getUpdateRows() / table.getPartitions().size(), 1)
+=======
+            if (StatsConstants.AnalyzeType.SAMPLE == analyzeType &&
+                    (basicStatsMeta.getUpdateTime().isAfter(lastWorkTimestamp) || rowCount == 0)) {
+                long statsRowCount = Math.max(basicStatsMeta.getTotalRows() / table.getPartitions().size(), 1)
+>>>>>>> cf01a20cdd ([Enhancement] Adapt to corner cases for sample type cardinality evaluation (#65599))
                         * selectedPartitions.size();
                 if (statsRowCount > rowCount) {
                     rowCount = statsRowCount;
