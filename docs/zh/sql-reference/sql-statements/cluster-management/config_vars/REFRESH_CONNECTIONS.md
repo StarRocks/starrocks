@@ -21,16 +21,22 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
-REFRESH CONNECTIONS;
+REFRESH CONNECTIONS [FORCE];
 ```
+
+## 参数说明
+
+| **参数** | **必选** | **说明**                                              |
+| -------- | -------- | ------------------------------------------------------------ |
+| FORCE     | 否       | 如果指定，即使变量已通过 `SET SESSION` 在会话中修改，也会强制刷新所有变量。如果不指定 `FORCE`，则只刷新未被会话修改的变量。 |
 
 ## 行为说明
 
-- **选择性刷新**：该命令仅刷新会话本身未修改的变量。使用 `SET SESSION` 显式设置的变量将被保留。
+- **选择性刷新**：默认情况下，该命令仅刷新会话本身未修改的变量。使用 `SET SESSION` 显式设置的变量将被保留。当指定 `FORCE` 时，无论会话是否修改过，都会刷新所有变量。
 
 - **立即执行**：正在运行的语句不会立即受到影响。刷新会在执行下一个命令之前生效。
 
-- **分布式执行**：该命令通过编辑日志自动分发到所有 FE 节点，确保整个集群的一致性。
+- **分布式执行**：该命令通过 RPC 自动分发到所有 FE 节点，确保整个集群的一致性。
 
 - **权限要求**：只有拥有 SYSTEM 对象 OPERATE 权限的用户才能执行此命令。
 
@@ -61,9 +67,23 @@ mysql> REFRESH CONNECTIONS;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
+示例三：强制刷新所有连接，包括已通过会话修改变量的连接。
+
+```Plain
+mysql> SET GLOBAL query_timeout = 600;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> REFRESH CONNECTIONS FORCE;
+Query OK, 0 rows affected (0.00 sec)
+```
+
+执行 `REFRESH CONNECTIONS FORCE` 后，所有活动连接的 `query_timeout` 值将更新为 600，即使它们之前使用 `SET SESSION query_timeout = 500` 修改过此变量。
+
 ## 注意事项
 
-- 已在会话中使用 `SET SESSION` 修改的变量不会被刷新。例如，如果连接已执行 `SET SESSION query_timeout = 500`，即使执行 `REFRESH CONNECTIONS` 后，该连接的 `query_timeout` 值仍将保持为 500。
+- 默认情况下，已在会话中使用 `SET SESSION` 修改的变量不会被刷新。例如，如果连接已执行 `SET SESSION query_timeout = 500`，即使执行 `REFRESH CONNECTIONS` 后，该连接的 `query_timeout` 值仍将保持为 500。但是，如果使用 `REFRESH CONNECTIONS FORCE`，无论会话是否修改过，都会刷新所有变量。
+
+- 当指定 `FORCE` 时，之前被会话修改的变量将被重置为全局默认值，并清除其修改标志。这使得后续的非强制刷新可以更新这些变量。
 
 - 该命令会影响集群中所有 FE 节点上的所有活动连接。
 

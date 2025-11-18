@@ -21,16 +21,22 @@ This command requires the OPERATE privilege on the SYSTEM object.
 ## Syntax
 
 ```SQL
-REFRESH CONNECTIONS;
+REFRESH CONNECTIONS [FORCE];
 ```
+
+## Parameters
+
+| **Parameter** | **Required** | **Description**                                              |
+| ------------- | ------------ | ------------------------------------------------------------ |
+| FORCE         | No           | If specified, forces refresh of all variables even if they have been modified by the session using `SET SESSION`. When `FORCE` is not specified, only variables that haven't been modified by the session are refreshed. |
 
 ## Behavior
 
-- **Selective refresh**: The command only refreshes variables that have not been modified by the session itself. Variables that were explicitly set using `SET SESSION` are preserved.
+- **Selective refresh**: By default, the command only refreshes variables that have not been modified by the session itself. Variables that were explicitly set using `SET SESSION` are preserved. When `FORCE` is specified, all variables are refreshed regardless of session modifications.
 
 - **Immediate execution**: Running statements are not affected immediately. The refresh takes effect before the next command is executed.
 
-- **Distribution**: The command is automatically distributed to all FE nodes via edit log, ensuring consistency across the cluster.
+- **Distribution**: The command is automatically distributed to all FE nodes via RPC, ensuring consistency across the cluster.
 
 - **Privilege requirement**: Only users with OPERATE privilege on the SYSTEM object can execute this command.
 
@@ -61,9 +67,23 @@ mysql> REFRESH CONNECTIONS;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
+Example 3: Force refresh all connections, including those with session-modified variables.
+
+```Plain
+mysql> SET GLOBAL query_timeout = 600;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> REFRESH CONNECTIONS FORCE;
+Query OK, 0 rows affected (0.00 sec)
+```
+
+After executing `REFRESH CONNECTIONS FORCE`, all active connections will have their `query_timeout` value updated to 600, even if they previously modified this variable using `SET SESSION query_timeout = 500`.
+
 ## Notes
 
-- Variables that have been modified in a session using `SET SESSION` are not refreshed. For example, if a connection has executed `SET SESSION query_timeout = 500`, the `query_timeout` value for that connection will remain 500 even after `REFRESH CONNECTIONS` is executed.
+- By default, variables that have been modified in a session using `SET SESSION` are not refreshed. For example, if a connection has executed `SET SESSION query_timeout = 500`, the `query_timeout` value for that connection will remain 500 even after `REFRESH CONNECTIONS` is executed. However, if you use `REFRESH CONNECTIONS FORCE`, all variables will be refreshed regardless of session modifications.
+
+- When `FORCE` is specified, variables that were previously modified by the session are reset to the global default values, and their modification flags are cleared. This allows future non-forced refreshes to update these variables.
 
 - The command affects all active connections on all FE nodes in the cluster.
 
