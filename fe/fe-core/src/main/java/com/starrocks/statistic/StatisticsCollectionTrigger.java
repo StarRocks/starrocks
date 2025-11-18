@@ -220,7 +220,17 @@ public class StatisticsCollectionTrigger {
                 if (!partitionTabletRowCounts.isEmpty()) {
                     job.setPartitionTabletRowCounts(partitionTabletRowCounts);
                 }
+<<<<<<< HEAD
                 statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false);
+=======
+
+                statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
+                        true /* resetWarehouse */);
+                if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
+                    AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+                    overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                }
+>>>>>>> 0b749afda5 ([BugFix] drop old partition stats after statistics collection triggered by insert overwrite (#65586))
             };
 
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
