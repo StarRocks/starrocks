@@ -284,10 +284,10 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
     return Status::OK();
 }
 
-Status insert_page_cache(bool cache_enabled, StoragePageCache* cache, const std::string& cache_key,
+Status insert_page_cache(bool cache_enabled, const PageReadOptions& opts, StoragePageCache* cache, const std::string& cache_key,
                          std::unique_ptr<std::vector<uint8_t>> page, PageHandle* handle) {
     // If cache is not enabled, just return
-    if (!cache_enabled) {
+    if (!cache_enabled && opts.use_page_cache) {
         *handle = PageHandle(page.get());
         page.release();
         return Status::OK();
@@ -317,7 +317,7 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
 #ifdef __APPLE__
     bool page_cache_available = false;
 #else
-    bool page_cache_available = (cache != nullptr) && cache->available() && opts.use_page_cache;
+    bool page_cache_available = (cache != nullptr) && cache->available();
 #endif
     PageCacheHandle cache_handle;
     std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
