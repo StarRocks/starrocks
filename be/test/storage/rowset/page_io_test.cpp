@@ -244,6 +244,48 @@ TEST_F(PageIOTest, test_use_cache_hit) {
     }
 }
 
+// When use_page_cache = false, PageIO should not insert the page into StoragePageCache.
+// Otherwise a later read with use_page_cache = true may hit a stale page from cache.
+TEST_F(PageIOTest, test_no_cache_not_insert_into_cache) {
+    std::vector<int32_t> values{1, 2, 3};
+    OwnedSlice page = _build_data_page(values);
+    size_t uncompressed_size = page.slice().size;
+
+    // write an uncompressed page
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_no_cache_not_insert_into_cache"));
+
+    PageFooterPB footer = _build_page_footer(uncompressed_size);
+    PagePointer result;
+    std::vector<Slice> page_body{page.slice()};
+    ASSERT_OK(PageIO::write_page(write_file.get(), page_body, footer, &result));
+    ASSERT_OK(write_file->close());
+    uint64_t file_size = write_file->size();
+
+    // first read with use_page_cache = false, this must NOT insert into cache
+    ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_no_cache_not_insert_into_cache"));
+    PageReadOptions read_opts_no_cache = _build_read_options(read_file.get(), 0, file_size, false);
+    {
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(read_opts_no_cache, &handle, &body, &read_footer));
+    }
+
+    // second read with use_page_cache = true.
+    // If the first read had incorrectly inserted the page into cache, this read would hit cache
+    // and increase cached_pages_num to 1. With the correct behavior, cached_pages_num should remain 0.
+    PageReadOptions read_opts_use_cache = _build_read_options(read_file.get(), 0, file_size, true);
+    {
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(read_opts_use_cache, &handle, &body, &read_footer));
+        ASSERT_EQ(_stats.cached_pages_num, 0);
+    }
+}
+
 TEST_F(PageIOTest, test_corrupted_cache) {
     // open file
     WritableFileOptions write_opts;
