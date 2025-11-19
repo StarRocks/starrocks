@@ -275,7 +275,10 @@ public class FunctionSet {
 
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
-
+    public static final String GET_VARIANT_BOOL = "get_variant_bool";
+    public static final String GET_VARIANT_INT = "get_variant_int";
+    public static final String GET_VARIANT_DOUBLE = "get_variant_double";
+    public static final String GET_VARIANT_STRING = "get_variant_string";
     // Matching functions:
     public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
