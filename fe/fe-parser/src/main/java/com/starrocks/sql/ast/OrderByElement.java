@@ -37,8 +37,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -119,60 +117,9 @@ public class OrderByElement implements ParseNode {
         return result;
     }
 
-    public String toSql() {
-        StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(ExprToSql.toSql(expr));
-        strBuilder.append(isAsc ? " ASC" : " DESC");
-
-        // When ASC and NULLS FIRST or DESC and NULLS LAST, we do not print NULLS FIRST/LAST
-        // because it is the default behavior
-        if (nullsFirstParam != null) {
-            if (isAsc && !nullsFirstParam) {
-                // If ascending, nulls are first by default, so only add if nulls last.
-                strBuilder.append(" NULLS LAST");
-            } else if (!isAsc && nullsFirstParam) {
-                // If descending, nulls are last by default, so only add if nulls first.
-                strBuilder.append(" NULLS FIRST");
-            }
-        }
-        return strBuilder.toString();
-    }
-
     @Override
     public NodePosition getPos() {
         return pos;
-    }
-
-    /**
-     * Try to extract the column name from the `expr`.
-     * If the `expr` represents a valid column, the column name will be returned.
-     * Otherwise, it will return null.
-     */
-    public String castAsSlotRef() {
-        if (!(expr instanceof SlotRef)) {
-            return null;
-        }
-        SlotRef slotRef = (SlotRef) expr;
-        return slotRef.getColumnName();
-    }
-
-    public String explain() {
-        StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(ExprToSql.explain(expr));
-        strBuilder.append(isAsc ? " ASC" : " DESC");
-        if (nullsFirstParam != null) {
-            if (isAsc && !nullsFirstParam) {
-                strBuilder.append(" NULLS LAST");
-            } else if (!isAsc && nullsFirstParam) {
-                strBuilder.append(" NULLS FIRST");
-            }
-        }
-        return strBuilder.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override
@@ -209,6 +156,6 @@ public class OrderByElement implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitOrderByElement(this, context);
+        return visitor.visitOrderByElement(this, context);
     }
 }

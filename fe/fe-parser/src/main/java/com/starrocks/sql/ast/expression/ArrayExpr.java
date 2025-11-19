@@ -15,11 +15,12 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ArrayExpr extends Expr {
 
@@ -30,13 +31,12 @@ public class ArrayExpr extends Expr {
     public ArrayExpr(Type type, List<Expr> items, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.children = ExprUtils.cloneList(items);
+        this.children = items.stream().map(Expr::clone).collect(Collectors.toCollection(ArrayList::new));
     }
 
     public ArrayExpr(ArrayExpr other) {
         super(other);
     }
-
 
     @Override
     public Expr clone() {
@@ -45,6 +45,6 @@ public class ArrayExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitArrayExpr(this, context);
+        return visitor.visitArrayExpr(this, context);
     }
 }
