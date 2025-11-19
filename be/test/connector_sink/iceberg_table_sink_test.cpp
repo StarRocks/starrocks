@@ -139,7 +139,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
         auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
         auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
-        
+
         // Should use data_location when it's set and not empty
         EXPECT_EQ(sink_ctx->path, "s3://bucket/data-location");
     }
@@ -162,7 +162,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
         auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
         auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
-        
+
         // Should use location + "/data" when data_location is not set
         EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
     }
@@ -185,7 +185,7 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
         auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
         auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
-        
+
         // Should use location + "/data" when data_location is empty
         EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
     }
