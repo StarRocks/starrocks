@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -54,6 +55,10 @@ public class SchemaInfo {
     private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
+    @SerializedName("compressionType")
+    private final TCompressionType compressionType;
+    @SerializedName("compressionLevel")
+    private final int compressionLevel;
 
     private SchemaInfo(Builder builder) {
         this.id = builder.id;
@@ -68,6 +73,8 @@ public class SchemaInfo {
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.schemaHash = builder.schemaHash;
+        this.compressionType = builder.compressionType;
+        this.compressionLevel = builder.compressionLevel;
     }
 
     public long getId() {
@@ -114,6 +121,14 @@ public class SchemaInfo {
         return bloomFilterFpp;
     }
 
+    public TCompressionType getCompressionType() {
+        return compressionType;
+    }
+
+    public int getCompressionLevel() {
+        return compressionLevel;
+    }
+
     public TTabletSchema toTabletSchema() {
         TTabletSchema tSchema = new TTabletSchema();
         tSchema.setShort_key_column_count(shortKeyColumnCount);
@@ -148,6 +163,10 @@ public class SchemaInfo {
         if (bloomFilterColumnNames != null) {
             tSchema.setBloom_filter_fpp(bloomFilterFpp);
         }
+        if (compressionType != null) {
+            tSchema.setCompression_type(compressionType);
+            tSchema.setCompression_level(compressionLevel);
+        }
         return tSchema;
     }
 
@@ -168,6 +187,8 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
+        private TCompressionType compressionType;
+        private int compressionLevel = -1;
 
         private Builder() {
         }
@@ -246,6 +267,16 @@ public class SchemaInfo {
 
         public Builder setSchemaHash(int schemaHash) {
             this.schemaHash = schemaHash;
+            return this;
+        }
+
+        public Builder setCompressionLevel(int compressionLevel) {
+            this.compressionLevel = compressionLevel;
+            return this;
+        }
+
+        public Builder setCompressionType(TCompressionType compressionType) {
+            this.compressionType = compressionType;
             return this;
         }
 

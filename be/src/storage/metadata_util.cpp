@@ -410,4 +410,12 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompression
     }
     return convert_t_schema_to_pb_schema(t_schema, next_unique_id, col_idx_to_unique_id, out_schema, compression_type);
 }
+
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TabletSchemaPB* out_schema) {
+    auto compression_type = t_schema.__isset.compression_type ? t_schema.compression_type : TCompressionType::LZ4_FRAME;
+    auto compression_level = t_schema.__isset.compression_level ? t_schema.compression_level : -1;
+    out_schema->set_compression_level(compression_level);
+    return convert_t_schema_to_pb_schema(t_schema, compression_type, out_schema);
+}
+
 } // namespace starrocks

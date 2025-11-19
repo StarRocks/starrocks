@@ -459,10 +459,8 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
         metadata_update_info->set_persistent_index_type(index_type);
     }
     if (tablet_meta_info.__isset.tablet_schema) {
-        // FIXME: pass compression type
-        auto compression_type = TCompressionType::LZ4_FRAME;
         auto new_schema = metadata_update_info->mutable_tablet_schema();
-        RETURN_IF_ERROR(convert_t_schema_to_pb_schema(tablet_meta_info.tablet_schema, compression_type, new_schema));
+        RETURN_IF_ERROR(convert_t_schema_to_pb_schema(tablet_meta_info.tablet_schema, new_schema));
         if (tablet_meta_info.create_schema_file) {
             RETURN_IF_ERROR(_tablet_manager->create_schema_file(tablet_id, *new_schema));
         }

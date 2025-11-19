@@ -55,6 +55,8 @@ struct TTabletSchema {
     10: optional list<i32> sort_key_idxes
     11: optional list<i32> sort_key_unique_ids
     12: optional i32 schema_version;
+    13: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
+    14: optional i32 compression_level = -1;
 }
 
 // this enum stands for different storage format in src_backends
