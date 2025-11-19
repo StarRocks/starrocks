@@ -460,6 +460,9 @@ Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, Obj
     RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
     {
         std::unique_lock lock(_map_mutex);
+        if (_partition_id_to_desc_map.find(id) != _partition_id_to_desc_map.end()) {
+            return Status::InternalError(fmt::format("Partition id {} already exists", id));
+        }
         _partition_id_to_desc_map[id] = partition;
     }
     return Status::OK();
