@@ -209,7 +209,6 @@ public class ClickhouseSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
-            System.out.println(table.getFullSchema());
             Assertions.assertTrue(table instanceof JDBCTable);
             Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
             Assertions.assertEquals("tbl1", table.getName());
@@ -218,11 +217,9 @@ public class ClickhouseSchemaResolverTest {
             ResultSet columnSet = clickhouseSchemaResolver.getColumns(connection, "test", "tbl1");
             List<Column> fullSchema = clickhouseSchemaResolver.convertToSRTable(columnSet);
             Table table1 = clickhouseSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
-            System.out.println(table1.getFullSchema());
             Assertions.assertTrue(table1 instanceof JDBCTable);
             Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
         } catch (Exception e) {
-            System.out.println(e.getMessage());
             e.printStackTrace();
             Assertions.fail();
         }
