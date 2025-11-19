@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PRangeCell;
@@ -1648,7 +1649,7 @@ public class MvUtils {
     private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
                                                                      LiteralExpr literalExpr) throws AnalysisException {
         if (!partitionColRef.getType().equals(literalExpr.getType())) {
-            literalExpr = LiteralExpr.create(literalExpr.getStringValue(), partitionColRef.getType());
+            literalExpr = LiteralExprFactory.create(literalExpr.getStringValue(), partitionColRef.getType());
         }
         return (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
     }

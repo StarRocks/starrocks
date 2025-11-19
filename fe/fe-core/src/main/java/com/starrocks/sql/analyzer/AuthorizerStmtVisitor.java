@@ -253,7 +253,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it

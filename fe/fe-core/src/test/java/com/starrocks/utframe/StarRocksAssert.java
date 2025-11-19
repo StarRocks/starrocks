@@ -126,6 +126,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.BackendResourceStat;
@@ -1281,7 +1282,7 @@ public class StarRocksAssert {
         public void analysisError(String... keywords) {
             try {
                 explainQuery();
-            } catch (AnalysisException | StarRocksPlannerException analysisException) {
+            } catch (AnalysisException | StarRocksPlannerException | ParsingException analysisException) {
                 Assertions.assertTrue(Stream.of(keywords).allMatch(analysisException.getMessage()::contains),
                             analysisException.getMessage());
                 return;

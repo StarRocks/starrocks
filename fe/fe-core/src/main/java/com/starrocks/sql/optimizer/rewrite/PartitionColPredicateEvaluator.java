@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -168,7 +169,7 @@ public class PartitionColPredicateEvaluator {
             LiteralExpr literalExpr;
             try {
                 if (constantOperator.isNull()) {
-                    literalExpr = LiteralExpr.createInfinity(childType, false);
+                    literalExpr = LiteralExprFactory.createInfinity(childType, false);
                 } else {
                     literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
                 }
@@ -312,7 +313,7 @@ public class PartitionColPredicateEvaluator {
                     return Optional.of(Range.closed(conditionKey, conditionKey));
                 } else {
                     PartitionKey conditionKey = new PartitionKey();
-                    conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), columnType.getPrimitiveType());
+                    conditionKey.pushColumn(LiteralExprFactory.createInfinity(columnType, false), columnType.getPrimitiveType());
                     return Optional.of(Range.closed(conditionKey, conditionKey));
                 }
             } catch (AnalysisException e) {
