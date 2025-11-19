@@ -20,6 +20,7 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/column_visitor_adapter.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/schema.h"
@@ -30,14 +31,10 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "simd/simd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/type_traits.h"
-#include "storage/type_utils.h"
 #include "storage/types.h"
-#include "util/metrics.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 
