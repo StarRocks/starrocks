@@ -86,17 +86,6 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                             throw new RuntimeException(e);
                         }
                     }
-<<<<<<< HEAD
-                    for (DeployState state : states) {
-                        deployer.deployFragments(state);
-                    }
-                } catch (Exception e) {
-                    // there could be a lot of reasons to fail, just cancel the query
-                    LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
-                    coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
-                    throw new RuntimeException(e);
-=======
->>>>>>> a95c0df2b5 ([Enhancement] fix query profile when deploying more tasks (#62186))
                 }
             }
         }
