@@ -265,7 +265,7 @@ TEST_F(LakeDelvecLoaderTest, test_load_with_pk_builder) {
     LakeIOOptions lake_io_opts;
     LakeDelvecLoader loader(_tablet_manager.get(), &builder2, true, lake_io_opts);
 
-    st = loader.load(tsid, version + 1, &pdelvec);
+    st = loader.load(tsid, version, &pdelvec);
     // The load should succeed (either found in builder or loaded from file)
     ASSERT_TRUE(st.ok());
 }
