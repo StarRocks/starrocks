@@ -532,6 +532,7 @@ public class FunctionSet {
     public static final String MAP_FROM_ARRAYS = "map_from_arrays";
     public static final String MAP_KEYS = "map_keys";
     public static final String MAP_ENTRIES = "map_entries";
+    public static final String ARRAYS_ZIP = "arrays_zip";
 
     public static final String MAP_SIZE = "map_size";
 
