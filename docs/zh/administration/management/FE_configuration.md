@@ -2715,6 +2715,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：Backup 作业的超时时间。
 - 引入版本：-
 
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- 默认：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 `SHOW PROC /BACKENDS/{id}` 命令中，启用每个磁盘的 tablet 编号收集。
+- 引入版本：v4.0.1、v3.5.8
+
 ##### enable_colocate_restore
 
 - 默认值：false
@@ -2748,7 +2757,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Boolean
 - Unit:
 - 是否动态：是
-- 描述：是否开启Query级别的用于透明加速改写的物化视图Cache，用于加速改写性能。
+- 描述：是否开启 Query 级别的用于透明加速改写的物化视图 Cache，用于加速改写性能。
 - 引入版本： v3.3
 
 ##### enable_mv_refresh_collect_profile
