@@ -1096,9 +1096,10 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(scan.getTable());
             ComputeResource computeResource = ConnectContext.get() != null ?
                     ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
-                    scan.getSelectPartitionNames(),
+                    scan.getSelectPartitionNames(), scan.getSelectedIndexId(),
                     context.getConnectContext().getCurrentComputeResource());
 
             scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
