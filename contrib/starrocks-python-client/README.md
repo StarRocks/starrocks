@@ -14,7 +14,7 @@ pip install starrocks
 
 #### Supported Python Versions
 
-Python >= 3.8, <= 3.12
+Python >= 3.10, <= 3.13
 
 #### Using a Virtual Environment (Recommended)
 

@@ -1,4 +1,3 @@
-#! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
 
 # It's just used to suppress a spurious warning from pytest.
 pytest.register_assert_rewrite("sqlalchemy.testing.assertions")
-
 
 # from sqlalchemy.testing.plugin.pytestplugin import *  # noqa: E402,F403,I001
 
