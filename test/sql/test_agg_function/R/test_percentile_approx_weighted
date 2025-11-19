@@ -546,3 +546,49 @@ select /*+ SET_VAR (enable_sort_aggregate = 'true') */ percentile_approx_weighte
 [5.285714149475098,6]
 [6.636363506317139,8]
 -- !result
+CREATE TABLE `t0_convert_to_serialize_format` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t1_convert_to_serialize_format` (
+  `v4` bigint(20) NULL COMMENT "",
+  `v5` bigint(20) NULL COMMENT "",
+  `v6` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v4`, `v5`, `v6`)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0_convert_to_serialize_format values(1,2,3),(4,5,6),(7,8,9); 
+insert into t1_convert_to_serialize_format values(1,2,3),(4,5,6),(7,8,9);
+-- result:
+-- !result
+select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ percentile_approx_weighted(v2, 10, array<double>[0.1, 0.5, 0.9], 5000) from t0_convert_to_serialize_format join t1_convert_to_serialize_format group by 'a';
+-- result:
+[2,5,8]
+-- !result
+select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ percentile_approx_weighted(v2, 0, array<double>[0.1, 0.5, 0.9], 5000) from t0_convert_to_serialize_format join t1_convert_to_serialize_format group by 'a';
+-- result:
+[nan,nan,nan]
+-- !result
+select /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */ percentile_approx_weighted(v2, v1, array<double>[0.1, 0.5, 0.9], 5000) from t0_convert_to_serialize_format join t1_convert_to_serialize_format group by 'a';
+-- result:
+[3.320000410079956,7.7272725105285645,8]
+-- !result
