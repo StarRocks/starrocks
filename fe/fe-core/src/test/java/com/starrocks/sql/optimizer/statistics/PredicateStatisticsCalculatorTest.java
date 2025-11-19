@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
@@ -347,9 +346,9 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateSimpleIfPredicate() {
-        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
-        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
-        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, IntegerType.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, IntegerType.INT, "c3", true);
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
                 .setMinValue(10)
@@ -384,7 +383,7 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator rightPredicate =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
         CallOperator ifPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(condition, leftPredicate, rightPredicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(condition, leftPredicate, rightPredicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(ifPredicate, statistics);
         Assertions.assertEquals(17.0, (int) result.getOutputRowCount());
@@ -392,9 +391,9 @@ public class PredicateStatisticsCalculatorTest {
 
     @Test
     public void testEstimateNestedIfPredicate() {
-        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
-        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
-        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, IntegerType.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, IntegerType.INT, "c3", true);
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
                 .setMinValue(10)
@@ -429,22 +428,24 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator c3Eq80Predicate =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
         CallOperator innerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, c3Eq80Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, c3Eq80Predicate));
         BinaryPredicateOperator c1Ge20Condition =
                 new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
         BinaryPredicateOperator c3Eq70Predicate =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(70));
         CallOperator outerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Condition, innerIfPredicate, c3Eq70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
+                        List.of(c1Ge20Condition, innerIfPredicate, c3Eq70Predicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(14.0, (int) result.getOutputRowCount());
 
         // IF ( c1 >= 30 , c2 = 50 , IF ( c1 >= 20 , c3 = 80 , c3 = 70 ) )
         innerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Condition, c3Eq80Predicate, c3Eq70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(c1Ge20Condition, c3Eq80Predicate, c3Eq70Predicate));
         outerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, innerIfPredicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
+                        List.of(c1Ge30Condition, c2Eq50Predicate, innerIfPredicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(15.0, (int) result.getOutputRowCount());
@@ -457,9 +458,10 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator c2Le70Predicate =
                 new BinaryPredicateOperator(BinaryType.LE, columnRef2, ConstantOperator.createInt(70));
         innerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
         outerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(innerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
+                        List.of(innerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
@@ -470,10 +472,10 @@ public class PredicateStatisticsCalculatorTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setThreadLocalInfo();
 
-        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
-        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
-        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
-        ColumnRefOperator columnRef4 = new ColumnRefOperator(4, Type.INT, "c4", true);
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, IntegerType.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, IntegerType.INT, "c3", true);
+        ColumnRefOperator columnRef4 = new ColumnRefOperator(4, IntegerType.INT, "c4", true);
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
                 .setMinValue(10)
@@ -515,7 +517,7 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator c3Eq80Predicate =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
         CallOperator innerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, c3Eq80Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, c3Eq80Predicate));
         CompoundPredicateOperator compoundInnerIfPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, innerIfPredicate);
         BinaryPredicateOperator c1Ge20Condition =
@@ -523,7 +525,7 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator c3Eq70Predicate =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(70));
         CallOperator outerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
                         List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
@@ -535,7 +537,7 @@ public class PredicateStatisticsCalculatorTest {
         compoundInnerIfPredicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                 c4Eq10Predicate, innerIfPredicate);
         outerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
                         List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
@@ -544,7 +546,7 @@ public class PredicateStatisticsCalculatorTest {
         // IF ( c1 >= 20 , c4 = 10 OR IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
         compoundInnerIfPredicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
                 c4Eq10Predicate, innerIfPredicate);
-        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+        outerIfPredicate = new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
                 List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
@@ -558,10 +560,10 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator c2Le70Predicate =
                 new BinaryPredicateOperator(BinaryType.LE, columnRef2, ConstantOperator.createInt(70));
         innerIfPredicate =
-                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
         compoundInnerIfPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, innerIfPredicate);
-        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+        outerIfPredicate = new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
                 List.of(compoundInnerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
@@ -570,7 +572,7 @@ public class PredicateStatisticsCalculatorTest {
         // IF ( c4 = 10 AND IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
         compoundInnerIfPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, c4Eq10Predicate, innerIfPredicate);
-        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+        outerIfPredicate = new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
                 List.of(compoundInnerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
@@ -579,7 +581,7 @@ public class PredicateStatisticsCalculatorTest {
         // IF ( c4 = 10 OR IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
         compoundInnerIfPredicate =
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, c4Eq10Predicate, innerIfPredicate);
-        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+        outerIfPredicate = new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN,
                 List.of(compoundInnerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
