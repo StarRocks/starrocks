@@ -2169,10 +2169,10 @@ public class MaterializedViewAnalyzer {
         mv.getBaseSchema().forEach(col ->
                 fields.add(new Field(col.getName(), col.getType(), null, null)));
         Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
+        ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
         Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
         retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
                 scope, connectContext);
-        ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
         return Optional.of(retentionCondtiionExpr);
     }
 
