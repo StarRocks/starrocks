@@ -25,22 +25,23 @@ from alembic.ddl.mysql import (
 )
 from alembic.operations.ops import AlterColumnOp
 from alembic.util.sqla_compat import compiles
-from sqlalchemy import Column, Connection, Row, Table, exc, log, schema as sa_schema, text, util
+from sqlalchemy import Column, Connection, Row, Table, TableClause, exc, log, schema as sa_schema, text, util
 from sqlalchemy.dialects.mysql.base import (
     MySQLCompiler,
     MySQLDDLCompiler,
     MySQLIdentifierPreparer,
     MySQLTypeCompiler,
     _DecodingRow,
+    colspecs as base_colspecs,
 )
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
 from sqlalchemy.engine import reflection
 from sqlalchemy.engine.interfaces import ReflectedTableComment
-from sqlalchemy.sql import sqltypes
-from sqlalchemy.sql.expression import Delete, Select
+from sqlalchemy.sql import sqltypes, bindparam
+from sqlalchemy.sql.expression import Delete, Select, Update
 
-from starrocks.common.defaults import ReflectionTableDefaults, ReflectionViewDefaults
-from starrocks.common.params import (
+from .common.defaults import ReflectionTableDefaults, ReflectionViewDefaults
+from .common.params import (
     ColumnAggInfoKey,
     ColumnAggInfoKeyWithPrefix,
     ColumnSROptionsKey,
@@ -49,8 +50,8 @@ from starrocks.common.params import (
     TableInfoKey,
     TableInfoKeyWithPrefix,
 )
-from starrocks.common.types import ColumnAggType, SystemRunMode, TableType
-from starrocks.common.utils import TableAttributeNormalizer
+from .common.types import ColumnAggType, SystemRunMode, TableType
+from .common.utils import TableAttributeNormalizer
 
 from . import reflection as _reflection
 from .datatype import (
@@ -163,11 +164,19 @@ ischema_names = {
     "bitmap": BITMAP,
 }
 
+colspecs = base_colspecs | {
+    sqltypes.Date: DATE,
+    sqltypes.DateTime: DATETIME,
+    sqltypes.DECIMAL: DECIMAL,
+}
 
 class StarRocksTypeCompiler(MySQLTypeCompiler):
     """
     Compile a datatype to StarRocks' SQL type string.
     """
+
+    def visit_NVARCHAR(self, type_, **kw):
+        return self.visit_VARCHAR(type_, **kw)
 
     def visit_BOOLEAN(self, type_, **kw):
         return "BOOLEAN"
@@ -235,6 +244,9 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
     def visit_BITMAP(self, type_, **kw):
         return "BITMAP"
 
+    def visit_BLOB(self, type_, **kw):
+        return "BINARY"
+
 
 class StarRocksSQLCompiler(MySQLCompiler):
     def visit_delete(self, delete_stmt: Delete, **kw: Any) -> str:
@@ -263,6 +275,79 @@ class StarRocksSQLCompiler(MySQLCompiler):
             text += " OFFSET " + self.process(select._offset_clause, **kw)
         return text
 
+    def visit_typeclause(
+        self,
+        typeclause,
+        type_=None,
+        **kw: Any,
+    ):
+        if type_ is None:
+            type_ = typeclause.type.dialect_impl(self.dialect)
+        if isinstance(type_, sqltypes.Boolean):
+            return self.dialect.type_compiler_instance.process(type_)
+        return super().visit_typeclause(typeclause, type_, **kw)
+
+    def visit_insert_into_files(self, insert_into, **kw):
+        return (
+            f"INSERT INTO {self.process(insert_into.target, **kw)}\n"
+            f" {self.process(insert_into.from_, **kw)}"
+        )
+
+    def visit_files_target(self, files, **kw):
+        target_items = []
+        target_items.append(self.process(files.storage, **kw))
+        target_items.append(self.process(files.format, **kw))
+        if files.options is not None:
+            target_items.append(self.process(files.options, **kw))
+        files_str = ",\n".join(target_items)
+        return f"FILES(\n{files_str}\n)"
+
+    def _key_value_format(self, items: dict):
+        return ',\n'.join([
+            f'{repr(k)} = {repr(v)}'
+            for k, v in items.items()
+        ])
+
+    def visit_cloud_storage(self, storage, **kw):
+        return self._key_value_format(storage.options)
+
+    def visit_files_format(self, files_format, **kw):
+        return self._key_value_format(files_format.options)
+
+    def visit_files_options(self, files_options, **kw):
+        return self._key_value_format(files_options.options)
+
+    def visit_insert_from_files(self, insert_from, **kw):
+        target = (
+            self.preparer.format_table(insert_from.target)
+            if isinstance(insert_from.target, (TableClause,))
+            else self.process(insert_from.target, **kw)
+        )
+
+        if isinstance(insert_from.columns, str):
+            select_str = insert_from.columns
+        else:
+            select_str = ",".join(
+                [
+                    self.process(col, **kw)
+                    for col in insert_from.columns
+                ]
+            )
+
+        return (
+            f"INSERT INTO {target}\n"
+            f" SELECT {select_str}\n"
+            f" FROM {self.process(insert_from.from_, **kw)}"
+        )
+
+    def visit_files_source(self, files, **kw):
+        source_items = []
+        source_items.append(self.process(files.storage, **kw))
+        source_items.append(self.process(files.format, **kw))
+        if files.options is not None:
+            source_items.append(self.process(files.options, **kw))
+        files_str = ",\n".join(source_items)
+        return f"FILES(\n{files_str}\n)"
 
 class StarRocksDDLCompiler(MySQLDDLCompiler):
     def __init__(self, *args, **kwargs):
@@ -638,19 +723,39 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             logger.debug(f"agg info for column: {column.name} is '{agg_info}'")
             colspec.append(agg_info)
 
-        # NULL or NOT NULL. AUTO_INCREMENT columns must be NOT NULL
-        if not column.nullable or column.autoincrement is True:
+        # NULL or NOT NULL.
+        if not column.nullable:
             colspec.append("NOT NULL")
         # else: omit explicit NULL (default)
 
         # AUTO_INCREMENT or default value or computed column
-        if column.autoincrement is True:
+        # AUTO_INCREMENT columns must be NOT NULL
+        if (
+            column.table is not None
+            and (
+                column is column.table._autoincrement_column
+                or column.autoincrement is True
+            )
+            and (
+                column.server_default is None
+                or isinstance(column.server_default, sa_schema.Identity)
+            )
+            and not (
+                self.dialect.supports_sequences
+                and isinstance(column.default, sa_schema.Sequence)
+                and not column.default.optional
+            )
+        ):
             colspec[idx_type] = "BIGINT"  # AUTO_INCREMENT column must be BIGINT
+            if column.nullable:
+                colspec.append("NOT NULL")
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
             if default == "AUTO_INCREMENT":
                 colspec[1] = "BIGINT"
+                if column.nullable:
+                    colspec.append("NOT NULL")
                 colspec.append("AUTO_INCREMENT")
 
             elif default is not None:
@@ -818,7 +923,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         return None
 
     def visit_computed_column(self, generated: sa_schema.Computed, **kw: Any) -> str:
-        text = "AS %s" % self.sql_compiler.process(
+        text = "AS (%s)" % self.sql_compiler.process(
             generated.sqltext, include_table=False, literal_binds=True
         )
         return text
@@ -831,9 +936,9 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             ),
         )
 
-    def visit_drop_table_comment(self, create: sa_schema.DropTableComment, **kw: Any) -> str:
+    def visit_drop_table_comment(self, drop: sa_schema.DropTableComment, **kw: Any) -> str:
         return "ALTER TABLE %s COMMENT=''" % (
-            self.preparer.format_table(create.element)
+            self.preparer.format_table(drop.element)
         )
 
     def visit_alter_view(self, alter: AlterView, **kw: Any) -> str:
@@ -1070,20 +1175,32 @@ class StarRocksDialect(MySQLDialect_pymysql):
     name: Final[str] = "starrocks"
 
     # Supported/Permitted StarRocks's dialect construct arguments for Table and Column
-    # Supports both lower and upper case variants for the arguments (eaiser for users' usages).
+    # Supports both lower and upper case variants for the arguments (easier for users' usages).
     construct_arguments = [
         (Table, {variant: None for k in TableInfoKey.ALL for variant in (k.lower(), k.upper())}),
         (Column, {variant: None for k in ColumnAggInfoKey.ALL for variant in (k.lower(), k.upper())}),
+        (Update, {"limit": None}),
+        (Delete, {"limit": None}),
+        (sa_schema.PrimaryKeyConstraint, {"using": None}),
+        (
+            sa_schema.Index,
+            {
+                "using": None,
+                "length": None,
+                "prefix": None,
+                "with_parser": None,
+            },
+        ),
     ]
 
     # Caching
     # Warnings are generated by SQLAlchemy if this flag is not explicitly set
     # and tests are needed before being enabled
     supports_statement_cache = True
-    supports_server_side_cursors = False
     supports_empty_insert = False
 
     ischema_names = ischema_names
+    colspecs = colspecs
     inspector = StarRocksInspector
 
     statement_compiler = StarRocksSQLCompiler
@@ -1174,6 +1291,26 @@ class StarRocksDialect(MySQLDialect_pymysql):
             # Default to shared_nothing if query fails
             return SystemRunMode.SHARED_NOTHING
 
+    def _show_create_table(
+        self,
+        connection: Connection,
+        table: Optional[Table],
+        charset: Optional[str] = None,
+        full_name: Optional[str] = None,
+    ) -> str:
+        try:
+            return super()._show_create_table(
+                connection,
+                table,
+                charset,
+                full_name,
+            )
+        except exc.DBAPIError as e:
+            if self._extract_error_code(e.orig) == 1064:  # type: ignore[arg-type] # noqa: E501
+                raise exc.NoSuchTableError(full_name) from e
+            else:
+                raise
+
     @util.memoized_property
     def _tabledef_parser(self) -> _reflection.StarRocksTableDefinitionParser:
         """return the StarRocksTableDefinitionParser, generate if needed.
@@ -1188,22 +1325,29 @@ class StarRocksDialect(MySQLDialect_pymysql):
     def _read_from_information_schema(
         self, connection: Connection, inf_sch_table: str, charset: Optional[str] = None, **kwargs: Any
     ) -> List[_DecodingRow]:
-        def escape_single_quote(s: str) -> str:
-            return s.replace("'", "\\'")
-
-        st: str = dedent(f"""
-            SELECT *
-            FROM information_schema.{inf_sch_table}
-            WHERE {" AND ".join([f"{k} = '{escape_single_quote(v)}'"
-                                 for k, v in kwargs.items()
-                                 if k and v])}
-        """)
-        # logger.debug(f"query for information_schema.{inf_sch_table}: {st}")
-        rp: Any = None
+        st = text(dedent(
+            f"""
+            SELECT * 
+            FROM information_schema.{inf_sch_table} 
+            WHERE {" AND ".join([f"{k} = :{k}" for k in kwargs.keys()])}
+        """
+        )).bindparams(
+            *[
+                bindparam(k, type_=sqltypes.Unicode)
+                for k in kwargs.keys()
+            ]
+        )
         try:
             rp = connection.execution_options(
                 skip_user_error_events=False
-            ).exec_driver_sql(st)
+            ).execute(st, kwargs)
+            rows: list[_DecodingRow] = [
+                _DecodingRow(row, charset)
+                for row in rp.mappings().fetchall()
+            ]
+            if not rows:
+                raise exc.NoSuchTableError(f"Empty response for query: '{st}'")
+            return rows
         except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) == 1146:
                 raise exc.NoSuchTableError(
@@ -1211,10 +1355,6 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 ) from e
             else:
                 raise
-        rows: list[_DecodingRow] = [_DecodingRow(
-            row, charset) for row in rp.mappings().fetchall()]
-        # logger.debug(f"fetched row from information_schema.{inf_sch_table}, row number: {len(rows)}")
-        return rows
 
     @reflection.cache
     def _setup_parser(
@@ -1272,6 +1412,10 @@ class StarRocksDialect(MySQLDialect_pymysql):
             table_name=table_name,
         )
 
+        full_name = self._get_quote_full_table_name(table_name, schema=schema)
+        show_create_table = self._show_create_table(connection, None, charset, full_name)
+        column_autoinc = self._get_autoinc_from_show_create_table(show_create_table)
+
         # Get aggregate info from `SHOW FULL COLUMNS`
         full_column_rows: List[Row] = self._get_show_full_columns(
             connection, table_name=table_name, schema=schema
@@ -1282,7 +1426,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             if row.Extra
         }
 
-        partition_clause = self._get_partition_clause_from_create_table(connection, table_name, schema)
+        partition_clause = self._get_partition_clause_from_create_table(show_create_table)
         # Add the partition info into table_config row for convenience
         # But the row object is immutable, so we convert it to a dictionary to modify it.
         table_config_dict = dict(table_config_row)
@@ -1294,43 +1438,43 @@ class StarRocksDialect(MySQLDialect_pymysql):
             table_config=table_config_dict,
             columns=column_rows,
             column_2_agg_type=column_2_agg_type,
+            column_autoinc=column_autoinc,
             charset=charset,
         )
 
     def _get_quote_full_table_name(
         self, table_name: str, schema: Optional[str] = None
     ) -> str:
-        """Get the fully quoted table name."""
-        full_table_name = self.preparer.quote_identifier(str(table_name))
-        if schema:
-            full_table_name = f"{self.preparer.quote_identifier(str(schema))}.{full_table_name}"
-        return full_table_name
+        return ".".join(
+            self.identifier_preparer._quote_free_identifiers(
+                schema, table_name
+            )
+        )
 
-    def _get_partition_clause_from_create_table(self, connection: Connection, table_name: str,
-                                                schema: Optional[str] = None) -> Optional[str]:
+    def _get_autoinc_from_show_create_table(self, create_table: str) -> Dict[str, Any]:
+        if create_table.lstrip().startswith("CREATE VIEW"):
+            return dict()
+        only_create = create_table.split('ENGINE=')[0]
+        only_columns = only_create.split("\n")[1:-1]
+        only_columns = [c.strip() for c in only_columns if c.strip().startswith("`")]
+        col_autoinc = {
+            c.split(' ')[0].strip('`'): 'AUTO_INCREMENT' in c
+            for c in only_columns
+        }
+        return col_autoinc
+
+    def _get_partition_clause_from_create_table(self, create_table: str) -> Optional[str]:
         """
         Get the PARTITION BY clause from the SHOW CREATE TABLE statement.
         Because we can't get the partition info from any information_schema views.
         """
-        full_table_name = self._get_quote_full_table_name(table_name, schema)
-        try:
-            st = f"SHOW CREATE TABLE {full_table_name}"
-            result = connection.execute(text(st)).first()
-            if not result:
-                return None
-
-            create_table_str = result[1]  # 'Create Table' column
-
-            # Use regex to find the PARTITION BY clause. It can be multi-line.
-            # match = self._PARTITION_BY_PATTERN.search(create_table_str)
-            match = StarRocksTableDefinitionParser._PARTITION_BY_PATTERN.search(create_table_str)
-            if match:
-                partition_clause = match.group(1).strip()
-                return partition_clause
-            return None
-        except exc.DBAPIError as e:
-            logger.warning(f"Could not get partition info from SHOW CREATE TABLE for table {full_table_name}: {e}")
-            return None
+        # Use regex to find the PARTITION BY clause. It can be multi-line.
+        # match = self._PARTITION_BY_PATTERN.search(create_table_str)
+        match = StarRocksTableDefinitionParser._PARTITION_BY_PATTERN.search(create_table)
+        if match:
+            partition_clause = match.group(1).strip()
+            return partition_clause
+        return None
 
     def _get_show_full_columns(
         self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
@@ -1341,9 +1485,9 @@ class StarRocksDialect(MySQLDialect_pymysql):
         """
         full_table_name = self._get_quote_full_table_name(table_name, schema)
         try:
-            st: str = f"SHOW FULL COLUMNS FROM {full_table_name}"
+            st: str = "SHOW FULL COLUMNS FROM %s" % full_table_name
             # logger.debug(f"query special column info by using: {st}")
-            return connection.execute(text(st)).fetchall()
+            return list(connection.exec_driver_sql(st).fetchall())
         except exc.DBAPIError as e:
             # 1146: Table ... doesn't exist
             if e.orig and e.orig.args[0] == 1146:
@@ -1358,7 +1502,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
     def gen_show_alter_table_statement(table_name: str, alter_type: str,
             schema: Optional[str] = None, state: str = 'RUNNING') -> str:
         """Generate the SHOW ALTER TABLE OPTIMIZE statement for a given table."""
-        from_db_clause = f"FROM {schema} " if schema else ""
+        from_db_clause = f"FROM `{schema}` " if schema else ""
         state_clause = f" AND State='{state}'" if state else ""
         stmt = f"SHOW ALTER TABLE {alter_type} {from_db_clause}WHERE TableName='{table_name}'{state_clause}"
         # logger.debug(f"generate show alter table statement: {stmt}")
@@ -1429,7 +1573,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             elif flavor is None:
                 pass
             else:
-                logger.warning(
+                self.logger.info(
                     "Converting unknown KEY type %s to a plain KEY", flavor
                 )
                 pass
@@ -1459,6 +1603,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             indexes.append(index_d)
         return indexes
 
+    @reflection.cache
     def has_table(
         self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
     ) -> bool:
@@ -1521,30 +1666,25 @@ class StarRocksDialect(MySQLDialect_pymysql):
         if schema is None:
             schema = self.default_schema_name
 
-        try:
-            view_rows = self._read_from_information_schema(
-                connection, "views", table_schema=schema, table_name=view_name
-            )
-            if not view_rows:
-                return None
-            view_row = view_rows[0]
-
-            table_row = None
-            try:
-                table_rows = self._read_from_information_schema(
-                    connection, "tables", table_schema=schema, table_name=view_name
-                )
-                if table_rows:
-                    table_row = table_rows[0]
-            except Exception as e:
-                self.logger.info(f"Could not retrieve comment for View '{schema}.{view_name}': {e}")
-
-            parser = self._tabledef_parser
-            return parser.parse_view(view_row, table_row)
-
-        except Exception as e:
-            self.logger.warning(f"Failed to get view info for '{schema}.{view_name}': {e}")
+        view_rows = self._read_from_information_schema(
+            connection, "views", table_schema=schema, table_name=view_name
+        )
+        if not view_rows:
             return None
+        view_row = view_rows[0]
+
+        table_row = None
+        try:
+            table_rows = self._read_from_information_schema(
+                connection, "tables", table_schema=schema, table_name=view_name
+            )
+            if table_rows:
+                table_row = table_rows[0]
+        except Exception as e:
+            self.logger.info(f"Could not retrieve comment for View '{schema}.{view_name}': {e}")
+
+        parser = self._tabledef_parser
+        return parser.parse_view(view_row, table_row)
 
     def get_view(
         self, connection: Connection, view_name: str, schema: Optional[str] = None, **kwargs: Any

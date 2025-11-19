@@ -35,7 +35,7 @@ refresh_clause: "REFRESH"i (refresh_moment | refresh_type | (refresh_moment refr
 !refresh_type: async_scheme | "MANUAL"i | "INCREMENTAL"i
 
 async_scheme: "ASYNC"i ASYNC_DETAILS?
-ASYNC_DETAILS: /(?s).+/ // Match any character including newlines
+ASYNC_DETAILS: /[\s\S]+/ // Match any character including newlines
 
 %import common.CNAME
 %import common.NUMBER
