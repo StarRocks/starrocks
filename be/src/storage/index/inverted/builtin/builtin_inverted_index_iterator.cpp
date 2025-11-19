@@ -127,25 +127,25 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
 
     {
         SCOPED_RAW_TIMER(&_stats->gin_ngram_filter_dict_ns);
-        // parse wildcard like '%%key%word%%' into ['key', 'word']
-        // use ngram to filter each word
-        wildcard_pos = 0;
-        int64_t last_wildcard_pos = 0;
-        while (0 <= wildcard_pos && wildcard_pos < search_query->get_size()) {
-            while (0 <= wildcard_pos && wildcard_pos < search_query->get_size() &&
-                   (*search_query)[wildcard_pos] == '%') {
-                ++wildcard_pos;
+        // Parse wildcard query like '%%key%word%%' into ['key', 'word'], then use ngram to filter each word.
+        // Start from the beginning to search: the left boundary may consist of several '%' characters. Therefore,
+        // if the left boundary is '%', move the left boundary to the right. After finding the first non-'%' character,
+        // locate the first '%' that appears after this position, and use it as the right boundary. The segment between
+        // these two positions is the keyword. Then, set the right boundary as the new left boundary and continue
+        // searching for the next right boundary following the same logic.
+        int64_t left = 0, right = 0;
+        while (0 <= left && left < search_query->get_size()) {
+            while (0 <= left && left < search_query->get_size() && (*search_query)[left] == '%') {
+                ++left;
             }
-            if (wildcard_pos < 0 || wildcard_pos >= search_query->get_size()) {
+            if (left < 0 || left >= search_query->get_size()) {
                 break;
             }
-            last_wildcard_pos = wildcard_pos;
-            wildcard_pos = search_query->find('%', last_wildcard_pos);
+            right = left;
+            left = search_query->find('%', right);
 
-            auto sub_query = wildcard_pos != -1
-                                     ? Slice(search_query->data + last_wildcard_pos, wildcard_pos - last_wildcard_pos)
-                                     : Slice(search_query->data + last_wildcard_pos,
-                                             search_query->get_size() - last_wildcard_pos);
+            auto sub_query = left != -1 ? Slice(search_query->data + right, left - right)
+                                        : Slice(search_query->data + right, search_query->get_size() - right);
             keywords.emplace_back(sub_query, sub_query.build_next());
 
             if (_bitmap_itr->ngram_bitmap_nums() == 0) {

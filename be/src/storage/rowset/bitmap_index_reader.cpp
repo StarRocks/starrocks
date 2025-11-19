@@ -53,7 +53,7 @@ namespace starrocks {
 
 using Roaring = roaring::Roaring;
 
-BitmapIndexReader::BitmapIndexReader(int32_t gram_num): _gram_num(gram_num) {
+BitmapIndexReader::BitmapIndexReader(int32_t gram_num) : _gram_num(gram_num) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
 }
 
@@ -163,6 +163,9 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
         bool match = false;
         RETURN_IF_ERROR(_ngram_dict_column_iter->seek_at_or_after(&cur_ngram, &match));
         if (!match) {
+            // Clear rowids bitmap here, otherwise the caller might mistakenly treat the remaining values in the
+            // bitmap as matched rowids.
+            roaring->clear();
             return Status::OK();
         }
 
