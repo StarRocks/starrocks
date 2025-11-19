@@ -17,14 +17,7 @@
 // NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <memory>
 
-<<<<<<< HEAD
-#include "column/column_visitor.h"
-#include "column/column_visitor_adapter.h"
 #include "column/datum.h"
-#include "column/fixed_length_column_base.h"
-=======
-#include "column/chunk.h"
->>>>>>> 218f680fc9 ([Refactor] remover unnecessary includes in column_helper.h (backport #65665) (#65701))
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "tablet_schema.h"
