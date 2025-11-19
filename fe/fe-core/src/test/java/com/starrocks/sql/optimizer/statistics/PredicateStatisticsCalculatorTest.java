@@ -16,6 +16,8 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -341,5 +343,246 @@ public class PredicateStatisticsCalculatorTest {
 
         Assertions.assertEquals(1, (int) result.getOutputRowCount());
         Assertions.assertEquals(0, result.getColumnStatistic(columnRef).getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testEstimateSimpleIfPredicate() {
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
+
+        ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(30)
+                .setDistinctValuesCount(20)
+                .setNullsFraction(0.1)
+                .build();
+        ColumnStatistic columnStatistic2 = ColumnStatistic.builder()
+                .setMinValue(40)
+                .setMaxValue(80)
+                .setDistinctValuesCount(30)
+                .setNullsFraction(0.2)
+                .build();
+        ColumnStatistic columnStatistic3 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(90)
+                .setDistinctValuesCount(50)
+                .setNullsFraction(0.4)
+                .build();
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(columnRef1, columnStatistic1)
+                .addColumnStatistic(columnRef2, columnStatistic2)
+                .addColumnStatistic(columnRef3, columnStatistic3)
+                .build();
+
+        // IF ( c1 >= 20 , c2 = 50 , c3 = 80 )
+        BinaryPredicateOperator condition =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
+        BinaryPredicateOperator leftPredicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef2, ConstantOperator.createInt(50));
+        BinaryPredicateOperator rightPredicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
+        CallOperator ifPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(condition, leftPredicate, rightPredicate));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(ifPredicate, statistics);
+        Assertions.assertEquals(17.0, (int) result.getOutputRowCount());
+    }
+
+    @Test
+    public void testEstimateNestedIfPredicate() {
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
+
+        ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(40)
+                .setDistinctValuesCount(20)
+                .setNullsFraction(0.1)
+                .build();
+        ColumnStatistic columnStatistic2 = ColumnStatistic.builder()
+                .setMinValue(40)
+                .setMaxValue(80)
+                .setDistinctValuesCount(30)
+                .setNullsFraction(0.2)
+                .build();
+        ColumnStatistic columnStatistic3 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(90)
+                .setDistinctValuesCount(50)
+                .setNullsFraction(0.4)
+                .build();
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(columnRef1, columnStatistic1)
+                .addColumnStatistic(columnRef2, columnStatistic2)
+                .addColumnStatistic(columnRef3, columnStatistic3)
+                .build();
+
+        // IF ( c1 >= 20 , IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
+        BinaryPredicateOperator c1Ge30Condition =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(30));
+        BinaryPredicateOperator c2Eq50Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef2, ConstantOperator.createInt(50));
+        BinaryPredicateOperator c3Eq80Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
+        CallOperator innerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, c3Eq80Predicate));
+        BinaryPredicateOperator c1Ge20Condition =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
+        BinaryPredicateOperator c3Eq70Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(70));
+        CallOperator outerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Condition, innerIfPredicate, c3Eq70Predicate));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(14.0, (int) result.getOutputRowCount());
+
+        // IF ( c1 >= 30 , c2 = 50 , IF ( c1 >= 20 , c3 = 80 , c3 = 70 ) )
+        innerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Condition, c3Eq80Predicate, c3Eq70Predicate));
+        outerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, innerIfPredicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(15.0, (int) result.getOutputRowCount());
+
+        // IF ( IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
+        BinaryPredicateOperator c1Ge20Predicate =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
+        BinaryPredicateOperator c2Ge50Predicate =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef2, ConstantOperator.createInt(50));
+        BinaryPredicateOperator c2Le70Predicate =
+                new BinaryPredicateOperator(BinaryType.LE, columnRef2, ConstantOperator.createInt(70));
+        innerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
+        outerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(innerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
+    }
+
+    @Test
+    public void testEstimateCompoundNestedIfPredicate() {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+
+        ColumnRefOperator columnRef1 = new ColumnRefOperator(1, Type.INT, "c1", true);
+        ColumnRefOperator columnRef2 = new ColumnRefOperator(2, Type.INT, "c2", true);
+        ColumnRefOperator columnRef3 = new ColumnRefOperator(3, Type.INT, "c3", true);
+        ColumnRefOperator columnRef4 = new ColumnRefOperator(4, Type.INT, "c4", true);
+
+        ColumnStatistic columnStatistic1 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(40)
+                .setDistinctValuesCount(20)
+                .setNullsFraction(0.1)
+                .build();
+        ColumnStatistic columnStatistic2 = ColumnStatistic.builder()
+                .setMinValue(40)
+                .setMaxValue(80)
+                .setDistinctValuesCount(30)
+                .setNullsFraction(0.2)
+                .build();
+        ColumnStatistic columnStatistic3 = ColumnStatistic.builder()
+                .setMinValue(10)
+                .setMaxValue(90)
+                .setDistinctValuesCount(50)
+                .setNullsFraction(0.4)
+                .build();
+        ColumnStatistic columnStatistic4 = ColumnStatistic.builder()
+                .setMinValue(0)
+                .setMaxValue(100)
+                .setDistinctValuesCount(70)
+                .setNullsFraction(0.15)
+                .build();
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(columnRef1, columnStatistic1)
+                .addColumnStatistic(columnRef2, columnStatistic2)
+                .addColumnStatistic(columnRef3, columnStatistic3)
+                .addColumnStatistic(columnRef4, columnStatistic4)
+                .build();
+
+        // IF ( c1 >= 20 , NOT IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
+        BinaryPredicateOperator c1Ge30Condition =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(30));
+        BinaryPredicateOperator c2Eq50Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef2, ConstantOperator.createInt(50));
+        BinaryPredicateOperator c3Eq80Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(80));
+        CallOperator innerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge30Condition, c2Eq50Predicate, c3Eq80Predicate));
+        CompoundPredicateOperator compoundInnerIfPredicate =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, innerIfPredicate);
+        BinaryPredicateOperator c1Ge20Condition =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
+        BinaryPredicateOperator c3Eq70Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef3, ConstantOperator.createInt(70));
+        CallOperator outerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                        List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
+
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(593.0, (int) result.getOutputRowCount());
+
+        // IF ( c1 >= 20 , c4 = 10 AND IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
+        BinaryPredicateOperator c4Eq10Predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRef4, ConstantOperator.createInt(10));
+        compoundInnerIfPredicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                c4Eq10Predicate, innerIfPredicate);
+        outerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                        List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(4.0, (int) result.getOutputRowCount());
+
+        // IF ( c1 >= 20 , c4 = 10 OR IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
+        compoundInnerIfPredicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                c4Eq10Predicate, innerIfPredicate);
+        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(20.0, (int) result.getOutputRowCount());
+
+        // IF ( NOT IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
+        BinaryPredicateOperator c1Ge20Predicate =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef1, ConstantOperator.createInt(20));
+        BinaryPredicateOperator c2Ge50Predicate =
+                new BinaryPredicateOperator(BinaryType.GE, columnRef2, ConstantOperator.createInt(50));
+        BinaryPredicateOperator c2Le70Predicate =
+                new BinaryPredicateOperator(BinaryType.LE, columnRef2, ConstantOperator.createInt(70));
+        innerIfPredicate =
+                new CallOperator(FunctionSet.IF, Type.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
+        compoundInnerIfPredicate =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, innerIfPredicate);
+        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                List.of(compoundInnerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
+
+        // IF ( c4 = 10 AND IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
+        compoundInnerIfPredicate =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, c4Eq10Predicate, innerIfPredicate);
+        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                List.of(compoundInnerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
+
+        // IF ( c4 = 10 OR IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
+        compoundInnerIfPredicate =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, c4Eq10Predicate, innerIfPredicate);
+        outerIfPredicate = new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                List.of(compoundInnerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
+
+        result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
+        Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
     }
 }
