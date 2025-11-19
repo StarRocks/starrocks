@@ -773,14 +773,14 @@ TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
     // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]
     column->append_datum(
-            DatumArray{DatumStruct{1, DatumMap{{11, (Slice) "test11"}, {111, (Slice) "test111"}}}, Datum()});
+            DatumArray{Datum(DatumStruct{1, DatumMap{{11, (Slice) "test11"}, {111, (Slice) "test111"}}}), Datum()});
     // []
     column->append_datum(DatumArray());
     // [{"id": 2, "map": null}, {"id": null, "map": {33:"test33"},{333:null}}]
-    column->append_datum(DatumArray{DatumStruct{2, Datum()},
-                                    DatumStruct{Datum(), DatumMap{{33, (Slice) "test33"}, {333, Datum()}}}});
+    column->append_datum(DatumArray{Datum(DatumStruct{2, Datum()}),
+                                    Datum(DatumStruct{Datum(), DatumMap{{33, (Slice) "test33"}, {333, Datum()}}})});
     // [{"id": 4, "map": {}}}]
-    column->append_datum(DatumArray{DatumStruct{4, DatumMap{}}});
+    column->append_datum(DatumArray{Datum(DatumStruct{4, DatumMap{}})});
     // null
     column->append_nulls(1);
 
