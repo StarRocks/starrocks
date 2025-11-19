@@ -59,6 +59,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -89,7 +90,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
-    private final Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
+    private final Map<StructLikeWrapper, Long> partitionKeyToId = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -284,7 +285,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
 
-        StructLike partition = task.partition();
+        if (!partitionSlotIdsCache.containsKey(spec.specId())) {
+            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
+        }
+
+        // Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
+        StructLike origPartition = task.partition();
+        StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
+        StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
         if (partitionKeyToId.containsKey(partition)) {
             return partitionKeyToId.get(partition);
         }
@@ -294,7 +302,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
-        PartitionKey partitionKey = getPartitionKey(partition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+        PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
         long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
 
         Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
@@ -304,10 +312,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         partitionKeyToId.put(partition, partitionId);
         referencedPartitions.put(partitionId, referencedPartitionInfo);
-        if (!partitionSlotIdsCache.containsKey(spec.specId())) {
-            partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
-        }
-
         return partitionId;
     }
 
