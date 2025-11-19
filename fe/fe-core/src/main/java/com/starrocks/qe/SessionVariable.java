@@ -1278,15 +1278,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_USE_DB_LOCK, flag = VariableMgr.INVISIBLE)
     private boolean cboUseDBLock = false;
 
-<<<<<<< HEAD
-=======
-    @VarAttr(name = CBO_JSON_V2_REWRITE)
-    private boolean cboJSONV2Rewrite = true;
-
-    @VarAttr(name = CBO_JSON_V2_DICT_OPT)
-    private boolean cboJSONV2DictOpt = true;
-
->>>>>>> a5efb18e9e ([Enhancement] add a session variable to deploy scan range in foreground thread (#62291))
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -5200,97 +5191,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
     }
 
-<<<<<<< HEAD
-=======
-    public long getColumnViewConcatRowsLimit() {
-        return columnViewConcatRowsLimit;
-    }
-
-    public void setColumnViewConcatRowsLimit(long value) {
-        this.columnViewConcatRowsLimit = value;
-    }
-
-    public long getColumnViewConcatBytesLimit() {
-        return columnViewConcatBytesLimit;
-    }
-
-    public void setColumnViewConcatBytesLimit(long value) {
-        this.columnViewConcatBytesLimit = value;
-    }
-
-    public void setEnableDeferProjectAfterTopN(boolean enableDeferProjectAfterTopN) {
-        this.enableDeferProjectAfterTopN = enableDeferProjectAfterTopN;
-    }
-
-    public boolean isEnableDeferProjectAfterTopN() {
-        return enableDeferProjectAfterTopN;
-    }
-
-    public boolean isEnableSPMRewrite() {
-        return enableSPMRewrite;
-    }
-
-    public void setEnableSPMRewrite(boolean enableSPMRewrite) {
-        this.enableSPMRewrite = enableSPMRewrite;
-    }
-
-    public int getSemiJoinDeduplicateMode() {
-        return semiJoinDeduplicateMode;
-    }
-
-    public void setSemiJoinDeduplicateMode(int semiJoinDeduplicateMode) {
-        this.semiJoinDeduplicateMode = semiJoinDeduplicateMode;
-    }
-
-    public boolean isEnableInnerJoinToSemi() {
-        return enableInnerJoinToSemi;
-    }
-
-    public void setEnableInnerJoinToSemi(boolean enableInnerJoinToSemi) {
-        this.enableInnerJoinToSemi = enableInnerJoinToSemi;
-    }
-
-    public String getCboPushDownDistinct() {
-        return cboPushDownDistinct;
-    }
-
-    public int getJoinReorderDrivingTableMaxElement() {
-        return joinReorderDrivingTableMaxElement;
-    }
-
-    public boolean isEnableJoinReorderBeforeDeduplicate() {
-        return enableJoinReorderBeforeDeduplicate;
-    }
-
-    public void setEnableJoinReorderBeforeDeduplicate(boolean enableJoinReorderBeforeDeduplicate) {
-        this.enableJoinReorderBeforeDeduplicate = enableJoinReorderBeforeDeduplicate;
-    }
-
-    public int getSpmRewriteTimeoutMs() {
-        return spmRewriteTimeoutMs;
-    }
-
-    public void setSpmRewriteTimeoutMs(int spmRewriteTimeoutMs) {
-        this.spmRewriteTimeoutMs = spmRewriteTimeoutMs;
-    }
-
-    public void setEnableMultiCastLimitPushDown(boolean enableMultiCastLimitPushDown) {
-        this.enableMultiCastLimitPushDown = enableMultiCastLimitPushDown;
-    }
-
-    public boolean isEnableMultiCastLimitPushDown() {
-        return enableMultiCastLimitPushDown;
-    }
-
-    public boolean isEnableJSONV2Rewrite() {
-        return cboJSONV2Rewrite;
-    }
-
-    public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
-        this.cboJSONV2Rewrite = enableJSONV2Rewrite;
-    }
-
->>>>>>> a5efb18e9e ([Enhancement] add a session variable to deploy scan range in foreground thread (#62291))
     public boolean isEnableDropTableCheckMvDependency() {
         return enableDropTableCheckMvDependency;
     }
