@@ -157,6 +157,8 @@ public:
 
     DEFINE_VECTORIZED_FN(concat);
 
+    DEFINE_VECTORIZED_FN(arrays_zip);
+
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
     DEFINE_VECTORIZED_FN(array_cum_sum_double);
 
