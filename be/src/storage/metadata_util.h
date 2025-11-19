@@ -40,6 +40,8 @@ enum class FieldTypeVersion {
     kV2,
 };
 
+Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TabletSchemaPB* out_schema);
+
 // If the columns in |t_schema| do not have a unique id, then the columns in |out_schema| will use the
 // column's position in the schema (starting from 0) as their unique id.
 Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompressionType::type compression_type,
