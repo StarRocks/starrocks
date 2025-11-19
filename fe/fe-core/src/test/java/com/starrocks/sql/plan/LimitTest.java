@@ -995,7 +995,7 @@ public class LimitTest extends PlanTestBase {
     public void testLimitAgg() throws Exception {
         String sql = "select count(*) from (select * from t0 limit 50, 20) xx;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  2:EXCHANGE\n" +
                 "     offset: 50\n" +
                 "     limit: 20");
     }
