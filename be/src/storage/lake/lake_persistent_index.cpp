@@ -187,6 +187,45 @@ bool LakePersistentIndex::too_many_rebuild_files() const {
     return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
 }
 
+Status LakePersistentIndex::try_inline_major_compaction() {
+    TRACE_COUNTER_SCOPE_LATENCY_US("upsert_inline_compact_latency_us");
+
+    size_t current_txn_sstable_count = 0;
+    TabletMetadataPB metadata_pb;
+    metadata_pb.set_id(_tablet_id);
+    auto* sstable_meta = metadata_pb.mutable_sstable_meta();
+    for (const auto& sst : _sstables) {
+        auto current_max_rss_rowid = sst->sstable_pb().max_rss_rowid();
+        if (current_max_rss_rowid >= _current_txn_rss_rowid_min) {
+            auto* sstable_pb = sstable_meta->add_sstables();
+            sstable_pb->CopyFrom(sst->sstable_pb());
+            current_txn_sstable_count++;
+        }
+    }
+
+    // Check if we have enough sstables from current transaction
+    if (current_txn_sstable_count < config::lake_pk_index_inline_compaction_sst_min_count) {
+        VLOG(3) << "Skip inline compaction: not enough sstables generated in current txn. "
+                << "tablet: " << _tablet_id << ", current sstables count: " << current_txn_sstable_count
+                << ", min required: " << config::lake_pk_index_inline_compaction_sst_min_count;
+        return Status::OK();
+    }
+
+    TxnLogPB compaction_log;
+    RETURN_IF_ERROR(major_compact(_tablet_mgr, metadata_pb, &compaction_log));
+    if (!compaction_log.has_op_compaction()) {
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(apply_opcompaction(compaction_log.op_compaction(), true));
+    TRACE_COUNTER_INCREMENT("upsert_inline_compact_times", 1);
+
+    VLOG(3) << "Finish inline compaction for current txn. "
+            << "tablet: " << _tablet_id << ", _current_txn_rss_rowid_min: " << _current_txn_rss_rowid_min
+            << ", input sstables: " << compaction_log.op_compaction().input_sstables_size()
+            << ", remaining sstables: " << _sstables.size();
+    return Status::OK();
+}
+
 Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto filename = gen_sst_filename();
@@ -269,7 +308,12 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     KeyIndexSet& key_indexes = not_founds;
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
-        return flush_memtable();
+        uint32_t max_rss_rowid = _memtable->max_rss_rowid();
+        _current_txn_rss_rowid_min = std::min(_current_txn_rss_rowid_min, max_rss_rowid);
+        RETURN_IF_ERROR(flush_memtable());
+        if (config::lake_pk_index_publish_enable_inline_major_compaction) {
+            RETURN_IF_ERROR(try_inline_major_compaction());
+        }
     }
     return Status::OK();
 }
@@ -510,7 +554,8 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     return Status::OK();
 }
 
-Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
+Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
+                                               const bool is_inlined_compaction) {
     if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
         return Status::OK();
     }
@@ -540,6 +585,16 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
     for (const auto& input_sstable : op_compaction.input_sstables()) {
         filenames.insert(input_sstable.filename());
     }
+
+    if (is_inlined_compaction) {
+        for (auto it = _sstables.begin(); it != _sstables.end(); ++it) {
+            const auto& sstable_pb = (*it)->sstable_pb();
+            if (filenames.contains(sstable_pb.filename())) {
+                _inline_compacted_sstables[sstable_pb.filename()] = sstable_pb.filesize();
+            }
+        }
+    }
+
     // Erase merged sstable from sstable list
     _sstables.erase(std::remove_if(_sstables.begin(), _sstables.end(),
                                    [&](const std::unique_ptr<PersistentIndexSstable>& sstable) {
@@ -576,7 +631,26 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+
+    // make inline compacted sstables as orphan files for cleanup
+    if (!_inline_compacted_sstables.empty()) {
+        // create a temporary TxnLogPB_OpCompaction to reuse the existing remove_compacted_sst method
+        TxnLogPB_OpCompaction op_compaction;
+        for (const auto& [filename, filesize] : _inline_compacted_sstables) {
+            auto* input_sstable = op_compaction.add_input_sstables();
+            input_sstable->set_filename(filename);
+            input_sstable->set_filesize(filesize);
+        }
+        builder->remove_compacted_sst(op_compaction);
+        TRACE_COUNTER_INCREMENT("upsert_inline_compact_sst_count", _inline_compacted_sstables.size());
+        _inline_compacted_sstables.clear();
+    }
+
     _need_rebuild_file_cnt = need_rebuild_file_cnt(*builder->tablet_meta(), sstable_meta);
+
+    // Reset transaction-level rssid tracking after commit
+    _current_txn_rss_rowid_min = UINT32_MAX;
+
     return Status::OK();
 }
 

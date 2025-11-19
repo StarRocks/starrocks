@@ -88,6 +88,9 @@ public:
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   IOStat* stat = nullptr) override;
 
+    // Try inline major compaction for current transaction's sstables only
+    Status try_inline_major_compaction();
+
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -137,7 +140,7 @@ public:
 
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadata& metadata, TxnLogPB* txn_log);
 
-    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, bool is_inlined_compaction = false);
 
     Status commit(MetaFileBuilder* builder);
 
@@ -195,6 +198,13 @@ private:
     // In major compaction, some sstables will be picked to be merged into one.
     // sstables are ordered with the smaller version on the left.
     std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
+    // The sstables that has been compacted before commmit,
+    // and need be marked as orphan files in the final tablet meta
+    // mapping from filename -> filesize
+    std::map<std::string, std::int64_t> _inline_compacted_sstables;
+
+    // Track the minimum rssid_rowid of current transaction (for inline compaction optimization)
+    uint32_t _current_txn_rss_rowid_min{UINT32_MAX};
 };
 
 } // namespace lake

@@ -1176,6 +1176,8 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
+CONF_mBool(lake_pk_index_publish_enable_inline_major_compaction, "true");
+CONF_mInt32(lake_pk_index_inline_compaction_sst_min_count, "10");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Used for control memory usage of update state cache and compaction state cache
