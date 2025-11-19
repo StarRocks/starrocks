@@ -16,14 +16,10 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
-=======
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.BinaryType;
->>>>>>> 10812fa4d3 ([Enhancement] Estimate IF-based predicate (#64962))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;

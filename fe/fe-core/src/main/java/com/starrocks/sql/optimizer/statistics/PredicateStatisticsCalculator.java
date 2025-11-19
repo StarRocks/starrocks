@@ -15,11 +15,8 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
-=======
 import com.starrocks.catalog.FunctionSet;
->>>>>>> 10812fa4d3 ([Enhancement] Estimate IF-based predicate (#64962))
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
