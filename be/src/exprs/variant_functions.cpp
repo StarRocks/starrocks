@@ -20,17 +20,29 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "runtime/runtime_state.h"
+#include "util/variant_converter.h"
 #include "variant_path_parser.h"
 
 namespace starrocks {
 
 StatusOr<ColumnPtr> VariantFunctions::variant_query(FunctionContext* context, const Columns& columns) {
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    if (columns.size() != 2) {
-        return Status::InvalidArgument("VariantFunctions::variant_query requires 2 arguments");
-    }
-
     return _do_variant_query<TYPE_VARIANT>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_string(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_VARCHAR>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_int(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_BIGINT>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_bool(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_BOOLEAN>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_double(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DOUBLE>(context, columns);
 }
 
 Status VariantFunctions::variant_segments_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -85,6 +97,11 @@ Status VariantFunctions::variant_segments_close(FunctionContext* context, Functi
 
 template <LogicalType ResultType>
 StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns.size() != 2) {
+        return Status::InvalidArgument("Variant query functions requires 2 arguments");
+    }
+
     size_t num_rows = columns[0]->size();
 
     auto variant_viewer = ColumnViewer<TYPE_VARIANT>(columns[0]);
@@ -121,10 +138,19 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
         if constexpr (ResultType == TYPE_VARIANT) {
             result.append(std::move(field.value()));
         } else {
-            // TODO: support cast conversions in the following PR
-            return Status::NotSupported(
-                    fmt::format("VariantFunctions::variant_query does not support result type {} yet",
-                                logical_type_to_string(ResultType)));
+            const RuntimeState* state = context->state();
+            cctz::time_zone zone;
+            if (state == nullptr) {
+                zone = cctz::local_time_zone();
+            } else {
+                zone = context->state()->timezone_obj();
+            }
+            Variant field_view(field.value().get_metadata(), field.value().get_value());
+            Status casted = cast_variant_value_to<ResultType, true>(field_view, zone, result);
+            // Append null if casting fails
+            if (!casted.ok()) {
+                result.append_null();
+            }
         }
     }
 

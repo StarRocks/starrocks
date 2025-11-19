@@ -103,8 +103,7 @@ std::vector<uint32_t> VariantMetadata::get_index(std::string_view key) const {
             int cmp = field_key.compare(key);
             if (cmp == 0) {
                 indexes.push_back(mid);
-            }
-            if (cmp < 0) {
+            } else if (cmp < 0) {
                 left = mid + 1;
             } else {
                 right = mid - 1;

@@ -123,6 +123,7 @@ public enum PrimitiveType {
                     .add(FLOAT)
                     .add(DOUBLE)
                     .addAll(STRING_TYPE_LIST)
+                    .add(JSON)
                     .build();
 
     public static final ImmutableList<PrimitiveType> VARIANT_INCOMPATIBLE_TYPES =
@@ -204,7 +205,7 @@ public enum PrimitiveType {
         builder.putAll(VARIANT, VARIANT);
         builder.putAll(VARIANT, NULL_TYPE);
         for (PrimitiveType type : VARIANT_COMPATIBLE_TYPE) {
-            builder.put(type, VARIANT);
+            builder.put(VARIANT, type);
         }
 
         IMPLICIT_CAST_MAP = builder.build();
