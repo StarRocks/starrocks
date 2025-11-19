@@ -14,13 +14,9 @@
 
 package com.starrocks.qe.scheduler.dag;
 
-<<<<<<< HEAD
 import com.starrocks.common.UserException;
-=======
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
->>>>>>> a95c0df2b5 ([Enhancement] fix query profile when deploying more tasks (#62186))
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
@@ -84,13 +80,12 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                             for (DeployState state : states) {
                                 deployer.deployFragments(state);
                             }
-                        } catch (StarRocksException | RpcException e) {
+                        } catch (UserException | RpcException e) {
                             LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
                             coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                             throw new RuntimeException(e);
                         }
                     }
-<<<<<<< HEAD
                     for (DeployState state : states) {
                         deployer.deployFragments(state);
                     }
@@ -98,8 +93,6 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                     LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
                     coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                     throw new RuntimeException(e);
-=======
->>>>>>> a95c0df2b5 ([Enhancement] fix query profile when deploying more tasks (#62186))
                 }
             }
         }
