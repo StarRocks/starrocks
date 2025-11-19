@@ -88,6 +88,7 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.Backend;
@@ -1098,7 +1099,9 @@ public class SparkLoadJob extends BulkLoadJob {
                     // bitmap and hll data will be converted from varchar in be push.
                     return expr;
                 }
-                return dstType.getPrimitiveType() != srcType.getPrimitiveType() ? expr.castTo(dstType) : expr;
+                return dstType.getPrimitiveType() != srcType.getPrimitiveType()
+                        ? ExprCastFunction.castTo(expr, dstType)
+                        : expr;
             } else {
                 throw new AnalysisException("Spark-Load does not support complex types yet");
             }

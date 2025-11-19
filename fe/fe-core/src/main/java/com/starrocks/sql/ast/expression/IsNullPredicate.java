@@ -36,27 +36,12 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Function;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TFunctionBinaryType;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.InvalidType;
-import com.starrocks.type.Type;
 
 public class IsNullPredicate extends Predicate {
-
-    static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-            new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
-    static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-            new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
-    {
-        isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
-        isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
-    }
-
     private final boolean isNotNull;
 
     public IsNullPredicate(Expr e, boolean isNotNull) {
@@ -96,14 +81,6 @@ public class IsNullPredicate extends Predicate {
         return ((IsNullPredicate) obj).isNotNull == isNotNull;
     }
 
-
-    /**
-     * Negates an IsNullPredicate.
-     */
-    @Override
-    public Expr negate() {
-        return new IsNullPredicate(getChild(0), !isNotNull);
-    }
 
     public boolean isNullable() {
         return false;

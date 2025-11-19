@@ -42,6 +42,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Describes the addition and subtraction of time units from timestamps.
@@ -49,6 +50,7 @@ import java.util.Map;
  * They are executed as function call exprs in the BE.
  */
 public class TimestampArithmeticExpr extends Expr {
+
     private static final Map<String, TimeUnit> TIME_UNITS_MAP = new HashMap<String, TimeUnit>();
 
     static {
@@ -115,7 +117,6 @@ public class TimestampArithmeticExpr extends Expr {
         return new TimestampArithmeticExpr(this);
     }
 
-
     public ArithmeticExpr.Operator getOp() {
         return op;
     }
@@ -181,5 +182,24 @@ public class TimestampArithmeticExpr extends Expr {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitTimestampArithmeticExpr(this, context);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || (o.getClass() != this.getClass())) {
+            return false;
+        }
+        TimestampArithmeticExpr that = (TimestampArithmeticExpr) o;
+        return Objects.equals(funcName, that.funcName) &&
+                Objects.equals(timeUnitIdent, that.timeUnitIdent) &&
+                op == that.op;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), funcName, timeUnitIdent, op);
     }
 }

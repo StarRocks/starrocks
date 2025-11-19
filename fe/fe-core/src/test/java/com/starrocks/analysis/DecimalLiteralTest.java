@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -73,7 +74,7 @@ public class DecimalLiteralTest {
 
         // if DecimalLiteral need to cast to Decimal and Decimalv2, need to cast
         // to themselves
-        Assertions.assertEquals(literal, literal.uncheckedCastTo(DecimalType.DECIMALV2));
+        Assertions.assertEquals(literal, ExprCastFunction.uncheckedCastTo(literal, DecimalType.DECIMALV2));
 
         Assertions.assertEquals(1, literal.compareLiteral(new NullLiteral()));
     }
@@ -222,17 +223,17 @@ public class DecimalLiteralTest {
         type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
         decimalLiteral = new DecimalLiteral("12345678.90", type);
         Assertions.assertEquals(decimalLiteral.getType(), TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2));
-        decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
+        decimalLiteral = (DecimalLiteral) ExprCastFunction.uncheckedCastTo(decimalLiteral, type);
         Assertions.assertEquals(decimalLiteral.getType(), type);
 
         type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 6);
         decimalLiteral = new DecimalLiteral("12345678.1234567890123", type);
         Assertions.assertEquals(decimalLiteral.getType(), TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 14, 6));
-        decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
+        decimalLiteral = (DecimalLiteral) ExprCastFunction.uncheckedCastTo(decimalLiteral, type);
         Assertions.assertEquals(decimalLiteral.getType(), type);
         Assertions.assertEquals(decimalLiteral.getStringValue(), "12345678.123457");
         type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 17, 5);
-        decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
+        decimalLiteral = (DecimalLiteral) ExprCastFunction.uncheckedCastTo(decimalLiteral, type);
         Assertions.assertEquals(decimalLiteral.getType(), type);
         Assertions.assertEquals(decimalLiteral.getStringValue(), "12345678.12346");
     }
@@ -265,7 +266,7 @@ public class DecimalLiteralTest {
         assertThrows(Throwable.class, () -> {
             Type type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 2);
             DecimalLiteral decimalLiteral = new DecimalLiteral("92233720368547758.08");
-            decimalLiteral.uncheckedCastTo(type);
+            ExprCastFunction.uncheckedCastTo(decimalLiteral, type);
         });
     }
 

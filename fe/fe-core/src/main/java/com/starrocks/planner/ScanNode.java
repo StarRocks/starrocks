@@ -45,6 +45,7 @@ import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -156,7 +157,7 @@ public abstract class ScanNode extends PlanNode {
      */
     protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
         if (!slotDesc.getType().matchesType(expr.getType())) {
-            return expr.castTo(slotDesc.getType());
+            return ExprCastFunction.castTo(expr, slotDesc.getType());
         } else {
             return expr;
         }

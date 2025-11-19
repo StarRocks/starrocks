@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -850,7 +851,7 @@ public class Load {
                     Expr replaceExpr = exprsByName.get(slot.getColumnName());
                     if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
+                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
                     }
                     smap.put(slot, replaceExpr);
                 } else {
@@ -859,7 +860,7 @@ public class Load {
                     Expr replaceExpr = slotRef;
                     if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
+                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
                     }
                     smap.put(slot, replaceExpr);
                 }

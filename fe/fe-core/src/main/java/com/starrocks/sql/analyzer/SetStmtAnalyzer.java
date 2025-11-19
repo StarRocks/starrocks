@@ -553,7 +553,7 @@ public class SetStmtAnalyzer {
             Expr foldedExpression;
             foldedExpression = ExprUtils.analyzeAndCastFold(expression);
 
-            if (foldedExpression.isLiteral()) {
+            if (ExprUtils.isLiteral(foldedExpression)) {
                 userVariable.setEvaluatedExpression(foldedExpression);
             } else {
                 SelectList selectList = new SelectList(Lists.newArrayList(

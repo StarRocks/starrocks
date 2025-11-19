@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
@@ -561,7 +562,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         List<Expr> flatten = AnalyzerUtils.flattenPredicate(node);
         if (flatten.size() >= MASSIVE_COMPOUND_LIMIT && options.isEnableMassiveExpr()) {
             // Only record de-duplicated slots if there are too many compounds
-            List<SlotRef> exprs = node.collectAllSlotRefs(true);
+            List<SlotRef> exprs = ExprUtils.collectAllSlotRefs(node, true);
             String sortedSlots = exprs.stream()
                     .filter(SlotRef::isColumnRef)
                     .map(ExprToSql::toSql)

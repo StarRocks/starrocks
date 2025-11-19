@@ -810,7 +810,7 @@ public class PlanFragmentBuilder {
 
             for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(entry.getKey().asInt());
-                if (entry.getValue().isLiteral() && !entry.getValue().isNullable()) {
+                if (ExprUtils.isLiteral(entry.getValue()) && !entry.getValue().isNullable()) {
                     slotDescriptor.setIsNullable(false);
                 } else {
                     slotDescriptor.setIsNullable(
