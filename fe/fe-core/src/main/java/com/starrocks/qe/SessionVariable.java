@@ -5396,7 +5396,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return root.toString();
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, getJsonString());
@@ -5406,8 +5405,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         readFromJson(in);
     }
 
-=======
->>>>>>> a5efb18e9e ([Enhancement] add a session variable to deploy scan range in foreground thread (#62291))
     private void readFromJson(DataInput in) throws IOException {
         String json = Text.readString(in);
         replayFromJson(json);
