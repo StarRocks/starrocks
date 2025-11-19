@@ -60,21 +60,23 @@ public class TimeWatcher {
     }
 
     public List<Timer> getAllTimerWithOrder() {
-        return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
+        return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePointNanoSecond))
                 .collect(Collectors.toList());
     }
 
     private class ScopedTimer extends Timer {
         private final String name;
         private final int scopeLevel;
-        private final long firstTimePoints;
+        private final long firstTimePointNanoSecond;
         private final Stopwatch stopWatch = Stopwatch.createUnstarted();
 
         private int count = 0;
         private int reentrantCount = 0;
 
         public ScopedTimer(long time, String name) {
-            this.firstTimePoints = time;
+            // The reason why here we want nanosecond is to make sure
+            // `getAllTimerWithOrder` can sort times in correct order.
+            this.firstTimePointNanoSecond = time;
             this.name = name;
             this.scopeLevel = levels.size();
         }
@@ -103,7 +105,7 @@ public class TimeWatcher {
 
         @Override
         public long getFirstTimePoint() {
-            return firstTimePoints;
+            return firstTimePointNanoSecond / 1000000;
         }
 
         @Override
