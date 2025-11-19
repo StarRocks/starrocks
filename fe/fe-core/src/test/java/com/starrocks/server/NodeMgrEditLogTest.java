@@ -14,14 +14,17 @@
 
 package com.starrocks.server;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.DropFrontendInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateFrontendInfo;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.MockJournal;
@@ -864,6 +867,85 @@ public class NodeMgrEditLogTest {
         Assertions.assertEquals(masterFrontend.getHost(), followerFrontend.getHost());
         Assertions.assertEquals(masterFrontend.getEditLogPort(), followerFrontend.getEditLogPort());
         Assertions.assertEquals(masterFrontend.getFid(), followerFrontend.getFid());
+    }
+
+    // ==================== Set Leader Info Tests ====================
+
+    @Test
+    public void testSetLeaderInfoNormalCase() throws Exception {
+        // 1. Set GlobalStateMgr to LEADER state to allow editlog writing
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+
+        // 2. Verify initial state (leader info should be empty or default)
+        String initialLeaderIp = masterNodeMgr.getLeaderInfo().getIp();
+        Assertions.assertNull(initialLeaderIp);
+
+        // 3. Execute setLeaderInfo operation (master side)
+        masterNodeMgr.setLeaderInfo();
+
+        // 4. Verify master state after setting leader info
+        LeaderInfo leaderInfo = masterNodeMgr.getLeaderInfo();
+        Assertions.assertNotNull(leaderInfo);
+        Assertions.assertEquals(FrontendOptions.getLocalHostAddress(), leaderInfo.getIp());
+        Assertions.assertEquals(Config.rpc_port, leaderInfo.getRpcPort());
+        Assertions.assertEquals(Config.http_port, leaderInfo.getHttpPort());
+
+        // 5. Test follower replay functionality
+        NodeMgr followerNodeMgr = new NodeMgr(FrontendNodeType.FOLLOWER, "follower", Pair.create("192.168.1.3", 9010));
+        
+        // Verify follower initial state
+        LeaderInfo followerInitialLeaderInfo = followerNodeMgr.getLeaderInfo();
+        Assertions.assertNull(followerInitialLeaderInfo.getIp());
+        Assertions.assertEquals(0, followerInitialLeaderInfo.getRpcPort());
+        Assertions.assertEquals(0, followerInitialLeaderInfo.getHttpPort());
+
+        LeaderInfo replayLeaderInfo = (LeaderInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_LEADER_INFO_CHANGE_V2);
+        
+        // Execute follower replay (simulating what happens in EditLog replay)
+        followerNodeMgr.setLeader(replayLeaderInfo);
+
+        // 6. Verify follower state is consistent with master
+        LeaderInfo followerLeaderInfo = followerNodeMgr.getLeaderInfo();
+        Assertions.assertEquals(leaderInfo.getIp(), followerLeaderInfo.getIp());
+        Assertions.assertEquals(leaderInfo.getRpcPort(), followerLeaderInfo.getRpcPort());
+        Assertions.assertEquals(leaderInfo.getHttpPort(), followerLeaderInfo.getHttpPort());
+    }
+
+    @Test
+    public void testSetLeaderInfoEditLogException() throws Exception {
+        // 1. Set GlobalStateMgr to LEADER state to allow editlog writing
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+
+        // 2. Create a separate NodeMgr for exception testing
+        NodeMgr exceptionNodeMgr = new NodeMgr(FrontendNodeType.FOLLOWER, "exception_master", Pair.create("192.168.1.4", 9010));
+        
+        // Verify initial state
+        LeaderInfo initialLeaderInfo = exceptionNodeMgr.getLeaderInfo();
+        Assertions.assertNull(initialLeaderInfo.getIp());
+        Assertions.assertEquals(0, initialLeaderInfo.getRpcPort());
+        Assertions.assertEquals(0, initialLeaderInfo.getHttpPort());
+
+        // 3. Mock EditLog.logLeaderInfo to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logLeaderInfo(any(LeaderInfo.class), any());
+        
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 4. Execute setLeaderInfo operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            exceptionNodeMgr.setLeaderInfo();
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 5. Verify leader memory state remains unchanged after exception
+        LeaderInfo leaderInfoAfterException = exceptionNodeMgr.getLeaderInfo();
+        // Verify leader info was not set (the leaderIp field itself should still be empty)
+        Assertions.assertNull(leaderInfoAfterException.getIp());
+        Assertions.assertEquals(0, leaderInfoAfterException.getRpcPort());
+        Assertions.assertEquals(0, leaderInfoAfterException.getHttpPort());
     }
 }
 

@@ -370,7 +370,7 @@ public class EditLog {
                 }
                 case OperationType.OP_SET_VIEW_SECURITY_LOG: {
                     AlterViewInfo info = (AlterViewInfo) journal.data();
-                    globalStateMgr.getAlterJobMgr().setViewSecurity(info, true);
+                    globalStateMgr.getAlterJobMgr().updateViewSecurity(info);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION_V2: {
@@ -1424,20 +1424,20 @@ public class EditLog {
         }
     }
 
-    public void logSaveNextId(long nextId) {
-        logJsonObject(OperationType.OP_SAVE_NEXTID_V2, new NextIdLog(nextId));
+    public void logSaveNextId(long nextId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SAVE_NEXTID_V2, new NextIdLog(nextId), walApplier);
     }
 
     public void logSaveTransactionId(long transactionId) {
         logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
     }
 
-    public void logSaveAutoIncrementId(AutoIncrementInfo info) {
-        logJsonObject(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info);
+    public void logSaveAutoIncrementId(AutoIncrementInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info, walApplier);
     }
 
-    public void logSaveDeleteAutoIncrementId(AutoIncrementInfo info) {
-        logJsonObject(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
+    public void logSaveDeleteAutoIncrementId(AutoIncrementInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info, walApplier);
     }
 
     public void logCreateDb(Database db, String storageVolumeId) {
@@ -1619,16 +1619,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_BATCH_DELETE_REPLICA, info);
     }
 
-    public void logAddKey(EncryptionKeyPB key) {
-        logJsonObject(OperationType.OP_ADD_KEY, key);
+    public void logAddKey(EncryptionKeyPB key, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_KEY, key, walApplier);
     }
 
     public void logTimestamp(Timestamp stamp) {
         logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
     }
 
-    public void logLeaderInfo(LeaderInfo info) {
-        logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
+    public void logLeaderInfo(LeaderInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info, walApplier);
     }
 
     public void logResetFrontends(Frontend frontend, WALApplier walApplier) {
@@ -2029,12 +2029,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
 
-    public void logAddSQLBlackList(SqlBlackListPersistInfo addBlackList) {
-        logJsonObject(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, addBlackList);
+    public void logAddSQLBlackList(SqlBlackListPersistInfo addBlackList, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, addBlackList, walApplier);
     }
 
-    public void logDeleteSQLBlackList(DeleteSqlBlackLists deleteBlacklists) {
-        logJsonObject(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, deleteBlacklists);
+    public void logDeleteSQLBlackList(DeleteSqlBlackLists deleteBlacklists, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, deleteBlacklists, walApplier);
     }
 
     public void logStarMgrOperation(StarMgrJournal journal) {
@@ -2218,19 +2218,19 @@ public class EditLog {
         logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
     }
 
-    public void logCreateSPMBaseline(BaselinePlan.Info info) {
-        logJsonObject(OperationType.OP_CREATE_SPM_BASELINE_LOG, info);
+    public void logCreateSPMBaseline(BaselinePlan.Info info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_SPM_BASELINE_LOG, info, walApplier);
     }
 
-    public void logDropSPMBaseline(BaselinePlan.Info info) {
-        logJsonObject(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
+    public void logDropSPMBaseline(BaselinePlan.Info info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_SPM_BASELINE_LOG, info, walApplier);
     }
 
-    public void logUpdateSPMBaseline(BaselinePlan.Info info, boolean isEnable) {
+    public void logUpdateSPMBaseline(BaselinePlan.Info info, boolean isEnable, WALApplier walApplier) {
         if (isEnable) {
-            logJsonObject(OperationType.OP_ENABLE_SPM_BASELINE_LOG, info);
+            logJsonObject(OperationType.OP_ENABLE_SPM_BASELINE_LOG, info, walApplier);
         } else {
-            logJsonObject(OperationType.OP_DISABLE_SPM_BASELINE_LOG, info);
+            logJsonObject(OperationType.OP_DISABLE_SPM_BASELINE_LOG, info, walApplier);
         }
     }
 
@@ -2240,5 +2240,13 @@ public class EditLog {
 
     public void logRemoveDynamicTabletJob(long jobId) {
         logJsonObject(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
+    }
+
+    public void logCreateGroupProvider(GroupProviderLog provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER, provider, walApplier);
+    }
+
+    public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

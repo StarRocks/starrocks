@@ -640,11 +640,24 @@ public class AlterJobMgr {
         }
     }
 
-    public void setViewSecurity(AlterViewInfo alterViewInfo, boolean isReplay) {
+    public void setViewSecurity(AlterViewInfo alterViewInfo) {
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(
+                OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo, wal -> updateViewSecurity(alterViewInfo));
+    }
+
+    public void updateViewSecurity(AlterViewInfo alterViewInfo) {
         long dbId = alterViewInfo.getDbId();
         long tableId = alterViewInfo.getTableId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db {} is null when update view security", dbId);
+            return;
+        }
         View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (view == null) {
+            LOG.warn("view {} is null when update view security", tableId);
+            return;
+        }
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
@@ -652,10 +665,6 @@ public class AlterJobMgr {
             view.setSecurity(alterViewInfo.getSecurity());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
-        }
-
-        if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_SET_VIEW_SECURITY_LOG, alterViewInfo);
         }
     }
 

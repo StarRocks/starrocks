@@ -3093,7 +3093,11 @@ public class OlapTable extends Table {
     }
 
     public void removeTableBinds(boolean isReplay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId(), isReplay);
+        if (isReplay) {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().deleteAutoIncrementIdForTable(getId());
+        } else {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId());
+        }
         GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
         GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
     }

@@ -249,7 +249,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
         if (statement.getAlterClause() == null) {
             AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(), statement.isSecurity());
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo, false);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo);
             return null;
         }
 
