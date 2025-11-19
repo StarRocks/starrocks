@@ -16,13 +16,14 @@
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -30,10 +31,10 @@ public class LambdaFunctionOperatorTest {
     @Test
     public void lambdaFunction() {
         ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, Type.INT, "x", true),
+                new ColumnRefOperator(1, IntegerType.INT, "x", true),
                 ConstantOperator.createInt(1));
-        ColumnRefOperator colRef = new ColumnRefOperator(1, Type.INT, "x", true, true);
-        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        ColumnRefOperator colRef = new ColumnRefOperator(1, IntegerType.INT, "x", true, true);
+        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, BooleanType.BOOLEAN);
         Assertions.assertTrue(lambda.getChild(0).equals(lambdaExpr));
         Assertions.assertTrue(lambda.getLambdaExpr().equals(lambdaExpr));
         Assertions.assertTrue(lambda.getRefColumns().get(0).getName() == "x");

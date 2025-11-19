@@ -26,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
@@ -125,7 +126,7 @@ public class JDBCScanNode extends ScanNode {
             return;
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
-        Expr.collectList(conjuncts, SlotRef.class, slotRefs);
+        ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
         String identifier = getIdentifierSymbol();
         for (SlotRef slotRef : slotRefs) {
@@ -135,9 +136,9 @@ public class JDBCScanNode extends ScanNode {
             sMap.put(slotRef, tmpRef);
         }
 
-        ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
+        ArrayList<Expr> jdbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
-            p = p.replaceLargeStringLiteral();
+            p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(AstToStringBuilder.toString(p));
         }
     }

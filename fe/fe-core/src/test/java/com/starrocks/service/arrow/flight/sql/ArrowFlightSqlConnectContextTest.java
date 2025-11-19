@@ -15,7 +15,6 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectContext;
@@ -26,6 +25,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.type.TypeFactory;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -81,9 +81,46 @@ public class ArrowFlightSqlConnectContextTest {
 
     @Test
     public void testReset() {
-        context.reset("SELECT 1");
+        context.initWithStatement("SELECT 1");
         assertEquals("SELECT 1", context.getQuery());
         assertNotNull(context.getQueryId());
+    }
+
+    @Test
+    public void testResetThrowsWhenQueryAlreadySet() {
+        // First reset should succeed
+        context.initWithStatement("SELECT 1");
+        assertEquals("SELECT 1", context.getQuery());
+        
+        // Second reset should throw IllegalStateException
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            context.initWithStatement("SELECT 2");
+        });
+        
+        assertTrue(exception.getMessage().contains("Query already in progress"));
+    }
+
+    @Test
+    public void testResetAfterClearQuery() {
+        context.initWithStatement("SELECT 1");
+        context.reset();
+        
+        // Should not throw since query was cleared
+        context.initWithStatement("SELECT 2");
+        assertEquals("SELECT 2", context.getQuery());
+    }
+
+    @Test
+    public void testClearQuery() {
+        context.initWithStatement("SELECT 1");
+        assertEquals("SELECT 1", context.getQuery());
+        
+        context.reset();
+        assertEquals("", context.getQuery());
+        
+        // After clearing, reset should work again
+        context.initWithStatement("SELECT 2");
+        assertEquals("SELECT 2", context.getQuery());
     }
 
     @Test
@@ -111,7 +148,7 @@ public class ArrowFlightSqlConnectContextTest {
     public void testAddShowResultAndGetResult() {
         String queryId = "query-2";
 
-        Column column = new Column("col1", ScalarType.createVarchar(20));
+        Column column = new Column("col1", TypeFactory.createVarchar(20));
         ShowResultSetMetaData metaData = new ShowResultSetMetaData(Collections.singletonList(column));
         ShowResultSet showResultSet = new ShowResultSet(metaData, List.of(Collections.singletonList("value1")));
 

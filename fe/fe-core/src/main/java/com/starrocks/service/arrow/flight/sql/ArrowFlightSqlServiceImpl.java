@@ -14,6 +14,8 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
@@ -23,21 +25,17 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.proto.PFetchArrowSchemaRequest;
-import com.starrocks.proto.PFetchArrowSchemaResult;
-import com.starrocks.proto.PUniqueId;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
-import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
@@ -63,15 +61,14 @@ import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.util.AutoCloseables;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowStreamReader;
 import org.apache.arrow.vector.ipc.WriteChannel;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -81,8 +78,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlServiceImpl.class);
@@ -143,7 +138,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 String token = context.peerIdentity();
                 ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
 
-                ctx.reset(request.getQuery());
+                ctx.initWithStatement(request.getQuery());
                 // To prevent the client from mistakenly interpreting an empty Schema as an update statement (instead of a query statement),
                 // we need to ensure that the Schema returned by createPreparedStatement includes the query metadata.
                 // This means we need to correctly set the DatasetSchema and ParameterSchema in ActionCreatePreparedStatementResult.
@@ -174,6 +169,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public void closePreparedStatement(FlightSql.ActionClosePreparedStatementRequest request, CallContext context,
                                        StreamListener<Result> listener) {
+        String token = context.peerIdentity();
+        ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
+        ctx.reset(); 
         executor.submit(listener::onCompleted);
     }
 
@@ -207,7 +205,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                              FlightDescriptor descriptor) {
         String token = context.peerIdentity();
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
-        ctx.reset(command.getQuery());
+        ctx.initWithStatement(command.getQuery());
         ctx.setThreadLocalInfo();
         return getFlightInfoFromQuery(ctx, descriptor);
     }
@@ -444,7 +442,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         listener.start(vectorSchemaRoot);
         listener.putNext();
         listener.completed();
-
         ctx.removeResult(queryId);
     }
 
@@ -462,18 +459,21 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                     ctx.setDeploymentFinished(null);
                     processorFinished.complete(null);
-                } catch (Exception e) {
-                    processorFinished.completeExceptionally(e);
                 } catch (Throwable t) {
+                    ctx.setDeployFailed(t);
                     processorFinished.completeExceptionally(t);
                 }
             });
 
-            processorFinished.get();
+            // Wait util deployment finished or ArrowFlightSqlConnectProcessor finished.
+            SessionVariable sv = ctx.getSessionVariable();
+            Coordinator coordinator = ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
+
             // ------------------------------------------------------------------------------------
             // FE task will return FE as endpoint.
             // ------------------------------------------------------------------------------------
-            if (ctx.returnFromFE() || ctx.isFromFECoordinator()) {
+            if (ctx.returnFromFE()) {
+                processorFinished.get();
                 if (ctx.getState().isError()) {
                     throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                             DebugUtil.printId(ctx.getExecutionId()),
@@ -493,17 +493,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             // ------------------------------------------------------------------------------------
             // Query task will wait until deployment to BE is finished and return BE as endpoint.
             // ------------------------------------------------------------------------------------
-            SessionVariable sv = ctx.getSessionVariable();
-            Coordinator coordinator = ctx.waitForDeploymentFinished(sv.getQueryTimeoutS() * 1000L);
             if (coordinator == null || ctx.getState().isError()) {
                 throw new RuntimeException(String.format("failed to process query [queryID=%s] [error=%s]",
                         DebugUtil.printId(ctx.getExecutionId()),
                         ctx.getState().getErrorMessage()));
             }
 
-            if (!(coordinator instanceof DefaultCoordinator)) {
-                throw new RuntimeException("Coordinator is not DefaultCoordinator, cannot proceed with BE execution.");
-            }
+            Preconditions.checkState(coordinator instanceof DefaultCoordinator,
+                    "Coordinator is not DefaultCoordinator, cannot proceed with BE execution.");
             DefaultCoordinator defaultCoordinator = (DefaultCoordinator) coordinator;
 
             ExecutionFragment rootFragment = defaultCoordinator.getExecutionDAG().getRootFragment();
@@ -511,12 +508,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             ComputeNode worker = rootFragmentInstance.getWorker();
             TUniqueId rootFragmentInstanceId = rootFragmentInstance.getInstanceId();
 
-            // Fetch arrow schema from BE.
-            PUniqueId pInstanceId = new PUniqueId();
-            pInstanceId.setHi(rootFragmentInstanceId.getHi());
-            pInstanceId.setLo(rootFragmentInstanceId.getLo());
-            long timeoutMs = Math.min(sv.getQueryDeliveryTimeoutS(), sv.getQueryTimeoutS()) * 1000L;
-            Schema schema = fetchArrowSchema(ctx, worker.getBrpcAddress(), pInstanceId, timeoutMs);
+            ExecPlan execPlan = defaultCoordinator.getJobSpec().getExecPlan();
+            Preconditions.checkNotNull(execPlan, "execPlan is null");
+            Schema schema = buildSchema(execPlan);
 
             // Build BE ticket.
             final ByteString handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
@@ -525,6 +519,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
             return buildFlightInfo(ticketStatement, descriptor, schema, endpoint);
         } catch (Exception e) {
+            ctx.reset();
             LOG.warn("[ARROW] failed to getFlightInfoFromQuery [queryID={}]", DebugUtil.printId(ctx.getExecutionId()), e);
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
         }
@@ -545,33 +540,25 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return buildFlightInfo(request, descriptor, schema, feEndpoint);
     }
 
-    protected  <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,
-                                                           Schema schema, Location endpoint) {
+    protected <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,
+                                                             Schema schema, Location endpoint) {
         final Ticket ticket = new Ticket(Any.pack(request).toByteArray());
         final List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, endpoint));
         return new FlightInfo(schema, descriptor, endpoints, -1, -1);
     }
 
-    protected Schema fetchArrowSchema(ConnectContext ctx, TNetworkAddress brpcAddress, PUniqueId rootInstanceId, long timeoutMs) {
-        PFetchArrowSchemaRequest request = new PFetchArrowSchemaRequest();
-        request.setFinstId(rootInstanceId);
+    private Schema buildSchema(ExecPlan execPlan) {
+        List<Field> arrowFields = Lists.newArrayList();
 
-        try {
-            Future<PFetchArrowSchemaResult> resFuture = BackendServiceClient.getInstance().fetchArrowSchema(brpcAddress, request);
-            PFetchArrowSchemaResult res = resFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
-
-            try (RootAllocator rootAllocator = new RootAllocator(Integer.MAX_VALUE);
-                    ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(res.getSchema()), rootAllocator)) {
-                return reader.getVectorSchemaRoot().getSchema();
-            }
-        } catch (Exception e) {
-            String errorMsg = String.format(
-                    "Failed to fetchArrowSchema [queryID=%s] [rootInstanceId=%s] [brpcAddress=%s:%d] [msg=%s]",
-                    DebugUtil.printId(ctx.getExecutionId()), DebugUtil.printId(rootInstanceId), brpcAddress.getHostname(),
-                    brpcAddress.getPort(), e.getMessage());
-            LOG.warn("[ARROW] {}", errorMsg, e);
-            throw new RuntimeException(errorMsg, e);
+        List<String> colNames = execPlan.getColNames();
+        List<Expr> outExprs = execPlan.getOutputExprs();
+        for (int i = 0; i < colNames.size(); i++) {
+            Expr expr = outExprs.get(i);
+            Field arrowField = ArrowUtils.convertToArrowType(expr.getOriginType(), colNames.get(i), expr.isNullable());
+            arrowFields.add(arrowField);
         }
+
+        return new Schema(arrowFields);
     }
 
     protected StatementBase parse(String sql, SessionVariable sessionVariables) {

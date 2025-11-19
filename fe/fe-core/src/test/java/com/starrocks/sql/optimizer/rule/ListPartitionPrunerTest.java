@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -41,6 +40,11 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,8 +80,8 @@ public class ListPartitionPrunerTest {
         // date_col=2021-01-03/int_col=1   7
         // date_col=2021-01-03/int_col=2   8
         // date_col=null/int_col=null      9
-        dateColumn = new ColumnRefOperator(1, Type.DATE, "date_col", true);
-        intColumn = new ColumnRefOperator(2, Type.INT, "int_col", true);
+        dateColumn = new ColumnRefOperator(1, DateType.DATE, "date_col", true);
+        intColumn = new ColumnRefOperator(2, IntegerType.INT, "int_col", true);
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newConcurrentMap();
@@ -88,9 +92,9 @@ public class ListPartitionPrunerTest {
         datePartitionValuesMap.put(new DateLiteral(2021, 1, 3), Sets.newHashSet(6L, 7L, 8L));
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intColumn, intPartitionValuesMap);
-        intPartitionValuesMap.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 3L, 6L));
-        intPartitionValuesMap.put(new IntLiteral(1, Type.INT), Sets.newHashSet(1L, 4L, 7L));
-        intPartitionValuesMap.put(new IntLiteral(2, Type.INT), Sets.newHashSet(2L, 5L, 8L));
+        intPartitionValuesMap.put(new IntLiteral(0, IntegerType.INT), Sets.newHashSet(0L, 3L, 6L));
+        intPartitionValuesMap.put(new IntLiteral(1, IntegerType.INT), Sets.newHashSet(1L, 4L, 7L));
+        intPartitionValuesMap.put(new IntLiteral(2, IntegerType.INT), Sets.newHashSet(2L, 5L, 8L));
 
         // column -> null partitions
         columnToNullPartitions = Maps.newHashMap();
@@ -177,7 +181,7 @@ public class ListPartitionPrunerTest {
         // string_col=2021-01-03   3
         // string_col=2021-01-04   4
 
-        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, StringType.STRING, "string_col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -206,17 +210,17 @@ public class ListPartitionPrunerTest {
         Assertions.assertEquals(Lists.newArrayList(2L, 3L, 4L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.DATE, stringColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(DateType.DATE, stringColumn),
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(1L, 2L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, new CastOperator(Type.DATE, stringColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, new CastOperator(DateType.DATE, stringColumn),
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 4, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(4L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.DATE, stringColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(DateType.DATE, stringColumn),
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(1L), pruner.prune());
     }
@@ -232,7 +236,7 @@ public class ListPartitionPrunerTest {
         // string_col=12   7
         // string_col=21   8
 
-        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, StringType.STRING, "string_col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -271,17 +275,17 @@ public class ListPartitionPrunerTest {
         Assertions.assertEquals(Lists.newArrayList(1L, 2L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.INT, stringColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(IntegerType.INT, stringColumn),
                 ConstantOperator.createInt(1)));
         Assertions.assertEquals(Lists.newArrayList(1L, 4L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, new CastOperator(Type.INT, stringColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, new CastOperator(IntegerType.INT, stringColumn),
                 ConstantOperator.createInt(3)));
         Assertions.assertEquals(Lists.newArrayList(5L, 6L, 7L, 8L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.INT, stringColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(IntegerType.INT, stringColumn),
                 ConstantOperator.createInt(3)));
         Assertions.assertEquals(Lists.newArrayList(1L, 2L, 4L), pruner.prune());
     }
@@ -297,7 +301,7 @@ public class ListPartitionPrunerTest {
         // int_col=20   7
         // int_col=21   8
 
-        ColumnRefOperator intColumn = new ColumnRefOperator(1, Type.INT, "int_col", true);
+        ColumnRefOperator intColumn = new ColumnRefOperator(1, IntegerType.INT, "int_col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -332,17 +336,17 @@ public class ListPartitionPrunerTest {
         Assertions.assertEquals(Lists.newArrayList(1L, 2L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.STRING, intColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(StringType.STRING, intColumn),
                 ConstantOperator.createVarchar("1")));
         Assertions.assertEquals(Lists.newArrayList(1L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, new CastOperator(Type.STRING, intColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, new CastOperator(StringType.STRING, intColumn),
                 ConstantOperator.createVarchar("3")));
         Assertions.assertEquals(Lists.newArrayList(), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.STRING, intColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(StringType.STRING, intColumn),
                 ConstantOperator.createVarchar("2")));
         Assertions.assertEquals(Lists.newArrayList(1L, 4L, 5L, 6L), pruner.prune());
     }
@@ -354,7 +358,7 @@ public class ListPartitionPrunerTest {
         // int_col=20210103   3
         // int_col=20210104   4
 
-        ColumnRefOperator intColumn = new ColumnRefOperator(1, Type.INT, "int_col", true);
+        ColumnRefOperator intColumn = new ColumnRefOperator(1, IntegerType.INT, "int_col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -376,40 +380,40 @@ public class ListPartitionPrunerTest {
         conjuncts.clear();
         conjuncts.add(
                 new BinaryPredicateOperator(BinaryType.EQ, intColumn,
-                        new CastOperator(Type.INT, ConstantOperator.createDate(
+                        new CastOperator(IntegerType.INT, ConstantOperator.createDate(
                                 LocalDateTime.of(2021, 1, 2, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(2L), pruner.prune());
 
         conjuncts.clear();
         conjuncts.add(
                 new BinaryPredicateOperator(BinaryType.GE, intColumn,
-                        new CastOperator(Type.INT, ConstantOperator.createDate(
+                        new CastOperator(IntegerType.INT, ConstantOperator.createDate(
                                 LocalDateTime.of(2021, 1, 2, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(2L, 3L, 4L), pruner.prune());
 
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, intColumn,
-                new CastOperator(Type.INT, ConstantOperator.createDate(
+                new CastOperator(IntegerType.INT, ConstantOperator.createDate(
                         LocalDateTime.of(2021, 1, 2, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(1L), pruner.prune());
 
         conjuncts.clear();
         conjuncts.add(
-                new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.DOUBLE, intColumn),
-                        new CastOperator(Type.DOUBLE, ConstantOperator.createDate(
+                new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(FloatType.DOUBLE, intColumn),
+                        new CastOperator(FloatType.DOUBLE, ConstantOperator.createDate(
                                 LocalDateTime.of(2021, 1, 2, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(2L), pruner.prune());
 
         conjuncts.clear();
         conjuncts.add(
-                new BinaryPredicateOperator(BinaryType.GE, new CastOperator(Type.DOUBLE, intColumn),
-                        new CastOperator(Type.DOUBLE, ConstantOperator.createDate(
+                new BinaryPredicateOperator(BinaryType.GE, new CastOperator(FloatType.DOUBLE, intColumn),
+                        new CastOperator(FloatType.DOUBLE, ConstantOperator.createDate(
                                 LocalDateTime.of(2021, 1, 2, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(2L, 3L, 4L), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.DOUBLE, intColumn),
-                new CastOperator(Type.DOUBLE, ConstantOperator.createDate(
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(FloatType.DOUBLE, intColumn),
+                new CastOperator(FloatType.DOUBLE, ConstantOperator.createDate(
                         LocalDateTime.of(2021, 1, 2, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(1L), pruner.prune());
     }
@@ -420,7 +424,7 @@ public class ListPartitionPrunerTest {
         // string_col="02"  2
         // string_col="03"   3
 
-        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, StringType.STRING, "string_col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -438,8 +442,8 @@ public class ListPartitionPrunerTest {
         ListPartitionPruner pruner =
                 new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.INT, stringColumn),
-                new CastOperator(Type.INT, ConstantOperator.createVarchar("1.23"))));
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(IntegerType.INT, stringColumn),
+                new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("1.23"))));
         Assertions.assertNull(pruner.prune());
     }
 
@@ -449,7 +453,7 @@ public class ListPartitionPrunerTest {
         // string_col="2"  2
         // string_col="3"   3
 
-        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, StringType.STRING, "string_col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -467,7 +471,7 @@ public class ListPartitionPrunerTest {
         ListPartitionPruner pruner =
                 new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         conjuncts.clear();
-        conjuncts.add(new InPredicateOperator(new CastOperator(Type.INT, stringColumn),
+        conjuncts.add(new InPredicateOperator(new CastOperator(IntegerType.INT, stringColumn),
                 ConstantOperator.createInt(2),
                 ConstantOperator.createInt(3)));
         Assertions.assertEquals(2, pruner.prune().size());
@@ -479,21 +483,21 @@ public class ListPartitionPrunerTest {
         // int_col1=0/int_col2=10    0
         // int_col1=0/int_col2=11    1
         // int_col1=1/int_col2=10    2
-        intColumn = new ColumnRefOperator(2, Type.INT, "int_col", true);
-        ColumnRefOperator intCol1 = new ColumnRefOperator(3, Type.INT, "int_col1", true);
-        ColumnRefOperator intCol2 = new ColumnRefOperator(4, Type.INT, "int_col2", true);
-        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, Type.INT, "int_col_not_part", true);
+        intColumn = new ColumnRefOperator(2, IntegerType.INT, "int_col", true);
+        ColumnRefOperator intCol1 = new ColumnRefOperator(3, IntegerType.INT, "int_col1", true);
+        ColumnRefOperator intCol2 = new ColumnRefOperator(4, IntegerType.INT, "int_col2", true);
+        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, IntegerType.INT, "int_col_not_part", true);
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newHashMap();
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol1, intPartitionValuesMap1);
-        intPartitionValuesMap1.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 1L));
-        intPartitionValuesMap1.put(new IntLiteral(1, Type.INT), Sets.newHashSet(2L));
+        intPartitionValuesMap1.put(new IntLiteral(0, IntegerType.INT), Sets.newHashSet(0L, 1L));
+        intPartitionValuesMap1.put(new IntLiteral(1, IntegerType.INT), Sets.newHashSet(2L));
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol2, intPartitionValuesMap2);
-        intPartitionValuesMap2.put(new IntLiteral(10, Type.INT), Sets.newHashSet(0L, 2L));
-        intPartitionValuesMap2.put(new IntLiteral(11, Type.INT), Sets.newHashSet(1L));
+        intPartitionValuesMap2.put(new IntLiteral(10, IntegerType.INT), Sets.newHashSet(0L, 2L));
+        intPartitionValuesMap2.put(new IntLiteral(11, IntegerType.INT), Sets.newHashSet(1L));
 
         // column -> null partitions
         columnToNullPartitions = Maps.newHashMap();
@@ -515,21 +519,21 @@ public class ListPartitionPrunerTest {
         // int_col1=0/int_col2=10    0
         // int_col1=0/int_col2=11    1
         // int_col1=1/int_col2=10    2
-        intColumn = new ColumnRefOperator(2, Type.INT, "int_col", true);
-        ColumnRefOperator intCol1 = new ColumnRefOperator(3, Type.INT, "int_col1", true);
-        ColumnRefOperator intCol2 = new ColumnRefOperator(4, Type.INT, "int_col2", true);
-        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, Type.INT, "int_col_not_part", true);
+        intColumn = new ColumnRefOperator(2, IntegerType.INT, "int_col", true);
+        ColumnRefOperator intCol1 = new ColumnRefOperator(3, IntegerType.INT, "int_col1", true);
+        ColumnRefOperator intCol2 = new ColumnRefOperator(4, IntegerType.INT, "int_col2", true);
+        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, IntegerType.INT, "int_col_not_part", true);
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newHashMap();
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap1 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol1, intPartitionValuesMap1);
-        intPartitionValuesMap1.put(new IntLiteral(0, Type.INT), Sets.newHashSet(0L, 1L));
-        intPartitionValuesMap1.put(new IntLiteral(1, Type.INT), Sets.newHashSet(2L));
+        intPartitionValuesMap1.put(new IntLiteral(0, IntegerType.INT), Sets.newHashSet(0L, 1L));
+        intPartitionValuesMap1.put(new IntLiteral(1, IntegerType.INT), Sets.newHashSet(2L));
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> intPartitionValuesMap2 = new ConcurrentSkipListMap<>();
         columnToPartitionValuesMap.put(intCol2, intPartitionValuesMap2);
-        intPartitionValuesMap2.put(new IntLiteral(10, Type.INT), Sets.newHashSet(0L, 2L));
-        intPartitionValuesMap2.put(new IntLiteral(11, Type.INT), Sets.newHashSet(1L));
+        intPartitionValuesMap2.put(new IntLiteral(10, IntegerType.INT), Sets.newHashSet(0L, 2L));
+        intPartitionValuesMap2.put(new IntLiteral(11, IntegerType.INT), Sets.newHashSet(1L));
 
         // column -> null partitions
         columnToNullPartitions = Maps.newHashMap();
@@ -544,7 +548,7 @@ public class ListPartitionPrunerTest {
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(
                 BinaryType.EQ,
-                new CallOperator("add", Type.BIGINT, Lists.newArrayList(intCol1, intCol2)),
+                new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(intCol1, intCol2)),
                 ConstantOperator.createInt(10)));
         Assertions.assertEquals(null, pruner.prune());
         // check not eval conjuncts
@@ -557,7 +561,7 @@ public class ListPartitionPrunerTest {
         notEvalConjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(
                 BinaryType.EQ,
-                new CallOperator("add", Type.BIGINT, Lists.newArrayList(intCol2, ConstantOperator.createInt(1))),
+                new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(intCol2, ConstantOperator.createInt(1))),
                 ConstantOperator.createInt(11)));
         Assertions.assertEquals(null, pruner.prune());
         // check not eval conjuncts
@@ -686,8 +690,8 @@ public class ListPartitionPrunerTest {
 
     @Test
     public void testGetEffectivePartitionPredicate() {
-        Column dateCol = new Column("date_col", Type.DATE);
-        Column intCol = new Column("int_col", Type.INT);
+        Column dateCol = new Column("date_col", DateType.DATE);
+        Column intCol = new Column("int_col", IntegerType.INT);
 
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
         columnMetaToColRefMap.put(dateCol, dateColumn);
@@ -713,56 +717,56 @@ public class ListPartitionPrunerTest {
         // date_col = "2021-01-01"
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(Type.DATETIME, dateColumn),
+                new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 1, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col < "2021-01-02"
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.LT,
-                new CastOperator(Type.DATETIME, dateColumn),
+                new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 2, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col >= "2021-01-03" and date_col <= "2021-01-03"
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.GE,
-                new CastOperator(Type.DATETIME, dateColumn),
+                new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         conjuncts.add(new BinaryPredicateOperator(BinaryType.LE,
-                new CastOperator(Type.DATETIME, dateColumn),
+                new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(6L, 7L, 8L), pruner.prune());
         // date_col > "2021-01-03"
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.GT,
-                new CastOperator(Type.DATETIME, dateColumn),
+                new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(), pruner.prune());
         // date_col <= "2020-12-31"
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.LE,
-                new CastOperator(Type.DATETIME, dateColumn),
+                new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2020, 12, 31, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(), pruner.prune());
 
         conjuncts.clear();
-        conjuncts.add(new InPredicateOperator(new CastOperator(Type.DATETIME, dateColumn),
+        conjuncts.add(new InPredicateOperator(new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 1, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col in ("2021-01-02", "2021-01-03")
         conjuncts.clear();
-        conjuncts.add(new InPredicateOperator(new CastOperator(Type.DATETIME, dateColumn),
+        conjuncts.add(new InPredicateOperator(new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 2, 0, 0, 0)),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assertions.assertEquals(Lists.newArrayList(3L, 4L, 5L, 6L, 7L, 8L), pruner.prune());
         // date_col in ("2021-01-03", "2021-01-04")
         conjuncts.clear();
-        conjuncts.add(new InPredicateOperator(false, Lists.newArrayList(new CastOperator(Type.DATETIME, dateColumn),
+        conjuncts.add(new InPredicateOperator(false, Lists.newArrayList(new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0)),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 4, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(6L, 7L, 8L), pruner.prune());
         // date_col in ("2021-01-04")
         conjuncts.clear();
-        conjuncts.add(new InPredicateOperator(false, Lists.newArrayList(new CastOperator(Type.DATETIME, dateColumn),
+        conjuncts.add(new InPredicateOperator(false, Lists.newArrayList(new CastOperator(DateType.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 4, 0, 0, 0)))));
         Assertions.assertEquals(Lists.newArrayList(), pruner.prune());
 
@@ -770,7 +774,7 @@ public class ListPartitionPrunerTest {
 
     @Test
     public void testBinaryPredicateWithEmptyPartition() throws AnalysisException {
-        ColumnRefOperator operator = new ColumnRefOperator(5, Type.VARCHAR, "ds", true);
+        ColumnRefOperator operator = new ColumnRefOperator(5, VarcharType.VARCHAR, "ds", true);
         columnToPartitionValuesMap = Maps.newHashMap();
         columnToPartitionValuesMap.put(operator, new ConcurrentSkipListMap<>());
         columnToNullPartitions = new HashMap<>();
@@ -784,7 +788,7 @@ public class ListPartitionPrunerTest {
 
     @Test
     public void testInPredicateWithEmptyPartition() throws AnalysisException {
-        ColumnRefOperator operator = new ColumnRefOperator(5, Type.VARCHAR, "ds", true);
+        ColumnRefOperator operator = new ColumnRefOperator(5, VarcharType.VARCHAR, "ds", true);
         columnToPartitionValuesMap = Maps.newHashMap();
         columnToPartitionValuesMap.put(operator, new ConcurrentSkipListMap<>());
         columnToNullPartitions = new HashMap<>();

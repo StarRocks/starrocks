@@ -45,7 +45,10 @@ namespace starrocks {
 class FlatJsonQueryTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>,
                                                      std::string, std::string>> {
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 };
 
@@ -432,6 +435,7 @@ class FlatGetJsonXXXTestFixture2 : public ::testing::TestWithParam<GetJsonXXXPar
 public:
     StatusOr<Columns> setup() {
         config::enable_json_flat_complex_type = true;
+        config::enable_lazy_dynamic_flat_json = true; // Enable hyper extraction path to test _extract_with_hyper
         _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
         auto ints = JsonColumn::create();
         ColumnBuilder<TYPE_VARCHAR> builder(1);
@@ -591,7 +595,10 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, FlatGetJsonXXXTestFixture2,
         std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 0, 0, "false", 0.0),
         std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -1, "true", -1),
         std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1),
-        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1)
+        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1),
+        // Test case to cover the bug fix: empty flat_path should not cause crash when calling substr(1)
+        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range
+        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1)
     ));
 // clang-format on
 
@@ -599,7 +606,10 @@ class FlatJsonDeriverPaths
         : public ::testing::TestWithParam<
                   std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {
 public:
-    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 };
 

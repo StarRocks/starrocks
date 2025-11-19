@@ -6,9 +6,97 @@ displayed_sidebar: docs
 
 :::warning
 
-升级至 v3.5 后，请勿直接将集群降级至 v3.4.0 ~ v3.4.4，否则会导致元数据不兼容。您必须降级到 v3.4.5 或更高版本以避免出现此问题。
+- 升级至 v3.5 后，请勿直接将集群降级至 v3.4.0 ~ v3.4.4，否则会导致元数据不兼容。您必须降级到 v3.4.5 或更高版本以避免出现此问题。
+- 升级至 v3.5.2 后，请勿将集群降级至 v3.5.0 和 v3.5.1，否则会导致 FE Crash。
 
 :::
+
+## 3.5.8
+
+发布日期：2025 年 11 月 10 日
+
+### 功能改进
+
+- 将 Arrow 升级至 19.0.1，以支持 Parquet 旧版 LIST 编码格式，从而兼容嵌套和复杂文件。 [#64238](https://github.com/StarRocks/starrocks/pull/64238)
+- FILES() 支持 Parquet 旧版 LIST 编码。 [#64160](https://github.com/StarRocks/starrocks/pull/64160)
+- 根据会话变量和插入列数量自动确定 Partial Update 模式。 [#62091](https://github.com/StarRocks/starrocks/pull/62091)
+- 在表函数之上的分析算子中应用低基数优化。 [#63378](https://github.com/StarRocks/starrocks/pull/63378)
+- 为 `finishTransaction` 新增可配置的表锁超时设置，以避免阻塞。 [#63981](https://github.com/StarRocks/starrocks/pull/63981)
+- 存算分离集群支持获取表级扫描指标。 [#62832](https://github.com/StarRocks/starrocks/pull/62832)
+- 窗口函数 LEAD/LAG/FIRST_VALUE/LAST_VALUE 现在支持 ARRAY 类型参数。 [#63547](https://github.com/StarRocks/starrocks/pull/63547)
+- 支持多种数组函数的常量折叠，以提升谓词下推和 Join 简化性能。 [#63692](https://github.com/StarRocks/starrocks/pull/63692)
+- 支持批量 API 优化 `SHOW PROC /backends/{id}` 中获取指定节点的 `tabletNum`。新增 FE 配置项 `enable_collect_tablet_num_in_show_proc_backend_disk_path`（默认值：`true`）。 [#64013](https://github.com/StarRocks/starrocks/pull/64013)
+- 确保 `INSERT ... SELECT` 在执行前刷新外部表，以读取最新元数据。 [#64026](https://github.com/StarRocks/starrocks/pull/64026)
+- 在表函数、NL Join Probe、Hash Join Probe 中增加 `capacity_limit_reached` 检查，以避免构造超限列。 [#64009](https://github.com/StarRocks/starrocks/pull/64009)
+- 新增 FE 配置项 `collect_stats_io_tasks_per_connector_operator`（默认值：`4`），用于设置收集外部表统计信息的最大任务数。 [#64016](https://github.com/StarRocks/starrocks/pull/64016)
+- 采样收集的默认分区大小从 1000 调整为 300。 [#64022](https://github.com/StarRocks/starrocks/pull/64022)
+- 锁表槽数量增加至 256，并在慢锁日志中增加 `rid` 字段。 [#63945](https://github.com/StarRocks/starrocks/pull/63945)
+- 提升 Gson 反序列化在处理旧版数据时的健壮性。 [#63555](https://github.com/StarRocks/starrocks/pull/63555)
+- 缩小 FILES() 模式下推的元数据锁范围，以降低锁竞争并减少计划延迟。 [#63796](https://github.com/StarRocks/starrocks/pull/63796)
+- 新增 Task Run 执行超时检查机制，通过引入 FE 配置项 `task_runs_timeout_second`，并优化超时任务的取消逻辑。 [#63842](https://github.com/StarRocks/starrocks/pull/63842)
+- 确保 `REFRESH MATERIALIZED VIEW ... FORCE` 始终刷新目标分区，即使在不一致或损坏的情况下。 [#63844](https://github.com/StarRocks/starrocks/pull/63844)
+
+### 问题修复
+
+修复了以下问题：
+
+- 解析 ClickHouse 的 Nullable (Decimal) 类型时出现异常。 [#64195](https://github.com/StarRocks/starrocks/pull/64195)
+- Tablet 迁移与主键索引查找的并发问题。 [#64164](https://github.com/StarRocks/starrocks/pull/64164)
+- 物化视图刷新缺少 FINISHED 状态。 [#64191](https://github.com/StarRocks/starrocks/pull/64191)
+- 存算分离集群中 Schema Change Publish 无法重试。 [#64093](https://github.com/StarRocks/starrocks/pull/64093)
+- 数据湖中主键表的行数统计错误。 [#64007](https://github.com/StarRocks/starrocks/pull/64007)
+- 存算分离集群中 Tablet 创建超时时无法返回节点信息。 [#63963](https://github.com/StarRocks/starrocks/pull/63963)
+- Lake Data Cache 损坏后无法清理。 [#63182](https://github.com/StarRocks/starrocks/pull/63182)
+- 带 IGNORE NULLS 标志的窗口函数无法与不带该标志的函数合并。 [#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- 如果 Compaction 任务在 FE 重启前中止，则重启后无法重新调度。 [#63881](https://github.com/StarRocks/starrocks/pull/63881)
+- FE 频繁重启时任务调度失败。 [#63966](https://github.com/StarRocks/starrocks/pull/63966)
+- GCS 错误码处理问题。 [#64066](https://github.com/StarRocks/starrocks/pull/64066)
+- StarMgr gRPC 执行器的不稳定问题。 [#63828](https://github.com/StarRocks/starrocks/pull/63828)
+- 创建独占 Worker Group 时的死锁问题。 [#63893](https://github.com/StarRocks/starrocks/pull/63893)
+- Iceberg 表缓存未正确失效。 [#63971](https://github.com/StarRocks/starrocks/pull/63971)
+- 存算分离集群中排序聚合结果错误。 [#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- `PartitionedSpillerWriter::_remove_partition` 中的 ASAN 错误。 [#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- 获取 Morsel 队列分片失败时 BE 崩溃。 [#62753](https://github.com/StarRocks/starrocks/pull/62753)
+- 物化视图改写中聚合下推类型转换错误。 [#63875](https://github.com/StarRocks/starrocks/pull/63875)
+- FE 中删除过期导入作业时报 NPE。 [#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- 删除分区时的 Partitioned Spill 崩溃问题。 [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- 某些计划下物化视图改写抛出 `IllegalStateException`。 [#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- 创建分区物化视图时发生 NPE。 [#63830](https://github.com/StarRocks/starrocks/pull/63830)
+
+## 3.5.7
+
+发布日期：2025年10月21日
+
+### 功能增强
+
+- 通过在内存竞争严重的情况下引入重试回退机制，提升了 Scan Operator 的内存统计准确性。[#63788](https://github.com/StarRocks/starrocks/pull/63788)
+- 通过利用现有的分区分布，优化了物化视图桶的推理，防止了过多桶的创建。[#63367](https://github.com/StarRocks/starrocks/pull/63367)
+- 修改了 Iceberg 表缓存机制，提高了一致性并减少了频繁元数据更新时的缓存失效风险。[#63388](https://github.com/StarRocks/starrocks/pull/63388)
+- 在 `QueryDetail` 和 `AuditEvent` 中增加了 `querySource` 字段，以便更好地追踪查询来源，跨 API 和调度器。[#63480](https://github.com/StarRocks/starrocks/pull/63480)
+- 通过在 MemTable 写入时检测到 Duplicate Key 时打印详细的上下文，增强了持久化索引诊断功能。[#63560](https://github.com/StarRocks/starrocks/pull/63560)
+- 通过优化锁粒度和并发场景中的顺序，减少了物化视图操作中的锁竞争。[#63481](https://github.com/StarRocks/starrocks/pull/63481)
+
+### 问题修复
+
+修复了以下问题：
+
+- 由于类型不匹配导致的物化视图重写失败。[#63659](https://github.com/StarRocks/starrocks/pull/63659)
+- `regexp_extract_all` 行为不正确，且不支持 `pos=0`。[#63626](https://github.com/StarRocks/starrocks/pull/63626)
+- 由于对带有复杂函数的 CASE WHEN 简化不当，导致扫描性能下降。[#63732](https://github.com/StarRocks/starrocks/pull/63732)
+- 在部分更新时，从列模式切换到行模式时，DCG 数据读取不正确。[#61529](https://github.com/StarRocks/starrocks/pull/61529)
+- 初始化 `ExceptionStackContext` 时可能发生死锁。[#63776](https://github.com/StarRocks/starrocks/pull/63776)
+- ARM 架构机器上 Parquet 数值转换崩溃。[#63294](https://github.com/StarRocks/starrocks/pull/63294)
+- 聚合中间类型使用 `ARRAY<NULL_TYPE>` 引发的问题。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- 在边缘情况下（例如，INT128_MIN）将 LARGEINT 转换为 DECIMAL128 时，溢出检测不正确导致的稳定性问题。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- 无法感知 LZ4 压缩和解压缩错误。[#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- 查询由 `FROM_UNIXTIME` 分区的表时，出现 `ClassCastException`。[#63684](https://github.com/StarRocks/starrocks/pull/63684)
+- 当唯一有效的源副本被标记为 `DECOMMISSION` 时，平衡触发迁移后的分区无法修复。[#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- 使用 PREPARE 语句时，Profile 丢失 SQL 语句和 Planner Trace。[#63519](https://github.com/StarRocks/starrocks/pull/63519)
+- `extract_number`，`extract_bool`和`extract_string`函数不具备异常安全性。[#63575](https://github.com/StarRocks/starrocks/pull/63575)
+- 关闭的分区无法正确进行垃圾回收。[#63595](https://github.com/StarRocks/starrocks/pull/63595)
+- `PREPARE`/`EXECUTE`语句的返回结果在 Profile 中显示为`omit`。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
+- `date_trunc` 的分区裁剪与组合谓词错误地产生了 EMPTYSET。[#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- `NullableColumn` 中的 CHECK 导致 Release Build 发生崩溃。[#63553](https://github.com/StarRocks/starrocks/pull/63553)
 
 ## 3.5.6
 

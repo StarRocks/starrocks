@@ -16,17 +16,12 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.thrift.TBinaryLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.type.VarbinaryType;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
@@ -45,13 +40,13 @@ public class VarBinaryLiteral extends LiteralExpr {
 
     public VarBinaryLiteral() {
         super();
-        this.type = Type.VARBINARY;
+        this.type = VarbinaryType.VARBINARY;
     }
 
     public VarBinaryLiteral(byte[] value) {
         super();
         this.value = value;
-        this.type = Type.VARBINARY;
+        this.type = VarbinaryType.VARBINARY;
         analysisDone();
     }
 
@@ -68,7 +63,7 @@ public class VarBinaryLiteral extends LiteralExpr {
         if (hexString.length() % 2 != 0) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidBinaryFormat(), pos);
         }
-        this.type = Type.VARBINARY;
+        this.type = VarbinaryType.VARBINARY;
         this.value = BaseEncoding.base16().decode(hexString);
     }
 
@@ -125,16 +120,15 @@ public class VarBinaryLiteral extends LiteralExpr {
         return value;
     }
 
+    public byte[] getValue() {
+        return value;
+    }
+
     @Override
     public boolean isMinValue() {
         return false;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.BINARY_LITERAL;
-        msg.binary_literal = new TBinaryLiteral(ByteBuffer.wrap(value));
-    }
 
     @Override
     public String getStringValue() {
@@ -149,11 +143,6 @@ public class VarBinaryLiteral extends LiteralExpr {
     @Override
     public double getDoubleValue() {
         return 0.0;
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        return super.uncheckedCastTo(targetType);
     }
 
     @Override

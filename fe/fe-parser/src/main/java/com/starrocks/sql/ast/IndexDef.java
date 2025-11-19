@@ -50,7 +50,6 @@ public class IndexDef implements ParseNode {
         this.properties = Optional.ofNullable(properties).orElse(Collections.emptyMap());
     }
 
-    @Override
     public String toSql() {
         return toSql(null);
     }

@@ -23,13 +23,6 @@ insert into test_array_ndv values
 (4, [], [], []);
 -- result:
 -- !result
-select column_name, hll_cardinality(ndv) from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_ndv' order by column_name;
--- result:
-int_arr	0
-k1	3
-nested_arr_int	0
-str_arr	0
--- !result
 admin set frontend config ("enable_manual_collect_array_ndv"="true");
 -- result:
 -- !result

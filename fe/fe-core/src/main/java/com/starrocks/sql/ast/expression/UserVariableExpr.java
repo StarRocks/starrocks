@@ -15,8 +15,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
@@ -84,11 +82,4 @@ public class UserVariableExpr extends Expr {
         return value.isNullable();
     }
 
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        Preconditions.checkState(value != null, "should analyze UserVariableExpr first then cast its value");
-        UserVariableExpr userVariableExpr = new UserVariableExpr(this);
-        userVariableExpr.setValue(value.uncheckedCastTo(targetType));
-        return userVariableExpr;
-    }
 }

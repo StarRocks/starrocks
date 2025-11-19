@@ -295,7 +295,7 @@ public class SplitTabletJobFactory implements DynamicTabletJobFactory {
             newIndex.addTablet(tablet, null, false);
         }
 
-        newIndex.setVirtualBuckets(dynamicTablets.calcNewVirtualBuckets(oldIndex.getVirtualBuckets()));
+        // newIndex.setVirtualBuckets(dynamicTablets.calcNewVirtualBuckets(oldIndex.getVirtualBuckets()));
         return newIndex;
     }
 

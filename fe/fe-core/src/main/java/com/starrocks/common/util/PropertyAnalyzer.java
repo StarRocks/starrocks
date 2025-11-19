@@ -57,7 +57,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -98,6 +97,8 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -264,9 +265,9 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
-    public static final String PROPERTIES_ENABLE_DYNAMIC_TABLET = "enable_dynamic_tablet";
-
     public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
+
+    public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -325,7 +326,7 @@ public class PropertyAnalyzer {
                 }
             } else if (!hasCooldownTime && key.equalsIgnoreCase(coolDownTimeKey)) {
                 hasCooldownTime = true;
-                DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
+                DateLiteral dateLiteral = new DateLiteral(value, DateType.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
             } else if (!hasCoolDownTTL && key.equalsIgnoreCase(coolDownTTLKey)) {
                 hasCoolDownTTL = true;
@@ -585,6 +586,14 @@ public class PropertyAnalyzer {
             enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
         }
         return enableLoadProfile;
+    }
+
+    public static boolean analyzeEnableStatisticCollectOnFirstLoad(Map<String, String> properties) {
+        boolean enable = true;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            enable = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+        }
+        return enable;
     }
 
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
@@ -1593,24 +1602,6 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    public static Boolean analyzeEnableDynamicTablet(Map<String, String> properties, boolean removeProperties)
-            throws AnalysisException {
-        Boolean enableDynamicTablet = Config.enable_dynamic_tablet;
-        if (properties != null) {
-            String value = removeProperties ? properties.remove(PROPERTIES_ENABLE_DYNAMIC_TABLET)
-                    : properties.get(PROPERTIES_ENABLE_DYNAMIC_TABLET);
-            if (value != null) {
-                try {
-                    enableDynamicTablet = parseBoolean(value);
-                } catch (Exception e) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
-                            PROPERTIES_ENABLE_DYNAMIC_TABLET, value, "`true` or `false`");
-                }
-            }
-        }
-        return enableDynamicTablet;
-    }
-
     public static long analyzeDynamicTabletSplitSize(Map<String, String> properties, boolean removeProperties)
             throws AnalysisException {
         long dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
@@ -1662,7 +1653,11 @@ public class PropertyAnalyzer {
             // replication_num
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                if (FeConstants.isReplayFromQueryDump) {
+                    replicationNum = 1;
+                } else {
+                    replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                }
                 materializedView.setReplicationNum(replicationNum);
             }
             // bloom_filter_columns
@@ -1940,11 +1935,15 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
-            if (materializedView.isCloudNativeMaterializedView()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                        .unbindTableToStorageVolume(materializedView.getId());
+            if (FeConstants.isReplayFromQueryDump) {
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+            } else {
+                if (materializedView.isCloudNativeMaterializedView()) {
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                            .unbindTableToStorageVolume(materializedView.getId());
+                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
             }
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
     }
 

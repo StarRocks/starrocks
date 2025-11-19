@@ -49,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -224,7 +225,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.fullRefresh(mv);
-        mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
+        mvUpdateInfo.addMVToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, mvUpdateInfo, queryTables, 0);

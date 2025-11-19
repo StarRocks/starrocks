@@ -41,6 +41,13 @@ public class FormatOptions {
 
     private boolean enableHints = true;
 
+    private boolean enablePrettyFormat = false;
+
+    private int indentLevel = 0;
+    
+    // Two spaces for indentation
+    private String indentString = "  ";
+
     private FormatOptions() {}
 
     public static FormatOptions allEnable() {
@@ -85,6 +92,10 @@ public class FormatOptions {
 
     public boolean isEnableHints() {
         return enableHints;
+    }
+
+    public boolean isEnablePrettyFormat() {
+        return enablePrettyFormat;
     }
 
     public FormatOptions setColumnSimplifyTableName(boolean columnSimplifyTableName) {
@@ -142,7 +153,36 @@ public class FormatOptions {
         return this;
     }
 
+    public FormatOptions setEnablePrettyFormat(boolean enablePrettyFormat) {
+        this.enablePrettyFormat = enablePrettyFormat;
+        return this;
+    }
+
     public String newLine() {
         return enableNewLine ? "\n" : " ";
+    }
+
+
+    public String indent() {
+        if (!enableNewLine) {
+            return " ";
+        }
+        return "\n" + indentString.repeat(indentLevel);
+    }
+
+    public FormatOptions increaseIndent() {
+        indentLevel++;
+        return this;
+    }
+
+    public FormatOptions decreaseIndent() {
+        if (indentLevel > 0) {
+            indentLevel--;
+        }
+        return this;
+    }
+
+    public int getIndentLevel() {
+        return indentLevel;
     }
 }

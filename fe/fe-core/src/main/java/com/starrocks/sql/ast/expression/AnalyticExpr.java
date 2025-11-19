@@ -36,22 +36,24 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Representation of an analytic function call with OVER clause.
@@ -160,7 +162,7 @@ public class AnalyticExpr extends Expr {
             orderByElements.add(e.clone());
         }
 
-        partitionExprs = Expr.cloneList(other.partitionExprs);
+        partitionExprs = ExprUtils.cloneList(other.partitionExprs);
         window = (other.window != null ? other.window.clone() : null);
         resetWindow = other.resetWindow;
         partitionHint = other.partitionHint;
@@ -248,9 +250,6 @@ public class AnalyticExpr extends Expr {
                 .toString();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-    }
 
     public static boolean isAnalyticFn(Function fn) {
         return fn instanceof AggregateFunction
@@ -311,7 +310,7 @@ public class AnalyticExpr extends Expr {
             return;
         }
 
-        double value = getConstFromExpr(val);
+        double value = ExprUtils.getConstFromExpr(val);
         PrimitiveType type = call.getChild(0).getType().getPrimitiveType();
         boolean out = false;
 
@@ -395,7 +394,7 @@ public class AnalyticExpr extends Expr {
     }
 
     @Override
-    protected void resetAnalysisState() {
+    public void resetAnalysisState() {
         super.resetAnalysisState();
         fnCall.resetAnalysisState();
 
@@ -421,7 +420,28 @@ public class AnalyticExpr extends Expr {
         // all children information is contained in the group of fnCall, partitionExprs, orderByElements and window,
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
-        return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
+        return Objects.hash(type, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
                 useHashBasedPartition, isSkewed);
+    }
+
+    // aggregation function over unbounded window without sliding frame can convert into
+    // null-safe-eq join with aggregation
+    // for an example:
+    // Q1: select a, b, count(distinct c) over (partition by a,b) from t;
+    // equals to
+    // Q2: with cte as (select a,b, count(distinct c) cdc from t group by a,b)
+    //     select t.a,t.b,cte.cdc from t inner join cte on t.a <=> cte.a and t.b <= cte.b
+    public boolean isUnboundedWindowWithoutSlidingFrame() {
+        if (window != null &&
+                !(window.getLeftBoundary().getType().isAbsolutePos() &&
+                        window.getRightBoundary().getType().isAbsolutePos())) {
+            return false;
+        }
+
+        if (!orderByElements.isEmpty()) {
+            return false;
+        }
+        final Set<String> supportFunctions = ImmutableSet.of(FunctionSet.SUM, FunctionSet.AVG, FunctionSet.COUNT);
+        return supportFunctions.contains(fnCall.getFnName().getFunction());
     }
 }

@@ -18,16 +18,20 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
 
@@ -38,7 +42,7 @@ public class AnalyticAnalyzer {
         for (Expr e : analyticExpr.getPartitionExprs()) {
             if (e.isConstant()) {
                 throw new SemanticException("Expressions in the PARTITION BY clause must not be constant: "
-                        + e.toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
+                        + ExprToSql.toSql(e) + " (in " + ExprToSql.toSql(analyticExpr) + ")", e.getPos());
             }
             if (!e.getType().canPartitionBy()) {
                 throw new SemanticException(e.getType().toSql() + " type can't as partition by column", e.getPos());
@@ -48,7 +52,7 @@ public class AnalyticAnalyzer {
         for (OrderByElement e : analyticExpr.getOrderByElements()) {
             if (e.getExpr().isConstant()) {
                 throw new SemanticException("Expressions in the ORDER BY clause must not be constant: "
-                        + e.getExpr().toSql() + " (in " + analyticExpr.toSql() + ")", e.getPos());
+                        + ExprToSql.toSql(e.getExpr()) + " (in " + ExprToSql.toSql(analyticExpr) + ")", e.getPos());
             }
             if (!e.getExpr().getType().canOrderBy()) {
                 throw new SemanticException(e.getExpr().getType().toString() + " type can't as order by column", e.getPos());
@@ -56,14 +60,14 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
-        if (analyticFunction.getParams().isDistinct()) {
-            throw new SemanticException("DISTINCT not allowed in analytic function: " + analyticFunction.toSql(),
+        if (analyticFunction.getParams().isDistinct() && !analyticExpr.isUnboundedWindowWithoutSlidingFrame()) {
+            throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());
         }
 
         if (!isAnalyticFn(analyticFunction.getFn())) {
             throw new SemanticException("Function '%s' not supported with OVER clause.",
-                    analyticExpr.getFnCall().toSql(), analyticFunction.getPos());
+                    ExprToSql.toSql(analyticExpr.getFnCall()), analyticFunction.getPos());
         }
 
         for (Expr e : analyticExpr.getFnCall().getChildren()) {
@@ -90,7 +94,7 @@ public class AnalyticAnalyzer {
             if (!isPositiveConstantInteger(offset)) {
                 throw new SemanticException(
                         "The offset parameter of LEAD/LAG must be a constant positive integer: " +
-                                analyticFunction.toSql(), analyticFunction.getPos());
+                                ExprToSql.toSql(analyticFunction), analyticFunction.getPos());
             }
 
             // TODO: remove this check when the backend can handle non-constants
@@ -104,7 +108,7 @@ public class AnalyticAnalyzer {
                 }
 
                 try {
-                    analyticFunction.uncheckedCastChild(firstType, 2);
+                    ExprCastFunction.uncheckedCastChild(analyticFunction, firstType, 2);
                 } catch (AnalysisException e) {
                     throw new SemanticException("The third parameter of LEAD/LAG can't convert to " + firstType,
                             analyticFunction.getChild(2).getPos());
@@ -118,7 +122,7 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (!theThirdChild.isLiteral() && theThirdChild.isNullable()) {
+                if (!ExprUtils.isLiteral(theThirdChild) && theThirdChild.isNullable()) {
                     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
                             analyticFunction.getChild(2).getPos());
                 }
@@ -132,7 +136,7 @@ public class AnalyticAnalyzer {
             if (!isPositiveConstantInteger(numBuckets)) {
                 throw new SemanticException(
                         "The num_buckets parameter of NTILE must be a constant positive integer: " +
-                                analyticFunction.toSql(), numBuckets.getPos());
+                                ExprToSql.toSql(analyticFunction), numBuckets.getPos());
             }
         }
 
@@ -140,7 +144,7 @@ public class AnalyticAnalyzer {
         if (analyticExpr.getWindow() != null) {
             if ((isRankingFn(analyticFunction.getFn()) || isCumeFn(analyticFunction.getFn()) ||
                     isOffsetFn(analyticFunction.getFn()) || isHllAggFn(analyticFunction.getFn()))) {
-                throw new SemanticException("Windowing clause not allowed with '" + analyticFunction.toSql() + "'",
+                throw new SemanticException("Windowing clause not allowed with '" + ExprToSql.toSql(analyticFunction) + "'",
                         analyticExpr.getPos());
             }
 
@@ -150,7 +154,7 @@ public class AnalyticAnalyzer {
 
     private static void verifyWindowFrame(AnalyticExpr analyticExpr) {
         if (analyticExpr.getOrderByElements().isEmpty()) {
-            throw new SemanticException("Windowing clause requires ORDER BY clause: " + analyticExpr.toSql(),
+            throw new SemanticException("Windowing clause requires ORDER BY clause: " + ExprToSql.toSql(analyticExpr),
                     analyticExpr.getPos());
         }
 
@@ -234,15 +238,15 @@ public class AnalyticAnalyzer {
     private static void checkRangeOffsetBoundaryExpr(AnalyticExpr analyticExpr, AnalyticWindow.Boundary boundary) {
         if (analyticExpr.getOrderByElements().size() > 1) {
             throw new SemanticException("Only one ORDER BY expression allowed if used with "
-                    + "a RANGE window with PRECEDING/FOLLOWING: " + analyticExpr.toSql(), analyticExpr.getPos());
+                    + "a RANGE window with PRECEDING/FOLLOWING: " + ExprToSql.toSql(analyticExpr), analyticExpr.getPos());
         }
 
-        if (!Type.isImplicitlyCastable(boundary.getExpr().getType(),
+        if (!TypeManager.isImplicitlyCastable(boundary.getExpr().getType(),
                 analyticExpr.getOrderByElements().get(0).getExpr().getType(), false)) {
             throw new SemanticException("The value expression of a PRECEDING/FOLLOWING clause of a RANGE window "
                     + "must be implicitly convertable to the ORDER BY expression's type: "
-                    + boundary.getExpr().toSql() + " cannot be implicitly converted to "
-                    + analyticExpr.getOrderByElements().get(0).getExpr().toSql(), analyticExpr.getPos());
+                    + ExprToSql.toSql(boundary.getExpr()) + " cannot be implicitly converted to "
+                    + ExprToSql.toSql(analyticExpr.getOrderByElements().get(0).getExpr()), analyticExpr.getPos());
         }
     }
 
@@ -258,7 +262,7 @@ public class AnalyticAnalyzer {
 
         if (e.isConstant() && e.getType().isNumericType()) {
             try {
-                val = Expr.getConstFromExpr(e);
+                val = ExprUtils.getConstFromExpr(e);
                 if (val <= 0) {
                     isPos = false;
                 }
@@ -298,8 +302,8 @@ public class AnalyticAnalyzer {
         Preconditions.checkState(e2 != null && e2.isConstant() && e2.getType().isNumericType());
 
         try {
-            double left = Expr.getConstFromExpr(e1);
-            double right = Expr.getConstFromExpr(e2);
+            double left = ExprUtils.getConstFromExpr(e1);
+            double right = ExprUtils.getConstFromExpr(e2);
 
             if (left > right) {
                 throw new SemanticException("Offset boundaries are in the wrong order", e1.getPos());

@@ -85,6 +85,7 @@ enum TPlanNodeType {
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
   CAPTURE_VERSION_NODE,
+  RAW_VALUES_NODE
 }
 
 // phases of an execution node
@@ -1107,6 +1108,17 @@ struct TUnionNode {
     22: optional list<list<Exprs.TExpr>> local_partition_by_exprs
 }
 
+// Raw values node for efficient serialization of large constant lists
+struct TRawValuesNode {
+    // Tuple ID for the output
+    1: required Types.TTupleId tuple_id
+    // The data type of the constants
+    2: required Types.TTypeDesc constant_type
+    // Typed constant lists for better compression
+    3: optional list<i64> long_values      // For BIGINT, INT types
+    4: optional list<string> string_values // For VARCHAR types
+}
+
 struct TIntersectNode {
     // A IntersectNode materializes all const/result exprs into this tuple.
     1: required Types.TTupleId tuple_id
@@ -1273,6 +1285,7 @@ struct TMetaScanNode {
     2: optional list<Descriptors.TColumn> columns
     3: optional i32 low_cardinality_threshold
     4: optional list<TColumnAccessPath> column_access_paths
+    5: optional i64 schema_id
 }
 
 struct TDecodeNode {
@@ -1357,7 +1370,11 @@ struct TStreamAggregationNode {
   24: optional i32 agg_func_set_version = 1
 }
 
-
+struct TPlanNodeCommon {
+  // heavy_exprs are extracted from projection and shall be push down to ScanNode and
+  // it is evaluated by ScanNode's ChunkSource in io threads.
+  1: optional map<Types.TSlotId, Exprs.TExpr> heavy_exprs
+}
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -1374,6 +1391,7 @@ struct TPlanNode {
 
   // Produce data in compact format.
   8: required bool compact_data
+  9: optional TPlanNodeCommon common
 
   // one field per PlanNode subclass
   11: optional THashJoinNode hash_join_node
@@ -1398,6 +1416,7 @@ struct TPlanNode {
   33: optional TIntersectNode intersect_node
   34: optional TExceptNode except_node
   35: optional TMergeJoinNode merge_join_node
+  36: optional TRawValuesNode raw_values_node
 
   // For vector query engine
   // 50 is reserved, please don't use

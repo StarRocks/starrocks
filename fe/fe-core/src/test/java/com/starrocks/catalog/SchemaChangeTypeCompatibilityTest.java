@@ -14,6 +14,12 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Test;
 
 import static com.starrocks.catalog.SchemaChangeTypeCompatibility.canReuseZonemapIndex;
@@ -24,90 +30,90 @@ public class SchemaChangeTypeCompatibilityTest {
 
     @Test
     public void testZoneMapIndexReuse() {
-        assertTrue(canReuseZonemapIndex(Type.TINYINT, Type.TINYINT));
-        assertTrue(canReuseZonemapIndex(Type.TINYINT, Type.SMALLINT));
-        assertTrue(canReuseZonemapIndex(Type.TINYINT, Type.INT));
-        assertTrue(canReuseZonemapIndex(Type.TINYINT, Type.BIGINT));
-        assertTrue(canReuseZonemapIndex(Type.TINYINT, Type.LARGEINT));
-        assertTrue(canReuseZonemapIndex(Type.TINYINT, Type.DOUBLE));
+        assertTrue(canReuseZonemapIndex(IntegerType.TINYINT, IntegerType.TINYINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.TINYINT, IntegerType.SMALLINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.TINYINT, IntegerType.INT));
+        assertTrue(canReuseZonemapIndex(IntegerType.TINYINT, IntegerType.BIGINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.TINYINT, IntegerType.LARGEINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.TINYINT, FloatType.DOUBLE));
 
-        assertTrue(canReuseZonemapIndex(Type.SMALLINT, Type.SMALLINT));
-        assertTrue(canReuseZonemapIndex(Type.SMALLINT, Type.INT));
-        assertTrue(canReuseZonemapIndex(Type.SMALLINT, Type.BIGINT));
-        assertTrue(canReuseZonemapIndex(Type.SMALLINT, Type.LARGEINT));
-        assertTrue(canReuseZonemapIndex(Type.SMALLINT, Type.DOUBLE));
+        assertTrue(canReuseZonemapIndex(IntegerType.SMALLINT, IntegerType.SMALLINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.SMALLINT, IntegerType.INT));
+        assertTrue(canReuseZonemapIndex(IntegerType.SMALLINT, IntegerType.BIGINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.SMALLINT, IntegerType.LARGEINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.SMALLINT, FloatType.DOUBLE));
 
-        assertTrue(canReuseZonemapIndex(Type.INT, Type.INT));
-        assertTrue(canReuseZonemapIndex(Type.INT, Type.BIGINT));
-        assertTrue(canReuseZonemapIndex(Type.INT, Type.LARGEINT));
-        assertTrue(canReuseZonemapIndex(Type.INT, Type.DOUBLE));
+        assertTrue(canReuseZonemapIndex(IntegerType.INT, IntegerType.INT));
+        assertTrue(canReuseZonemapIndex(IntegerType.INT, IntegerType.BIGINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.INT, IntegerType.LARGEINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.INT, FloatType.DOUBLE));
 
-        assertTrue(canReuseZonemapIndex(Type.BIGINT, Type.BIGINT));
-        assertTrue(canReuseZonemapIndex(Type.BIGINT, Type.LARGEINT));
-        assertTrue(canReuseZonemapIndex(Type.BIGINT, Type.DOUBLE));
+        assertTrue(canReuseZonemapIndex(IntegerType.BIGINT, IntegerType.BIGINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.BIGINT, IntegerType.LARGEINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.BIGINT, FloatType.DOUBLE));
 
-        assertTrue(canReuseZonemapIndex(Type.LARGEINT, Type.LARGEINT));
+        assertTrue(canReuseZonemapIndex(IntegerType.LARGEINT, IntegerType.LARGEINT));
 
-        assertTrue(canReuseZonemapIndex(Type.FLOAT, Type.FLOAT));
-        assertTrue(canReuseZonemapIndex(Type.FLOAT, Type.DOUBLE));
+        assertTrue(canReuseZonemapIndex(FloatType.FLOAT, FloatType.FLOAT));
+        assertTrue(canReuseZonemapIndex(FloatType.FLOAT, FloatType.DOUBLE));
 
-        assertTrue(canReuseZonemapIndex(Type.DOUBLE, Type.DOUBLE));
+        assertTrue(canReuseZonemapIndex(FloatType.DOUBLE, FloatType.DOUBLE));
 
-        assertTrue(canReuseZonemapIndex(Type.DECIMALV2, Type.DECIMALV2));
-        assertTrue(canReuseZonemapIndex(Type.DECIMALV2, Type.DECIMAL128));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMALV2, DecimalType.DECIMALV2));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMALV2, DecimalType.DECIMAL128));
 
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL32, Type.DECIMAL32));
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL32, Type.DECIMAL64));
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL32, Type.DECIMAL128));
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL32, Type.DECIMAL256));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL32, DecimalType.DECIMAL32));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL32, DecimalType.DECIMAL64));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL32, DecimalType.DECIMAL128));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL32, DecimalType.DECIMAL256));
 
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL64, Type.DECIMAL64));
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL64, Type.DECIMAL128));
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL64, Type.DECIMAL256));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL64, DecimalType.DECIMAL64));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL64, DecimalType.DECIMAL128));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL64, DecimalType.DECIMAL256));
 
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL128, Type.DECIMAL128));
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL128, Type.DECIMAL256));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL128, DecimalType.DECIMAL128));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL128, DecimalType.DECIMAL256));
 
-        assertTrue(canReuseZonemapIndex(Type.DECIMAL256, Type.DECIMAL256));
+        assertTrue(canReuseZonemapIndex(DecimalType.DECIMAL256, DecimalType.DECIMAL256));
 
-        assertTrue(canReuseZonemapIndex(Type.DATE, Type.DATE));
-        assertTrue(canReuseZonemapIndex(Type.DATE, Type.DATETIME));
+        assertTrue(canReuseZonemapIndex(DateType.DATE, DateType.DATE));
+        assertTrue(canReuseZonemapIndex(DateType.DATE, DateType.DATETIME));
 
-        assertTrue(canReuseZonemapIndex(Type.DATETIME, Type.DATETIME));
+        assertTrue(canReuseZonemapIndex(DateType.DATETIME, DateType.DATETIME));
 
-        ScalarType char10 = ScalarType.createCharType(10);
-        ScalarType varchar20 = ScalarType.createVarcharType(20);
+        ScalarType char10 = TypeFactory.createCharType(10);
+        ScalarType varchar20 = TypeFactory.createVarcharType(20);
         assertTrue(canReuseZonemapIndex(char10, char10));
         assertTrue(canReuseZonemapIndex(char10, varchar20));
 
-        ScalarType varchar30 = ScalarType.createVarcharType(30);
+        ScalarType varchar30 = TypeFactory.createVarcharType(30);
         assertTrue(canReuseZonemapIndex(varchar20, varchar30));
     }
 
     @Test
     public void testZoneMapIndexNotReuse() {
         // decreasing width
-        assertFalse(canReuseZonemapIndex(Type.INT, Type.SMALLINT));
-        assertFalse(canReuseZonemapIndex(Type.BIGINT, Type.INT));
+        assertFalse(canReuseZonemapIndex(IntegerType.INT, IntegerType.SMALLINT));
+        assertFalse(canReuseZonemapIndex(IntegerType.BIGINT, IntegerType.INT));
 
         // integer to float is not in allowed matrix (only float->double allowed)
-        assertFalse(canReuseZonemapIndex(Type.INT, Type.FLOAT));
+        assertFalse(canReuseZonemapIndex(IntegerType.INT, FloatType.FLOAT));
 
         // double to float narrowing not allowed
-        assertFalse(canReuseZonemapIndex(Type.DOUBLE, Type.FLOAT));
+        assertFalse(canReuseZonemapIndex(FloatType.DOUBLE, FloatType.FLOAT));
 
         // decimal narrowing
-        assertFalse(canReuseZonemapIndex(Type.DECIMAL128, Type.DECIMAL64));
+        assertFalse(canReuseZonemapIndex(DecimalType.DECIMAL128, DecimalType.DECIMAL64));
 
-        assertFalse(canReuseZonemapIndex(Type.DATETIME, Type.DATE));
+        assertFalse(canReuseZonemapIndex(DateType.DATETIME, DateType.DATE));
 
         // varchar to char not allowed by reuse matrix
-        ScalarType varchar20 = ScalarType.createVarcharType(20);
-        ScalarType char10 = ScalarType.createCharType(10);
+        ScalarType varchar20 = TypeFactory.createVarcharType(20);
+        ScalarType char10 = TypeFactory.createCharType(10);
         assertFalse(canReuseZonemapIndex(varchar20, char10));
 
         // string <-> int not allowed
-        assertFalse(canReuseZonemapIndex(varchar20, Type.INT));
-        assertFalse(canReuseZonemapIndex(Type.INT, varchar20));
+        assertFalse(canReuseZonemapIndex(varchar20, IntegerType.INT));
+        assertFalse(canReuseZonemapIndex(IntegerType.INT, varchar20));
     }
 }

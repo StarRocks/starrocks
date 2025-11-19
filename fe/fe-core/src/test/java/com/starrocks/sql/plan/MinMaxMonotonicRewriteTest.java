@@ -18,13 +18,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.statistics.ColumnMinMaxMgr;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
@@ -174,7 +175,7 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
 
         Column regularColumn = mock(Column.class);
         when(regularColumn.getName()).thenReturn("id");
-        when(regularColumn.getType()).thenReturn(Type.BIGINT);
+        when(regularColumn.getType()).thenReturn(IntegerType.BIGINT);
         when(regularColumn.getColumnId()).thenReturn(ColumnId.create("id"));
 
         String sql1 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, regularColumn);
@@ -185,7 +186,7 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
         // Test JSON column with BIGINT type
         Column jsonColumn = mock(Column.class);
         when(jsonColumn.getName()).thenReturn("json_col");
-        when(jsonColumn.getType()).thenReturn(Type.BIGINT);
+        when(jsonColumn.getType()).thenReturn(IntegerType.BIGINT);
         when(jsonColumn.getColumnId()).thenReturn(ColumnId.create("json_col.field1"));
 
         String sql2 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, jsonColumn);
@@ -196,7 +197,7 @@ public class MinMaxMonotonicRewriteTest extends PlanTestBase {
 
         // Test JSON column with STRING type
         when(jsonColumn.getName()).thenReturn("json_col");
-        when(jsonColumn.getType()).thenReturn(Type.VARCHAR);
+        when(jsonColumn.getType()).thenReturn(VarcharType.VARCHAR);
         when(jsonColumn.getColumnId()).thenReturn(ColumnId.create("json_col.field2"));
 
         String sql3 = ColumnMinMaxMgr.genMinMaxSql("default_catalog", mockDb, mockTable, jsonColumn);

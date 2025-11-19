@@ -19,7 +19,9 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -27,6 +29,13 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AddBackendBlackListStmt;
+import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -78,7 +87,9 @@ public class SqlBlackList {
             BlackListSql blackListSql = sqlBlackListMap.get(pattern.toString());
             if (blackListSql == null) {
                 long id = ids.getAndIncrement();
-                sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, id));
+                GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(
+                        new SqlBlackListPersistInfo(id, pattern.pattern()),
+                        wal -> sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, id)));
                 return id;
             } else {
                 return blackListSql.id;
@@ -93,6 +104,30 @@ public class SqlBlackList {
                 ids.set(Math.max(ids.get(), id + 1));
                 sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, id));
             }
+        }
+    }
+
+    public void deleteBlackSql(DelSqlBlackListStmt delSqlBlackListStmt) {
+        List<Long> indexs = delSqlBlackListStmt.getIndexs();
+        if (indexs != null) {
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logDeleteSQLBlackList(new DeleteSqlBlackLists(indexs), wal -> {
+                        for (long id : indexs) {
+                            GlobalStateMgr.getCurrentState().getSqlBlackList().delete(id);
+                        }
+                    });
+        }
+    }
+
+    public void addBlackSql(AddBackendBlackListStmt addBackendBlackListStmt, ConnectContext context)
+            throws StarRocksException {
+        Authorizer.check(addBackendBlackListStmt, context);
+        for (Long beId : addBackendBlackListStmt.getBackendIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            if (sis.getBackend(beId) == null) {
+                throw new StarRocksException("Not found backend: " + beId);
+            }
+            SimpleScheduler.getHostBlacklist().addByManual(beId);
         }
     }
 
@@ -142,5 +177,12 @@ public class SqlBlackList {
 
     // ids used in sql blacklist
     private final AtomicLong ids = new AtomicLong();
+
+    protected void cleanup() {
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            sqlBlackListMap.clear();
+            ids.set(0);
+        }
+    }
 }
 

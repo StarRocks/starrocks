@@ -51,8 +51,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -76,6 +74,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.DateType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -179,7 +178,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             long leftVal;
             long rightVal;
             if (subExpr.getChild(1) instanceof DateLiteral) {
-                leftVal = (new DateLiteral((String) element, Type.DATETIME)).getLongValue();
+                leftVal = (new DateLiteral((String) element, DateType.DATETIME)).getLongValue();
                 rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             } else {
                 leftVal = Long.parseLong(element.toString());
@@ -334,13 +333,18 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionInfos;
     }
 
-    public static String distributionKeyAsString(Table table, DistributionInfo distributionInfo) {
+    public static String distributionKeyAsString(OlapTable table, DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             List<String> columnNames = MetaUtils.getColumnNamesByColumnIds(
                     table.getIdToColumn(), distributionInfo.getDistributionColumns());
             return Joiner.on(", ").join(columnNames);
-        } else {
+        } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             return "ALL KEY";
+        } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
+            List<String> columnNames = MetaUtils.getRangeDistributionColumnNames(table);
+            return Joiner.on(", ").join(columnNames);
+        } else {
+            throw new RuntimeException("Unsupported distribution type: " + distributionInfo.getType());
         }
     }
 

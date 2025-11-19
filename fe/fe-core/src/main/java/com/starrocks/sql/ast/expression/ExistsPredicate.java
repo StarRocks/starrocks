@@ -39,7 +39,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
 
 import java.util.Objects;
 
@@ -64,17 +63,6 @@ public class ExistsPredicate extends Predicate {
     public ExistsPredicate(ExistsPredicate other) {
         super(other);
         notExists = other.notExists;
-    }
-
-    @Override
-    public Expr negate() {
-        return new ExistsPredicate((Subquery) getChild(0), !notExists);
-    }
-
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // Cannot serialize a nested predicate
-        Preconditions.checkState(false);
     }
 
     @Override

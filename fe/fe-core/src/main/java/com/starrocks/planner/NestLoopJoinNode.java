@@ -20,9 +20,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.thrift.TNestLoopJoinNode;
 import com.starrocks.thrift.TNormalNestLoopJoinNode;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -44,7 +46,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     private static final Logger LOG = LogManager.getLogger(NestLoopJoinNode.class);
 
-    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRefPersist innerRef,
+    public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner,
                             JoinOperator joinOp, List<Expr> eqJoinConjuncts, List<Expr> joinConjuncts) {
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
     }
@@ -104,10 +106,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         if (joinExpr instanceof BinaryPredicate && ((BinaryPredicate) joinExpr).getOp().isUnequivalence()) {
             return false;
         }
-        if (!leftExpr.isBoundByTupleIds(leftChild.getTupleIds())) {
+        if (!ExprUtils.isBoundByTupleIds(leftExpr, leftChild.getTupleIds())) {
             return false;
         }
-        return rightExpr.isBoundByTupleIds(rightChild.getTupleIds());
+        return ExprUtils.isBoundByTupleIds(rightExpr, rightChild.getTupleIds());
     }
 
     @Override
@@ -120,9 +122,9 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
         if (CollectionUtils.isNotEmpty(otherJoinConjuncts)) {
             for (Expr e : otherJoinConjuncts) {
-                msg.nestloop_join_node.addToJoin_conjuncts(e.treeToThrift());
+                msg.nestloop_join_node.addToJoin_conjuncts(ExprToThriftVisitor.treeToThrift(e));
             }
-            String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
+            String sqlJoinPredicate = otherJoinConjuncts.stream().map(ExprToSql::toSql).collect(Collectors.joining(","));
             msg.nestloop_join_node.setSql_join_conjuncts(sqlJoinPredicate);
         }
         SessionVariable sv = ConnectContext.get().getSessionVariable();
@@ -137,7 +139,7 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         }
         if (commonSlotMap != null) {
             commonSlotMap.forEach((key, value) ->
-                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+                    msg.nestloop_join_node.putToCommon_slot_map(key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
         }
     }
 

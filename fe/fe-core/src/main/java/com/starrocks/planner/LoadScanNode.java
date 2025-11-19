@@ -46,6 +46,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -79,13 +81,12 @@ public abstract class LoadScanNode extends ScanNode {
                 throw new StarRocksException("unknown column in where statement. "
                         + "the column '" + slot.getColumnName() + "' in where clause must be in the target table.");
             }
-            smap.getLhs().add(slot);
             SlotRef slotRef = new SlotRef(slotDesc);
             slotRef.setColumnName(slot.getColumnName());
-            smap.getRhs().add(slotRef);
+            smap.put(slot, slotRef);
         }
-        whereExpr = whereExpr.clone(smap);
-        whereExpr = Expr.analyzeAndCastFold(whereExpr);
+        whereExpr = ExprSubstitutionVisitor.rewrite(whereExpr, smap);
+        whereExpr = ExprUtils.analyzeAndCastFold(whereExpr);
 
         if (!whereExpr.getType().isBoolean()) {
             throw new StarRocksException("where statement is not a valid statement return bool");

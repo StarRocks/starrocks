@@ -34,18 +34,15 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TFloatLiteral;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
@@ -131,7 +128,7 @@ public class FloatLiteral extends LiteralExpr {
         // Figure out if this will fit in a FLOAT without loosing precision.
         float fvalue;
         fvalue = value.floatValue();
-        type = Float.toString(fvalue).equals(Double.toString(value)) ? Type.FLOAT : Type.DOUBLE;
+        type = Float.toString(fvalue).equals(Double.toString(value)) ? FloatType.FLOAT : FloatType.DOUBLE;
     }
 
     private void checkValue(Double value) throws AnalysisException {
@@ -173,34 +170,9 @@ public class FloatLiteral extends LiteralExpr {
         return value;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.FLOAT_LITERAL;
-        msg.float_literal = new TFloatLiteral(value);
-    }
 
     public double getValue() {
         return value;
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (!(targetType.isFloatingPointType() || targetType.isDecimalOfAnyVersion())) {
-            return super.uncheckedCastTo(targetType);
-        }
-        if (targetType.isFloatingPointType()) {
-            if (!type.equals(targetType)) {
-                FloatLiteral floatLiteral = new FloatLiteral(this);
-                floatLiteral.setType(targetType);
-                return floatLiteral;
-            }
-            return this;
-        } else if (targetType.isDecimalOfAnyVersion()) {
-            DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(Double.toString(value)));
-            decimalLiteral.type = targetType;
-            return decimalLiteral;
-        }
-        return this;
     }
 
     @Override

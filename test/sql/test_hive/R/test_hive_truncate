@@ -1,0 +1,137 @@
+-- name: test_hive_truncate
+create external catalog hive_truncate_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_truncate_${uuid0}.hive_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/hive_truncate_${uuid0}/hive_db/${uuid0}"
+);
+-- result:
+-- !result
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int);
+-- result:
+-- !result
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1),(2),(3);
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+-- result:
+1
+2
+3
+-- !result
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+-- result:
+-- !result
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+-- result:
+-- !result
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int, k2 date) partition by (k2);
+-- result:
+-- !result
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,'2020-01-01'),(2,'2020-01-01'),(3,'2020-01-02');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+-- result:
+1	2020-01-01
+2	2020-01-01
+3	2020-01-02
+-- !result
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+-- result:
+-- !result
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+-- result:
+-- !result
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);
+-- result:
+-- !result
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,'2020-01-01','a'),(2,'2020-01-01','b'),(3,'2020-01-02','a');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+-- result:
+1	2020-01-01	a
+2	2020-01-01	b
+3	2020-01-02	a
+-- !result
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+-- result:
+-- !result
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+-- result:
+-- !result
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);
+-- result:
+-- !result
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} values (1,'2020-01-01','a'),(2,'2020-01-01','b'),(3,'2020-01-02','a');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+-- result:
+1	2020-01-01	a
+2	2020-01-01	b
+3	2020-01-02	a
+-- !result
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} partition (k2='2020-01-01');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+-- result:
+3	2020-01-02	a
+-- !result
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} values (4,'2020-01-02','b'),(5,'2020-01-02','c'),(6,'2020-01-02','d');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+-- result:
+3	2020-01-02	a
+4	2020-01-02	b
+5	2020-01-02	c
+6	2020-01-02	d
+-- !result
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} partition (k2='2020-01-02',k3='b');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+-- result:
+3	2020-01-02	a
+5	2020-01-02	c
+6	2020-01-02	d
+-- !result
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} partition (k3='c');
+-- result:
+-- !result
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} order by k1;
+-- result:
+3	2020-01-02	a
+6	2020-01-02	d
+-- !result
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} force;
+-- result:
+-- !result
+drop database hive_truncate_${uuid0}.hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_truncate_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/hive_truncate_${uuid0}/hive_db/${uuid0} > /dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

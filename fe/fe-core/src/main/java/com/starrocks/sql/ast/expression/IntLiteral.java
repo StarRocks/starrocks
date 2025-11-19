@@ -35,7 +35,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -44,14 +43,9 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TIntLiteral;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
@@ -179,13 +173,13 @@ public class IntLiteral extends LiteralExpr {
     private void init(long value) {
         this.value = value;
         if (this.value <= TINY_INT_MAX && this.value >= TINY_INT_MIN) {
-            type = Type.TINYINT;
+            type = IntegerType.TINYINT;
         } else if (this.value <= SMALL_INT_MAX && this.value >= SMALL_INT_MIN) {
-            type = Type.SMALLINT;
+            type = IntegerType.SMALLINT;
         } else if (this.value <= INT_MAX && this.value >= INT_MIN) {
-            type = Type.INT;
+            type = IntegerType.INT;
         } else {
-            type = Type.BIGINT;
+            type = IntegerType.BIGINT;
         }
     }
 
@@ -231,12 +225,6 @@ public class IntLiteral extends LiteralExpr {
         }
 
         return new IntLiteral(value);
-    }
-
-    public static IntLiteral read(DataInput in) throws IOException {
-        IntLiteral literal = new IntLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     @Override
@@ -333,58 +321,11 @@ public class IntLiteral extends LiteralExpr {
         return (double) value;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.INT_LITERAL;
-        msg.int_literal = new TIntLiteral(value);
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (!targetType.isNumericType()) {
-            return super.uncheckedCastTo(targetType);
-        }
-        if (targetType.isFixedPointType()) {
-            if (!targetType.isLargeint()) {
-                if (!type.equals(targetType)) {
-                    // When cast large int type to small int type, must add cast expr
-                    if (type.getPrimitiveType().ordinal() > targetType.getPrimitiveType().ordinal()) {
-                        return super.uncheckedCastTo(targetType);
-                    } else {
-                        IntLiteral intLiteral = new IntLiteral(this);
-                        intLiteral.setType(targetType);
-                        return intLiteral;
-                    }
-                }
-                return this;
-            } else {
-                return new LargeIntLiteral(Long.toString(value));
-            }
-        } else if (targetType.isFloatingPointType()) {
-            return new FloatLiteral((double) value, targetType);
-        } else if (targetType.isDecimalOfAnyVersion()) {
-            DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(value));
-            decimalLiteral.type = targetType;
-            return decimalLiteral;
-        }
-        return this;
-    }
 
     @Override
     public void swapSign() throws NotImplementedException {
         // swapping sign does not change the type
         value = -value;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = in.readLong();
     }
 
     @Override

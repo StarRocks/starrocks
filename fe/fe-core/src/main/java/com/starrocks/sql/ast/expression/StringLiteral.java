@@ -34,21 +34,11 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TStringLiteral;
+import com.starrocks.type.VarcharType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
@@ -60,7 +50,7 @@ public class StringLiteral extends LiteralExpr {
 
     public StringLiteral() {
         super(NodePosition.ZERO);
-        type = Type.VARCHAR;
+        type = VarcharType.VARCHAR;
     }
 
     public StringLiteral(String value) {
@@ -70,7 +60,7 @@ public class StringLiteral extends LiteralExpr {
     public StringLiteral(String value, NodePosition pos) {
         super(pos);
         this.value = value;
-        type = Type.VARCHAR;
+        type = VarcharType.VARCHAR;
         analysisDone();
     }
 
@@ -138,11 +128,6 @@ public class StringLiteral extends LiteralExpr {
         return false;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.STRING_LITERAL;
-        msg.string_literal = new TStringLiteral(getUnescapedValue());
-    }
 
     // FIXME: modify by zhaochun
     public String getUnescapedValue() {
@@ -164,92 +149,6 @@ public class StringLiteral extends LiteralExpr {
     @Override
     public double getDoubleValue() {
         return Double.parseDouble(value);
-    }
-
-    /**
-     * Convert a string literal to a date literal
-     *
-     * @param targetType is the desired type
-     * @return new converted literal (not null)
-     * @throws AnalysisException when entire given string cannot be transformed into a date
-     */
-    private LiteralExpr convertToDate(Type targetType) throws AnalysisException {
-        LiteralExpr newLiteral;
-        try {
-            newLiteral = new DateLiteral(value, targetType);
-        } catch (AnalysisException e) {
-            if (targetType.isDatetime()) {
-                newLiteral = new DateLiteral(value, Type.DATE);
-                newLiteral.setType(Type.DATETIME);
-            } else {
-                throw e;
-            }
-        }
-        return newLiteral;
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (targetType.isNumericType()) {
-            switch (targetType.getPrimitiveType()) {
-                case TINYINT:
-                case SMALLINT:
-                case INT:
-                case BIGINT:
-                    return new IntLiteral(value, targetType);
-                case LARGEINT:
-                    return new LargeIntLiteral(value);
-                case FLOAT:
-                case DOUBLE:
-                    try {
-                        return new FloatLiteral(Double.valueOf(value), targetType);
-                    } catch (NumberFormatException e) {
-                        ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_NUMBER, value);
-                    }
-                    break;
-                case DECIMALV2:
-                case DECIMAL32:
-                case DECIMAL64:
-                case DECIMAL128:
-                case DECIMAL256:
-                    return new DecimalLiteral(value).uncheckedCastTo(targetType);
-                default:
-                    break;
-            }
-        } else if (targetType.isDateType()) {
-            // FE only support 'yyyy-MM-dd hh:mm:ss' && 'yyyy-MM-dd' format
-            // so if FE unchecked cast fail, we also build CastExpr for BE
-            // BE support other format suck as 'yyyyMMdd'...
-            try {
-                return convertToDate(targetType);
-            } catch (AnalysisException e) {
-                // pass;
-            }
-        } else if (targetType.getPrimitiveType() == type.getPrimitiveType()) {
-            return this;
-        } else if (targetType.isStringType()) {
-            StringLiteral stringLiteral = new StringLiteral(this);
-            stringLiteral.setType(targetType);
-            return stringLiteral;
-        }
-        return super.uncheckedCastTo(targetType);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, value);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        value = Text.readString(in);
-    }
-
-    public static StringLiteral read(DataInput in) throws IOException {
-        StringLiteral literal = new StringLiteral();
-        literal.readFields(in);
-        return literal;
     }
 
     @Override

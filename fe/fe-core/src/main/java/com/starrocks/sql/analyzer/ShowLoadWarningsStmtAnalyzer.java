@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -176,7 +177,7 @@ public class ShowLoadWarningsStmtAnalyzer {
 
                 if (hasLoadJobId) {
                     if (!(subExpr.getChild(1) instanceof IntLiteral)) {
-                        LOG.warn("load_job_id is not IntLiteral. value: {}", subExpr.toSql());
+                        LOG.warn("load_job_id is not IntLiteral. value: {}", ExprToSql.toSql(subExpr));
                         valid = false;
                         break;
                     }

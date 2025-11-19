@@ -17,10 +17,7 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.UnitIdentifier;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
 
 
 public class IntervalLiteral extends LiteralExpr {
@@ -45,10 +42,6 @@ public class IntervalLiteral extends LiteralExpr {
         return unitIdentifier;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        throw new StarRocksPlannerException("IntervalLiteral not implement toThrift", ErrorType.INTERNAL_ERROR);
-    }
 
     @Override
     public Expr clone() {

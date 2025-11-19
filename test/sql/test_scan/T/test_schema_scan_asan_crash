@@ -1,4 +1,4 @@
--- name: test_schema_scan_asan_crash
+-- name: test_schema_scan_asan_crash @mac
 
 set enable_shared_scan = true;
 set pipeline_dop = 8;

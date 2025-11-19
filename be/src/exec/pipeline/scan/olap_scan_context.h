@@ -47,7 +47,7 @@ using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 class ConcurrentJitRewriter {
 public:
-    ConcurrentJitRewriter(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
+    ConcurrentJitRewriter() : _barrier(), _errors(0), _id(0) {}
     Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
 
 private:
@@ -76,7 +76,6 @@ private:
         std::mutex _mutex;
         std::condition_variable _cv;
     };
-    const int32_t _dop;
     Barrier _barrier;
     std::atomic_int _errors;
     std::atomic_int _id = 0;
@@ -186,7 +185,7 @@ public:
               _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
                             std::move(chunk_buffer_limiter)),
               _contexts(shared_morsel_queue ? 1 : dop),
-              _jit_rewriter(dop) {}
+              _jit_rewriter() {}
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 

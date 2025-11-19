@@ -47,6 +47,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -80,6 +81,7 @@ import com.starrocks.sql.spm.SPMPlanner;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
@@ -233,7 +235,22 @@ public class StatementPlanner {
                 Map<Long, Set<Long>> tables = Maps.newHashMap();
                 PlannerMetaLocker.collectTablesNeedLock(insertStmt.getQueryStatement(), session, dbs, tables);
 
-                if (tables.isEmpty() || FeConstants.runningUnitTest) {
+                // If SELECT contains files() table function, resolve files() without lock but analyze normal tables
+                // under lock. So:
+                // - files() present AND normal tables present: pre-analyze files() without lock, then lock and analyze
+                //   the whole statement under lock (no overall deferred lock).
+                // - files() present AND no normal tables to lock: safe to use overall deferred lock path.
+                boolean hasFileTableFunction =
+                        !AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement()).isEmpty();
+                boolean hasNormalTablesToLock = !tables.isEmpty();
+
+                if (hasFileTableFunction && hasNormalTablesToLock) {
+                    // Pre-analyze files() without lock to fetch schema via BE RPC
+                    new QueryAnalyzer(session).analyzeFilesOnly(insertStmt.getQueryStatement());
+                    // We will take lock and run full analyze below (no deferred lock)
+                    deferredLock = false;
+                } else if (hasFileTableFunction || tables.isEmpty() || FeConstants.runningUnitTest) {
+                    // Only files() or no tables at all: allow deferred lock
                     deferredLock = true;
                 }
             }
@@ -245,10 +262,12 @@ public class StatementPlanner {
                 } else {
                     InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
                 }
+                ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
             } else {
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
             }
         }
@@ -339,6 +358,8 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         boolean isSchemaValid = true;
 
+        int sourceTablesCount = collectSourceTablesCount(session, queryStmt);
+
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
         // the original olapTable in queryStmt had been replaced with the copied olapTable
@@ -375,6 +396,7 @@ public class StatementPlanner {
                 }
                 optimizerContext.setMvTransformerContext(mvTransformerContext);
                 optimizerContext.setStatement(queryStmt);
+                optimizerContext.setSourceTablesCount(sourceTablesCount);
 
                 Optimizer optimizer = OptimizerFactory.create(optimizerContext);
                 optimizedPlan = optimizer.optimize(logicalPlan.getRoot(), new PhysicalPropertySet(),
@@ -422,6 +444,12 @@ public class StatementPlanner {
         } finally {
             unLock(locker);
         }
+    }
+
+    public static int collectSourceTablesCount(ConnectContext session, StatementBase queryStmt) {
+        List<Table> sourceTables = Lists.newArrayList();
+        AnalyzerUtils.collectSourceTables(queryStmt, sourceTables);
+        return sourceTables.size();
     }
 
     public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {

@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -114,10 +115,11 @@ public class SelectHintTest extends PlanTestBase {
         });
         assertContains(exception.getMessage(), "The offset parameter of LEAD/LAG must be a constant positive integer");
 
-        exception = Assertions.assertThrows(SemanticException.class, () -> {
+        exception = Assertions.assertThrows(StarRocksPlannerException.class, () -> {
             String invalidSql = "select /*+ set_user_variable(@a = 1, @b = 10) */ percentile_approx(@a, @b) from t0";
             getFragmentPlan(invalidSql);
         });
-        assertContains(exception.getMessage(), " percentile_approx second parameter'value must be between 0 and 1");
+        assertContains(exception.getMessage(), "percentile parameter must " +
+                "be between 0 and 1 in percentile_approx, but got: 10.0");
     }
 }

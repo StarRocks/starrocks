@@ -110,6 +110,7 @@ set(EXPR_FILES
   bit_functions.cpp
   hash_functions.cpp
   gin_functions.cpp
+  ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
@@ -120,4 +121,4 @@ if(STARROCKS_JIT_ENABLE)
 
 endif()
 
-add_library(Exprs ${EXPR_FILES})
+ADD_BE_LIB(Exprs ${EXPR_FILES})

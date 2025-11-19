@@ -155,7 +155,8 @@
                         "loading/Loading_intro",
                         "loading/loading_introduction/loading_concepts",
                         "loading/loading_introduction/loading_considerations",
-                        "loading/loading_introduction/feature-support-loading-and-unloading"
+                        "loading/loading_introduction/feature-support-loading-and-unloading",
+                        "loading/loading_introduction/troubleshooting_loading"
                     ]
                 },
                 {
@@ -259,7 +260,8 @@
                             "items": [
                                 "data_source/catalog/iceberg/iceberg_timetravel",
                                 "data_source/catalog/iceberg/iceberg_meta_table",
-                                "data_source/catalog/iceberg/iceberg_rest_s3"
+                                "data_source/catalog/iceberg/iceberg_rest_s3",
+                                "data_source/catalog/iceberg/iceberg_rest_security"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
@@ -283,7 +285,7 @@
                     },
                     "items": [
                         "data_source/data_cache",
-                        "data_source/data_cache_warmup",
+                        "data_source/block_cache_warmup",
                         "data_source/data_cache_observe",
                         "data_source/data_cache_troubleshooting"
                     ]
@@ -437,10 +439,8 @@
                     "id": "integrations/other_integrations/datadog_support"
                 },
                 {
-                    "type": "link",
-                    "label": "DBT",
-                    "description": "Modeling and transformation with DBT",
-                    "href": "https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+                    "type": "doc",
+                    "id": "integrations/dbt"
                 }
             ]
         },

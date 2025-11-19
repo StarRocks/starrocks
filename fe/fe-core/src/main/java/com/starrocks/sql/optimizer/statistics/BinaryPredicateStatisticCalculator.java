@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -23,6 +22,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -154,7 +155,7 @@ public class BinaryPredicateStatisticCalculator {
         Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
 
         String constantStringValue = constantOperator.toString();
-        if (constantOperator.getType() == Type.BOOLEAN) {
+        if (constantOperator.getType() == BooleanType.BOOLEAN) {
             constantStringValue = constantOperator.getBoolean() ? "1" : "0";
         }
         // If there is a constant key in MCV, we use the MCV count to estimate the row count.

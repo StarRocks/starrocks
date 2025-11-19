@@ -40,8 +40,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.Objects;
 
@@ -81,7 +79,6 @@ public class BinaryPredicate extends Predicate implements Writable {
     public BinaryPredicate(BinaryType op, Expr e1, Expr e2, NodePosition pos) {
         super(pos);
         this.op = op;
-        this.opcode = op.getOpcode();
         Preconditions.checkNotNull(e1);
         children.add(e1);
         Preconditions.checkNotNull(e2);
@@ -105,52 +102,13 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public Expr negate() {
-        BinaryType newOp = null;
-        switch (op) {
-            case EQ:
-                newOp = BinaryType.NE;
-                break;
-            case NE:
-                newOp = BinaryType.EQ;
-                break;
-            case LT:
-                newOp = BinaryType.GE;
-                break;
-            case LE:
-                newOp = BinaryType.GT;
-                break;
-            case GE:
-                newOp = BinaryType.LT;
-                break;
-            case GT:
-                newOp = BinaryType.LE;
-                break;
-            default:
-                throw new IllegalStateException("Not implemented");
-        }
-        return new BinaryPredicate(newOp, getChild(0), getChild(1));
-    }
-
-    @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!super.equalsWithoutChild(obj)) {
             return false;
         }
-        return ((BinaryPredicate) obj).opcode == this.opcode;
+        return ((BinaryPredicate) obj).op == this.op;
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.BINARY_PRED;
-        msg.setOpcode(opcode);
-        msg.setVector_opcode(vectorOpcode);
-        if (getChild(0).getType().isComplexType()) {
-            msg.setChild_type_desc(getChild(0).getType().toThrift());
-        } else {
-            msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-        }
-    }
 
     /*
      * the follow persistence code is only for TableFamilyDeleteInfo.

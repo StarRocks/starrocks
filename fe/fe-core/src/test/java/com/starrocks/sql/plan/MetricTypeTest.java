@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Test;
 
 public class MetricTypeTest extends PlanTestBase {

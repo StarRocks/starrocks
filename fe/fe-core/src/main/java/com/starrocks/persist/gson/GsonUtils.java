@@ -103,9 +103,6 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -125,15 +122,13 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
@@ -141,10 +136,8 @@ import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
@@ -205,6 +198,15 @@ import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.PseudoType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -216,6 +218,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -238,10 +241,10 @@ import java.util.Map;
 public class GsonUtils {
 
     // runtime adapter for class "Type"
-    private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Type> COLUMN_TYPE_ADAPTER_FACTORY =
+    private static final RuntimeTypeAdapterFactory<com.starrocks.type.Type> COLUMN_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory
-                    .of(com.starrocks.catalog.Type.class, "clazz")
-                    .registerSubtype(ScalarType.class, "ScalarType")
+                    .of(com.starrocks.type.Type.class, "clazz")
+                    .registerSubtype(ScalarType.class, "ScalarType", true)
                     .registerSubtype(ArrayType.class, "ArrayType")
                     .registerSubtype(MapType.class, "MapType")
                     .registerSubtype(StructType.class, "StructType")
@@ -254,7 +257,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory
                     .of(DistributionInfo.class, "clazz")
                     .registerSubtype(HashDistributionInfo.class, "HashDistributionInfo")
-                    .registerSubtype(RandomDistributionInfo.class, "RandomDistributionInfo");
+                    .registerSubtype(RandomDistributionInfo.class, "RandomDistributionInfo")
+                    .registerSubtype(RangeDistributionInfo.class, "RangeDistributionInfo");
 
     private static final RuntimeTypeAdapterFactory<PartitionInfo> PARTITION_INFO_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory
@@ -485,8 +489,8 @@ public class GsonUtils {
                 .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
                 .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
                 // For call constructor with selectedFields
-                .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
-                .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
+                .registerTypeAdapter(MapType.class, new MapTypeDeserializer())
+                .registerTypeAdapter(StructType.class, new StructTypeDeserializer())
                 .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
@@ -788,6 +792,41 @@ public class GsonUtils {
             } catch (Throwable t) {
                 return PrimitiveType.INVALID_TYPE;
             }
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    private static class MapTypeDeserializer implements JsonDeserializer<MapType> {
+        @Override
+        public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonObject key = dumpJsonObject.getAsJsonObject("keyType");
+            com.starrocks.type.Type keyType = GsonUtils.GSON.fromJson(key, com.starrocks.type.Type.class);
+            JsonObject value = dumpJsonObject.getAsJsonObject("valueType");
+            com.starrocks.type.Type valueType = GsonUtils.GSON.fromJson(value, com.starrocks.type.Type.class);
+            return new MapType(keyType, valueType);
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                      JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            boolean isNamed = false;
+            if (dumpJsonObject.get("named") != null) {
+                isNamed = dumpJsonObject.get("named").getAsBoolean();
+            }
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields, isNamed);
         }
     }
 }

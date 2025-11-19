@@ -75,9 +75,16 @@ Also, please notice that if you didn't install the ranger-starrocks-plugin, then
 
 3. Restart Ranger Admin.
 
-   ```SQL
-   ranger-admin restart
-   ```
+   -  Ranger 0.5.x:
+
+      ```SQL
+      ranger-admin restart
+      ```
+   - Ranger 2.x and above:
+   
+      ```SQL
+      ./ews/ranger-admin-services.sh restart
+      ```
 
 ### Configure StarRocks Service on Ranger Admin
 
@@ -88,7 +95,7 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
 
    ```SQL
-   wget https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-servicedef-starrocks.json
+   wget https://raw.githubusercontent.com/StarRocks/starrocks/main/conf/ranger/ranger-servicedef-starrocks.json
    ```
 
    :::note

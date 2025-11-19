@@ -1,0 +1,42 @@
+-- name: test_be_proc_profile_simple
+-- Test BE /proc_profile and /proc_profile/file HTTP endpoints
+
+-- Get BE IP and HTTP port from show backends command
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+
+-- Test 2: Check that BE /proc_profile page is accessible and contains profile information
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -c "Process Profiles"
+
+-- Test BE /proc_profile/file endpoint with a valid filename (if profiles exist)
+-- Get a profile filename from the main page and test accessing it
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile" | grep -o 'filename=[^"]*\.gz' | tail -1 | cut -d'=' -f2 > be_profile_file.txt
+[UC]shell: cat be_profile_file.txt
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+shell: if [ $(curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi
+
+-- Test BE /proc_profile/file endpoint with invalid filename (should return error)
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file.tar.gz"
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/proc_profile/file?filename=invalid_file"
+
+-- Test BE /api/proc_profile/list endpoint (JSON API)
+-- This should return JSON with profile list (covers ProcProfileAction.cpp:55-136)
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"profiles\""
+
+-- Test BE /api/proc_profile with invalid action parameter
+-- Should return error (covers ProcProfileAction.cpp:47)
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/invalid_action" | grep -c "\"error\""
+
+-- Test BE /api/proc_profile with unsupported HTTP method (POST)
+-- Should return error (covers ProcProfileAction.cpp:50-51)
+shell: curl -s -X POST -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"error\""
+
+-- Test BE /api/proc_profile/list returns valid JSON structure
+-- Verify JSON contains expected fields and has correct content-type header
+shell: curl -s -I -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -i "content-type" | grep -c "application/json"
+shell: curl -s -u root: "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile/list" | grep -c "\"profiles\""
+
+-- Cleanup
+shell: rm -f be_profile_file.txt
+shell: rm -f be_ip.txt be_http_port.txt

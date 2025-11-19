@@ -39,11 +39,10 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.expression.ArithmeticExpr.Operator;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Describes the addition and subtraction of time units from timestamps.
@@ -51,6 +50,7 @@ import java.util.Map;
  * They are executed as function call exprs in the BE.
  */
 public class TimestampArithmeticExpr extends Expr {
+
     private static final Map<String, TimeUnit> TIME_UNITS_MAP = new HashMap<String, TimeUnit>();
 
     static {
@@ -115,12 +115,6 @@ public class TimestampArithmeticExpr extends Expr {
     @Override
     public Expr clone() {
         return new TimestampArithmeticExpr(this);
-    }
-
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.COMPUTE_FUNCTION_CALL;
-        msg.setOpcode(opcode);
     }
 
     public ArithmeticExpr.Operator getOp() {
@@ -188,5 +182,24 @@ public class TimestampArithmeticExpr extends Expr {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitTimestampArithmeticExpr(this, context);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || (o.getClass() != this.getClass())) {
+            return false;
+        }
+        TimestampArithmeticExpr that = (TimestampArithmeticExpr) o;
+        return Objects.equals(funcName, that.funcName) &&
+                Objects.equals(timeUnitIdent, that.timeUnitIdent) &&
+                op == that.op;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), funcName, timeUnitIdent, op);
     }
 }

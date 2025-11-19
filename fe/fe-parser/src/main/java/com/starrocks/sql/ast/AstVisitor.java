@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -646,6 +647,22 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitDropCNGroupStatement(DropCnGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -684,5 +701,17 @@ public interface AstVisitor<R, C> {
 
     default R visitShowDataDistributionStatement(ShowDataDistributionStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    default R visitBackupStatement(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitRestoreStatement(RestoreStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitExpression(Expr node, C context) {
+        return visitNode(node, context);
     }
 }
