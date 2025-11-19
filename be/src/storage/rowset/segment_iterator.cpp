@@ -2460,6 +2460,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             if (ctx->_skip_dict_decode_indexes[i]) {
                 ctx->_dict_decode_schema.append(f2);
                 ctx->_column_ids_to_column_iterators.emplace(cid, ctx->_column_iterators.back());
+                ctx->_column_ids_to_index.emplace(cid, i);
                 continue;
             }
 
