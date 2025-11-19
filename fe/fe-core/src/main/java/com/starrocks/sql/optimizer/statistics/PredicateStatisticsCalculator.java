@@ -15,11 +15,13 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -30,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.Type;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
@@ -424,6 +427,52 @@ public class PredicateStatisticsCalculator {
             } else {
                 return Statistics.buildFrom(statistics).setOutputRowCount(0.0).build();
             }
+        }
+
+        @Override
+        public Statistics visitCall(CallOperator call, Void context) {
+            if (call.getType() != Type.BOOLEAN) {
+                return visit(call, context);
+            }
+
+            if (call.getFnName().equalsIgnoreCase(FunctionSet.IF)) {
+                return ifPredicate(call);
+            }
+
+            return visit(call, context);
+        }
+
+        // The statistics are computed by building the equivalent predicate using AND and OR, and computing its statistics.
+        // example:
+        //                       IF
+        //               /       |        \
+        //      condition   predicate1     predicate2
+        //
+        // equivalent predicate:
+        //                            OR
+        //                   /                   \
+        //                AND                     AND
+        //               /   \                   /   \
+        //      condition     predicate1       OR     predicate2
+        //                                    /  \
+        //                   condition IS NULL    NOT ( condition )
+        private Statistics ifPredicate(CallOperator predicate) {
+            List<ScalarOperator> children = predicate.getChildren();
+            ScalarOperator trueBranch = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                    children.get(0), children.get(1));
+
+            ScalarOperator isNullCondition = new IsNullPredicateOperator(false, children.get(0));
+            ScalarOperator notCondition = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
+                    children.get(0));
+            ScalarOperator falseBranchCondition = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                    isNullCondition, notCondition);
+            ScalarOperator falseBranch = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                    falseBranchCondition, children.get(2));
+
+            CompoundPredicateOperator equivalentCompoundPredicate =
+                    new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, trueBranch, falseBranch);
+
+            return equivalentCompoundPredicate.accept(this, null);
         }
 
         private ScalarOperator getChildForCastOperator(ScalarOperator operator) {

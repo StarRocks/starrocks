@@ -94,6 +94,12 @@ protected:
     // convert the column to the nullable column if the arg is nullable and the column is not nullable
     StatusOr<ColumnPtr> _convert_to_nullable_column(const ColumnPtr& column, bool arg_nullable,
                                                     bool is_unpack_column) const {
+        // For constant columns, if we don't need to unpack, return directly to keep efficiency
+        // e.g.: StateFunction with constant parameters like [0.2,0.5,0.75]
+        if (!is_unpack_column && column->is_constant()) {
+            return column;
+        }
+
         auto unpack_column =
                 is_unpack_column ? ColumnHelper::unpack_and_duplicate_const_column(column->size(), column) : column;
         if (!arg_nullable && unpack_column->is_nullable()) {
