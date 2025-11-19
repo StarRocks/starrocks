@@ -250,6 +250,7 @@ set(EXEC_FILES
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp
+        ./storage/metadata_util_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
         ./storage/lake/location_provider_test.cpp
