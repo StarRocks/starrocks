@@ -215,6 +215,25 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class ArraysZipDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            // Get element types from all input arrays
+            List<StructField> structFields = new ArrayList<>();
+            for (int i = 0; i < types.length; i++) {
+                if (types[i] instanceof ArrayType) {
+                    ArrayType arrayType = (ArrayType) types[i];
+                    // Field name is col1, col2, col3...
+                    String fieldName = "col" + (i + 1);
+                    structFields.add(new StructField(fieldName, arrayType.getItemType()));
+                }
+            }
+            // Return ARRAY<STRUCT<col1:type1, col2:type2, ...>>
+            StructType structType = new StructType(structFields, true);
+            return new ArrayType(structType);
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
@@ -268,6 +287,8 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.getStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateCombineName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.MAP_AGG, new MapAggDeduce())
+            // array functions
+            .put(FunctionSet.ARRAYS_ZIP, new ArraysZipDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
