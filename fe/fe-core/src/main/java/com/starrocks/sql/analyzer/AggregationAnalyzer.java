@@ -245,7 +245,7 @@ public class AggregationAnalyzer {
                 List<FunctionCallExpr> aggFunc = Lists.newArrayList();
                 if (expr.getChildren().stream().anyMatch(childExpr -> {
                     childExpr.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                            arg.getFn() instanceof AggregateFunction, aggFunc);
+                            ((FunctionCallExpr) arg).getFn() instanceof AggregateFunction, aggFunc);
                     return !aggFunc.isEmpty();
                 })) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("aggregation function"), expr.getPos());

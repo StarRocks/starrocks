@@ -20,7 +20,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
-import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -28,9 +27,11 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.CloneExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -629,7 +630,7 @@ public class QueryTransformer {
 
         List<Ordering> orderings = new ArrayList<>();
         for (OrderByElement item : orderByExpressions) {
-            if (item.getExpr().isLiteral()) {
+            if (ExprUtils.isLiteral(item.getExpr())) {
                 continue;
             }
             ColumnRefOperator column =

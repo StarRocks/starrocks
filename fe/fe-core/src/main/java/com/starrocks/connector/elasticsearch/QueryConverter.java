@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -222,7 +223,7 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
     }
 
     private static Object valueFor(Expr expr) {
-        if (!expr.isLiteral()) {
+        if (!ExprUtils.isLiteral(expr)) {
             throw new StarRocksConnectorException("can not get literal value from " + expr);
         }
         if (expr instanceof BoolLiteral) {

@@ -43,7 +43,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
-import com.starrocks.planner.TupleId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -356,26 +355,6 @@ public class SlotRef extends Expr {
             return desc.getIsNullable();
         }
         return nullable;
-    }
-
-    @Override
-    public boolean isBoundByTupleIds(List<TupleId> tids) {
-        Preconditions.checkState(desc != null);
-        if (isFromLambda()) {
-            return true;
-        }
-        for (TupleId tid : tids) {
-            if (tid.equals(desc.getParent().getId())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isBound(SlotId slotId) {
-        Preconditions.checkState(isAnalyzed);
-        return desc.getId().equals(slotId);
     }
 
     public Table getTable() {

@@ -32,11 +32,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
-import com.starrocks.sql.ast.expression.NullLiteral;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -50,10 +49,6 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
 
     public NodeType getChild(int i) {
         return hasChild(i) ? children.get(i) : null;
-    }
-
-    public void removeNullChild() {
-        children.removeIf(child -> child instanceof NullLiteral);
     }
 
     public void addChild(NodeType n) {

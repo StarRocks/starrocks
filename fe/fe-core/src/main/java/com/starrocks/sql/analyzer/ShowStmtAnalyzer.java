@@ -82,6 +82,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.Predicate;
@@ -710,7 +711,8 @@ public class ShowStmtAnalyzer {
                             + "\"2019-12-22|2019-12-22 22:22:00\"");
                 }
                 try {
-                    subExpr.setChild(1, (subExpr.getChild(1)).castTo(DateType.DATETIME));
+                    subExpr.setChild(1,
+                            ExprCastFunction.castTo(subExpr.getChild(1), DateType.DATETIME));
                 } catch (AnalysisException e) {
                     throw new SemanticException("expression %s cast to datetime error: %s",
                             subExpr.getChild(1).toString(), e.getMessage());

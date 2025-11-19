@@ -93,7 +93,7 @@ Specifies the percentage of memory (query pool) available to the resource group 
 
 ##### `mem_pool`
 
-Since v3.5, specifies a shared memory pool identifier. Resource groups with the same mem_pool identifier draw from a shared memory pool, collectively limited by the `mem_limit`. If not specified, the resource group is assigned to `default_mem_pool`, and its memory usage is limited solely by its own `mem_limit`.
+Since v4.0, specifies a shared memory pool identifier. Resource groups with the same mem_pool identifier draw from a shared memory pool, collectively limited by the `mem_limit`. If not specified, the resource group is assigned to `default_mem_pool`, and its memory usage is limited solely by its own `mem_limit`.
 
 All resource groups sharing the same `mem_pool` must be configured with an identical `mem_limit`.
 

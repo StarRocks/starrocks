@@ -16,12 +16,10 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -66,26 +64,6 @@ public class MapExpr extends Expr {
         }
         return TypeManager.getCommonSuperType(valueExprsType);
     }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        ArrayList<Expr> newItems = new ArrayList<>();
-        MapType mapType = (MapType) targetType;
-        Type keyType = mapType.getKeyType();
-        Type valueType = mapType.getValueType();
-        for (int i = 0; i < getChildren().size(); i++) {
-            Expr child = getChild(i);
-            if (child.getType().matchesType(i % 2 == 0 ? keyType : valueType)) {
-                newItems.add(child);
-            } else {
-                newItems.add(child.castTo(i % 2 == 0 ? keyType : valueType));
-            }
-        }
-        MapExpr e = new MapExpr(targetType, newItems);
-        e.analysisDone();
-        return e;
-    }
-
 
     @Override
     public Expr clone() {

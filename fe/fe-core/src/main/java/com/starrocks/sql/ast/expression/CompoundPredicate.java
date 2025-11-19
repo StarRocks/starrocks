@@ -106,20 +106,6 @@ public class CompoundPredicate extends Predicate {
         }
     }
 
-    /**
-     * Negates a CompoundPredicate.
-     */
-    @Override
-    public Expr negate() {
-        if (op == Operator.NOT) {
-            return getChild(0);
-        }
-        Expr negatedLeft = getChild(0).negate();
-        Expr negatedRight = getChild(1).negate();
-        Operator newOp = (op == Operator.OR) ? Operator.AND : Operator.OR;
-        return new CompoundPredicate(newOp, negatedLeft, negatedRight);
-    }
-
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), op);

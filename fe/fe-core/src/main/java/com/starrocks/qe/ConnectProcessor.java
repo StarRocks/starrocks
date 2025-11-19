@@ -234,7 +234,9 @@ public class ConnectProcessor {
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString())
                 .setSessionId(ctx.getSessionId().toString())
                 .setCNGroup(ctx.getCurrentComputeResourceName())
-                .setQuerySource(ctx.getQuerySource().toString());
+                .setQuerySource(ctx.getQuerySource().toString())
+                .setCommand(ctx.getCommandStr())
+                .setPreparedStmtId(executor == null ? null : executor.getPreparedStmtId());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -626,6 +628,7 @@ public class ConnectProcessor {
         packetBuf.get(nullBitmap);
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
 
             // new_params_bind_flag
             if (packetBuf.hasRemaining() && (int) packetBuf.get() != 0) {
@@ -662,7 +665,9 @@ public class ConnectProcessor {
                 PrepareStmtContext prepareStmtContext = ctx.getPreparedStmt(executeStmt.getStmtName());
                 if (prepareStmtContext != null) {
                     if (prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement) {
-                        originStmt = AstToSQLBuilder.toSQL(prepareStmtContext.getStmt().getInnerStmt());
+                        PrepareStmt prepareStmt = prepareStmtContext.getStmt();
+                        StatementBase deparameterizedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
+                        originStmt = AstToSQLBuilder.toSQL(deparameterizedStmt);
                         executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
                     }
                 }
@@ -676,6 +681,9 @@ public class ConnectProcessor {
                 executor.execute();
                 executor.addFinishedQueryDetail();
             } else {
+                // Clear query detail. Otherwise, after collecting the profile, it will be mistakenly added to ctx.queryDetail,
+                // which still belongs to the previous query.
+                ctx.setQueryDetail(null);
                 executor.execute();
             }
 
@@ -828,7 +836,8 @@ public class ConnectProcessor {
         channel.sendAndFlush(packet);
 
         // only change lastQueryId when current command is COM_QUERY
-        if (ctx.getCommand() == MysqlCommand.COM_QUERY) {
+        MysqlCommand cmd = ctx.getCommand();
+        if (cmd == MysqlCommand.COM_QUERY || cmd == MysqlCommand.COM_STMT_PREPARE || cmd == MysqlCommand.COM_STMT_EXECUTE) {
             ctx.setLastQueryId(ctx.queryId);
             ctx.setQueryId(null);
         }

@@ -18,9 +18,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
-import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
@@ -147,7 +147,7 @@ public class ProjectNode extends PlanNode {
             // 2. and probe expr slot id == kv.getKey()
             // then replace probeExpr with kv.getValue()
             // and push down kv.getValue()
-            if (expr.isBound(kv.getKey())) {
+            if (ExprUtils.isBound(expr, kv.getKey())) {
                 newExprs.add(kv.getValue());
             }
         }

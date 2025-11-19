@@ -66,12 +66,6 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public Expr negate() {
-        return new ExistsPredicate((Subquery) getChild(0), !notExists);
-    }
-
-
-    @Override
     public Expr clone() {
         return new ExistsPredicate(this);
     }

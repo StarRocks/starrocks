@@ -237,6 +237,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;
     RETURN_IF_ERROR(
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
+    auto compession_level = req.__isset.compression_level ? req.compression_level : -1;
+    tablet_metadata_pb->mutable_schema()->set_compression_level(compession_level);
     if (req.create_schema_file) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
@@ -310,6 +312,7 @@ Status TabletManager::cache_tablet_metadata(const TabletMetadataPtr& metadata) {
         return Status::OK();
     }
     _metacache->cache_tablet_metadata(metadata_location, metadata);
+    _metacache->cache_tablet_metadata(tablet_latest_metadata_cache_key(metadata->id()), metadata);
     return Status::OK();
 }
 
@@ -501,6 +504,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         // If the metadata is not found, we will try to read the initial metadata at least
         std::string new_path = join_path(prefix_name(path), tablet_initial_metadata_filename());
         metadata_or = load_tablet_metadata(new_path, cache_opts.fill_data_cache, expected_gtid, fs);
+        // set tablet id for initial metadata
+        if (metadata_or.ok()) {
+            auto metadata = const_cast<starrocks::TabletMetadataPB*>(metadata_or.value().get());
+            metadata->set_id(tablet_id);
+        }
     }
 
     if (!metadata_or.ok()) {

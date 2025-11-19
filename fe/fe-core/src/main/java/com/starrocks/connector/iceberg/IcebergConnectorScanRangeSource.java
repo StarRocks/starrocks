@@ -113,6 +113,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Set<DeleteFile> appliedPosDeleteFiles;
     private final Set<DeleteFile> appliedEqualDeleteFiles;
     private final boolean recordScanFiles;
+    private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
@@ -121,7 +122,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                            TupleDescriptor desc,
                                            Optional<List<BucketProperty>> bucketProperties,
                                            PartitionIdGenerator partitionIdGenerator,
-                                           boolean recordScanFiles) {
+                                           boolean recordScanFiles,
+                                           boolean useMinMaxOpt) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
@@ -133,15 +135,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.appliedPosDeleteFiles = new HashSet<>();
         this.appliedEqualDeleteFiles = new HashSet<>();
         this.partitionIdGenerator = partitionIdGenerator;
-    }
-
-    public IcebergConnectorScanRangeSource(IcebergTable table,
-                                           RemoteFileInfoSource remoteFileInfoSource,
-                                           IcebergMORParams morParams,
-                                           TupleDescriptor desc,
-                                           Optional<List<BucketProperty>> bucketProperties,
-                                           PartitionIdGenerator partitionIdGenerator) {
-        this(table, remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false);
+        this.useMinMaxOpt = useMinMaxOpt;
     }
 
     public void clearScannedFiles() {
@@ -203,7 +197,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                 res.add(fileScanTask);
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
-                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that 
+                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
                             // we can eliminate the equality delete files.
                         }
                     }
@@ -290,10 +284,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     protected THdfsScanRange buildScanRange(FileScanTask task, ContentFile<?> file, Long partitionId) throws AnalysisException {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        if (file.path().toString().startsWith(table.getTableLocation())) {
-            hdfsScanRange.setRelative_path(file.path().toString().substring(table.getTableLocation().length()));
+        String filePath = file.path().toString();
+        String tableLocation = table.getTableLocation();
+        if (isFileUnderTableLocation(filePath, tableLocation)) {
+            hdfsScanRange.setRelative_path(buildRelativePath(filePath, tableLocation));
         } else {
-            hdfsScanRange.setFull_path(file.path().toString());
+            hdfsScanRange.setFull_path(filePath);
         }
 
         hdfsScanRange.setOffset(file.content() == FileContent.DATA ? task.start() : 0);
@@ -355,7 +351,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
-        if (file.nullValueCounts() != null && file.valueCounts() != null) {
+        if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
             // fill min/max value
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
                     table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
@@ -489,7 +485,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 partitionValues.add(partitionValue);
             } else {
                 partitionValues.add(null);
-            } 
+            }
             cols.add(table.getColumn(field.name()));
         });
 
@@ -518,5 +514,39 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     public Set<DeleteFile> getEqualAppliedDeleteFiles() {
         return appliedEqualDeleteFiles;
+    }
+
+    private static boolean isFileUnderTableLocation(String filePath, String tableLocation) {
+        if (filePath == null || tableLocation == null || tableLocation.isEmpty()) {
+            LOG.warn("File path or table location is null or empty");
+            return false;
+        }
+        String normalizedTableLocation = normalizeTableLocation(tableLocation);
+        if (normalizedTableLocation.isEmpty()) {
+            LOG.warn("Normalized table location is empty");
+            return false;
+        }
+        String prefixWithSeparator = normalizedTableLocation + "/";
+        return filePath.startsWith(prefixWithSeparator);
+    }
+
+    private static String buildRelativePath(String filePath, String tableLocation) {
+        String normalizedTableLocation = normalizeTableLocation(tableLocation);
+        if (filePath.length() <= normalizedTableLocation.length()) {
+            LOG.warn("File path {} is shorter than table location {}", filePath, tableLocation);
+            return "";
+        }
+        return filePath.substring(normalizedTableLocation.length());
+    }
+
+    private static String normalizeTableLocation(String tableLocation) {
+        if (tableLocation == null || tableLocation.isEmpty()) {
+            LOG.warn("Table location is null or empty");
+            return "";
+        }
+        if (tableLocation.length() > 1 && tableLocation.charAt(tableLocation.length() - 1) == '/') {
+            return tableLocation.substring(0, tableLocation.length() - 1);
+        }
+        return tableLocation;
     }
 }

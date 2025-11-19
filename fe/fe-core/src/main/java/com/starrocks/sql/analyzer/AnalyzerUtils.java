@@ -44,6 +44,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -185,7 +186,7 @@ public class AnalyzerUtils {
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {
         List<FunctionCallExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                arg.getFn() instanceof AggregateFunction, functions);
+                ((FunctionCallExpr) arg).getFn() instanceof AggregateFunction, functions);
         if (!functions.isEmpty()) {
             throw new SemanticException(clause + " clause cannot contain aggregations", expression.getPos());
         }
@@ -942,6 +943,10 @@ public class AnalyzerUtils {
             }
 
             Table table = node.getTable();
+            // system table is immutable
+            if (table instanceof SystemTable) {
+                return null;
+            }
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
