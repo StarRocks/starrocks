@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
@@ -202,5 +203,30 @@ public class ScalarOperatorRewriterTest {
         String expect = "date_trunc(YEAR, 1: dt) = 2024-01-01 AND 2: mode = Buzz";
         String actual = result.toString();
         Assertions.assertEquals(expect, actual, actual);
+    }
+
+    @Test
+    public void testDictMappingBothSidesInfiniteLoop() {
+        ColumnRefOperator dictColumn1 = new ColumnRefOperator(21, IntegerType.INT, "FIO_MANAGER_DICT", false);
+        ColumnRefOperator dictColumn2 = new ColumnRefOperator(24, IntegerType.INT, "MANAGER_DRBP_DICT", false);
+
+        ColumnRefOperator originColumn1 = new ColumnRefOperator(10, VarcharType.VARCHAR, "FIO_MANAGER", true);
+        ColumnRefOperator originColumn2 = new ColumnRefOperator(4, VarcharType.VARCHAR, "MANAGER_DRBP", true);
+
+        CallOperator upperCall1 = new CallOperator(FunctionSet.UPPER, VarcharType.VARCHAR,
+                Lists.newArrayList(originColumn1));
+        CallOperator upperCall2 = new CallOperator(FunctionSet.UPPER, VarcharType.VARCHAR,
+                Lists.newArrayList(originColumn2));
+
+        DictMappingOperator dictMapping1 = new DictMappingOperator(dictColumn1, upperCall1, IntegerType.INT);
+        DictMappingOperator dictMapping2 = new DictMappingOperator(dictColumn2, upperCall2, IntegerType.INT);
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.NE, dictMapping1, dictMapping2);
+
+        ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+        ScalarOperator result = operatorRewriter.rewrite(predicate,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        Assertions.assertEquals(predicate, result);
+
     }
 }
