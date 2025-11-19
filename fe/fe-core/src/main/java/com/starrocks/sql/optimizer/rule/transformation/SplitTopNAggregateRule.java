@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -43,7 +44,6 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -61,9 +61,8 @@ import java.util.Map;
  */
 public class SplitTopNAggregateRule extends TransformationRule {
     public SplitTopNAggregateRule() {
-        super(RuleType.TF_SPLIT_TOPN_AGGREGATE_RULE,
-                Pattern.create(OperatorType.LOGICAL_TOPN)
-                        .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.LOGICAL_OLAP_SCAN)));
+        super(RuleType.TF_SPLIT_TOPN_AGGREGATE_RULE, Pattern.create(OperatorType.LOGICAL_TOPN)
+                .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.LOGICAL_OLAP_SCAN)));
     }
 
     @Override
@@ -76,27 +75,27 @@ public class SplitTopNAggregateRule extends TransformationRule {
         LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
         LogicalOlapScanOperator scan = input.inputAt(0).inputAt(0).getOp().cast();
 
-        if (topN.getLimit() == Operator.DEFAULT_LIMIT
-                || topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
+        if (topN.getLimit() == Operator.DEFAULT_LIMIT ||
+                topN.getLimit() > context.getSessionVariable().getSplitTopNAggLimit()) {
             return false;
         }
         if (scan.getProjection() != null) {
-            if (scan.getProjection().getColumnRefMap().entrySet()
-                    .stream().anyMatch(e -> !e.getKey().equals(e.getValue()))) {
+            if (scan.getProjection().getColumnRefMap().entrySet().stream()
+                    .anyMatch(e -> !e.getKey().equals(e.getValue()))) {
                 return false;
             }
         }
 
         if (agg.getProjection() != null) {
-            if (agg.getProjection().getColumnRefMap().entrySet()
-                    .stream().anyMatch(e -> !e.getKey().equals(e.getValue()))) {
+            if (agg.getProjection().getColumnRefMap().entrySet().stream()
+                    .anyMatch(e -> !e.getKey().equals(e.getValue()))) {
                 return false;
             }
         }
 
         Statistics ss = input.inputAt(0).getStatistics();
-        if (!FeConstants.runningUnitTest && ss != null && ss.getOutputRowCount() < (topN.getLimit() * 10)
-                && ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)) {
+        if (!FeConstants.runningUnitTest && ss != null && ss.getOutputRowCount() < (topN.getLimit() * 10) &&
+                ss.getColumnStatistics().values().stream().noneMatch(ColumnStatistic::isUnknown)) {
             return false;
         }
 
@@ -119,11 +118,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         // Check predicate and column type constraints only for duplicated columns
-        if (!checkPredicateAndColumnConstraints(scan, scanStatistics, firstScanColumns)) {
-            return false;
-        }
-
-        return true;
+        return checkPredicateAndColumnConstraints(scan, scanStatistics, firstScanColumns);
     }
 
     private boolean checkPredicateAndColumnConstraints(LogicalOlapScanOperator scan, Statistics scanStatistics,
@@ -142,11 +137,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
         List<ScalarOperator> disconjuncts = Utils.extractDisjunctive(predicate);
 
         // if evaluate too much predicates, scan's extra costs may bigger then agg's
-        if (conjuncts.size() > 2 || disconjuncts.size() > 2) {
-            return false;
-        }
-
-        return true;
+        return conjuncts.size() <= 2 && disconjuncts.size() <= 2;
     }
 
     /**
@@ -201,7 +192,7 @@ public class SplitTopNAggregateRule extends TransformationRule {
      * Check if a type is complex type (ARRAY, MAP, STRUCT, JSON, VARIANT).
      */
     private boolean isComplexType(Type type) {
-        return type.isComplexType() || type.isJsonType() || type.isVariantType();
+        return type.isComplexType() || type.isJsonType();
     }
 
     @Override
@@ -248,10 +239,9 @@ public class SplitTopNAggregateRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> scanProjections = Maps.newHashMap();
         newScanUseRefs.getStream().forEach(k -> scanProjections.put(factory.getColumnRef(k), factory.getColumnRef(k)));
 
-        LogicalOlapScanOperator newScan = LogicalOlapScanOperator.builder()
-                .withOperator(scan)
-                .setProjection(new Projection(scanProjections))
-                .build();
+        LogicalOlapScanOperator newScan =
+                LogicalOlapScanOperator.builder().withOperator(scan).setProjection(new Projection(scanProjections))
+                        .build();
 
         // build join
         List<ScalarOperator> eqPredicate = Lists.newArrayList();
@@ -259,10 +249,8 @@ public class SplitTopNAggregateRule extends TransformationRule {
             eqPredicate.add(new BinaryPredicateOperator(BinaryType.EQ, groupingKey, refToNew.get(groupingKey)));
         }
 
-        LogicalJoinOperator join = LogicalJoinOperator.builder()
-                .setJoinType(JoinOperator.INNER_JOIN)
-                .setOnPredicate(Utils.compoundAnd(eqPredicate))
-                .build();
+        LogicalJoinOperator join = LogicalJoinOperator.builder().setJoinType(JoinOperator.INNER_JOIN)
+                .setOnPredicate(Utils.compoundAnd(eqPredicate)).build();
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         agg.getAggregations().forEach((k, v) -> {
@@ -273,18 +261,16 @@ public class SplitTopNAggregateRule extends TransformationRule {
 
         List<ColumnRefOperator> newGroupBy = Lists.newArrayList(agg.getGroupingKeys());
         newGroupBy.addAll(splitAggregations);
-        LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder()
-                .withOperator(agg)
-                .setAggregations(newAggregations)
-                .setGroupingKeys(newGroupBy)
-                .setPartitionByColumns(newGroupBy)
-                .build();
+        LogicalAggregationOperator newAgg =
+                LogicalAggregationOperator.builder().withOperator(agg).setAggregations(newAggregations)
+                        .setGroupingKeys(newGroupBy).setPartitionByColumns(newGroupBy).build();
 
         return List.of(OptExpression.create(topN,
                 OptExpression.create(newAgg, OptExpression.create(join, OptExpression.create(newScan), right))));
     }
 
-    private OptExpression buildTopNAggregatePlan(OptExpression input, Map<ColumnRefOperator, ColumnRefOperator> refMapping,
+    private OptExpression buildTopNAggregatePlan(OptExpression input,
+                                                 Map<ColumnRefOperator, ColumnRefOperator> refMapping,
                                                  List<ColumnRefOperator> topNAggregations) {
         LogicalTopNOperator topN = input.getOp().cast();
         LogicalAggregationOperator agg = input.inputAt(0).getOp().cast();
@@ -313,13 +299,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         ReplaceColumnRefRewriter refRewriter = new ReplaceColumnRefRewriter(refMapping);
-        LogicalOlapScanOperator newScan = LogicalOlapScanOperator.builder()
-                .withOperator(scan)
-                .setProjection(scanProjection)
-                .setColRefToColumnMetaMap(refToMeta)
-                .setColumnMetaToColRefMap(metaToRef)
-                .setPredicate(refRewriter.rewrite(scan.getPredicate()))
-                .build();
+        LogicalOlapScanOperator newScan =
+                LogicalOlapScanOperator.builder().withOperator(scan).setProjection(scanProjection)
+                        .setColRefToColumnMetaMap(refToMeta).setColumnMetaToColRefMap(metaToRef)
+                        .setPredicate(refRewriter.rewrite(scan.getPredicate())).build();
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
 
@@ -327,14 +310,11 @@ public class SplitTopNAggregateRule extends TransformationRule {
             newAggregations.put(aggRef, (CallOperator) refRewriter.rewrite(agg.getAggregations().get(aggRef)));
         }
 
-        LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder()
-                .withOperator(agg)
+        LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder().withOperator(agg)
                 .setGroupingKeys(agg.getGroupingKeys().stream().map(refMapping::get).toList())
                 .setPartitionByColumns(agg.getGroupingKeys().stream().map(refMapping::get).toList())
-                .setAggregations(newAggregations)
-                .setPredicate(refRewriter.rewrite(agg.getPredicate()))
-                .setProjection(null)
-                .build();
+                .setAggregations(newAggregations).setPredicate(refRewriter.rewrite(agg.getPredicate()))
+                .setProjection(null).build();
 
         List<Ordering> newOrdering = Lists.newArrayList();
         for (Ordering o : topN.getOrderByElements()) {
@@ -345,11 +325,9 @@ public class SplitTopNAggregateRule extends TransformationRule {
             }
         }
 
-        LogicalTopNOperator newTopN = LogicalTopNOperator.builder()
-                .withOperator(topN)
-                .setOrderByElements(newOrdering)
-                .setProjection(null)
-                .build();
+        LogicalTopNOperator newTopN =
+                LogicalTopNOperator.builder().withOperator(topN).setOrderByElements(newOrdering).setProjection(null)
+                        .build();
 
         return OptExpression.create(newTopN, OptExpression.create(newAgg, OptExpression.create(newScan)));
     }
