@@ -328,6 +328,8 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         new_rowset_meta->CopyFrom(src_rowset_meta);
         new_rowset_meta->mutable_segments()->Clear();
         new_rowset_meta->mutable_segment_encryption_metas()->Clear();
+        new_rowset_meta->mutable_segment_size()->Clear();
+        new_rowset_meta->mutable_del_files()->Clear();
         // check if segment size is valid
         auto segment_size_size = src_rowset_meta.segment_size_size();
         if (segment_size_size > 0) {

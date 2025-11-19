@@ -434,6 +434,8 @@ private:
                 _metadata->set_cumulative_point(0);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
 
+                _tablet.update_mgr()->unload_primary_index(_tablet.id());
+
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
                         << ", txn_id: " << txn_meta.txn_id() << ", metadata id: " << _metadata->id()
