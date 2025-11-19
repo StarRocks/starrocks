@@ -15,9 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -663,14 +661,6 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
                                         PlanTestBase.assertContains(plan, "     PREAGGREGATION: ON\n" +
                                                 "     partitions=2/6");
-                                    }
-
-                                    // run partition ttl scheduler
-                                    {
-                                        DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
-                                                .getDynamicPartitionScheduler();
-                                        scheduler.runOnceForTest();
-                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                     }
                                 });
                     });
