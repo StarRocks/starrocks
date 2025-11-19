@@ -1800,6 +1800,14 @@ public class FunctionSet {
                 Lists.newArrayList(FloatType.DOUBLE, FloatType.DOUBLE, FloatType.DOUBLE), FloatType.DOUBLE,
                 VarbinaryType.VARBINARY,
                 false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
+                Lists.newArrayList(FloatType.DOUBLE, new ArrayType(FloatType.DOUBLE)),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
+                Lists.newArrayList(FloatType.DOUBLE, new ArrayType(FloatType.DOUBLE), FloatType.DOUBLE),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
+                false, false, false));
         // percentile_approx_weighted
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
                 Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, FloatType.DOUBLE), FloatType.DOUBLE,
@@ -1809,6 +1817,14 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
                 Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, FloatType.DOUBLE, FloatType.DOUBLE), FloatType.DOUBLE,
                 VarbinaryType.VARBINARY,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, new ArrayType(FloatType.DOUBLE)),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, new ArrayType(FloatType.DOUBLE), FloatType.DOUBLE),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
                 false, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_UNION,

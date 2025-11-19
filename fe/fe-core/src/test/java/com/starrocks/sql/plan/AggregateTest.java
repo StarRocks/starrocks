@@ -2526,17 +2526,170 @@ public class AggregateTest extends PlanTestBase {
             String testSql = "with cc as (select 1 as a, v1 from t0) select percentile_approx(1, cc.a, cc.v1) from cc;";
             getFragmentPlan(testSql);
         });
-        Assertions.assertTrue(exception.getMessage().contains("the third parameter's type is numeric constant type"));
+        Assertions.assertTrue(exception.getMessage().contains("Type check failed. want constant arg in " +
+                "percentile_approx (compression), but input is cast(1: v1 as double)"));
 
-        Throwable exception2 = assertThrows(SemanticException.class, () -> {
+        Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
             getCostExplain("select percentile_approx(1, cast(1.3 as DOUBLE));");
         });
-        assertThat(exception2.getMessage(), containsString("Getting analyzing error. " +
-                "Detail message: percentile_approx second parameter'value must be between 0 and 1."));
+        assertThat(exception2.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx, but got: 1.3"));
 
         // should success
         getCostExplain("select percentile_cont(1, cast(0.4 as DOUBLE));");
         getCostExplain("select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));");
+    }
+
+    @Test
+    public void testPercentileApproxWeightedValidation() throws Exception {
+        // Test valid cases
+        String sql = "select percentile_approx_weighted(v1, v2, 0.5) from t0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, v2, 0.5, 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, 1, 0.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, 1, 1.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        // Test percentile parameter out of range (single value)
+        Throwable exception1 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, 1.5) from t0;");
+        });
+        assertThat(exception1.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx_weighted, but got: 1.5"));
+
+        Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, -0.1) from t0;");
+        });
+        assertThat(exception2.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx_weighted, but got: -0.1"));
+
+        // Test percentile array with invalid element
+        Throwable exception3 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, [0.5, 1.5]) from t0;");
+        });
+        assertThat(exception3.getMessage(), containsString("Type check failed. " +
+                "percentile array element[1] must be between 0 and 1 in percentile_approx_weighted, but got: 1.5"));
+
+        Throwable exception4 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, array<double>[-0.1, 0.5]) from t0;");
+        });
+        assertThat(exception4.getMessage(), containsString("Type check failed. " +
+                "percentile array element[0] must be between 0 and 1 in percentile_approx_weighted, but got: -0.1"));
+
+        // Test empty percentile array
+        Throwable exception5 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, []) from t0;");
+        });
+        assertThat(exception5.getMessage(), containsString("Getting analyzing error from line 1, " +
+                "column 7 to line 1, column 44. Detail message: percentile_approx_weighted requires " +
+                "the third parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<NULL_TYPE>."));
+
+        // Test compression parameter validation
+        Throwable exception6 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, 0.5, 0) from t0;");
+        });
+        assertThat(exception6.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx_weighted, but got: 0.0"));
+
+        Throwable exception7 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, 0.5, -100) from t0;");
+        });
+        assertThat(exception7.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx_weighted, but got: -100.0"));
+
+        // Test valid array percentile
+        sql = "select percentile_approx_weighted(v1, v2, [0.0, 0.5, 1.0]) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, v2, [0.25, 0.5, 0.75], 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+    }
+
+    @Test
+    public void testPercentileApproxValidation() throws Exception {
+        // Test valid cases
+        String sql = "select percentile_approx(v1, 0.5) from t0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, 0.5, 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, 0.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, 1.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        // Test percentile parameter out of range (single value)
+        Throwable exception1 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, 1.5) from t0;");
+        });
+        assertThat(exception1.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx, but got: 1.5"));
+
+        Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, -0.1) from t0;");
+        });
+        assertThat(exception2.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx, but got: -0.1"));
+
+        // Test percentile array with invalid element
+        Throwable exception3 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, array<double>[0.5, 1.5]) from t0;");
+        });
+        assertThat(exception3.getMessage(), containsString("Type check failed. " +
+                "percentile array element[1] must be between 0 and 1 in percentile_approx, but got: 1.5"));
+
+        Throwable exception4 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, [-0.1, 0.5]) from t0;");
+        });
+        assertThat(exception4.getMessage(), containsString("Type check failed. " +
+                "percentile array element[0] must be between 0 and 1 in percentile_approx, but got: -0.1"));
+
+        // Test empty percentile array
+        Throwable exception5 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, []) from t0;");
+        });
+        assertThat(exception5.getMessage(), containsString("Getting analyzing error from line 1, " +
+                "column 7 to line 1, column 31. Detail message: " +
+                "percentile_approx requires the second parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<NULL_TYPE>."));
+
+        // Test compression parameter validation
+        Throwable exception6 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, 0.5, 0) from t0;");
+        });
+        assertThat(exception6.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx, but got: 0.0"));
+
+        Throwable exception7 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, 0.5, -100) from t0;");
+        });
+        assertThat(exception7.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx, but got: -100.0"));
+
+        // Test valid array percentile
+        sql = "select percentile_approx(v1, [0.0, 0.5, 1.0]) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, array<double>[0.25, 0.5, 0.75], 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
     }
 
     @Test
