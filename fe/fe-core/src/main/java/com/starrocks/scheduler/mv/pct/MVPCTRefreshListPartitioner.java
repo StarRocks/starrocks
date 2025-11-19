@@ -460,8 +460,13 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         // refresh the recent partitions first
         Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(toRefreshPartitions, 
                 Config.materialized_view_refresh_ascending);
-        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+        while (i < partitionRefreshNumber && iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
+            // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
+            if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
+            i++;
             logger.debug("Materialized view [{}] to refresh partition name {}, value {}",
                     mv.getName(), pCell.name(), pCell.cell());
         }
@@ -470,6 +475,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Set<PListCell> nextPartitionValues = Sets.newHashSet();
         while (iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
+            // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
+            if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
             nextPartitionValues.add((PListCell) pCell.cell());
             iterator.remove();
         }
