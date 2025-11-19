@@ -299,6 +299,96 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testPercentileApproxWeightedFunction() {
+        // Test parameter count validation
+        analyzeFail("select percentile_approx_weighted(1, 2) from tall group by tb");
+        analyzeFail("select percentile_approx_weighted(1, 2, 0.5, 100, 200) from tall group by tb");
+
+        // Test first parameter (value) type validation
+        analyzeFail("select percentile_approx_weighted('c', 1, 0.5) from tall group by tb",
+                "percentile_approx_weighted requires the first parameter (value) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(tc, 1, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tj, 1, 0.5) from tall group by tb");
+
+        // Test second parameter (weight) type validation
+        analyzeFail("select percentile_approx_weighted(1, 'c', 0.5) from tall group by tb",
+                "requires the second parameter (weight) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(1, tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 100, 0.5) from tall group by tb");
+
+        // Test third parameter (percentile) type validation - single value
+        analyzeFail("select percentile_approx_weighted(1, 2, 'c') from tall group by tb",
+                "requires the third parameter (percentile) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.0) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 1.0) from tall group by tb");
+
+        // Test third parameter (percentile) type validation - array
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, [0.5, 0.9]) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, [0.0, 0.5, 1.0]) from tall group by tb");
+        analyzeFail("select percentile_approx_weighted(1, 2, ['a', 'b']) from tall group by tb",
+                "percentile_approx_weighted requires " +
+                        "the third parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<varchar>.");
+
+        // Test fourth parameter (compression) type validation
+        analyzeFail("select percentile_approx_weighted(1, 2, 0.5, 'c') from tall group by tb",
+                "requires the fourth parameter (compression) to be numeric type");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, 100) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, tc) from tall group by tb");
+
+        // Test with different numeric types
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tj, tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(tc, 1, 0.5, 1000) from tall group by tb");
+        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, 2048) from tall group by tb");
+
+        // Test with array percentile and compression
+        analyzeSuccess("select percentile_approx_weighted(tc, tj, [0.25, 0.5, 0.75], 1000) from tall group by tb");
+    }
+
+    @Test
+    public void testPercentileApproxFunction() {
+        // Test parameter count validation
+        analyzeFail("select percentile_approx(1) from tall group by tb");
+        analyzeFail("select percentile_approx(1, 0.5, 100, 200) from tall group by tb");
+
+        // Test first parameter (value) type validation
+        analyzeFail("select percentile_approx('c', 0.5) from tall group by tb",
+                "percentile_approx requires the first parameter (value) to be numeric type");
+        analyzeSuccess("select percentile_approx(tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tj, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.5) from tall group by tb");
+
+        // Test second parameter (percentile) type validation - single value
+        analyzeFail("select percentile_approx(1, 'c') from tall group by tb",
+                "requires the second parameter (percentile) to be numeric type");
+        analyzeSuccess("select percentile_approx(1, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.0) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 1.0) from tall group by tb");
+
+        // Test second parameter (percentile) type validation - array
+        analyzeSuccess("select percentile_approx(tc, array<double>[0.5, 0.9]) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tc, array<double>[0.0, 0.5, 1.0]) from tall group by tb");
+        analyzeFail("select percentile_approx(1, ['a', 'b']) from tall group by tb",
+                "percentile_approx requires the second parameter (percentile) to be ARRAY<NUMERIC>");
+
+        // Test third parameter (compression) type validation
+        analyzeFail("select percentile_approx(1, 0.5, 'c') from tall group by tb",
+                "requires the third parameter (compression) to be numeric type");
+        analyzeSuccess("select percentile_approx(1, 0.5, 100) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.5, tc) from tall group by tb");
+
+        // Test with different numeric types
+        analyzeSuccess("select percentile_approx(tc, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tj, 0.5) from tall group by tb");
+        analyzeSuccess("select percentile_approx(tc, 0.5, 1000) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1, 0.5, 2048) from tall group by tb");
+
+        // Test with array percentile and compression
+        analyzeSuccess("select percentile_approx(tc, [0.25, 0.5, 0.75], 1000) from tall group by tb");
+    }
+
+    @Test
     public void testWindowFunnelFunction() {
         // For the argument `window_size`.
         analyzeFail("SELECT window_funnel(-1, ti, 0, [ta='a', ta='b']) FROM tall",
