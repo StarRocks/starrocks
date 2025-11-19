@@ -48,6 +48,7 @@ public class RestoreClusterSnapshotMgrTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        UtFrameUtils.addMockComputeNode(50001);
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
