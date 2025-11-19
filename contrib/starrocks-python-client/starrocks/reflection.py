@@ -25,15 +25,15 @@ from sqlalchemy.dialects.mysql.base import _DecodingRow
 from sqlalchemy.dialects.mysql.reflection import _re_compile
 from sqlalchemy.engine.reflection import Inspector
 
-from starrocks.common.consts import TableConfigKey
-from starrocks.common.params import (
+from .common.consts import TableConfigKey
+from .common.params import (
     ColumnAggInfoKeyWithPrefix,
     SRKwargsPrefix,
     TableInfoKey,
     TableInfoKeyWithPrefix,
 )
-from starrocks.common.types import PartitionType
-from starrocks.common.utils import SQLParseError
+from .common.types import PartitionType
+from .common.utils import SQLParseError
 
 from .common import utils
 from .drivers.parsers import parse_data_type, parse_mv_refresh_clause
@@ -158,6 +158,7 @@ class StarRocksTableDefinitionParser(object):
         table_config: Dict[str, Any],
         columns: List[_DecodingRow],
         column_2_agg_type: Dict[str, str],
+        column_autoinc: dict[str, bool],
         charset: str,
     ) -> ReflectedState:
         """
@@ -174,8 +175,11 @@ class StarRocksTableDefinitionParser(object):
         reflected_table_info = ReflectedState(
             table_name=table.TABLE_NAME,
             columns=[
-                self._parse_column(column=column,
-                    **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: column_2_agg_type.get(column.COLUMN_NAME)})
+                self._parse_column(
+                    column=column,
+                    col_autoinc=column_autoinc,
+                    **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: column_2_agg_type.get(column.COLUMN_NAME)},
+                )
                 for column in columns
             ],
             table_options=self._parse_table_options(
@@ -191,7 +195,7 @@ class StarRocksTableDefinitionParser(object):
         logger.debug(f"reflected table info for table: {table.TABLE_NAME}, info: {reflected_table_info}")
         return reflected_table_info
 
-    def _parse_column(self, column: _DecodingRow, **kwargs: Any) -> dict:
+    def _parse_column(self, column: _DecodingRow, col_autoinc: dict, **kwargs: Any) -> dict:
         """
         Parse column from information_schema.columns table.
         It returns dictionary with column informations expected by sqlalchemy.
@@ -212,7 +216,7 @@ class StarRocksTableDefinitionParser(object):
             "type": self._parse_column_type(column=column),
             "nullable": column.IS_NULLABLE == "YES",
             "default": column.COLUMN_DEFAULT or None,
-            "autoincrement": None,  # TODO: This is not specified
+            "autoincrement": col_autoinc.get(column.COLUMN_NAME, False),
             "comment": column.COLUMN_COMMENT or None,
             "dialect_options": {
                 k: v for k, v in kwargs.items() if v is not None
@@ -417,7 +421,7 @@ class StarRocksTableDefinitionParser(object):
             #     raise NotImplementedError(f"Table engine {table_engine} is not supported now.")
             opts[TableInfoKeyWithPrefix.ENGINE] = table_engine.upper()
 
-        if table.TABLE_COMMENT:
+        if table.TABLE_COMMENT and table.TABLE_COMMENT != 'OLAP':
             logger.debug(f"table.TABLE_COMMENT: {table.TABLE_COMMENT}")
             opts[TableInfoKeyWithPrefix.COMMENT] = table.TABLE_COMMENT
 
@@ -503,7 +507,7 @@ class StarRocksTableDefinitionParser(object):
         try:
             parsed_state = self._parse_mv_ddl(mv_row.TABLE_NAME, ddl, mv_row.TABLE_SCHEMA)
         except Exception as e:
-            self.logger.warning(f"Failed to parse DDL for MV '{mv_row.TABLE_SCHEMA}.{mv_row.TABLE_NAME}', reflection may be incomplete: {e}")
+            logger.warning(f"Failed to parse DDL for MV '{mv_row.TABLE_SCHEMA}.{mv_row.TABLE_NAME}', reflection may be incomplete: {e}")
             parsed_state = ReflectedMVState(name=mv_row.TABLE_NAME, schema=mv_row.TABLE_SCHEMA, definition=ddl)
 
         # 2. Create the final state using the parsed definition and other reliable sources.
