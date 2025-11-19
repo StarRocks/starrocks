@@ -392,16 +392,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     @VisibleForTesting
     public long addPartition(FileScanTask task) throws AnalysisException {
         PartitionSpec spec = task.spec();
-<<<<<<< HEAD
-        //Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
-=======
-
         if (!partitionSlotIdsCache.containsKey(spec.specId())) {
             partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
         }
 
         // Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
->>>>>>> 2c0473b510 ([BugFix] connect context is missing in deploy scan range threads (#63544))
         StructLike origPartition = task.partition();
         StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
         StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
