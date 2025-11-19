@@ -677,6 +677,12 @@ void StorageEngine::stop() {
     if (_compaction_manager) {
         _compaction_manager->stop();
     }
+
+#ifdef USE_STAROS
+    if (_local_pk_index_manager) {
+        _local_pk_index_manager->stop();
+    }
+#endif
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

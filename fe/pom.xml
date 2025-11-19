@@ -30,6 +30,7 @@ under the License.
 
     <modules>
         <module>fe-grammar</module>
+        <module>fe-type</module>
         <module>fe-parser</module>
         <module>fe-spi</module>
         <module>fe-utils</module>
@@ -184,6 +185,11 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-grammar</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-type</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

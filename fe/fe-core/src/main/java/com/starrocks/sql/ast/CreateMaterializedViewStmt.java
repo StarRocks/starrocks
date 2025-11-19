@@ -47,7 +47,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -86,6 +85,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.HLLType;
@@ -671,7 +671,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     Function fn = ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
                             Function.CompareMode.IS_IDENTICAL);
                     defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
-                    defineExpr.setFn(fn);
+                    ((FunctionCallExpr) defineExpr).setFn(fn);
                     defineExpr.setType(BitmapType.BITMAP);
                 } else {
                     throw new SemanticException("Unsupported bitmap_agg type:" + baseType);

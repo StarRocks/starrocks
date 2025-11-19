@@ -12,25 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.type;
 
 import com.google.common.collect.Lists;
-import com.starrocks.type.AnyElementType;
-import com.starrocks.type.AnyMapType;
-import com.starrocks.type.AnyStructType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.MapType;
-import com.starrocks.type.StructField;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
-import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class StructTypeTest {
+    public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
+
     @Test
     public void testTypeMatch() {
         Assertions.assertTrue(AnyStructType.ANY_STRUCT.matchesType(AnyStructType.ANY_STRUCT));
@@ -83,7 +73,7 @@ public class StructTypeTest {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", IntegerType.INT),
-                new StructField("cc1", TypeFactory.createDefaultCatalogString())
+                new StructField("cc1", new VarcharType(CATALOG_MAX_VARCHAR_LENGTH))
         ));
         StructType root = new StructType(Lists.newArrayList(
                 new StructField("struct_test", IntegerType.INT),
@@ -96,7 +86,7 @@ public class StructTypeTest {
 
         // MapType
         Type keyType = IntegerType.INT;
-        Type valueType = TypeFactory.createCharType(10);
+        Type valueType = new VarcharType(10);
         Type mapType = new MapType(keyType, valueType);
 
         Assertions.assertFalse(root.matchesType(mapType));
@@ -123,7 +113,7 @@ public class StructTypeTest {
         // matched
         StructType mc1 = new StructType(Lists.newArrayList(
                 new StructField("c1", IntegerType.INT),
-                new StructField("cc1", TypeFactory.createDefaultCatalogString())
+                new StructField("cc1", new VarcharType(CATALOG_MAX_VARCHAR_LENGTH))
         ));
         StructType matched = new StructType(Lists.newArrayList(
                 new StructField("struct_test", IntegerType.INT),
@@ -133,7 +123,7 @@ public class StructTypeTest {
 
         // Won't match with different subfield order
         StructType mc2 = new StructType(Lists.newArrayList(
-                new StructField("cc1", TypeFactory.createDefaultCatalogString()),
+                new StructField("cc1", new VarcharType(CATALOG_MAX_VARCHAR_LENGTH)),
                 new StructField("c1", IntegerType.INT)
         ));
         StructType matchedDiffOrder = new StructType(Lists.newArrayList(

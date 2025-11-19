@@ -16,7 +16,6 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -46,7 +45,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -231,29 +229,17 @@ public abstract class MVPCTRefreshPartitioner {
 
         // use base table's changed partitions instead of to-refresh partitions to decide
         Map<Table, PCellSortedSet> baseChangedPCellsSortedSet = toBaseTableWithSortedSet(baseChangedPartitionNames);
-        PCellSortedSet mvRangePartitionMap = mvContext.getMVToCellMap();
-        Set<String> mvToRefreshPartitionNames = result.getPartitionNames();
         if (isCalcPotentialRefreshPartition(baseChangedPCellsSortedSet, result)) {
             // because the relation of partitions between materialized view and base partition table is n : m,
             // should calculate the candidate partitions recursively.
             logger.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                     " baseChangedPartitionNames: {}", result, baseChangedPCellsSortedSet);
-            Set<String> potentialMvToRefreshPartitionNames = result.getPartitionNames();
             SyncPartitionUtils.calcPotentialRefreshPartition(result,
                     baseChangedPartitionNames,
                     mvContext.getRefBaseTableMVIntersectedPartitions(),
                     mvContext.getMvRefBaseTableIntersectedPartitions(),
                     mvToRefreshPotentialPartitions);
-            Set<String> newMvToRefreshPartitionNames =
-                    Sets.difference(potentialMvToRefreshPartitionNames, mvToRefreshPartitionNames);
-            for (String partitionName : newMvToRefreshPartitionNames) {
-                PCell pCell = mvRangePartitionMap.getPCell(partitionName);
-                if (pCell == null) {
-                    logger.warn("Cannot find mv partition name range cell:{}", partitionName);
-                    continue;
-                }
-                result.add(PCellWithName.of(partitionName, pCell));
-            }
+            result.addAll(mvToRefreshPotentialPartitions);
             logger.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                     " baseChangedPartitionNames: {}", result, baseChangedPartitionNames);
         }
@@ -393,7 +379,7 @@ public abstract class MVPCTRefreshPartitioner {
             }
         } catch (Exception e) {
             logger.warn("Adaptive refresh failed for mode '{}', falling back to STRICT mode. Reason: {}",
-                    refreshStrategy, e.getMessage(), e);
+                    refreshStrategy, e.getMessage());
             return getRefreshNumberByDefaultMode(toRefreshPartitions);
         }
     }

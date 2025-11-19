@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.ExprToNormalFormVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -526,7 +527,7 @@ public class FragmentNormalizer {
         List<Expr> boundSimpleRegionExprs = Lists.newArrayList();
         List<Expr> boundOtherExprs = Lists.newArrayList();
         for (Expr e : exprs) {
-            if (!e.isBound(partitionSlotId)) {
+            if (!ExprUtils.isBound(e, partitionSlotId)) {
                 unboundExprs.add(e);
                 continue;
             }

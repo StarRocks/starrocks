@@ -810,7 +810,7 @@ public class PlanFragmentBuilder {
 
             for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(entry.getKey().asInt());
-                if (entry.getValue().isLiteral() && !entry.getValue().isNullable()) {
+                if (ExprUtils.isLiteral(entry.getValue()) && !entry.getValue().isNullable()) {
                     slotDescriptor.setIsNullable(false);
                 } else {
                     slotDescriptor.setIsNullable(
@@ -1097,9 +1097,10 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(scan.getTable());
             ComputeResource computeResource = ConnectContext.get() != null ?
                     ConnectContext.get().getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
-                    scan.getSelectPartitionNames(),
+                    scan.getSelectPartitionNames(), scan.getSelectedIndexId(),
                     context.getConnectContext().getCurrentComputeResource());
 
             scanNode.setColumnAccessPaths(scan.getColumnAccessPaths());
@@ -1404,6 +1405,7 @@ public class PlanFragmentBuilder {
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             paimonScanNode.computeStatistics(optExpression.getStatistics());
+            paimonScanNode.setTvrVersionRange(node.getTvrVersionRange());
             currentExecGroup.add(paimonScanNode, true);
             try {
                 // set predicate

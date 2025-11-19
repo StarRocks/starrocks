@@ -174,15 +174,30 @@ struct ByteBuffer {
         DCHECK(pos <= limit);
     }
 
-    void flip() {
+    void flip_to_read() {
         limit = pos;
         pos = 0;
+    }
+
+    void flip_to_write() {
+        if (pos > 0) {
+            if (has_remaining()) {
+                size_t size = remaining();
+                std::memmove(ptr, ptr + pos, size);
+                pos = size;
+            } else {
+                pos = 0;
+            }
+        } else {
+            pos = limit;
+        }
+        limit = capacity;
     }
 
     size_t remaining() const { return limit - pos; }
     bool has_remaining() const { return limit > pos; }
 
-    ByteBufferMeta* meta() { return _meta; }
+    ByteBufferMeta* meta() const { return _meta; }
 
     char* const ptr;
     size_t pos{0};

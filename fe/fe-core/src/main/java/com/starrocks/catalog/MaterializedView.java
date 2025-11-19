@@ -76,6 +76,7 @@ import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
@@ -1859,7 +1860,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         sb.append("\n)");
 
-        String define = this.getSimpleDefineSql();
+        // use originalViewDefineSql first which it's user's original defined ddl which it is because original
+        // defined ddl may contain some comments or formatting that we want to preserve.
+        String define = this.getOriginalViewDefineSql();
+        if (StringUtils.isEmpty(define)) {
+            define = this.getViewDefineSql();
+        }
         if (StringUtils.isEmpty(define) || !simple) {
             define = this.getViewDefineSql();
         }
@@ -2340,7 +2346,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             List<SlotRef> slotRefs = Lists.newArrayList();
             for (Expr expr : mvPartitionExprs) {
-                List<SlotRef> exprSlotRefs = expr.collectAllSlotRefs();
+                List<SlotRef> exprSlotRefs = ExprUtils.collectAllSlotRefs(expr);
                 if (exprSlotRefs.size() != 1) {
                     LOG.warn("The partition expr {} of table {} contains more than one slot ref, skip", expr, table.getName());
                     continue;

@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -588,7 +589,7 @@ public class PartitionDescAnalyzer {
             return;
         }
         List<String> slotRefs = desc.getPartitionExprs().stream()
-                .flatMap(e -> e.collectAllSlotRefs().stream())
+                .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
                 .map(SlotRef::getColumnName)
                 .collect(Collectors.toList());
         

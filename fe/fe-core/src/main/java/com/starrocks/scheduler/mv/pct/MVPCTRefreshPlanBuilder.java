@@ -430,7 +430,7 @@ public class MVPCTRefreshPlanBuilder {
                 }
             } else {
                 // alias name.
-                SlotRef slotRef = expr.unwrapSlotRef();
+                SlotRef slotRef = ExprUtils.unwrapSlotRef(expr);
                 if (slotRef != null && slotRef.getColumnName().equals(mvPartitionInfoRefColName)) {
                     return outputExpressions.get(i);
                 }

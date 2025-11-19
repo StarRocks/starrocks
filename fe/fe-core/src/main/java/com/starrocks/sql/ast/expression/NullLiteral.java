@@ -34,7 +34,6 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -135,18 +134,6 @@ public class NullLiteral extends LiteralExpr {
     public ByteBuffer getHashValue(Type type) {
         return INT_EXPR.getHashValue(IntegerType.INT);
     }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        Preconditions.checkState(targetType.isValid());
-        if (!type.equals(targetType)) {
-            NullLiteral nullLiteral = new NullLiteral(this);
-            nullLiteral.setType(targetType);
-            return nullLiteral;
-        }
-        return this;
-    }
-
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

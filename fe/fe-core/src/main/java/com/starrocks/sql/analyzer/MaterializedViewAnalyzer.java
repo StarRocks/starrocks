@@ -927,7 +927,7 @@ public class MaterializedViewAnalyzer {
                                           QueryStatement queryStatement,
                                           Map<TableName, Table> aliasTableMap) {
             Expr expr = getResolvedPartitionByExpr(partitionColumnExpr, queryStatement);
-            List<SlotRef> slotRefs = expr.collectAllSlotRefs();
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(expr);
             if (slotRefs.size() != 1) {
                 throw new SemanticException("Materialized view partition expression %s must ref to one column",
                         ExprToSql.toSql(partitionColumnExpr));
@@ -974,7 +974,7 @@ public class MaterializedViewAnalyzer {
             }
             Expr partitionByExpr = partitionByExprs.get(0);
             Expr resolvedPartitionByExpr = getResolvedPartitionByExpr(partitionByExpr, queryStatement);
-            List<SlotRef> slotRefs = resolvedPartitionByExpr.collectAllSlotRefs();
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(resolvedPartitionByExpr);
             if (slotRefs.size() != 1) {
                 throw new SemanticException("Materialized view partition expression %s must ref to one column",
                         ExprToSql.toSql(partitionByExpr));
@@ -1887,7 +1887,7 @@ public class MaterializedViewAnalyzer {
                                                     Map<Integer, Expr> changedPartitionByExprs,
                                                     Map<Expr, Expr> partitionByExprToAdjustExprMap) {
         // what if partitionByExpr is not slot ref, eg: date_trunc('day', dt)
-        List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
+        List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(partitionByExpr);
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
                     ExprToSql.toSql(partitionByExpr));
@@ -1951,7 +1951,7 @@ public class MaterializedViewAnalyzer {
                                                              Expr originalPartitionByExpr,
                                                              Expr adjustedPartitionByExpr,
                                                              Map<Expr, Expr> partitionByExprToAdjustExprMap) {
-        List<SlotRef> slotRefs = originalPartitionByExpr.collectAllSlotRefs();
+        List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(originalPartitionByExpr);
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
                     ExprToSql.toSql(originalPartitionByExpr));
@@ -2008,7 +2008,7 @@ public class MaterializedViewAnalyzer {
         for (int i = 0; i < refBaseTablePartitionExprs.size(); i++) {
             Expr expr = refBaseTablePartitionExprs.get(i);
             Expr cloned = expr.clone();
-            List<SlotRef> slotRefs = cloned.collectAllSlotRefs();
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(cloned);
             if (slotRefs.size() != 1) {
                 continue;
             }
@@ -2095,7 +2095,6 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkNotNull(dateSubFn, "date_sub function is not found");
             TimestampArithmeticExpr newChild = new TimestampArithmeticExpr(FunctionSet.DATE_SUB, slotRef,
                     interval, "HOUR");
-            newChild.setFn(dateSubFn);
             newChild.setType(slotRef.getType());
             partitionByExpr.setChild(1, newChild);
         }
@@ -2109,7 +2108,6 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkNotNull(dateAddFn, "date_add function is not found");
             TimestampArithmeticExpr dateAddFunc = new TimestampArithmeticExpr(FunctionSet.DATE_ADD, partitionByExpr,
                     interval, "HOUR");
-            dateAddFunc.setFn(dateAddFn);
             dateAddFunc.setType(slotRef.getType());
 
             return dateAddFunc;

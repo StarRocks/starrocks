@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -432,7 +433,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         // add projection if order by no-column ref
         final boolean needNotAddProject =
                 !setRelation.hasOrderByClause() || setRelation.getOrderBy().stream().map(OrderByElement::getExpr)
-                        .allMatch(e -> (e instanceof SlotRef) || e.isLiteral());
+                .allMatch(e -> (e instanceof SlotRef) || ExprUtils.isLiteral(e));
         if (needNotAddProject) {
             return root;
         }
@@ -482,7 +483,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             List<Ordering> orderings = new ArrayList<>();
             List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : orderBy) {
-                if (item.getExpr().isLiteral()) {
+                if (ExprUtils.isLiteral(item.getExpr())) {
                     continue;
                 }
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
@@ -644,6 +645,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
                                 node.getPartitionNames().getPartitionNames())
+                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()
@@ -747,6 +749,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
+        }
+        if (tableVersionRange != null) {
+            scanOperator.setTvrVersionRange(tableVersionRange);
         }
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));

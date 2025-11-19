@@ -200,7 +200,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
-            ctx->buffer->flip();
+            ctx->buffer->flip_to_read();
             RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }
@@ -220,7 +220,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
-    ctx->buffer->flip();
+    ctx->buffer->flip_to_read();
     return _exec_env->batch_write_mgr()->append_data(ctx);
 }
 
@@ -419,7 +419,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
             } else {
                 // Otherwise, we could push buffer to the body_sink in streaming mode.
                 // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
-                ctx->buffer->flip();
+                ctx->buffer->flip_to_read();
                 auto st = ctx->body_sink->append(std::move(ctx->buffer));
                 if (!st.ok()) {
                     LOG(WARNING) << "append body content failed. errmsg=" << st << " context=" << ctx->brief();

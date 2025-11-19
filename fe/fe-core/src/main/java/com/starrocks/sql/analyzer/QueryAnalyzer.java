@@ -217,8 +217,8 @@ public class QueryAnalyzer {
             // 3. analyze generated column expression based on current scope
             Map<Expr, SlotRef> analyzedGeneratedExprToColumnRef = new HashMap<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
-                entry.getKey().reset();
-                entry.getValue().reset();
+                ExprUtils.reset(entry.getKey());
+                ExprUtils.reset(entry.getValue());
 
                 try {
                     ExpressionAnalyzer.analyzeExpression(entry.getKey(), new AnalyzeState(), scope, session);
