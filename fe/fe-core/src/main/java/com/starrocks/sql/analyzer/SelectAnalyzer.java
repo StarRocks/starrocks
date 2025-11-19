@@ -20,7 +20,6 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.GroupByClause;
@@ -30,6 +29,7 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -630,7 +630,7 @@ public class SelectAnalyzer {
         long offset;
         analyzeExpression(limitExpr, analyzeState, scope);
         analyzeExpression(offsetExpr, analyzeState, scope);
-        if (limitExpr.isLiteral()) {
+        if (ExprUtils.isLiteral(limitExpr)) {
             limit = limitElement.getLimit();
         } else if (limitExpr instanceof UserVariableExpr &&
                 ((UserVariableExpr) limitExpr).getValue() instanceof IntLiteral) {
@@ -642,7 +642,7 @@ public class SelectAnalyzer {
             return null;
         }
 
-        if (offsetExpr.isLiteral()) {
+        if (ExprUtils.isLiteral(offsetExpr)) {
             offset = limitElement.getOffset();
         } else if (offsetExpr instanceof UserVariableExpr &&
                 ((UserVariableExpr) offsetExpr).getValue() instanceof IntLiteral) {

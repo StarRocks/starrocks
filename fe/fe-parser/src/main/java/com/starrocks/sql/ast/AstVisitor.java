@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -708,5 +709,9 @@ public interface AstVisitor<R, C> {
 
     default R visitRestoreStatement(RestoreStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    default R visitExpression(Expr node, C context) {
+        return visitNode(node, context);
     }
 }

@@ -197,7 +197,7 @@ public class AnalyzeDecimalV3Test {
             Assertions.assertTrue(items.get(i) != null);
             Type type = items.get(i).getType();
             Type expectType = expectTypes[i / 2];
-            AggregateFunction fn = (AggregateFunction) items.get(i).getFn();
+            AggregateFunction fn = (AggregateFunction) ((FunctionCallExpr) items.get(i)).getFn();
             Type returnType = fn.getReturnType();
             Type argType = fn.getArgs()[0];
             Type serdeType = fn.getIntermediateType();
@@ -249,8 +249,9 @@ public class AnalyzeDecimalV3Test {
             Type type = items.get(i).getType();
             Type expectArgType = expectArgTypes[i / 3];
             Type expectReturnType = expectReturnTypes[i / 3];
-            Assertions.assertTrue(items.get(i).getFn() instanceof AggregateFunction);
-            AggregateFunction fn = (AggregateFunction) items.get(i).getFn();
+
+            Assertions.assertTrue(((FunctionCallExpr) items.get(i)).getFn() instanceof AggregateFunction);
+            AggregateFunction fn = (AggregateFunction) ((FunctionCallExpr) items.get(i)).getFn();
             Type returnType = fn.getReturnType();
             Type argType = fn.getArgs()[0];
             Type serdeType = fn.getIntermediateType();

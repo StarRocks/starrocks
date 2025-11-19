@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.JoinOperator;
@@ -105,10 +106,10 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         if (joinExpr instanceof BinaryPredicate && ((BinaryPredicate) joinExpr).getOp().isUnequivalence()) {
             return false;
         }
-        if (!leftExpr.isBoundByTupleIds(leftChild.getTupleIds())) {
+        if (!ExprUtils.isBoundByTupleIds(leftExpr, leftChild.getTupleIds())) {
             return false;
         }
-        return rightExpr.isBoundByTupleIds(rightChild.getTupleIds());
+        return ExprUtils.isBoundByTupleIds(rightExpr, rightChild.getTupleIds());
     }
 
     @Override

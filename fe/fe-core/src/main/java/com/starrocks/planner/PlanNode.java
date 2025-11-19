@@ -39,11 +39,10 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.TreeNode;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -798,7 +797,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
-        return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
+        return (Expr expr) -> ExprUtils.isBoundByTupleIds(expr, getTupleIds());
     }
 
     private RoaringBitmap cachedSlotIds = null;
@@ -827,12 +826,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             return false;
         } else {
-            return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
+            return getSlotIds(descTbl).contains(ExprUtils.getUsedSlotIds(probeExpr));
         }
     }
 
     protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
-        if (expr.isBound(slot.getId())) {
+        if (ExprUtils.isBound(expr, slot.getId())) {
             ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
             ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
                     "any", true);
@@ -890,8 +889,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean accept = tryPushdownRuntimeFilterToChild(context, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
         RoaringBitmap slotIds = getSlotIds(descTbl);
-        boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
-                partitionByExprs.stream().allMatch(expr -> slotIds.contains(expr.getUsedSlotIds()));
+        boolean isBound = slotIds.contains(ExprUtils.getUsedSlotIds(probeExpr)) &&
+                partitionByExprs.stream().allMatch(expr -> slotIds.contains(ExprUtils.getUsedSlotIds(expr)));
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }

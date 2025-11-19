@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -279,10 +280,11 @@ public class ExchangeNode extends PlanNode {
         // we enable this only when:
         // - session variable enabled &
         // - this rf has been accepted by children nodes(global rf).
-        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+        boolean isBound = ExprUtils.isBoundByTupleIds(probeExpr, getTupleIds());
         // local runtime filter won't use partition by expr to evaluate runtime filters
         if (!description.inLocalFragmentInstance()) {
-            isBound = isBound && partitionByExprs.stream().allMatch(expr -> expr.isBoundByTupleIds(getTupleIds()));
+            isBound = isBound && partitionByExprs.stream()
+                    .allMatch(expr -> ExprUtils.isBoundByTupleIds(expr, getTupleIds()));
         }
         if (isBound && description.canAcceptFilter(this, context)) {
             if (onExchangeNode || (description.isLocalApplicable() && description.inLocalFragmentInstance())) {

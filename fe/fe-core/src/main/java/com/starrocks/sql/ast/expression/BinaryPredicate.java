@@ -102,34 +102,6 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public Expr negate() {
-        BinaryType newOp = null;
-        switch (op) {
-            case EQ:
-                newOp = BinaryType.NE;
-                break;
-            case NE:
-                newOp = BinaryType.EQ;
-                break;
-            case LT:
-                newOp = BinaryType.GE;
-                break;
-            case LE:
-                newOp = BinaryType.GT;
-                break;
-            case GE:
-                newOp = BinaryType.LT;
-                break;
-            case GT:
-                newOp = BinaryType.LE;
-                break;
-            default:
-                throw new IllegalStateException("Not implemented");
-        }
-        return new BinaryPredicate(newOp, getChild(0), getChild(1));
-    }
-
-    @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!super.equalsWithoutChild(obj)) {
             return false;

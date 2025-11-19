@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprId;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -391,12 +392,6 @@ public class ExpressionAnalyzer {
     }
 
     public static class Visitor implements AstVisitorExtendInterface<Void, Scope> {
-        private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
-                FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
-        private static final List<String> SUB_DATE_FUNCTIONS =
-                Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
-                        FunctionSet.DAYS_SUB);
-
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
@@ -491,7 +486,7 @@ public class ExpressionAnalyzer {
 
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
-                            node.castChild(targetItemType, i);
+                            ExprCastFunction.castChild(node, targetItemType, i);
                         }
                     }
 
@@ -533,7 +528,7 @@ public class ExpressionAnalyzer {
                 }
                 try {
                     if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
-                        node.castChild(IntegerType.INT, 1);
+                        ExprCastFunction.castChild(node, IntegerType.INT, 1);
                     }
                     node.setType(((ArrayType) expr.getType()).getItemType());
                 } catch (AnalysisException e) {
@@ -543,7 +538,7 @@ public class ExpressionAnalyzer {
                 try {
                     if (subscript.getType().getPrimitiveType() !=
                             ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
-                        node.castChild(((MapType) expr.getType()).getKeyType(), 1);
+                        ExprCastFunction.castChild(node, ((MapType) expr.getType()).getKeyType(), 1);
                     }
                     node.setType(((MapType) expr.getType()).getValueType());
                 } catch (AnalysisException e) {
@@ -586,7 +581,7 @@ public class ExpressionAnalyzer {
         public Void visitArrowExpr(ArrowExpr node, Scope scope) {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
-            if (!key.isLiteral() || !key.getType().isStringType()) {
+            if (!ExprUtils.isLiteral(key) || !key.getType().isStringType()) {
                 throw new SemanticException("right operand of -> should be string literal, but got " + key,
                         key.getPos());
             }
@@ -691,210 +686,22 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitArithmeticExpr(ArithmeticExpr node, Scope scope) {
-            if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.BINARY_INFIX) {
-                ArithmeticExpr.Operator op = node.getOp();
-                Type t1 = getNumResultType(node.getChild(0).getType());
-                Type t2 = getNumResultType(node.getChild(1).getType());
-                if (t1.isDecimalV3() || t2.isDecimalV3()) {
-                    ArithmeticExpr.TypeTriple typeTriple = null;
-                    try {
-                        typeTriple = node.rewriteDecimalOperation();
-                    } catch (AnalysisException ex) {
-                        throw new SemanticException(ex.getMessage());
-                    }
-                    Preconditions.checkArgument(typeTriple != null);
-                    Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
-                    Function fn = ExprUtils.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
-                    // In resolved function instance, it's argTypes and resultType are wildcard decimal type
-                    // (both precision and and scale are -1, only used in function instance resolution), it's
-                    // illegal for a function and expression to has a wildcard decimal type as its type in BE,
-                    // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
-                    node.setType(typeTriple.returnType);
-                    node.setFn(newFn);
-                    return null;
-                }
-                // Find result type of this operator
-                Type lhsType;
-                Type rhsType;
-                switch (op) {
-                    case MULTIPLY:
-                    case ADD:
-                    case SUBTRACT:
-                        // numeric ops must be promoted to highest-resolution type
-                        // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                        lhsType = getArithmeticExprBiggerType(getArithmeticExprCommonType(t1, t2));
-                        rhsType = lhsType;
-                        break;
-                    case MOD:
-                        lhsType = getArithmeticExprCommonType(t1, t2);
-                        rhsType = lhsType;
-                        break;
-                    case DIVIDE:
-                        lhsType = getArithmeticExprCommonType(t1, t2);
-                        if (lhsType.isFixedPointType()) {
-                            lhsType = FloatType.DOUBLE;
-                        }
-                        rhsType = lhsType;
-                        break;
-                    case INT_DIVIDE:
-                    case BITAND:
-                    case BITOR:
-                    case BITXOR:
-                        lhsType = getArithmeticExprCommonType(t1, t2);
-                        if (!lhsType.isFixedPointType()) {
-                            lhsType = IntegerType.BIGINT;
-                        }
-                        rhsType = lhsType;
-                        break;
-                    case BIT_SHIFT_LEFT:
-                    case BIT_SHIFT_RIGHT:
-                    case BIT_SHIFT_RIGHT_LOGICAL:
-                        lhsType = t1;
-                        // only support bigint function
-                        rhsType = IntegerType.BIGINT;
-                        break;
-                    default:
-                        // the programmer forgot to deal with a case
-                        throw new SemanticException("Unknown arithmetic operation " + op + " in: " + node,
-                                node.getPos());
-                }
-
-                if (node.getChild(0).getType().equals(NullType.NULL)
-                        && node.getChild(1).getType().equals(NullType.NULL)) {
-                    lhsType = NullType.NULL;
-                    rhsType = NullType.NULL;
-                }
-
-                if (lhsType.isInvalid() || rhsType.isInvalid()) {
-                    throw new SemanticException("Any function type can not cast to " + InvalidType.INVALID.toSql());
-                }
-
-                if (!NullType.NULL.equals(node.getChild(0).getType()) && !TypeManager.canCastTo(t1, lhsType)) {
-                    throw new SemanticException(
-                            "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
-                                    + " is invalid", node.getPos());
-                }
-
-                if (!NullType.NULL.equals(node.getChild(1).getType()) && !TypeManager.canCastTo(t2, rhsType)) {
-                    throw new SemanticException(
-                            "cast type " + node.getChild(1).getType().toSql() + " with type " + rhsType.toSql()
-                                    + " is invalid", node.getPos());
-                }
-
-                Function fn = ExprUtils.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
-                        Function.CompareMode.IS_SUPERTYPE_OF);
-
-                if (fn == null) {
-                    throw new SemanticException(String.format(
-                            "No matching function '%s' with operand types %s and %s", node.getOp().getName(), t1, t2));
-                }
-
-                /*
-                 * commonType is the common type of the parameters of the function,
-                 * and fn.getReturnType() is the return type of the function after execution
-                 * So we use fn.getReturnType() as node type
-                 */
-                node.setType(fn.getReturnType());
-                node.setFn(fn);
-            } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
-
-                Function fn = ExprUtils.getBuiltinFunction(
-                        node.getOp().getName(), new Type[] {IntegerType.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
-
-                node.setType(IntegerType.BIGINT);
-                node.setFn(fn);
-            } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
-                throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
-                        node.getPos());
-            } else {
-                throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
-                        node.getPos());
-            }
-
+            Function arithmeticFunction = getArithmeticFunction(node);
+            node.setType(arithmeticFunction.getReturnType());
             return null;
-        }
-
-        private static Type getArithmeticExprCommonType(Type t1, Type t2) {
-            PrimitiveType pt1 = getNumResultType(t1).getPrimitiveType();
-            PrimitiveType pt2 = getNumResultType(t2).getPrimitiveType();
-
-            if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
-                return FloatType.DOUBLE;
-            } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
-                return TypeManager.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
-            } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
-                return DecimalType.DECIMALV2;
-            } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
-                return IntegerType.LARGEINT;
-            } else if (pt1 == PrimitiveType.BIGINT || pt2 == PrimitiveType.BIGINT) {
-                return IntegerType.BIGINT;
-            } else if ((PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
-                    pt1.ordinal() <= PrimitiveType.INT.ordinal()) &&
-                    (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
-                            pt2.ordinal() <= PrimitiveType.INT.ordinal())) {
-                return (pt1.ordinal() > pt2.ordinal()) ? t1 : t2;
-            } else if (PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
-                    pt1.ordinal() <= PrimitiveType.INT.ordinal()) {
-                // when t2 is INVALID TYPE:
-                return t1;
-            } else if (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
-                    pt2.ordinal() <= PrimitiveType.INT.ordinal()) {
-                // when t1 is INVALID TYPE:
-                return t2;
-            } else {
-                return InvalidType.INVALID;
-            }
-        }
-
-        private static Type getArithmeticExprBiggerType(Type t) {
-            return switch (getNumResultType(t).getPrimitiveType()) {
-                case TINYINT -> IntegerType.SMALLINT;
-                case SMALLINT -> IntegerType.INT;
-                case INT, BIGINT -> IntegerType.BIGINT;
-                case LARGEINT -> IntegerType.LARGEINT;
-                case DOUBLE -> FloatType.DOUBLE;
-                case DECIMALV2 -> DecimalType.DECIMALV2;
-                case DECIMAL32, DECIMAL64, DECIMAL128 -> t;
-                default -> InvalidType.INVALID;
-            };
-        }
-
-        public static Type getNumResultType(Type type) {
-            return switch (type.getPrimitiveType()) {
-                case BOOLEAN, TINYINT -> IntegerType.TINYINT;
-                case SMALLINT -> IntegerType.SMALLINT;
-                case INT -> IntegerType.INT;
-                case BIGINT -> IntegerType.BIGINT;
-                case LARGEINT -> IntegerType.LARGEINT;
-                case FLOAT, DOUBLE, DATE, DATETIME, TIME, CHAR, VARCHAR -> FloatType.DOUBLE;
-                case DECIMALV2 -> DecimalType.DECIMALV2;
-                case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 -> type;
-                default -> InvalidType.INVALID;
-            };
         }
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
             node.setChild(0, TypeManager.addCastExpr(node.getChild(0), DateType.DATETIME));
 
-            String funcOpName;
-            if (node.getFuncName() != null) {
-                if (ADD_DATE_FUNCTIONS.contains(node.getFuncName())) {
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "add");
-                } else if (SUB_DATE_FUNCTIONS.contains(node.getFuncName())) {
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
-                } else {
-                    node.setChild(1, TypeManager.addCastExpr(node.getChild(1), DateType.DATETIME));
-                    funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "diff");
-                }
-            } else {
-                funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(),
-                        (node.getOp() == ArithmeticExpr.Operator.ADD) ? "add" : "sub");
+            if (node.getFuncName() != null && ExprUtils.requiresTimestampDiffCast(node.getFuncName())) {
+                node.setChild(1, TypeManager.addCastExpr(node.getChild(1), DateType.DATETIME));
             }
 
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
                     .toArray(Type[]::new);
+            String funcOpName = ExprUtils.getTimestampArithmeticFunctionName(node);
             Function fn = ExprUtils.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
@@ -903,7 +710,6 @@ public class ExpressionAnalyzer {
                 throw new SemanticException(msg, node.getPos());
             }
             node.setType(fn.getReturnType());
-            node.setFn(fn);
             return null;
         }
 
@@ -1059,7 +865,8 @@ public class ExpressionAnalyzer {
             }
 
             // check pattern
-            if (LikePredicate.Operator.REGEXP.equals(node.getOp()) && !type2.isNull() && node.getChild(1).isLiteral()) {
+            if (LikePredicate.Operator.REGEXP.equals(node.getOp()) && !type2.isNull()
+                    && ExprUtils.isLiteral(node.getChild(1))) {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
@@ -2015,6 +1822,176 @@ public class ExpressionAnalyzer {
         }
     }
 
+    public static Function getArithmeticFunction(ArithmeticExpr node) {
+        if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.BINARY_INFIX) {
+            ArithmeticExpr.Operator op = node.getOp();
+            Type t1 = getNumResultType(node.getChild(0).getType());
+            Type t2 = getNumResultType(node.getChild(1).getType());
+            if (t1.isDecimalV3() || t2.isDecimalV3()) {
+                ArithmeticExpr.TypeTriple typeTriple = null;
+                typeTriple = DecimalV3FunctionAnalyzer.rewriteDecimalOperation(node);
+                Preconditions.checkArgument(typeTriple != null);
+                Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
+                Function fn = ExprUtils.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
+                // In resolved function instance, it's argTypes and resultType are wildcard decimal type
+                // (both precision and and scale are -1, only used in function instance resolution), it's
+                // illegal for a function and expression to has a wildcard decimal type as its type in BE,
+                // so here substitute wildcard decimal types with real decimal types.
+                return new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+            }
+            // Find result type of this operator
+            Type lhsType;
+            Type rhsType;
+            switch (op) {
+                case MULTIPLY:
+                case ADD:
+                case SUBTRACT:
+                    // numeric ops must be promoted to highest-resolution type
+                    // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
+                    lhsType = getArithmeticExprBiggerType(getArithmeticExprCommonType(t1, t2));
+                    rhsType = lhsType;
+                    break;
+                case MOD:
+                    lhsType = getArithmeticExprCommonType(t1, t2);
+                    rhsType = lhsType;
+                    break;
+                case DIVIDE:
+                    lhsType = getArithmeticExprCommonType(t1, t2);
+                    if (lhsType.isFixedPointType()) {
+                        lhsType = FloatType.DOUBLE;
+                    }
+                    rhsType = lhsType;
+                    break;
+                case INT_DIVIDE:
+                case BITAND:
+                case BITOR:
+                case BITXOR:
+                    lhsType = getArithmeticExprCommonType(t1, t2);
+                    if (!lhsType.isFixedPointType()) {
+                        lhsType = IntegerType.BIGINT;
+                    }
+                    rhsType = lhsType;
+                    break;
+                case BIT_SHIFT_LEFT:
+                case BIT_SHIFT_RIGHT:
+                case BIT_SHIFT_RIGHT_LOGICAL:
+                    lhsType = t1;
+                    // only support bigint function
+                    rhsType = IntegerType.BIGINT;
+                    break;
+                default:
+                    // the programmer forgot to deal with a case
+                    throw new SemanticException("Unknown arithmetic operation " + op + " in: " + node,
+                            node.getPos());
+            }
+
+            if (node.getChild(0).getType().equals(NullType.NULL)
+                    && node.getChild(1).getType().equals(NullType.NULL)) {
+                lhsType = NullType.NULL;
+                rhsType = NullType.NULL;
+            }
+
+            if (lhsType.isInvalid() || rhsType.isInvalid()) {
+                throw new SemanticException("Any function type can not cast to " + InvalidType.INVALID.toSql());
+            }
+
+            if (!NullType.NULL.equals(node.getChild(0).getType()) && !TypeManager.canCastTo(t1, lhsType)) {
+                throw new SemanticException(
+                        "cast type " + node.getChild(0).getType().toSql() + " with type " + lhsType.toSql()
+                                + " is invalid", node.getPos());
+            }
+
+            if (!NullType.NULL.equals(node.getChild(1).getType()) && !TypeManager.canCastTo(t2, rhsType)) {
+                throw new SemanticException(
+                        "cast type " + node.getChild(1).getType().toSql() + " with type " + rhsType.toSql()
+                                + " is invalid", node.getPos());
+            }
+
+            Function fn = ExprUtils.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
+                    Function.CompareMode.IS_SUPERTYPE_OF);
+
+            if (fn == null) {
+                throw new SemanticException(String.format(
+                        "No matching function '%s' with operand types %s and %s", node.getOp().getName(), t1, t2));
+            }
+
+            /*
+             * commonType is the common type of the parameters of the function,
+             * and fn.getReturnType() is the return type of the function after execution
+             * So we use fn.getReturnType() as node type
+             */
+            return fn;
+        } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
+            return ExprUtils.getBuiltinFunction(
+                    node.getOp().getName(), new Type[] {IntegerType.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+        } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
+            throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                    node.getPos());
+        } else {
+            throw new SemanticException("not yet implemented: expression analyzer for " + node.getClass().getName(),
+                    node.getPos());
+        }
+    }
+
+    private static Type getArithmeticExprCommonType(Type t1, Type t2) {
+        PrimitiveType pt1 = getNumResultType(t1).getPrimitiveType();
+        PrimitiveType pt2 = getNumResultType(t2).getPrimitiveType();
+
+        if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
+            return FloatType.DOUBLE;
+        } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
+            return TypeManager.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
+        } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
+            return DecimalType.DECIMALV2;
+        } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
+            return IntegerType.LARGEINT;
+        } else if (pt1 == PrimitiveType.BIGINT || pt2 == PrimitiveType.BIGINT) {
+            return IntegerType.BIGINT;
+        } else if ((PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
+                pt1.ordinal() <= PrimitiveType.INT.ordinal()) &&
+                (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
+                        pt2.ordinal() <= PrimitiveType.INT.ordinal())) {
+            return (pt1.ordinal() > pt2.ordinal()) ? t1 : t2;
+        } else if (PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
+                pt1.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t2 is INVALID TYPE:
+            return t1;
+        } else if (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
+                pt2.ordinal() <= PrimitiveType.INT.ordinal()) {
+            // when t1 is INVALID TYPE:
+            return t2;
+        } else {
+            return InvalidType.INVALID;
+        }
+    }
+
+    private static Type getArithmeticExprBiggerType(Type t) {
+        return switch (getNumResultType(t).getPrimitiveType()) {
+            case TINYINT -> IntegerType.SMALLINT;
+            case SMALLINT -> IntegerType.INT;
+            case INT, BIGINT -> IntegerType.BIGINT;
+            case LARGEINT -> IntegerType.LARGEINT;
+            case DOUBLE -> FloatType.DOUBLE;
+            case DECIMALV2 -> DecimalType.DECIMALV2;
+            case DECIMAL32, DECIMAL64, DECIMAL128 -> t;
+            default -> InvalidType.INVALID;
+        };
+    }
+
+    private static Type getNumResultType(Type type) {
+        return switch (type.getPrimitiveType()) {
+            case BOOLEAN, TINYINT -> IntegerType.TINYINT;
+            case SMALLINT -> IntegerType.SMALLINT;
+            case INT -> IntegerType.INT;
+            case BIGINT -> IntegerType.BIGINT;
+            case LARGEINT -> IntegerType.LARGEINT;
+            case FLOAT, DOUBLE, DATE, DATETIME, TIME, CHAR, VARCHAR -> FloatType.DOUBLE;
+            case DECIMALV2 -> DecimalType.DECIMALV2;
+            case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 -> type;
+            default -> InvalidType.INVALID;
+        };
+    }
+
     static class IgnoreSlotVisitor extends Visitor {
         public IgnoreSlotVisitor(AnalyzeState analyzeState, ConnectContext session) {
             super(analyzeState, session);
@@ -2064,4 +2041,3 @@ public class ExpressionAnalyzer {
         expressionAnalyzer.analyzeWithVisitor(expression, state, scope, visitor);
     }
 }
-

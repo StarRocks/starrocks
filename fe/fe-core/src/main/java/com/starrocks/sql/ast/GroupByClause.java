@@ -131,14 +131,17 @@ public class GroupByClause implements ParseNode {
         groupingExprs = new ArrayList<>();
         exprGenerated = false;
         if (oriGroupingExprs != null) {
-            Expr.resetList(oriGroupingExprs);
+            for (int i = 0; i < oriGroupingExprs.size(); ++i) {
+                oriGroupingExprs.set(i, ExprUtils.reset(oriGroupingExprs.get(i)));
+            }
+
             groupingExprs.addAll(oriGroupingExprs);
         }
         if (groupingSetList != null) {
             for (List<Expr> s : groupingSetList) {
                 for (Expr e : s) {
                     if (e != null) {
-                        e.reset();
+                        ExprUtils.reset(e);
                     }
                 }
             }

@@ -17,7 +17,6 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Function;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -41,10 +40,9 @@ import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
@@ -94,14 +92,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
 import com.starrocks.type.IntegerType;
-import com.starrocks.type.InvalidType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -272,7 +268,7 @@ public class ScalarOperatorToExpr {
                     return new FloatLiteral(literal.getTime(), DateType.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
                     DecimalLiteral d = new DecimalLiteral(literal.getDecimal());
-                    d.uncheckedCastTo(type);
+                    ExprCastFunction.uncheckedCastTo(d, type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     String str = literal.getVarchar();
@@ -376,26 +372,9 @@ public class ScalarOperatorToExpr {
                     "Retrying query with LargeInPredicate optimization disabled.");
         }
 
-        static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-                new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
-        static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-                new Type[] {InvalidType.INVALID}, BooleanType.BOOLEAN, false);
-
-        {
-            isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
-            isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
-        }
-
         @Override
         public Expr visitIsNullPredicate(IsNullPredicateOperator predicate, FormatterContext context) {
-            Expr expr = new IsNullPredicate(buildExpr.build(predicate.getChild(0), context), predicate.isNotNull());
-
-            // for set function name
-            if (predicate.isNotNull()) {
-                expr.setFn(isNotNullFN);
-            } else {
-                expr.setFn(isNullFN);
-            }
+            IsNullPredicate expr = new IsNullPredicate(buildExpr.build(predicate.getChild(0), context), predicate.isNotNull());
 
             expr.setType(BooleanType.BOOLEAN);
             return expr;
@@ -412,10 +391,6 @@ public class ScalarOperatorToExpr {
             } else {
                 expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2);
             }
-
-            expr.setFn(ExprUtils.getBuiltinFunction(expr.getOp().name(),
-                    new Type[] {child1.getType(), child2.getType()},
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF));
 
             expr.setType(BooleanType.BOOLEAN);
             return expr;
@@ -544,7 +519,7 @@ public class ScalarOperatorToExpr {
                     }
                     callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
                     Preconditions.checkNotNull(call.getFunction());
-                    callExpr.setFn(call.getFunction());
+                    ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
@@ -557,7 +532,7 @@ public class ScalarOperatorToExpr {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }
                     Preconditions.checkNotNull(call.getFunction());
-                    callExpr.setFn(call.getFunction());
+                    ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
             }

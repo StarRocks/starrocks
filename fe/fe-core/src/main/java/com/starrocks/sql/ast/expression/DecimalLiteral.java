@@ -202,6 +202,10 @@ public class DecimalLiteral extends LiteralExpr {
         return value;
     }
 
+    void overwriteValue(BigDecimal newValue) {
+        this.value = new BigDecimal(newValue.toPlainString());
+    }
+
     public void checkPrecisionAndScale(Type columnType, int precision, int scale) throws AnalysisException {
         Preconditions.checkNotNull(this.value);
         boolean valid = true;
@@ -460,31 +464,6 @@ public class DecimalLiteral extends LiteralExpr {
             return false;
         }
         return true;
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (targetType.getPrimitiveType().isDecimalV3Type()) {
-            this.type = targetType;
-            checkLiteralOverflowInBinaryStyle(this.value, (ScalarType) targetType);
-            // round
-            int realScale = getRealScale(value);
-            int scale = ((ScalarType) targetType).getScalarScale();
-            if (scale <= realScale) {
-                this.value = this.value.setScale(scale, RoundingMode.HALF_UP);
-            }
-            return this;
-        } else if (targetType.getPrimitiveType().isDecimalV2Type()) {
-            this.type = targetType;
-            return this;
-        } else if (targetType.isFloatingPointType()) {
-            return new FloatLiteral(value.doubleValue(), targetType);
-        } else if (targetType.isIntegerType()) {
-            return new IntLiteral(value.longValue(), targetType);
-        } else if (targetType.isStringType()) {
-            return new StringLiteral(value.toString());
-        }
-        return super.uncheckedCastTo(targetType);
     }
 
     @Override

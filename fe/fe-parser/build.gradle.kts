@@ -25,6 +25,9 @@ java {
 group = "com.starrocks"
 
 dependencies {
+    implementation(project(":fe-grammar"))
+    implementation(project(":fe-type"))
+
     implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.commons:commons-lang3")
     implementation("com.google.guava:guava")

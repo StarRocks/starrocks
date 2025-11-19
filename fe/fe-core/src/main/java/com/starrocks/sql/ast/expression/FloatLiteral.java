@@ -43,7 +43,6 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Objects;
@@ -174,26 +173,6 @@ public class FloatLiteral extends LiteralExpr {
 
     public double getValue() {
         return value;
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (!(targetType.isFloatingPointType() || targetType.isDecimalOfAnyVersion())) {
-            return super.uncheckedCastTo(targetType);
-        }
-        if (targetType.isFloatingPointType()) {
-            if (!type.equals(targetType)) {
-                FloatLiteral floatLiteral = new FloatLiteral(this);
-                floatLiteral.setType(targetType);
-                return floatLiteral;
-            }
-            return this;
-        } else if (targetType.isDecimalOfAnyVersion()) {
-            DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(Double.toString(value)));
-            decimalLiteral.type = targetType;
-            return decimalLiteral;
-        }
-        return this;
     }
 
     @Override

@@ -20,6 +20,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -63,12 +64,12 @@ public class DateLiteralTest {
         boolean hasException = false;
         try {
             DateLiteral literal = new DateLiteral("1997-10-07", DateType.DATE);
-            Expr castToExpr = literal.uncheckedCastTo(DateType.DATETIME);
+            Expr castToExpr = ExprCastFunction.uncheckedCastTo(literal, DateType.DATETIME);
             Assertions.assertTrue(castToExpr instanceof DateLiteral);
             Assertions.assertEquals(castToExpr.getType(), DateType.DATETIME);
 
             DateLiteral literal2 = new DateLiteral("1997-10-07 12:23:23", DateType.DATETIME);
-            Expr castToExpr2 = literal2.uncheckedCastTo(DateType.DATETIME);
+            Expr castToExpr2 = ExprCastFunction.uncheckedCastTo(literal2, DateType.DATETIME);
             Assertions.assertTrue(castToExpr2 instanceof DateLiteral);
         } catch (AnalysisException e) {
             e.printStackTrace();

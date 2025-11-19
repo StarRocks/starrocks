@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
@@ -555,7 +556,7 @@ public class InsertAnalyzer {
 
             Expr partitionValue = partitionColValues.get(i);
 
-            if (!partitionValue.isLiteral()) {
+            if (!ExprUtils.isLiteral(partitionValue)) {
                 throw new SemanticException("partition value should be literal expression");
             }
 
