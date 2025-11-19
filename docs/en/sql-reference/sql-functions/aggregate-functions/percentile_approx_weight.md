@@ -7,11 +7,11 @@ This function uses fixed-size memory, so less memory can be used for columns wit
 ## Syntax
 
 ```Haskell
-DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE p[, DOUBLE compression])
+DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE p[, DOUBLE compression])
 ```
 
 - `expr`: The column for which to calculate the percentile.
-- `p`: The percentile value, which must be a DOUBLE in the range [0, 1], or an ARRAY<DOUBLE> where each element is in the range [0, 1]. For example, 0.99 represents the 99th percentile.
+- `p`: The percentile value, which must be a DOUBLE in the range [0, 1], or an `ARRAY<DOUBLE>` where each element is in the range [0, 1]. For example, 0.99 represents the 99th percentile.
 - `weight` : Weight column. It must be a positive constant number or column.
 - `compression` : (Optional) Compression ratio. Range: [2048, 10000]. The larger the value, the higher the precision, the larger the memory consumption, and the longer the calculation time. If this parameter is not specified or the value is beyond the range of [2048, 10000], the default value `10000` is used.
 

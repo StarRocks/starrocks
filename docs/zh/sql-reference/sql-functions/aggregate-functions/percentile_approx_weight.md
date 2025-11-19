@@ -11,7 +11,7 @@ DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE> p[, DO
 ```
 
 - `expr`: 要计算分位数的列。
-- `p` : 支持的数据类型为 DOUBLE，p 的值介于 0 到 1 之间; 数组类型ARRAY<DOUBLE>, 数组每个值介于0 到 1之间。 例如，`0.99` 表示第 99 个百分位数。
+- `p` : 支持的数据类型为 DOUBLE，p 的值介于 0 到 1 之间; 数组类型`ARRAY<DOUBLE>`, 数组每个值介于0 到 1之间。 例如，`0.99` 表示第 99 个百分位数。
 - `weight` : 权重列。必须是一个正的常量数或列。
 - `compression` : （可选）压缩比。范围：[2048, 10000]。值越大，精度越高，内存消耗越大，计算时间越长。如果未指定此参数或值超出 [2048, 10000] 的范围，则使用默认值 `10000`。
 
