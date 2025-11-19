@@ -204,19 +204,19 @@ public class ScalarOperatorRewriterTest {
 
     @Test
     public void testDictMappingBothSidesInfiniteLoop() {
-        ColumnRefOperator dictColumn1 = new ColumnRefOperator(21, IntegerType.INT, "FIO_MANAGER_DICT", false);
-        ColumnRefOperator dictColumn2 = new ColumnRefOperator(24, IntegerType.INT, "MANAGER_DRBP_DICT", false);
+        ColumnRefOperator dictColumn1 = new ColumnRefOperator(21, Type.INT, "FIO_MANAGER_DICT", false);
+        ColumnRefOperator dictColumn2 = new ColumnRefOperator(24, Type.INT, "MANAGER_DRBP_DICT", false);
 
-        ColumnRefOperator originColumn1 = new ColumnRefOperator(10, VarcharType.VARCHAR, "FIO_MANAGER", true);
-        ColumnRefOperator originColumn2 = new ColumnRefOperator(4, VarcharType.VARCHAR, "MANAGER_DRBP", true);
+        ColumnRefOperator originColumn1 = new ColumnRefOperator(10, Type.VARCHAR, "FIO_MANAGER", true);
+        ColumnRefOperator originColumn2 = new ColumnRefOperator(4, Type.VARCHAR, "MANAGER_DRBP", true);
 
-        CallOperator upperCall1 = new CallOperator(FunctionSet.UPPER, VarcharType.VARCHAR,
+        CallOperator upperCall1 = new CallOperator(FunctionSet.UPPER, Type.VARCHAR,
                 Lists.newArrayList(originColumn1));
-        CallOperator upperCall2 = new CallOperator(FunctionSet.UPPER, VarcharType.VARCHAR,
+        CallOperator upperCall2 = new CallOperator(FunctionSet.UPPER, Type.VARCHAR,
                 Lists.newArrayList(originColumn2));
 
-        DictMappingOperator dictMapping1 = new DictMappingOperator(dictColumn1, upperCall1, IntegerType.INT);
-        DictMappingOperator dictMapping2 = new DictMappingOperator(dictColumn2, upperCall2, IntegerType.INT);
+        DictMappingOperator dictMapping1 = new DictMappingOperator(dictColumn1, upperCall1, Type.INT);
+        DictMappingOperator dictMapping2 = new DictMappingOperator(dictColumn2, upperCall2, Type.INT);
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.NE, dictMapping1, dictMapping2);
 
