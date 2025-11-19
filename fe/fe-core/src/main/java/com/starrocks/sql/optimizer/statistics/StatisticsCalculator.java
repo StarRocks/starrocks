@@ -646,21 +646,28 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
-        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computePaimonScanNode(node, context, node.getTable(),
+                node.getColRefToColumnMetaMap(), node.getTvrVersionRange());
     }
 
     @Override
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
-        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computePaimonScanNode(node, context, node.getTable(),
+                node.getColRefToColumnMetaMap(), TvrTableSnapshot.empty());
     }
 
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
-                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
+                                       TvrVersionRange tvrVersionRange) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
+<<<<<<< HEAD
                     node.getPredicate(), node.getLimit(), TableVersionRange.empty());
+=======
+                    node.getPredicate(), node.getLimit(), tvrVersionRange);
+>>>>>>> b08e2e53df ([Feature] Support paimon query with branch/tag/version/timestamp (#63316))
             context.setStatistics(stats);
             if (node.isLogical()) {
                 boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
