@@ -23,6 +23,8 @@
 #include <thrift/transport/TSocket.h>
 
 #include <memory>
+#include <mutex>
+#include <semaphore>
 
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
@@ -66,7 +68,15 @@ void MockedFrontendService::init() {
     auto transportFactory = std::make_shared<TBufferedTransportFactory>();
     auto protocolFactory = std::make_shared<TBinaryProtocolFactory>();
     _server = std::make_unique<TSimpleServer>(_processer, serverTransport, transportFactory, protocolFactory);
-    _thr = std::make_unique<std::thread>([this]() { _server->serve(); });
+
+    std::counting_semaphore<> sem(0);
+
+    _thr = std::make_unique<std::thread>([this, &sem]() {
+        sem.release(1);
+        _server->serve();
+    });
+
+    sem.acquire();
     // thrift server don't provide a start function
     // wait server ready
     sleep(3);
