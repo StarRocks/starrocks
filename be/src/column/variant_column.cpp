@@ -14,6 +14,8 @@
 
 #include "variant_column.h"
 
+#include <cctz/time_zone.h>
+
 #include "types/variant_value.h"
 #include "util/mysql_row_buffer.h"
 
@@ -89,7 +91,12 @@ bool VariantColumn::append_nulls(size_t count) {
 }
 
 std::string VariantColumn::debug_item(size_t idx) const {
-    return get_object(idx)->to_string();
+    // For debug display, use UTC timezone to show timestamps consistently
+    auto json_result = get_object(idx)->to_json(cctz::utc_time_zone());
+    if (!json_result.ok()) {
+        return "";
+    }
+    return json_result.value();
 }
 
 } // namespace starrocks
