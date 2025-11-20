@@ -961,27 +961,6 @@ under the License.
                 </executions>
             </plugin>
             
-            <!-- Load generated JaCoCo includes properties -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>properties-maven-plugin</artifactId>
-                <version>1.1.0</version>
-                <executions>
-                    <execution>
-                        <id>load-jacoco-includes</id>
-                        <phase>process-sources</phase>
-                        <goals>
-                            <goal>read-project-properties</goal>
-                        </goals>
-                        <configuration>
-                            <files>
-                                <file>${project.build.directory}/jacoco-includes.properties</file>
-                            </files>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            
             <!-- fe ut coverage-->
             <plugin>
                 <groupId>org.jacoco</groupId>
@@ -1172,28 +1151,6 @@ under the License.
                         <goals>
                             <goal>run</goal>
                         </goals>
-                    </execution>
-                    <execution>
-                        <id>generate-jacoco-includes</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <condition property="jacoco.diff.enabled" value="true">
-                                    <equals arg1="${env.JACOCO_DIFF_ENABLED}" arg2="true"/>
-                                </condition>
-                                <exec executable="bash" dir="${project.basedir}" if="jacoco.diff.enabled">
-                                    <arg value="scripts/generate-jacoco-includes.sh"/>
-                                    <arg value="${jacoco.base.branch}"/>
-                                    <arg value="target/jacoco-includes.txt"/>
-                                    <arg value="target/jacoco-includes.properties"/>
-                                </exec>
-                                <echo message="JaCoCo incremental coverage disabled, using full coverage" unless="jacoco.diff.enabled"/>
-                                <echo message="jacoco.includes=com/starrocks/**" file="target/jacoco-includes.properties" unless="jacoco.diff.enabled"/>
-                            </target>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>

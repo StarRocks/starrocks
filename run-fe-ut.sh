@@ -175,6 +175,44 @@ if [[ ${DUMPCASE} -ne 1 ]]; then
     TEST_NAME="$TEST_NAME,$FILTER_TEST"
 fi
 
+# Generate JaCoCo includes configuration before running tests
+FE_CORE_DIR="${STARROCKS_HOME}/fe/fe-core"
+JACOCO_INCLUDES_DIR="${FE_CORE_DIR}/target"
+mkdir -p "${JACOCO_INCLUDES_DIR}"
+
+if [ "${JACOCO_DIFF_ENABLED}" = "true" ]; then
+    JACOCO_BASE_BRANCH=${JACOCO_BASE_BRANCH:-HEAD~1}
+    echo "Generating JaCoCo incremental coverage includes (base branch: $JACOCO_BASE_BRANCH)"
+    if [ -f "${FE_CORE_DIR}/scripts/generate-jacoco-includes.sh" ]; then
+        bash "${FE_CORE_DIR}/scripts/generate-jacoco-includes.sh" \
+            "${JACOCO_BASE_BRANCH}" \
+            "${JACOCO_INCLUDES_DIR}/jacoco-includes.txt" \
+            "${JACOCO_INCLUDES_DIR}/jacoco-includes.properties"
+    else
+        echo "Warning: generate-jacoco-includes.sh not found, using full coverage"
+        echo "jacoco.includes=com/starrocks/**" > "${JACOCO_INCLUDES_DIR}/jacoco-includes.properties"
+    fi
+else
+    echo "Generating JaCoCo full coverage includes"
+    echo "jacoco.includes=com/starrocks/**" > "${JACOCO_INCLUDES_DIR}/jacoco-includes.properties"
+fi
+
+# Extract jacoco.includes value from properties file and set as environment variable
+if [ -f "${JACOCO_INCLUDES_DIR}/jacoco-includes.properties" ]; then
+    # Extract the value after 'jacoco.includes=' line
+    JACOCO_INCLUDES_VALUE=$(grep "^jacoco.includes=" "${JACOCO_INCLUDES_DIR}/jacoco-includes.properties" | cut -d'=' -f2-)
+    if [ -n "$JACOCO_INCLUDES_VALUE" ]; then
+        export JACOCO_INCLUDES="$JACOCO_INCLUDES_VALUE"
+        echo "Set JACOCO_INCLUDES=${JACOCO_INCLUDES}"
+    else
+        export JACOCO_INCLUDES="com/starrocks/**"
+        echo "Failed to extract jacoco.includes, using default: ${JACOCO_INCLUDES}"
+    fi
+else
+    export JACOCO_INCLUDES="com/starrocks/**"
+    echo "jacoco-includes.properties not found, using default: ${JACOCO_INCLUDES}"
+fi
+
 if [ ${COVERAGE} -eq 1 ]; then
     echo "Run coverage statistic tasks"
     ant cover-test
