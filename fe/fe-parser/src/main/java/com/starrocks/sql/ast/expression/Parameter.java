@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 
@@ -55,7 +54,7 @@ public class Parameter extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitParameterExpr(this, context);
+        return visitor.visitParameterExpr(this, context);
     }
 
     @Override

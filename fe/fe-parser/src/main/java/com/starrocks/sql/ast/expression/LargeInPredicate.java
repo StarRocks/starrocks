@@ -14,9 +14,7 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 
@@ -154,17 +152,6 @@ public class LargeInPredicate extends InPredicate {
                rawConstantList.equals(that.rawConstantList);
     }
 
-    public String toSql() {
-        String inClause = isNotIn() ? " NOT IN " : " IN ";
-        if (constantCount > 100) {
-            // For very large lists, show a summary
-            return ExprToSql.toSql(getChild(0)) + inClause + "(<" + constantCount + " values>)";
-        } else {
-            return ExprToSql.toSql(getChild(0)) + inClause + "(" + rawText + ")";
-        }
-    }
-
-
     @Override
     public String toString() {
         return String.format("LargeInPredicate{compareExpr=%s, constantCount=%d, isNotIn=%s, constantType=%s}",
@@ -173,7 +160,7 @@ public class LargeInPredicate extends InPredicate {
 
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitLargeInPredicate(this, context);
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context)  {
+        return visitor.visitLargeInPredicate(this, context);
     }
 }

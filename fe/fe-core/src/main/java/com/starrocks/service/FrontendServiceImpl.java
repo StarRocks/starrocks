@@ -163,6 +163,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -1932,7 +1933,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThriftVisitor
                                     .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -1940,7 +1941,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThriftVisitor
                                     .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -1953,7 +1954,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value -> ExprToThriftVisitor
                                         .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -1964,7 +1965,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value1 -> ExprToThriftVisitor
                                         .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2341,7 +2342,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                .map(value -> ExprToThriftVisitor
                         .treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
@@ -2357,7 +2358,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThriftVisitor
                                     .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -2365,7 +2366,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThriftVisitor
                                     .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -2377,7 +2378,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value -> ExprToThriftVisitor
                                         .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2388,7 +2389,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value1 -> ExprToThriftVisitor
                                         .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());

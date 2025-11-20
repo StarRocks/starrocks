@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -414,7 +415,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
                     .collect(Collectors.joining(",")));
         }
         if (node.getWindow() != null) {
-            sb.append(" ").append(node.getWindow().toSql());
+            sb.append(" ").append(ExprToSql.toSql(node.getWindow()));
         }
 
         FunctionCallExpr fnCall = node.getFnCall();

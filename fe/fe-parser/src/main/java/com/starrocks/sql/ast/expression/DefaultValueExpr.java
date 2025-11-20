@@ -15,49 +15,23 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
-/**
- * ArrowExpr: col->'xxx'
- * Mostly used in JSON expression
- */
-public class ArrowExpr extends Expr {
+public class DefaultValueExpr extends Expr {
 
-    public ArrowExpr(Expr left, Expr right) {
-        this(left, right, NodePosition.ZERO);
-    }
-
-    public ArrowExpr(Expr left, Expr right, NodePosition pos) {
+    public DefaultValueExpr(NodePosition pos) {
         super(pos);
-        this.children.add(left);
-        this.children.add(right);
-    }
-
-    public ArrowExpr(ArrowExpr rhs) {
-        super(rhs);
-    }
-
-    public Expr getItem() {
-        Preconditions.checkState(getChildren().size() == 2);
-        return getChild(0);
-    }
-
-    public Expr getKey() {
-        Preconditions.checkState(getChildren().size() == 2);
-        return getChild(1);
     }
 
 
     @Override
     public Expr clone() {
-        return new ArrowExpr(this);
+        return this;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitArrowExpr(this, context);
+        return visitor.visitDefaultValueExpr(this, context);
     }
 }

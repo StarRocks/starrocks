@@ -1475,7 +1475,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         List<String> sortKeys = new ArrayList<>();
         for (OrderByElement orderByElement : orderByElements) {
-            String column = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             if (column == null) {
                 throw new SemanticException("Unknown column '%s' in order by clause", ExprToSql.toSql(orderByElement.getExpr()));
             }

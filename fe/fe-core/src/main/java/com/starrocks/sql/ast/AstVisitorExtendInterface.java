@@ -17,21 +17,12 @@ package com.starrocks.sql.ast;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.ArrayExpr;
-import com.starrocks.sql.ast.expression.ArraySliceExpr;
-import com.starrocks.sql.ast.expression.ArrowExpr;
-import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BoolLiteral;
-import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.CloneExpr;
-import com.starrocks.sql.ast.expression.CollectionElementExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
-import com.starrocks.sql.ast.expression.DefaultValueExpr;
-import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
@@ -41,23 +32,18 @@ import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
-import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
-import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
-import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.MultiInPredicate;
-import com.starrocks.sql.ast.expression.NamedArgument;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
@@ -848,10 +834,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitNamedArgument(NamedArgument node, C context) {
-        return visitExpression(node, context);
-    }
-
     // ------------------------------------------- Functions ----------------------------------------
     default R visitFunctionCall(FunctionCallExpr node, C context) {
         return visitExpression(node, context);
@@ -861,42 +843,15 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitFunctionCall(node, context);
     }
 
-    default R visitInformationFunction(InformationFunction node, C context) {
-        return visitExpression(node, context);
-    }
-
     // ------------------------------------------- Collections --------------------------------------
-    default R visitArrayExpr(ArrayExpr node, C context) {
-        return visitExpression(node, context);
-    }
+
 
     default R visitMapExpr(MapExpr node, C context) {
         return visitExpression(node, context);
     }
 
-    default R visitCollectionElementExpr(CollectionElementExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitArraySliceExpr(ArraySliceExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitArrowExpr(ArrowExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
     default R visitSubfieldExpr(SubfieldExpr node, C context) {
         return visitExpression(node, context);
-    }
-
-    // ------------------------------------------- Predicates ---------------------------------------
-    default R visitPredicate(Expr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitBetweenPredicate(BetweenPredicate node, C context) {
-        return visitPredicate(node, context);
     }
 
     default R visitBinaryPredicate(BinaryPredicate node, C context) {
@@ -923,20 +878,8 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitPredicate(node, context);
     }
 
-    default R visitIsNullPredicate(IsNullPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitLikePredicate(LikePredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
     // ------------------------------------------- Literal ------------------------------------------
     default R visitLiteral(LiteralExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1006,10 +949,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitDictMappingExpr(DictMappingExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
     // ------------------------------------------- Others -------------------------------------------
     default R visitArithmeticExpr(ArithmeticExpr node, C context) {
         return visitExpression(node, context);
@@ -1019,15 +958,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitCaseWhenExpr(CaseExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
     default R visitCastExpr(CastExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitMatchExpr(MatchExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1044,10 +975,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
 

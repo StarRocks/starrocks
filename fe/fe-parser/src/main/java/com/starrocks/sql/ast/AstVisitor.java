@@ -14,7 +14,32 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArraySliceExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -330,7 +355,6 @@ public interface AstVisitor<R, C> {
         return visitComputeNodeClause(clause, context);
     }
 
-
     // ------------------------------------------- Basic Node Types ----------------------------------------------------
 
     default R visitIdentifier(Identifier identifier, C context) {
@@ -394,7 +418,6 @@ public interface AstVisitor<R, C> {
     default R visitDropWarehouseStatement(DropWarehouseStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
 
     // ------------------------------------------- Drop Statement ----------------------------------------------------
 
@@ -513,7 +536,6 @@ public interface AstVisitor<R, C> {
     default R visitDropDbStatement(DropDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
 
     // ------------------------------------------- User Statement ----------------------------------------------------
 
@@ -711,7 +733,121 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ------------------------------------------- Expression ----------------------------------------
+
     default R visitExpression(Expr node, C context) {
+        return visitNode(node, context);
+    }
+
+    default R visitArrayExpr(ArrayExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitArraySliceExpr(ArraySliceExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Predicates ---------------------------------------
+
+    default R visitPredicate(Predicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitBetweenPredicate(BetweenPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitBinaryPredicate(BinaryPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitInPredicate(InPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitLargeInPredicate(LargeInPredicate node, C context) {
+        return visitInPredicate(node, context);
+    }
+
+    default R visitMultiInPredicate(MultiInPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitIsNullPredicate(IsNullPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitLikePredicate(LikePredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    // ------------------------------------------- Case/Collection ----------------------------------
+
+    default R visitCaseWhenExpr(CaseExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitCollectionElementExpr(CollectionElementExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitSubfieldExpr(SubfieldExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Other Expressions --------------------------------
+
+    default R visitArithmeticExpr(ArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitArrowExpr(ArrowExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitCloneExpr(CloneExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDictMappingExpr(DictMappingExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitInformationFunction(InformationFunction node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitMatchExpr(MatchExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitNamedArgument(NamedArgument node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitParameterExpr(Parameter node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitPlaceHolderExpr(PlaceHolderExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitUserVariableExpr(UserVariableExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- AST Helpers --------------------------------------
+
+    default R visitOrderByElement(OrderByElement node, C context) {
         return visitNode(node, context);
     }
 }

@@ -31,6 +31,7 @@ import com.starrocks.connector.hudi.HudiRemoteFileDesc;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -265,7 +266,7 @@ public class HudiTable extends Table {
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream()
-                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
+                    .map(ExprToThriftVisitor::treeToThrift)
                     .collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();

@@ -14,11 +14,9 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 
@@ -80,9 +78,8 @@ public class SubfieldExpr extends Expr {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSubfieldExpr(this, context);
+        return visitor.visitSubfieldExpr(this, context);
     }
-
 
     @Override
     public Expr clone() {
@@ -106,17 +103,5 @@ public class SubfieldExpr extends Expr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), fieldNames, copyFlag);
-    }
-
-    public String getPath() {
-        String childPath = getChildPath();
-        return childPath + "." + Joiner.on('.').join(fieldNames);
-    }
-
-    private String getChildPath() {
-        if (children.get(0) instanceof SlotRef) {
-            return ((SlotRef) children.get(0)).getColumnName();
-        }
-        return ExprToSql.toSql(children.get(0));
     }
 }

@@ -12,33 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/BinaryPredicate.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.Pair;
-import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Objects;
@@ -46,7 +23,7 @@ import java.util.Objects;
 /**
  * Most predicates with two operands..
  */
-public class BinaryPredicate extends Predicate implements Writable {
+public class BinaryPredicate extends Predicate {
 
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_RANGE_PREDICATE =
             arg -> arg.getOp() == BinaryType.LT
@@ -60,12 +37,7 @@ public class BinaryPredicate extends Predicate implements Writable {
     public static final com.google.common.base.Predicate<BinaryPredicate> IS_EQ_NULL_PREDICATE =
             arg -> arg.getOp() == BinaryType.EQ_FOR_NULL;
 
-    // true if this BinaryPredicate is inferred from slot equivalences, false otherwise.
-    private boolean isInferred = false;
-
     private BinaryType op;
-    // check if left is slot and right isnot slot.
-    private Boolean slotIsleft = null;
 
     // for restoring
     public BinaryPredicate() {
@@ -88,8 +60,6 @@ public class BinaryPredicate extends Predicate implements Writable {
     protected BinaryPredicate(BinaryPredicate other) {
         super(other);
         op = other.op;
-        slotIsleft = other.slotIsleft;
-        isInferred = other.isInferred;
     }
 
     @Override
@@ -109,29 +79,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return ((BinaryPredicate) obj).op == this.op;
     }
 
-
-    /*
-     * the follow persistence code is only for TableFamilyDeleteInfo.
-     * Maybe useless
-     */
-
-
-
-    public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
-        Expr leftExpr = getChild(0);
-        Expr rightExpr = getChild(1);
-        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
-                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
-            SlotRef slot = (SlotRef) leftExpr;
-            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
-        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
-                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
-            SlotRef slot = (SlotRef) rightExpr;
-            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
-        }
-        return null;
-    }
-
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);
@@ -146,7 +93,7 @@ public class BinaryPredicate extends Predicate implements Writable {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitBinaryPredicate(this, context);
+        return visitor.visitBinaryPredicate(this, context);
     }
 
     @Override

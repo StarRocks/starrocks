@@ -422,6 +422,7 @@ import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.ArrowExpr;
@@ -6064,13 +6065,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.end != null) {
             return new AnalyticWindow(
                     getFrameType(context.frameType),
-                    (AnalyticWindow.Boundary) visit(context.start),
-                    (AnalyticWindow.Boundary) visit(context.end),
+                    (AnalyticWindowBoundary) visit(context.start),
+                    (AnalyticWindowBoundary) visit(context.end),
                     pos);
         } else {
             return new AnalyticWindow(
                     getFrameType(context.frameType),
-                    (AnalyticWindow.Boundary) visit(context.start),
+                    (AnalyticWindowBoundary) visit(context.start),
                     pos);
         }
     }
@@ -6085,33 +6086,33 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitUnboundedFrame(com.starrocks.sql.parser.StarRocksParser.UnboundedFrameContext context) {
-        return new AnalyticWindow.Boundary(getUnboundedFrameBoundType(context.boundType), null);
+        return new AnalyticWindowBoundary(getUnboundedFrameBoundType(context.boundType), null);
     }
 
     @Override
     public ParseNode visitBoundedFrame(com.starrocks.sql.parser.StarRocksParser.BoundedFrameContext context) {
-        return new AnalyticWindow.Boundary(getBoundedFrameBoundType(context.boundType),
+        return new AnalyticWindowBoundary(getBoundedFrameBoundType(context.boundType),
                 (Expr) visit(context.expression()));
     }
 
     @Override
     public ParseNode visitCurrentRowBound(com.starrocks.sql.parser.StarRocksParser.CurrentRowBoundContext context) {
-        return new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null);
+        return new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null);
     }
 
-    private static AnalyticWindow.BoundaryType getBoundedFrameBoundType(Token token) {
+    private static AnalyticWindowBoundary.BoundaryType getBoundedFrameBoundType(Token token) {
         if (token.getType() == com.starrocks.sql.parser.StarRocksLexer.PRECEDING) {
-            return AnalyticWindow.BoundaryType.PRECEDING;
+            return AnalyticWindowBoundary.BoundaryType.PRECEDING;
         } else {
-            return AnalyticWindow.BoundaryType.FOLLOWING;
+            return AnalyticWindowBoundary.BoundaryType.FOLLOWING;
         }
     }
 
-    private static AnalyticWindow.BoundaryType getUnboundedFrameBoundType(Token token) {
+    private static AnalyticWindowBoundary.BoundaryType getUnboundedFrameBoundType(Token token) {
         if (token.getType() == com.starrocks.sql.parser.StarRocksLexer.PRECEDING) {
-            return AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+            return AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING;
         } else {
-            return AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
+            return AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING;
         }
     }
 
