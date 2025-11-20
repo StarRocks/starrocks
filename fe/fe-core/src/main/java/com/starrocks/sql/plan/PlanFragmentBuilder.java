@@ -133,16 +133,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.QueryRelation;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.SlotRef;
->>>>>>> 688035efc3 ([BugFix] Fix query hang caused by merge exchange (#65707))
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.JoinHelper;
