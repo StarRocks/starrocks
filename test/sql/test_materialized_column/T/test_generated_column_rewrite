@@ -185,6 +185,7 @@ DROP TABLE t_generated_column_complex_rewrite_4;
 DROP TABLE t_generated_column_complex_rewrite_5;
 
 -- name: test_bug_join_with_same_column_name
+ADMIN SET FRONTEND CONFIG ("query_detail_explain_level" = "NORMAL");
 CREATE TABLE `t_bug_join_with_same_column_name_1` (
   `id` bigint(20) NOT NULL COMMENT "",
   `col` STRING AS CONCAT(CAST(id AS STRING), "_abc")
