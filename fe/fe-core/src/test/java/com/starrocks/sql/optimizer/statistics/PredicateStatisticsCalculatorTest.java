@@ -461,9 +461,11 @@ public class PredicateStatisticsCalculatorTest {
         BinaryPredicateOperator c2Le70Predicate =
                 new BinaryPredicateOperator(BinaryType.LE, columnRef2, ConstantOperator.createInt(70));
         innerIfPredicate =
-                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(
+                        c1Ge20Predicate, c2Ge50Predicate, c2Le70Predicate));
         outerIfPredicate =
-                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(innerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
+                new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(
+                        innerIfPredicate, c3Eq80Predicate, c3Eq70Predicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
