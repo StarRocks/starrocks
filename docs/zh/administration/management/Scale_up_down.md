@@ -70,7 +70,13 @@ SHOW PROC '/frontends';
 
 ## 扩缩容 BE 集群
 
-BE 集群成功扩缩容后，StarRocks 会自动根据负载情况，进行数据均衡，此期间系统正常运行。
+StarRocks 会在后端节点 (BE) 进行横向扩展或缩减后自动执行负载均衡，而不会影响整体性能。
+
+当您添加新的 BE 节点时，系统的 Tablet Scheduler 会检测到该新节点及其低负载。然后，它会将 Tablet 从高负载的 BE 节点迁移到新的低负载 BE 节点，以确保数据和负载在整个集群中均匀分布。
+
+均衡过程基于为每个 BE 计算的 loadScore，该 loadScore 会同时考虑磁盘利用率和副本数量。系统的目标是将 Tablet 从 loadScore 较高的节点迁移到 loadScore 较低的节点。
+
+您可以检查前端 (FE) 配置参数 `tablet_sched_disable_balance`，以确保自动均衡功能未被禁用（该参数默认为 false，这意味着 Tablet 均衡功能默认启用）。更多详细信息请参阅[管理副本文档](./resource_management/Replica.md)。
 
 ### 扩容 BE 集群
 
