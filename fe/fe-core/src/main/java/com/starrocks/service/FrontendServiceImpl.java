@@ -2224,16 +2224,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        // update partition info snapshot for txn should be synchronized
-        synchronized (txnState) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+        // update partition info snapshot for txn should be protected by txn lock
+        // NOTE: lock order must be: db/table lock first, then txnState lock
+        // to avoid deadlock with other transaction operations
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            txnState.writeLock();
             try {
                 return buildCreatePartitionResponse(
                         olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                txnState.writeUnlock();
             }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
     }
 
