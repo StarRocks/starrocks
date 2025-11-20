@@ -267,7 +267,9 @@ static Status collect_alive_bundle_files(TabletManager* tablet_mgr, const std::v
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     for (const auto& tablet_info : tablet_infos) {
         auto tablet_id = tablet_info.tablet_id();
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
+        // fill data cache to avoid read bundle meta file from remote storage repeatedly.
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* Not need to fill meta cache */,
+                                                   true /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (!res.ok()) {
             // must exist.
@@ -323,7 +325,10 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     // Starting at |*final_retain_version|, read the tablet metadata forward along
     // the |prev_garbage_version| pointer until the tablet metadata does not exist.
     while (version >= min_version) {
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
+        // fill data cache to avoid read bundle meta file from remote storage repeatedly.
+        auto res = tablet_mgr->get_tablet_metadata(
+                tablet_id, version, false /* Not need to fill meta cache */,
+                vacuum_version_range != nullptr /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
             break;
