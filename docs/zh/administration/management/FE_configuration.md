@@ -566,6 +566,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：全局锁（Global Lock）获取的超时时长。
 - 引入版本：-
 
+##### db_used_data_quota_update_interval_secs
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：数据库已使用数据配额的更新间隔。StarRocks 会定期更新所有数据库的已使用数据配额以跟踪存储消耗情况。此值用于配额管控和指标采集。允许的最小间隔为 30 秒，以防止系统负载过高。如果配置的值小于 30，将被拒绝。
+- 引入版本：-
+
 ##### drop_backend_after_decommission
 
 - 默认值：true
