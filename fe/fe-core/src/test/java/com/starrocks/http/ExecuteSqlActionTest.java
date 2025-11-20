@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.ExecuteEnv;
 import okhttp3.Request;
@@ -33,9 +34,22 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
 
     @Override
+<<<<<<< HEAD
     @Before
     public void setUp() {
         super.setUp();
+=======
+    public void setUp() throws Exception {
+        setUpWithCatalog();
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getDb(new ConnectContext(), "default_catalog", DB_NAME) != null);
+    }
+
+    @Override
+    protected void doSetUp() throws Exception {
+        Config.query_detail_explain_level = "NORMAL";
+>>>>>>> 1e1ec8c260 ([BugFix] query_detail_explain_level configuration was not taking effect. (#63265))
         MetricRepo.init();
         ExecuteEnv.setup();
     }

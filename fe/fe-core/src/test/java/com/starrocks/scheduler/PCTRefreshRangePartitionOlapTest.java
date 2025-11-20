@@ -15,6 +15,11 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+>>>>>>> 1e1ec8c260 ([BugFix] query_detail_explain_level configuration was not taking effect. (#63265))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import org.junit.jupiter.api.Assertions;
@@ -28,6 +33,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        Config.query_detail_explain_level = "NORMAL";
         MVTestBase.beforeClass();
     }
 
