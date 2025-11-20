@@ -53,7 +53,7 @@ public class CollectionTypeColumnStats extends BaseColumnStats {
     @Override
     public String getCollectionSize() {
         String collectionSizeFunction = columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE";
-        return "AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")) ";
+        return "IFNULL(AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")), -1) ";
     }
 
     @Override
