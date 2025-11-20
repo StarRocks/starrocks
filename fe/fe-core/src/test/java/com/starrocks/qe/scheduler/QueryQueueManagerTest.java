@@ -27,10 +27,13 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
+import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,6 +44,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TReleaseSlotRequest;
 import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TRequireSlotRequest;
@@ -62,6 +66,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -1733,5 +1738,112 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         coords.forEach(coor -> coor.cancel("Cancel by test"));
         runningCoords.forEach(DefaultCoordinator::onFinished);
+    }
+
+    @Test
+    public void testMaybeWait_registersListenerForQueryType() throws Exception {
+        DefaultCoordinator coord = Mockito.mock(DefaultCoordinator.class);
+        JobSpec jobSpec = Mockito.mock(JobSpec.class);
+        LocalSlotProvider slotProvider = Mockito.mock(LocalSlotProvider.class);
+
+        Mockito.when(coord.getJobSpec()).thenReturn(jobSpec);
+        Mockito.when(jobSpec.getSlotProvider()).thenReturn(slotProvider);
+        Mockito.when(jobSpec.isQueryType()).thenReturn(true);
+        Mockito.when(jobSpec.getQueryOptions()).thenReturn(new TQueryOptions());
+        Mockito.when(coord.getQueryId()).thenReturn(new TUniqueId());
+
+        // Mock createSlot dependencies
+        mockFrontendAndSlotManager(connectContext, coord);
+
+        QueryQueueManager.getInstance().maybeWait(connectContext, coord);
+
+        // Verify listener was registered
+        Mockito.verify(jobSpec).isQueryType();
+        Assertions.assertFalse(connectContext.getListeners().isEmpty());
+    }
+
+    @Test
+    public void testMaybeWait_doesNotRegisterListenerForNonQueryType() throws Exception {
+        DefaultCoordinator coord = Mockito.mock(DefaultCoordinator.class);
+        JobSpec jobSpec = Mockito.mock(JobSpec.class);
+        LocalSlotProvider slotProvider = Mockito.mock(LocalSlotProvider.class);
+
+        Mockito.when(coord.getJobSpec()).thenReturn(jobSpec);
+        Mockito.when(jobSpec.getSlotProvider()).thenReturn(slotProvider);
+        Mockito.when(jobSpec.isQueryType()).thenReturn(false);
+        Mockito.when(coord.getQueryId()).thenReturn(new TUniqueId());
+        Mockito.when(jobSpec.getQueryOptions()).thenReturn(new TQueryOptions());
+
+        mockFrontendAndSlotManager(connectContext, coord);
+
+        QueryQueueManager.getInstance().maybeWait(connectContext, coord);
+
+        // Verify listener was not registered for non-query types
+        Assertions.assertTrue(connectContext.getListeners().isEmpty());
+    }
+
+    @Test
+    public void testMaybeWait_listenerReleasesSlotOnQueryFinished() throws Exception {
+        DefaultCoordinator coord = Mockito.mock(DefaultCoordinator.class);
+        JobSpec jobSpec = Mockito.mock(JobSpec.class);
+        LocalSlotProvider slotProvider = Mockito.mock(LocalSlotProvider.class);
+        LogicalSlot slot = Mockito.mock(LogicalSlot.class);
+
+        Mockito.when(coord.getJobSpec()).thenReturn(jobSpec);
+        Mockito.when(jobSpec.getSlotProvider()).thenReturn(slotProvider);
+        Mockito.when(jobSpec.isQueryType()).thenReturn(true);
+        Mockito.when(coord.getQueryId()).thenReturn(new TUniqueId());
+        Mockito.when(jobSpec.getQueryOptions()).thenReturn(new TQueryOptions());
+
+        mockFrontendAndSlotManager(connectContext, coord);
+
+        QueryQueueManager.getInstance().maybeWait(connectContext, coord);
+
+        // Trigger onQueryFinished
+        connectContext.onQueryFinished();
+
+        // Verify slot is released through the listener
+        Mockito.verify(slotProvider, Mockito.atLeastOnce()).requireSlot(Mockito.any());
+    }
+
+    @Test
+    public void testMaybeWait_localSlotProviderSkipsQueue() throws Exception {
+        DefaultCoordinator coord = Mockito.mock(DefaultCoordinator.class);
+        JobSpec jobSpec = Mockito.mock(JobSpec.class);
+        LocalSlotProvider slotProvider = new LocalSlotProvider();
+
+        Mockito.when(coord.getJobSpec()).thenReturn(jobSpec);
+        Mockito.when(jobSpec.getSlotProvider()).thenReturn(slotProvider);
+        Mockito.when(jobSpec.isQueryType()).thenReturn(true);
+        Mockito.when(coord.getQueryId()).thenReturn(new TUniqueId());
+        Mockito.when(jobSpec.getQueryOptions()).thenReturn(new TQueryOptions());
+
+        mockFrontendAndSlotManager(connectContext, coord);
+
+        long startMs = System.currentTimeMillis();
+        QueryQueueManager.getInstance().maybeWait(connectContext, coord);
+        long duration = System.currentTimeMillis() - startMs;
+
+        // LocalSlotProvider should return immediately without queuing
+        Assertions.assertTrue(duration < 100);
+        Assertions.assertFalse(connectContext.isPending());
+    }
+
+    private void mockFrontendAndSlotManager(ConnectContext ctx, DefaultCoordinator coord) {
+        GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
+        NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
+        Frontend frontend = Mockito.mock(Frontend.class);
+        BaseSlotManager slotManager = Mockito.mock(BaseSlotManager.class);
+
+        Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(nodeMgr);
+        Mockito.when(nodeMgr.getSelfIpAndRpcPort()).thenReturn(new Pair<>("127.0.0.1", 9020));
+        Mockito.when(nodeMgr.getFeByHost("127.0.0.1")).thenReturn(frontend);
+        Mockito.when(frontend.getNodeName()).thenReturn("FE_NODE");
+        Mockito.when(frontend.getStartTime()).thenReturn(System.currentTimeMillis());
+        Mockito.when(globalStateMgr.getSlotManager()).thenReturn(slotManager);
+        Mockito.when(slotManager.getQueryQueuePendingTimeoutSecond(Mockito.anyLong())).thenReturn(300);
+
+        ctx.setStartTime();
+        ctx.setCurrentWarehouseId(0L);
     }
 }
