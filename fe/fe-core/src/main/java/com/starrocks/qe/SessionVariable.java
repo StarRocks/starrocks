@@ -3154,7 +3154,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboCTEForceReuseNodeCount = cboCTEForceReuseNodeCount;
     }
 
-    public boolean isCboCTEForceReuseLimitWithoutOrderBy() { return cboCTEForceReuseLimitWithoutOrderBy; }
+    public boolean isCboCTEForceReuseLimitWithoutOrderBy() {
+        return cboCTEForceReuseLimitWithoutOrderBy;
+    }
 
     public void setCboCTEForceReuseLimitWithoutOrderBy(boolean cboCTEForceReuseLimitWithoutOrderBy) {
         this.cboCTEForceReuseLimitWithoutOrderBy = cboCTEForceReuseLimitWithoutOrderBy;
