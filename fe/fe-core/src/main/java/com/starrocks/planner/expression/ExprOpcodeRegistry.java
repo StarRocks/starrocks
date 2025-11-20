@@ -12,8 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.planner.expression;
 
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.EnumMap;

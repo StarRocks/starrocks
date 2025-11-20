@@ -348,5 +348,4 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public List<String> getHints() {
         return hints;
     }
-
 }

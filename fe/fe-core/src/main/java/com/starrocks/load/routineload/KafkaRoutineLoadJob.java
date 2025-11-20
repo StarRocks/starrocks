@@ -71,7 +71,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;

@@ -1,6 +1,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
@@ -9,7 +10,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.TypeFactory;

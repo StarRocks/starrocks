@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.Type;
 
@@ -44,7 +45,7 @@ public class FunctionArgsDef {
         argTypes = new Type[argTypeDefs.size()];
         int i = 0;
         for (TypeDef typeDef : argTypeDefs) {
-            typeDef.analyze();
+            TypeDefAnalyzer.analyze(typeDef);
             argTypes[i++] = typeDef.getType();
         }
     }

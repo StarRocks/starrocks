@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -59,7 +60,6 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -103,6 +103,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -352,24 +353,24 @@ public class ScalarOperatorToExpr {
          * LargeInPredicate should have been transformed to a join by LargeInPredicateToJoinRule
          * during the optimization phase. If execution reaches here, it indicates that the
          * transformation was not applied, which can happen in certain unsupported scenarios:
-         * 
+         *
          * <p>Unsupported cases include:
          * <ul>
          *   <li>LargeInPredicate used within CASE WHEN expressions (e.g., CASE WHEN col IN (...))</li>
          *   <li>LargeInPredicate in complex nested expressions where join rewrite is not applicable</li>
          * </ul>
-         * 
+         *
          * <p>When this exception is thrown, the query will be automatically retried with
          * LargeInPredicate optimization disabled, falling back to the standard InPredicate evaluation.
-         * 
+         *
          * @throws LargeInPredicateException to trigger query retry with LargeInPredicate disabled
          */
         @Override
         public Expr visitLargeInPredicate(LargeInPredicateOperator predicate, FormatterContext context) {
             throw new LargeInPredicateException(
                     "LargeInPredicate was not transformed to join during optimization. " +
-                    "This may occur in unsupported contexts such as CASE WHEN expressions. " +
-                    "Retrying query with LargeInPredicate optimization disabled.");
+                            "This may occur in unsupported contexts such as CASE WHEN expressions. " +
+                            "Retrying query with LargeInPredicate optimization disabled.");
         }
 
         @Override
@@ -607,9 +608,25 @@ public class ScalarOperatorToExpr {
             newArguments.add(lambdaExpr);
             newArguments.addAll(arguments);
 
-            LambdaFunctionExpr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
+            List<Expr> children = new ArrayList<>(newArguments);
+            if (!commonSubOperatorMap.isEmpty()) { // flatten commonSubOperatorMap's slot_id and sub_expr to children
+                children.addAll(commonSubOperatorMap.keySet());
+                children.addAll(commonSubOperatorMap.values());
+            }
+
+            LambdaFunctionExpr result = new LambdaFunctionExpr(children, commonSubOperatorMap.size());
             result.setType(FunctionType.FUNCTION);
-            result.checkValidAfterToExpr();
+
+            // 1 lambda expr, at least 1 lambda argument and common sub op's slotref + expr
+            Preconditions.checkState(result.getChildren().size() >= 2 + 2 * result.getCommonSubOperatorNum(),
+                    "lambda expr's children num " + result.getChildren().size() + " should >= " +
+                            (2 + 2 * result.getCommonSubOperatorNum()));
+            int realChildrenNum = result.getChildren().size() - 2 * result.getCommonSubOperatorNum();
+            for (int i = 1; i < realChildrenNum; i++) {
+                Preconditions.checkState(result.getChild(i) instanceof SlotRef,
+                        i + "-th lambda argument should be type of SlotRef, but actually " + result.getChild(i));
+            }
+
             return result;
         }
 

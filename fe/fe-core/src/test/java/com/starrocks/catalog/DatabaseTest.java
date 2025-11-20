@@ -41,7 +41,6 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;

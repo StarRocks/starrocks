@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.planner.expression;
 
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -33,13 +36,13 @@ public class ExprToNormalFormVisitor implements AstVisitorExtendInterface<Void, 
 
     private ExprToNormalFormVisitor(FragmentNormalizer normalizer) {
         this.normalizer = normalizer;
-        this.delegate = ExprToThriftVisitor.getVisitor();
+        this.delegate = ExprToThrift.getVisitor();
     }
 
     public static TExpr treeToNormalForm(Expr expr, FragmentNormalizer normalizer) {
         TExpr result = new TExpr();
         ExprToNormalFormVisitor visitor = new ExprToNormalFormVisitor(normalizer);
-        ExprToThriftVisitor.treeToThriftHelper(expr, result, visitor::visit);
+        ExprToThrift.treeToThriftHelper(expr, result, visitor::visit);
         return result;
     }
 

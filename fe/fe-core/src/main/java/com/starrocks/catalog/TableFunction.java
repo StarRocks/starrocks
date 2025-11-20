@@ -22,7 +22,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;

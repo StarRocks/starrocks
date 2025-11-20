@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -64,7 +65,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
@@ -595,7 +595,7 @@ public class CreateTableAnalyzer {
                 }
                 TypeDef typeDef = new TypeDef(type);
                 try {
-                    typeDef.analyze();
+                    TypeDefAnalyzer.analyze(typeDef);
                 } catch (Exception e) {
                     throw new SemanticException("Generate partition column " + columnName
                             + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());

@@ -28,12 +28,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -70,7 +72,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
@@ -94,7 +95,6 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -505,17 +505,37 @@ public class ExpressionAnalyzer {
             if (!node.getChildren().isEmpty()) {
                 Type originalType = node.getType();
                 if (originalType == AnyMapType.ANY_MAP) {
-                    Type keyType = node.getKeyCommonType();
+                    Type keyType = getKeyCommonType(node);
                     if (!keyType.isValidMapKeyType()) {
                         throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
                     }
-                    Type valueType = node.getValueCommonType();
+                    Type valueType = getValueCommonType(node);
                     node.setType(new MapType(keyType, valueType));
                 }
             } else {
                 node.setType(new MapType(NullType.NULL, NullType.NULL));
             }
             return null;
+        }
+
+        private Type getKeyCommonType(MapExpr node) {
+            List<Expr> children = node.getChildren();
+            Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
+            ArrayList<Type> keyExprsType = Lists.newArrayList();
+            for (int i = 0; i < children.size(); i += 2) {
+                keyExprsType.add(children.get(i).getType());
+            }
+            return TypeManager.getCommonSuperType(keyExprsType);
+        }
+
+        public Type getValueCommonType(MapExpr node) {
+            List<Expr> children = node.getChildren();
+            Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
+            ArrayList<Type> valueExprsType = Lists.newArrayList();
+            for (int i = 1; i < children.size(); i += 2) {
+                valueExprsType.add(children.get(i).getType());
+            }
+            return TypeManager.getCommonSuperType(valueExprsType);
         }
 
         @Override

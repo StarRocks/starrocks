@@ -14,55 +14,30 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MapExpr extends Expr {
-    private boolean explicitType = false;
-
     public MapExpr(Type type, List<Expr> items) {
         super();
         this.type = type;
-        this.children = ExprUtils.cloneList(items);
-        this.explicitType = this.type != null;
+        this.children = items.stream().map(Expr::clone).collect(Collectors.toCollection(ArrayList::new));
     }
 
     // key expr, value expr, key expr, value expr ...
     public MapExpr(Type type, List<Expr> items, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.children = ExprUtils.cloneList(items);
-        this.explicitType = this.type != null;
+        this.children = items.stream().map(Expr::clone).collect(Collectors.toCollection(ArrayList::new));
     }
 
     public MapExpr(MapExpr other) {
         super(other);
-    }
-
-    public Type getKeyCommonType() {
-        Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
-        ArrayList<Type> keyExprsType = Lists.newArrayList();
-        for (int i = 0; i < children.size(); i += 2) {
-            keyExprsType.add(children.get(i).getType());
-        }
-        return TypeManager.getCommonSuperType(keyExprsType);
-    }
-
-    public Type getValueCommonType() {
-        Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
-        ArrayList<Type> valueExprsType = Lists.newArrayList();
-        for (int i = 1; i < children.size(); i += 2) {
-            valueExprsType.add(children.get(i).getType());
-        }
-        return TypeManager.getCommonSuperType(valueExprsType);
     }
 
     @Override
@@ -72,6 +47,6 @@ public class MapExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitMapExpr(this, context);
+        return visitor.visitMapExpr(this, context);
     }
 }

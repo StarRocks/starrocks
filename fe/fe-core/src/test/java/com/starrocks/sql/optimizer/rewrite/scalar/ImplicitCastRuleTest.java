@@ -17,8 +17,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;

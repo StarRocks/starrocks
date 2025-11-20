@@ -103,7 +103,6 @@ import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;

@@ -51,6 +51,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -100,7 +101,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
@@ -1862,7 +1862,7 @@ public class MaterializedViewAnalyzer {
         String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId;
         TypeDef typeDef = new TypeDef(type);
         try {
-            typeDef.analyze();
+            TypeDefAnalyzer.analyze(typeDef);
         } catch (Exception e) {
             throw new ParsingException("Generate partition column " + columnName
                     + " for multi expression partition error: " + e.getMessage());

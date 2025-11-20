@@ -43,6 +43,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -53,6 +54,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -87,6 +89,7 @@ import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -120,8 +123,6 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
@@ -349,7 +350,7 @@ public class StarRocksAssert {
         TypeDef returnType = createFunctionStmt.getReturnType();
         // check argument
         argsDef.analyze();
-        returnType.analyze();
+        TypeDefAnalyzer.analyze(returnType);
 
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
