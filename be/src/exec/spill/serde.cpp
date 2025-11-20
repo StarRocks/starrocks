@@ -136,9 +136,6 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         column_stats.reserve(columns.size());
         // serialize to io buffer
         int padding_size = 0;
-        if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
-            RETURN_IF_ERROR(chunk->capacity_limit_reached());
-        }
         for (size_t i = 0; i < columns.size(); i++) {
             uint8_t* begin = buf;
             buf = serde::ColumnArraySerde::serialize(*columns[i], buf, false, encode_levels[i]);
