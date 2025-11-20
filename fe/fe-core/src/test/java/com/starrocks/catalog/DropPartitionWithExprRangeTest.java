@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
