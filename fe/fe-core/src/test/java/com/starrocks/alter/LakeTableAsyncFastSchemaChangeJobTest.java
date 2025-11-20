@@ -52,6 +52,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class LakeTableAsyncFastSchemaChangeJobTest {
     private static ConnectContext connectContext;
@@ -356,22 +357,22 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
                 "CREATE TABLE t_compression_test(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
                 "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true', 'compression'='zstd(9)')");
         
-        Assertions.assertEquals(TCompressionType.ZSTD, table.getCompressionType());
-        Assertions.assertEquals(9, table.getCompressionLevel());
+        Assert.assertEquals(TCompressionType.ZSTD, table.getCompressionType());
+        Assert.assertEquals(9, table.getCompressionLevel());
         
         List<MockBeThriftClient> thriftClients = ((MockGenericPool<?>) ThriftConnectionPool.backendPool).getAllBackends()
-                .stream().map(MockedBackend::getMockBeThriftClient).toList();
-        Assertions.assertFalse(thriftClients.isEmpty());
+                .stream().map(MockedBackend::getMockBeThriftClient).collect(Collectors.toList());
+        Assert.assertFalse(thriftClients.isEmpty());
         thriftClients.forEach(client -> client.setCaptureAgentTask(true));
         try {
             String alterSql = "ALTER TABLE t_compression_test ADD COLUMN c1 BIGINT";
             AlterJobV2 alterJob = executeAlterAndWaitFinish(table, alterSql, true);
-            Assertions.assertInstanceOf(LakeTableAsyncFastSchemaChangeJob.class, alterJob);
+            Assert.assertTrue(alterJob instanceof LakeTableAsyncFastSchemaChangeJob);
             LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob) alterJob;
             List<SchemaInfo> schemaInfos = job.getSchemaInfoList();
-            Assertions.assertEquals(1, schemaInfos.size());
-            Assertions.assertEquals(TCompressionType.ZSTD, schemaInfos.get(0).getCompressionType());
-            Assertions.assertEquals(9, schemaInfos.get(0).getCompressionLevel());
+            Assert.assertEquals(1, schemaInfos.size());
+            Assert.assertEquals(TCompressionType.ZSTD, schemaInfos.get(0).getCompressionType());
+            Assert.assertEquals(9, schemaInfos.get(0).getCompressionLevel());
 
             // Get all tablet IDs from the table
             Set<Long> tableTabletIds = new HashSet<>();
@@ -385,19 +386,19 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
                     }
                 }
             }
-            Assertions.assertEquals(1, tableTabletIds.size());
+            Assert.assertEquals(1, tableTabletIds.size());
 
             // 1. get all TAgentTask by using MockBeThriftClient::getCapturedAgentTasks
             List<TAgentTaskRequest> allTasks = thriftClients.stream()
                     .flatMap(client -> client.getCapturedAgentTasks().stream())
-                    .toList();
+                    .collect(Collectors.toList());
 
             // 2. get all tasks related to fast schema evolution for table t_compression_test
             // Fast schema evolution uses UPDATE_TABLET_META_INFO task type
             List<TAgentTaskRequest> fastSchemaEvolutionTasks = allTasks.stream()
                     .filter(task -> task.getTask_type() == TTaskType.UPDATE_TABLET_META_INFO)
                     .filter(task -> task.isSetUpdate_tablet_meta_info_req())
-                    .toList();
+                    .collect(Collectors.toList());
 
             // 3. get TTabletSchema from agent task, filter by tablet IDs belonging to the table
             List<TTabletSchema> tabletSchemas = fastSchemaEvolutionTasks.stream()
@@ -407,15 +408,14 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
                     .filter(metaInfo -> tableTabletIds.contains(metaInfo.getTablet_id()))
                     .filter(TTabletMetaInfo::isSetTablet_schema)
                     .map(TTabletMetaInfo::getTablet_schema)
-                    .toList();
+                    .collect(Collectors.toList());
 
-            Assertions.assertEquals(1, tabletSchemas.size(), 
-                    "There should be exactly one TTabletSchema for fast schema evolution");
+            Assert.assertEquals(1, tabletSchemas.size());
 
             // 4. verify the compression type and level in TTabletSchema is correct
             TTabletSchema tabletSchema = tabletSchemas.get(0);
-            Assertions.assertEquals(TCompressionType.ZSTD, tabletSchema.getCompression_type());
-            Assertions.assertEquals(9, tabletSchema.getCompression_level());
+            Assert.assertEquals(TCompressionType.ZSTD, tabletSchema.getCompression_type());
+            Assert.assertEquals(9, tabletSchema.getCompression_level());
         } finally {
             thriftClients.forEach(client -> client.setCaptureAgentTask(false));
             thriftClients.forEach(MockBeThriftClient::clearCapturedAgentTasks);
