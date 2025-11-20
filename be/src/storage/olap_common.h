@@ -277,8 +277,15 @@ struct OlapReaderStatistics {
 
     int64_t rows_del_vec_filtered = 0;
 
-    int64_t rows_gin_filtered = 0;
     int64_t gin_index_filter_ns = 0;
+    int64_t rows_gin_filtered = 0;
+    int64_t gin_prefix_filter_ns = 0;
+    int64_t gin_ngram_filter_dict_ns = 0;
+    int64_t gin_predicate_filter_dict_ns = 0;
+    int64_t gin_dict_count = 0;
+    int64_t gin_ngram_dict_count = 0;
+    int64_t gin_ngram_dict_filtered = 0;
+    int64_t gin_predicate_dict_filtered = 0;
 
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;

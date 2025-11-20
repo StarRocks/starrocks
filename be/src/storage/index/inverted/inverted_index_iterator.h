@@ -26,8 +26,9 @@ enum class InvertedIndexReaderType;
 
 class InvertedIndexIterator {
 public:
-    InvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader)
-            : _index_meta(index_meta), _reader(reader) {
+    InvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
+                          OlapReaderStatistics* stats)
+            : _index_meta(index_meta), _stats(stats), _reader(reader) {
         _analyser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_index_meta->index_properties()));
     }
