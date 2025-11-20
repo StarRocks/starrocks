@@ -205,6 +205,7 @@ set(EXEC_FILES
     pipeline/operator.cpp
     pipeline/source_operator.cpp
     pipeline/limit_operator.cpp
+    pipeline/offset_operator.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
