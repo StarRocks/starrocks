@@ -215,12 +215,13 @@ class StarRocksTableDefinitionParser(object):
         :param charset: The character set of the table.
         :return: A ReflectedState object containing the parsed table information.
         """
+        # logger.debug("parsing table: %s", table.TABLE_NAME)
         reflected_table_info = ReflectedState(
             table_name=table.TABLE_NAME,
             columns=[
                 self._parse_column(
                     column=column,
-                    col_autoinc=column_autoinc,
+                    col_2_autoinc=column_autoinc,
                     **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: column_2_agg_type.get(column.COLUMN_NAME)},
                 )
                 for column in columns
@@ -239,13 +240,16 @@ class StarRocksTableDefinitionParser(object):
         logger.debug("reflected table info for table: %r, info: '%s'", table.TABLE_NAME, reflected_table_info)
         return reflected_table_info
 
-    def _parse_column(self, column: _DecodingRow, col_autoinc: dict, **kwargs: Any) -> dict:
+    def _parse_column(self, column: _DecodingRow, col_2_autoinc: dict | None = None, **kwargs: Any) -> dict:
         """
         Parse column from information_schema.columns table.
         It returns dictionary with column informations expected by sqlalchemy.
 
         Args:
             column: A row from `information_schema.columns`.
+            col_2_autoinc: A dictionary of column names and their auto increment info.
+                The key is the column name, the value is True/False whether the column has auto increment.
+                Example: `{"col1": True, "col2": False, ...}`
             kwargs: Additional keyword arguments, with prefix `starrocks_`, passed to the dialect.
                 currently only support:
                     - starrocks_is_agg_key: Whether the column is a key column.
@@ -260,7 +264,7 @@ class StarRocksTableDefinitionParser(object):
             "type": self._parse_column_type(column=column),
             "nullable": column.IS_NULLABLE == "YES",
             "default": column.COLUMN_DEFAULT or None,
-            "autoincrement": col_autoinc.get(column.COLUMN_NAME, False),
+            "autoincrement": col_2_autoinc.get(column.COLUMN_NAME, False) if col_2_autoinc else False,
             "comment": column.COLUMN_COMMENT or None,
             "dialect_options": {
                 k: v for k, v in kwargs.items() if v is not None
@@ -270,6 +274,8 @@ class StarRocksTableDefinitionParser(object):
             col_data["computed"] = {
                 "sqltext": column.GENERATION_EXPRESSION
             }
+
+        # logger.debug("parsed column data for column: %s is %s", column.COLUMN_NAME, col_data)
 
         return col_data
 

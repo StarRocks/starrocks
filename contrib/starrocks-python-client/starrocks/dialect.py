@@ -742,8 +742,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if (
             column.table is not None
             and (
-                column is column.table._autoincrement_column
-                or column.autoincrement is True
+                # NOTE: we should not use column.table._autoincrement_column here.
+                # because the column will be auto-incremented when it's set with `primary_key=True`.
+                # column is column.table._autoincrement_column or
+                column.autoincrement is True
             )
             and (
                 column.server_default is None
@@ -832,12 +834,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         if nullable is not None:
             colspec.append("NULL" if nullable else "NOT NULL")
 
-        # AUTO_INCREMENT or default value or computed column
-        if autoincrement is True:
-            raise exc.NotSupportedError(f"AUTO_INCREMENT is not supported for ALTER COLUMN in StarRocks, for column: {name}")
-
+        if autoincrement:
+            colspec.append("AUTO_INCREMENT")
         # DEFAULT: include if provided (even if 0 or empty string), but not when False
-        if default is not False and default is not None:
+        elif default is not False and default is not None:
             default = format_server_default(self, default)
             if default == "AUTO_INCREMENT":
                 colspec.append("AUTO_INCREMENT")
@@ -1409,8 +1409,9 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 _DecodingRow(row, charset)
                 for row in rp.mappings().fetchall()
             ]
-            if not rows:
-                raise exc.NoSuchTableError(f"Empty response for query: '{st}'")
+            # NOTE: We should not raise NoSuchTableError if the query returns empty rows.
+            # if not rows:
+            #     raise exc.NoSuchTableError(f"Empty response for query: '{st}'")
             return rows
 
         except exc.DBAPIError as e:
@@ -1447,6 +1448,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
         Query object type from the database (without cache).
         Only called once in _setup_parser.
         """
+        if not schema:
+            schema = connection.dialect.default_schema_name
         # 1. Query information_schema.tables
         table_rows = self._read_from_information_schema(
             connection, "tables", table_schema=schema, table_name=table_name
@@ -1571,6 +1574,17 @@ class StarRocksDialect(MySQLDialect_pymysql):
         )
 
     def _get_autoinc_from_show_create_table(self, create_table: str) -> Dict[str, Any]:
+        """
+        Get the auto increment info from the SHOW CREATE TABLE statement.
+
+        Args:
+            create_table: The SHOW CREATE TABLE statement.
+
+        Returns:
+            A dictionary of column names and their auto increment info.
+            The key is the column name, the value is True/False whether the column has auto increment
+            Example: `{"col1": True, "col2": False, ...}`
+        """
         if create_table.lstrip().startswith("CREATE VIEW"):
             return dict()
         only_create = create_table.split('ENGINE=')[0]

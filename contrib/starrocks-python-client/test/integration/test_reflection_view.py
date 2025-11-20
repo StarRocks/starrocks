@@ -510,12 +510,12 @@ class TestReflectionViewsIntegration:
 
         with sr_engine.connect() as connection:
             inspector = inspect(connection)
-
             # Should raise NoSuchTableError for non-existent view
             with pytest.raises(NoSuchTableError):
                 inspector.get_view("nonexistent_view_12345", schema=sr_engine.url.database)
 
             logger.info("Correctly raised NoSuchTableError for non-existent view")
+
 
     def test_reflect_view_name_case_sensitivity(self, sr_root_engine: Engine):
         """Test view reflection with different case sensitivity scenarios using Table.autoload_with."""
