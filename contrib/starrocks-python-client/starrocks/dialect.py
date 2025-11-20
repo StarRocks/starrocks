@@ -32,6 +32,7 @@ from sqlalchemy import (
     Row,
     Select,
     Table,
+    TableClause,
     exc,
     log,
     schema as sa_schema,
