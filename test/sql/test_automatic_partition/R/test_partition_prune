@@ -1,4 +1,7 @@
 -- name: test_create_table_exp
+ADMIN SET FRONTEND CONFIG ("query_detail_explain_level" = "NORMAL");
+-- result:
+-- !result
 CREATE TABLE orders_new (     ts INT NOT NULL,     id BIGINT NOT NULL,     city STRING NOT NULL ) PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 -- result:
 -- !result
