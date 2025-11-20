@@ -631,6 +631,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
+    JOIN_THREAD(_timer_metrics)
     wake_finish_publish_vesion_thread();
     wake_schedule_apply_thread();
     JOIN_THREAD(_finish_publish_version_thread)
