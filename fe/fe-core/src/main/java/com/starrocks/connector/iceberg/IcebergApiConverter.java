@@ -158,7 +158,8 @@ public class IcebergApiConverter {
         Set<String> addedSortKey = new HashSet<>();
         SortOrder.Builder builder = SortOrder.builderFor(schema);
         for (OrderByElement orderByElement : orderByElements) {
-            String columnName = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String columnName = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             Preconditions.checkNotNull(columnName);
             NullOrder nullOrder = orderByElement.getNullsFirstParam() ? NullOrder.NULLS_FIRST : NullOrder.NULLS_LAST;
             if (orderByElement.getIsAsc()) {
