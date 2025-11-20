@@ -1132,6 +1132,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     @Test
     public void testNestCTERewrite() throws Exception {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
-        System.out.println(plan);
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks");
     }
 }
