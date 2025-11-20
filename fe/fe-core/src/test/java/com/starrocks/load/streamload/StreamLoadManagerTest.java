@@ -23,6 +23,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -78,6 +79,16 @@ public class StreamLoadManagerTest {
 
             @Mock
             public void logInsertTransactionState(TransactionState transactionState) {
+            }
+
+            @Mock
+            public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask, WALApplier walApplier) {
+                walApplier.apply(streamLoadTask);
+            }
+
+            @Mock
+            public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask, WALApplier walApplier) {
+                walApplier.apply(streamLoadTask);
             }
         };
 

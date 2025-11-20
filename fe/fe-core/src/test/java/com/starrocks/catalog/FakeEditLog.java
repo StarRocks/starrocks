@@ -37,6 +37,10 @@ package com.starrocks.catalog;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.backup.BackupJob;
+import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
+import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.DropBackendInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
@@ -140,6 +144,31 @@ public class FakeEditLog extends MockUp<EditLog> {
     @Mock
     public void logDropComputeNode(DropComputeNodeLog log, WALApplier applier) {
         applier.apply(log);
+    }
+
+    @Mock
+    public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob, WALApplier walApplier) {
+        walApplier.apply(routineLoadJob);
+    }
+
+    @Mock
+    public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation, WALApplier walApplier) {
+        walApplier.apply(routineLoadOperation);
+    }
+
+    @Mock
+    public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
+        walApplier.apply(log);
+    }
+
+    @Mock
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask, WALApplier walApplier) {
+        walApplier.apply(streamLoadTask);
+    }
+
+    @Mock
+    public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask, WALApplier walApplier) {
+        walApplier.apply(streamLoadTask);
     }
 
     public TransactionState getTransaction(long transactionId) {

@@ -150,15 +150,15 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         try {
             if (stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY)) {
-                priority = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
+                int prio = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
                 AlterLoadJobOperationLog log = new AlterLoadJobOperationLog(id,
                         stmt.getAnalyzedJobProperties());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log, wal -> setPriority(prio));
 
                 for (LoadTask loadTask : newLoadingTasks) {
                     GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().updatePriority(
                             loadTask.getSignature(),
-                            priority);
+                            prio);
                 }
             }
 
@@ -171,8 +171,12 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     public void replayAlterJob(AlterLoadJobOperationLog log) {
         if (log.getJobProperties().containsKey(LoadStmt.PRIORITY)) {
-            priority = LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY));
+            setPriority(LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY)));
         }
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 
     @Override

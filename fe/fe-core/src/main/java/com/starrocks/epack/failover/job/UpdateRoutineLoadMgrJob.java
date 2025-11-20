@@ -4,7 +4,6 @@ package com.starrocks.epack.failover.job;
 
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.epack.load.routineload.RoutineLoadMgrEPack;
 import com.starrocks.load.routineload.ErrorReason;
@@ -49,16 +48,9 @@ public class UpdateRoutineLoadMgrJob extends FailoverGroupJob {
             routineLoadJob.setWarehouseId(
                     GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundWarehouse().getId());
             if (!routineLoadJob.isFinal() && routineLoadJob.getState() != RoutineLoadJob.JobState.PAUSED) {
-                try {
-                    routineLoadJob.updateState(RoutineLoadJob.JobState.PAUSED,
-                            new ErrorReason(InternalErrorCode.MANUAL_PAUSE_ERR,
-                                    "Failover group " + failoverGroup.getName() + " pauses routine load job"),
-                            true);
-                } catch (StarRocksException e) {
-                    failoverGroup.addErrorMessage("Failed to update routine load job state " + e.getMessage());
-                    LOG.warn("Failed to update routine load job state ", e);
-                    continue;
-                }
+                routineLoadJob.replayUpdateState(RoutineLoadJob.JobState.PAUSED,
+                        new ErrorReason(InternalErrorCode.MANUAL_PAUSE_ERR,
+                                "Failover group " + failoverGroup.getName() + " pauses routine load job"));
             }
             ((RoutineLoadMgrEPack) GlobalStateMgr.getServingState().getRoutineLoadMgr())
                     .registerOrUpdateJob(routineLoadJob);

@@ -16,22 +16,21 @@ public class RoutineLoadMgrEPack extends RoutineLoadMgr {
         try {
             Map<String, List<RoutineLoadJob>> dbJobs = dbToNameToRoutineLoadJob.get(job.getDbId());
             if (dbJobs == null || dbJobs.isEmpty()) {
-                unprotectedAddJob(job);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(job);
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logCreateRoutineLoadJob(job, wal -> unprotectedAddJob(job));
                 return;
             }
             List<RoutineLoadJob> jobs = dbJobs.get(job.getName());
             if (jobs == null || jobs.isEmpty()) {
-                unprotectedAddJob(job);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(job);
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logCreateRoutineLoadJob(job, wal -> unprotectedAddJob(job));
                 return;
             }
 
             RoutineLoadJob existedJob = jobs.get(jobs.size() - 1);
             RoutineLoadJob.setId(job, existedJob.getId()); // Same job
 
-            unprotectedAddJob(job);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(job);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(job, wal -> unprotectedAddJob(job));
         } finally {
             writeUnlock();
         }

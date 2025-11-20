@@ -37,6 +37,10 @@ package com.starrocks.load.routineload;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -47,8 +51,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.epack.warehouse.LocalWarehouse;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -108,6 +110,7 @@ public class RoutineLoadManagerTest {
     @BeforeEach
     public void setUp() {
         UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     @AfterEach
@@ -117,8 +120,7 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
-                                 @Mocked ConnectContext connectContext,
-                                 @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+                                 @Mocked ConnectContext connectContext) throws StarRocksException {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -240,9 +242,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testCreateWithSameNameOfStoppedJob(@Mocked ConnectContext connectContext,
-                                                   @Mocked GlobalStateMgr globalStateMgr,
-                                                   @Mocked EditLog editLog) throws DdlException {
+    public void testCreateWithSameNameOfStoppedJob(@Mocked ConnectContext connectContext) throws DdlException {
         String jobName = "job1";
         String topicName = "topic1";
         String serverAddress = "http://127.0.0.1:8080";
@@ -250,14 +250,6 @@ public class RoutineLoadManagerTest {
                 serverAddress, topicName);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
-
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
 
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
@@ -555,9 +547,9 @@ public class RoutineLoadManagerTest {
     @Test
     public void testGetJobByDb(@Injectable RoutineLoadJob routineLoadJob1,
                                @Injectable RoutineLoadJob routineLoadJob2,
-                               @Injectable RoutineLoadJob routineLoadJob3,
-                               @Mocked GlobalStateMgr globalStateMgr,
-                               @Mocked Database database) throws MetaNotFoundException {
+                               @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -578,15 +570,8 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getLocalMetastore().getDb("db1");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
@@ -605,9 +590,9 @@ public class RoutineLoadManagerTest {
     @Test
     public void testGetJobByDbAndJobName(@Injectable RoutineLoadJob routineLoadJob1,
                                          @Injectable RoutineLoadJob routineLoadJob2,
-                                         @Injectable RoutineLoadJob routineLoadJob3,
-                                         @Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked Database database) throws MetaNotFoundException {
+                                         @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -628,12 +613,6 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getLocalMetastore().getDb("db1");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -654,9 +633,9 @@ public class RoutineLoadManagerTest {
     @Test
     public void testGetJobIncludeHistory(@Injectable RoutineLoadJob routineLoadJob1,
                                          @Injectable RoutineLoadJob routineLoadJob2,
-                                         @Injectable RoutineLoadJob routineLoadJob3,
-                                         @Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked Database database) throws MetaNotFoundException {
+                                         @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -668,12 +647,6 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
-                globalStateMgr.getLocalMetastore().getDb(anyString);
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -687,7 +660,7 @@ public class RoutineLoadManagerTest {
         nameToRoutineLoadJob.put("", routineLoadJobList);
         dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
-        List<RoutineLoadJob> result = routineLoadManager.getJob("", "", true);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "", true);
 
         Assertions.assertEquals(3, result.size());
         Assertions.assertEquals(routineLoadJob2, result.get(0));
@@ -696,15 +669,18 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
-                                        @Mocked GlobalStateMgr globalStateMgr,
-                                        @Mocked Database database,
+    public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt, 
                                         @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+        OlapTable olapTable = new OlapTable(2L, "table1", Lists.newArrayList(),
+                KeysType.DUP_KEYS, new SinglePartitionInfo(), new RandomDistributionInfo(3));
+        database.registerTableUnlocked(olapTable);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
         List<RoutineLoadJob> routineLoadJobList = Lists.newArrayList();
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(3L, "job1", 1L, 2L, "localhost:9092", "topic1");
         routineLoadJobList.add(routineLoadJob);
         nameToRoutineLoadJob.put("", routineLoadJobList);
         dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
@@ -718,16 +694,10 @@ public class RoutineLoadManagerTest {
             {
                 pauseRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "db1";
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getLocalMetastore().getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -752,9 +722,9 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
-                                         @Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked Database database,
                                          @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -769,16 +739,10 @@ public class RoutineLoadManagerTest {
             {
                 resumeRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "db1";
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getLocalMetastore().getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -789,9 +753,9 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
-                                       @Mocked GlobalStateMgr globalStateMgr,
-                                       @Mocked Database database,
                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -806,16 +770,10 @@ public class RoutineLoadManagerTest {
             {
                 stopRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "db1";
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getLocalMetastore().getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -825,9 +783,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testCleanOldRoutineLoadJobs(@Injectable RoutineLoadJob routineLoadJob,
-                                            @Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked EditLog editLog) {
+    public void testCleanOldRoutineLoadJobs(@Injectable RoutineLoadJob routineLoadJob) {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -854,9 +810,6 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getCurrentWarehouseId();
                 minTimes = 0;
                 result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
             }
         };
         routineLoadManager.cleanOldRoutineLoadJobs();
@@ -935,9 +888,9 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
-                                        @Mocked GlobalStateMgr globalStateMgr,
-                                        @Mocked Database database,
                                         @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "test");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -952,16 +905,10 @@ public class RoutineLoadManagerTest {
             {
                 stopRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "test";
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getLocalMetastore().getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -971,22 +918,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testLoadImageWithoutExpiredJob(@Mocked GlobalStateMgr globalStateMgr,
-                                               @Mocked WarehouseManager warehouseMgr) throws Exception {
-
-        new Expectations() {
-            {
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseMgr;
-                minTimes = 0;
-
-                warehouseMgr.getWarehouse(anyLong);
-                result = LocalWarehouse.createDefaultLocalWarehouse(
-                        "An internal warehouse contains all compute nodes in this system");
-                minTimes = 0;
-            }
-        };
-
+    public void testLoadImageWithoutExpiredJob() throws Exception {
         Config.label_keep_max_second = 10;
         Config.enable_dict_optimize_routine_load = true;
         ConnectContext connectContext = new ConnectContext();
@@ -1007,7 +939,7 @@ public class RoutineLoadManagerTest {
         discardJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, db);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,
-                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"));
         discardJob.endTimestamp = now - Config.label_keep_max_second * 2 * 1000L;
 
         // 2. create a new job that will keep for a while
@@ -1017,7 +949,7 @@ public class RoutineLoadManagerTest {
         goodJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(goodJob, db);
         goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
-                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"));
         Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
         Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 

@@ -560,7 +560,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         for (int i = 0; i < numJobs; i++) {
             RoutineLoadJob job = genRoutineLoadJob(whId);
             if (isFinished) {
-                job.updateState(RoutineLoadJob.JobState.STOPPED, null, true);
+                job.replayUpdateState(RoutineLoadJob.JobState.STOPPED, null);
             }
             routineLoadMgr.addRoutineLoadJob(job, DB_NAME);
         }

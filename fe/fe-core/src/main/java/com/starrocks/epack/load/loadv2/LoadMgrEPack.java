@@ -26,12 +26,11 @@ public class LoadMgrEPack extends LoadMgr {
                     return false;
                 }
             }
-            addLoadJob(loadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> addLoadJob(loadJob));
         } finally {
             writeUnlock();
         }
         // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
         return true;
     }
 }

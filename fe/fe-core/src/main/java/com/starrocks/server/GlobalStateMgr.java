@@ -339,7 +339,7 @@ public class GlobalStateMgr {
 
     private final Load load;
     private final LoadMgr loadMgr;
-    private final RoutineLoadMgr routineLoadMgr;
+    private RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
     private final BatchWriteMgr batchWriteMgr;
     private final ExportMgr exportMgr;
@@ -3003,5 +3003,9 @@ public class GlobalStateMgr {
 
     public LicenseMgr getLicenseMgr() {
         return licenseMgr;
+    }
+
+    public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {
+        this.routineLoadMgr = routineLoadMgr;
     }
 }

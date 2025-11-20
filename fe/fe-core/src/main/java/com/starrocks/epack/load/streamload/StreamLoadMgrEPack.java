@@ -14,12 +14,11 @@ public class StreamLoadMgrEPack extends StreamLoadMgr {
             if (idToStreamLoadTask.containsKey(task.getLabel())) {
                 return false;
             }
-            addLoadTask(task);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(task, wal -> addLoadTask(task));
         } finally {
             writeUnlock();
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(task);
         return true;
     }
 }
