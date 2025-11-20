@@ -341,19 +341,6 @@ Status BinaryPlainPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordina
         }
     }
 
-    class SliceContainerAdaptor {
-    public:
-        using value_type = Slice;
-        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
-
-        Slice* data() const { return _slices; }
-        size_t size() const { return _size; }
-
-    private:
-        Slice* _slices;
-        size_t _size;
-    };
-
     SliceContainerAdaptor adaptor(slices, total);
     if (column->append_strings(adaptor)) {
         *count = total;

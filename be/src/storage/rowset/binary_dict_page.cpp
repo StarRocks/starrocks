@@ -267,19 +267,6 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
         _dict_decoder->batch_string_at_index(slices, codewords, nread);
     }
 
-    class SliceContainerAdaptor {
-    public:
-        using value_type = Slice;
-        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
-
-        Slice* data() const { return _slices; }
-        size_t size() const { return _size; }
-
-    private:
-        Slice* _slices;
-        size_t _size;
-    };
-
     SliceContainerAdaptor adaptor(slices, nread);
     bool ok = dst->append_strings_overflow(adaptor, _max_value_length);
     DCHECK(ok) << "append_strings_overflow failed";
@@ -403,18 +390,6 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
 
     // Step 4: Append selected strings to column using append_strings_overflow
     if (!selected_slices.empty()) {
-        class SliceContainerAdaptor {
-        public:
-            using value_type = Slice;
-            SliceContainerAdaptor(const std::vector<Slice>& slices) : _slices(slices) {}
-
-            const Slice* data() const { return _slices.data(); }
-            size_t size() const { return _slices.size(); }
-
-        private:
-            const std::vector<Slice>& _slices;
-        };
-
         SliceContainerAdaptor adaptor(selected_slices);
         bool ok = column->append_strings_overflow(adaptor, _max_value_length);
         RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch_with_filter failed"));
@@ -461,19 +436,6 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
     } else {
         _dict_decoder->batch_string_at_index(slices, codewords, read_count);
     }
-
-    class SliceContainerAdaptor {
-    public:
-        using value_type = Slice;
-        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
-
-        Slice* data() const { return _slices; }
-        size_t size() const { return _size; }
-
-    private:
-        Slice* _slices;
-        size_t _size;
-    };
 
     SliceContainerAdaptor adaptor(slices, read_count);
     bool ok = column->append_strings_overflow(adaptor, _max_value_length);
