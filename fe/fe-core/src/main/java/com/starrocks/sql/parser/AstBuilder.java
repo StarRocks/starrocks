@@ -9193,7 +9193,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return ScalarType.createUnifiedDecimalType(precision);
             }
             return ScalarType.createUnifiedDecimalType(10, 0);
-        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
+        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null ||
+                context.DECIMAL128() != null || context.DECIMAL256() != null) {
             try {
                 ScalarType.checkEnableDecimalV3();
             } catch (AnalysisException e) {
