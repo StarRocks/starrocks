@@ -230,7 +230,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
     // Build the filesystem under no lock, so the op won't hold the lock for a long time.
     // It is possible that multiple filesystems are built for the same shard from multiple threads under no lock here.
-    auto fs_or = build_filesystem_from_shard_info(shard_info, conf);
+    auto fs_or = build_filesystem_from_shard_info(id, shard_info, conf);
     if (!fs_or.ok()) {
         return fs_or.status();
     }
@@ -272,7 +272,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     if (!info_or.ok()) {
         return info_or.status();
     }
-    auto fs_or = build_filesystem_from_shard_info(info_or.value(), conf);
+    auto fs_or = build_filesystem_from_shard_info(id, info_or.value(), conf);
     if (!fs_or.ok()) {
         return fs_or.status();
     }
@@ -282,7 +282,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
-StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf) {
+StarOSWorker::build_filesystem_from_shard_info(ShardId shard_id, const ShardInfo& info, const Configuration& conf) {
     auto localconf = build_conf_from_shard_info(info);
     if (!localconf.ok()) {
         return localconf.status();
@@ -292,7 +292,7 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
-    return new_shared_filesystem(*scheme, *localconf);
+    return new_shared_filesystem(shard_id, *scheme, *localconf);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
@@ -334,7 +334,7 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
-StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration& conf) {
+StarOSWorker::new_shared_filesystem(ShardId shard_id, std::string_view scheme, const Configuration& conf) {
     std::string cache_key = get_cache_key(scheme, conf);
 
     // Lookup LRU cache
@@ -361,7 +361,7 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
         VLOG(9) << "Share filesystem";
         return value_or;
     }
-    auto fs_cache_key = insert_fs_cache(cache_key, fs);
+    auto fs_cache_key = insert_fs_cache(shard_id, cache_key, fs);
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
 }
@@ -378,14 +378,26 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
     return sha256.hex();
 }
 
-std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& key,
+std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(ShardId shard_id, const std::string& key,
                                                            const std::shared_ptr<FileSystem>& fs) {
-    std::shared_ptr<std::string> fs_cache_key(new std::string(key), [](std::string* key) {
-        if (g_worker) {
-            g_worker->erase_fs_cache(*key);
+    std::shared_ptr<std::string> fs_cache_key;
+
+    {
+        std::shared_lock l(_mtx);
+        auto it = _shards.find(shard_id);
+        if (it != _shards.end() && it->second.fs_cache_key != nullptr && *it->second.fs_cache_key == key) {
+            fs_cache_key = it->second.fs_cache_key;
         }
-        delete key;
-    });
+    }
+
+    if (fs_cache_key == nullptr) {
+        fs_cache_key = std::shared_ptr<std::string>(new std::string(key), [](std::string* key) {
+            if (g_worker) {
+                g_worker->erase_fs_cache(*key);
+            }
+            delete key;
+        });
+    }
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
