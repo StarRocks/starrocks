@@ -32,7 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
@@ -431,7 +431,7 @@ public class PredicateStatisticsCalculator {
 
         @Override
         public Statistics visitCall(CallOperator call, Void context) {
-            if (call.getType() != Type.BOOLEAN) {
+            if (call.getType() != BooleanType.BOOLEAN) {
                 return visit(call, context);
             }
 
