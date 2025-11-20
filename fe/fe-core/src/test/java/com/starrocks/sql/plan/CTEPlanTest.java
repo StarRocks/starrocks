@@ -25,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -1085,5 +1086,20 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : rand()");
+    }
+
+    @Test
+    public void testCteWithLimit() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0.1);
+        String sql = "WITH c AS (\n"
+                + "    SELECT v1\n"
+                + "    FROM t0\n"
+                + "    LIMIT 10\n"
+                + ")\n"
+                + "SELECT 'A' AS src, v1 FROM c\n"
+                + "UNION ALL\n"
+                + "SELECT 'B' AS src, v1 FROM c;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks");
     }
 }

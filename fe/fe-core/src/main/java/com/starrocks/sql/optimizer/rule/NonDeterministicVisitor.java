@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -127,6 +128,12 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
     @Override
     public Boolean visit(OptExpression optExpression, Void context) {
         return checkOptExpression(optExpression);
+    }
+
+    @Override
+    public Boolean visitLogicalLimit(OptExpression optExpression, Void context) {
+        LogicalLimitOperator limit = optExpression.getOp().cast();
+        return limit.isGlobal();
     }
 
     @Override
