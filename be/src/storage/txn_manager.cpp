@@ -215,11 +215,10 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     return Status::OK();
 }
 
-Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                              TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
+Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partition_id, TTransactionId transaction_id,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery,
-                              bool is_shadow, const TabletSharedPtr& tablet) {
-    DCEHCK(tablet != nullptr);
+                              bool is_shadow) {
+    DCHECK(tablet != nullptr);
     if (tablet == nullptr) {
         return Status::InternalError("tablet not exist during commit txn");
     }
