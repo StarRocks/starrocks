@@ -3240,7 +3240,9 @@ public class SchemaChangeHandler extends AlterHandler {
             SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMeta);
             job.setIndexTabletSchema(indexId, indexName, schemaInfo);
         }
-        final ComputeResource computeResource = ConnectContext.get().getCurrentComputeResource();
+        ConnectContext connectContext = ConnectContext.get();
+        ComputeResource computeResource  = connectContext != null ?
+                connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
         if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().isResourceAvailable(computeResource)) {
             throw new DdlException("no available compute nodes:" + computeResource);
         }
