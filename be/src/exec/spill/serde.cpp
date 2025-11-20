@@ -167,7 +167,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
 
     int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
-    int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
+    size_t attachment_size = UNALIGNED_LOAD64(header_buffer + ATTACHMENT_SIZE_OFFSET);
     if (sequence_id != SEQUENCE_MAGIC_ID) {
         return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, SEQUENCE_MAGIC_ID));
     }
