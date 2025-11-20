@@ -237,6 +237,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     auto compress_type = req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME;
     RETURN_IF_ERROR(
             convert_t_schema_to_pb_schema(req.tablet_schema, compress_type, tablet_metadata_pb->mutable_schema()));
+    auto compession_level = req.__isset.compression_level ? req.compression_level : -1;
+    tablet_metadata_pb->mutable_schema()->set_compression_level(compession_level);
     if (req.create_schema_file) {
         RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     }
