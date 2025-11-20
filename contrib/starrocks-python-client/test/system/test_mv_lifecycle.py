@@ -180,7 +180,9 @@ def test_mixed_schema_lifecycle(alembic_env: AlembicTestEnv, sr_engine):
     alembic_env.harness.downgrade("-1") # Back to initial state
     inspector.clear_cache()
     tables = inspector.get_table_names()
+    assert tables is not None and "t1" in tables
     views = inspector.get_view_names()
+    assert views is not None
     mv_names = inspector.get_materialized_view_names()
     assert "name" not in [c["name"] for c in inspector.get_columns("t1")]
     assert "v1" in views

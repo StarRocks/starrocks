@@ -24,7 +24,7 @@ import pytest
 from sqlalchemy import MetaData, Table
 
 from starrocks.alembic.compare import _compare_mv
-from starrocks.alembic.ops import AlterMaterializedViewOp, CreateMaterializedViewOp, DropMaterializedViewOp
+from starrocks.alembic.ops import AlterMaterializedViewOp
 from starrocks.common.params import DialectName, TableInfoKey, TableKind, TableObjectInfoKey
 from starrocks.sql.schema import MaterializedView
 

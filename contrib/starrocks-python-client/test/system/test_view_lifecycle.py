@@ -147,7 +147,7 @@ def test_view_idempotency(database: str, alembic_env: AlembicTestEnv, sr_engine)
         starrocks_security='INVOKER'
     )
     alembic_env.harness.generate_autogen_revision(metadata=Base.metadata, message="Initial")
-    script_content = ScriptContentParser.check_script_content(alembic_env, 1, "initial")
+    ScriptContentParser.check_script_content(alembic_env, 1, "initial")
     alembic_env.harness.upgrade("head")
 
     # 2. Second run

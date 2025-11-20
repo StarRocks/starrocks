@@ -23,12 +23,10 @@ from typing import Any, Collection, Dict, List, Optional, Set, Union
 from sqlalchemy import log, types as sqltypes, util
 from sqlalchemy.dialects.mysql.base import _DecodingRow
 from sqlalchemy.dialects.mysql.reflection import _re_compile
-from sqlalchemy.engine import reflection
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.schema import Table
 
 from starrocks.common.consts import TableConfigKey
-from starrocks.common.defaults import ReflectionViewDefaults
 from starrocks.common.params import (
     ColumnAggInfoKeyWithPrefix,
     SRKwargsPrefix,
@@ -137,6 +135,7 @@ class StarRocksInspector(Inspector):
         try:
             del table.dialect_kwargs[TableInfoKeyWithPrefix.COMMENT]
         except KeyError:
+            # starrocks_comment does not exist in dialect_kwargs
             pass
 
     def _reflect_view_attributes(self, table: Table, view_state: ReflectedViewState) -> None:

@@ -61,7 +61,7 @@ class TestAutogenerateViews:
         upgrade_ops = ops.UpgradeOps([])
         self.mock_inspector.get_view_names.return_value = []
         m2 = MetaData()
-        view = View('my_test_view', m2, definition='SELECT 1')
+        View('my_test_view', m2, definition='SELECT 1')
         self.mock_autogen_context.metadata = m2
         _autogen_for_views(self.mock_autogen_context, upgrade_ops, [None])
 
@@ -76,7 +76,7 @@ class TestAutogenerateViews:
         upgrade_ops = ops.UpgradeOps([])
         self.mock_inspector.get_view_names.return_value = []
         m2 = MetaData()
-        view = View('commented_view', m2, definition='SELECT 1', comment='This is a comment')
+        View('commented_view', m2, definition='SELECT 1', comment='This is a comment')
         self.mock_autogen_context.metadata = m2
         _autogen_for_views(self.mock_autogen_context, upgrade_ops, [None])
 
@@ -91,7 +91,7 @@ class TestAutogenerateViews:
         upgrade_ops = ops.UpgradeOps([])
         self.mock_inspector.get_view_names.return_value = []
         m2 = MetaData()
-        view = View('my_secure_view', m2, definition='SELECT 1', starrocks_security='INVOKER')
+        View('my_secure_view', m2, definition='SELECT 1', starrocks_security='INVOKER')
         self.mock_autogen_context.metadata = m2
         _autogen_for_views(self.mock_autogen_context, upgrade_ops, [None])
 
@@ -106,7 +106,7 @@ class TestAutogenerateViews:
         upgrade_ops = ops.UpgradeOps([])
         self.mock_inspector.get_view_names.return_value = []
         m2 = MetaData()
-        view = View(
+        View(
             'my_view',
             m2,
             Column('id', VARCHAR()),
@@ -132,7 +132,7 @@ class TestAutogenerateViews:
         upgrade_ops = ops.UpgradeOps([])
         self.mock_inspector.get_view_names.return_value = []
         m2 = MetaData()
-        view = View(
+        View(
             'full_view',
             m2,
             Column('id', VARCHAR()),
@@ -622,7 +622,7 @@ class TestCompareView:
             definition='SELECT id, name FROM users WHERE active = 1'  # Definition changed!
         )
 
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             compare_view(
                 self.mock_autogen_context,
