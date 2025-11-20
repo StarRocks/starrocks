@@ -35,7 +35,13 @@ After the expansion and contraction, you can view the node information by runnin
 
 ## Scale BE in and out
 
-After BE is scaled in or out, StarRocks will automatically perform load-balancing without affecting the overall performance.
+StarRocks will automatically perform load-balancing after BE's are scaled in or out without affecting the overall performance.
+
+When you add a new BE node, the system's Tablet Scheduler will detect the new node and its low load. It will then start moving tablets from high-load BE nodes to the new, low-load BE node to ensure an even distribution of data and load across the entire cluster.
+
+The balancing process is based on a loadScore calculated for each BE, which considers both disk utilization and replica count. The system aims to move tablets from nodes with a higher loadScore to nodes with a lower loadScore.
+
+You can check the FE configuration parameter `tablet_sched_disable_balance` to ensure that automatic balancing is not disabled (the parameter is false by default, which means that tablet balancing is enabled by default). More details are in the [manage replica docs](./resource_management/Replica.md).
 
 ### Scale BE out
 
