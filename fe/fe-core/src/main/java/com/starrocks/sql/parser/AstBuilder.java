@@ -8139,8 +8139,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
+<<<<<<< HEAD
     private static StatementBase.ExplainLevel getExplainType(StarRocksParser.ExplainDescContext context) {
         StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
+=======
+    private static StatementBase.ExplainLevel getExplainType(
+            com.starrocks.sql.parser.StarRocksParser.ExplainDescContext context) {
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+>>>>>>> 1e1ec8c260 ([BugFix] query_detail_explain_level configuration was not taking effect. (#63265))
         if (context.LOGICAL() != null) {
             explainLevel = StatementBase.ExplainLevel.LOGICAL;
         } else if (context.ANALYZE() != null) {
