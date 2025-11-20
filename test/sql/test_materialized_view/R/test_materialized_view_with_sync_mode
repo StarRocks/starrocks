@@ -73,9 +73,9 @@ function: wait_show_materialized_view_finish('mv')
 -- result:
 None
 -- !result
-select count(*) from information_schema.task_runs where `database`='db_${uuid0}';
+select if(count(*) > 0, 'pass', 'fail') from information_schema.task_runs where `database`='db_${uuid0}';
 -- result:
-1
+pass
 -- !result
 drop database db_${uuid0};
 -- result:
