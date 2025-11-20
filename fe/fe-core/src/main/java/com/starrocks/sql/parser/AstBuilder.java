@@ -9192,15 +9192,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 return ScalarType.createUnifiedDecimalType(precision);
             }
-<<<<<<< HEAD
-            return ScalarType.createUnifiedDecimalType(10, 0);
-        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
-            try {
-                ScalarType.checkEnableDecimalV3();
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-=======
-            return TypeFactory.createUnifiedDecimalType(10, 0);
         } else if (context.DECIMAL32() != null || context.DECIMAL64() != null ||
                 context.DECIMAL128() != null || context.DECIMAL256() != null) {
             if (!Config.enable_decimal_v3) {
@@ -9208,7 +9199,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "turn it on before decimal32/64/128/256 are used, " +
                         "execute cmd 'admin set frontend config (\"enable_decimal_v3\" = \"true\")' " +
                         "on every FE server");
->>>>>>> b3fdd9fa35 ([BugFix] fix decimal256 mod (#65795))
             }
             final PrimitiveType primitiveType = PrimitiveType.valueOf(context.children.get(0).getText().toUpperCase());
             if (precision != null) {
