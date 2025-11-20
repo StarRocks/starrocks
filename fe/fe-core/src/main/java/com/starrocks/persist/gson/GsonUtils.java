@@ -103,7 +103,9 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.BoolVariant;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.DateVariant;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -118,8 +120,10 @@ import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergResource;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IntVariant;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.LargeIntVariant;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedView;
@@ -138,10 +142,13 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.StringVariant;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Variant;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -446,6 +453,14 @@ public class GsonUtils {
                     .registerSubtype(SplittingTablet.class, "SplittingTablet")
                     .registerSubtype(MergingTablet.class, "MergingTablet")
                     .registerSubtype(IdenticalTablet.class, "IdenticalTablet");
+    
+    public static final RuntimeTypeAdapterFactory<Variant> VARIANT_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(Variant.class, "clazz")
+                    .registerSubtype(BoolVariant.class, "BoolVariant")
+                    .registerSubtype(IntVariant.class, "IntVariant")
+                    .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
+                    .registerSubtype(StringVariant.class, "StringVariant")
+                    .registerSubtype(DateVariant.class, "DateVariant");
 
     public static final RuntimeTypeAdapterFactory<TvrVersionRange> TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(TvrVersionRange.class, "clazz")
@@ -487,6 +502,7 @@ public class GsonUtils {
                 .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
                 .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
                 .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
+                .registerTypeHierarchyAdapter(Range.class, new RangeAdapter())
                 .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
                 // For call constructor with selectedFields
                 .registerTypeAdapter(MapType.class, new MapTypeDeserializer())
@@ -519,6 +535,7 @@ public class GsonUtils {
                 .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(VARIANT_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
                 .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
@@ -745,6 +762,77 @@ public class GsonUtils {
         @Override
         public JsonElement serialize(ColumnId src, Type typeOfSrc, JsonSerializationContext context) {
             return new JsonPrimitive(src.getId());
+        }
+    }
+
+    /*
+     * The json adapter for Range with generic type support.
+     */
+    private static class RangeAdapter<T extends Comparable<T>>
+            implements JsonSerializer<Range<T>>, JsonDeserializer<Range<T>> {
+
+        @Override
+        public JsonElement serialize(Range<T> src, Type typeOfSrc, JsonSerializationContext context) {
+            JsonObject jsonObject = new JsonObject();
+
+            // Serialize bounds using context to preserve generic type
+            if (src.getLowerBound() != null) {
+                jsonObject.add("lowerBound", context.serialize(src.getLowerBound()));
+            }
+            if (src.getUpperBound() != null) {
+                jsonObject.add("upperBound", context.serialize(src.getUpperBound()));
+            }
+            if (src.isLowerBoundIncluded()) {
+                jsonObject.add("lowerBoundIncluded", new JsonPrimitive(true));
+            }
+            if (src.isUpperBoundIncluded()) {
+                jsonObject.add("upperBoundIncluded", new JsonPrimitive(true));
+            }
+
+            return jsonObject;
+        }
+
+        @Override
+        public Range<T> deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            JsonObject jsonObject = json.getAsJsonObject();
+
+            // Extract generic type information
+            Type elementType;
+            if (typeOfT instanceof ParameterizedType) {
+                ParameterizedType parameterizedType = (ParameterizedType) typeOfT;
+                Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
+                elementType = actualTypeArguments[0];
+            } else {
+                // Cannot deserialize Range without generic type information
+                throw new JsonParseException("Cannot deserialize Range without generic type information.");
+            }
+
+            T lowerBound = null;
+            JsonElement lowerBoundElement = jsonObject.get("lowerBound");
+            if (lowerBoundElement != null) {
+                lowerBound = context.deserialize(lowerBoundElement, elementType);
+            }
+
+            T upperBound = null;
+            JsonElement upperBoundElement = jsonObject.get("upperBound");
+            if (upperBoundElement != null) {
+                upperBound = context.deserialize(upperBoundElement, elementType);
+            }
+
+            boolean lowerBoundIncluded = false;
+            JsonElement lowerBoundIncludedElement = jsonObject.get("lowerBoundIncluded");
+            if (lowerBoundIncludedElement != null) {
+                lowerBoundIncluded = lowerBoundIncludedElement.getAsBoolean();
+            }
+
+            boolean upperBoundIncluded = false;
+            JsonElement upperBoundIncludedElement = jsonObject.get("upperBoundIncluded");
+            if (upperBoundIncludedElement != null) {
+                upperBoundIncluded = upperBoundIncludedElement.getAsBoolean();
+            }
+
+            return Range.of(lowerBound, upperBound, lowerBoundIncluded, upperBoundIncluded);
         }
     }
 

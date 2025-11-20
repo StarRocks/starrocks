@@ -1,5 +1,3 @@
-
-#! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,6 +44,25 @@ from .datatype import (
     VARCHAR,
 )
 from .sql import schema
+from .sql.dml import (
+    InsertIntoFiles,
+    FilesTarget,
+    FilesTargetOptions,
+    FilesFormat,
+    InsertFromFiles,
+    FilesSource,
+    FilesSourceOptions,
+    CSVFormat,
+    ParquetFormat,
+    ORCFormat,
+    AVROFormat,
+    AmazonS3,
+    AzureBlobStorage,
+    AzureDataLakeStorage1,
+    AzureDataLakeStorage2,
+    GoogleCloudStorage,
+    Compression,
+)
 
 
 __all__ = (
@@ -57,4 +74,24 @@ __all__ = (
     "ARRAY", "MAP", "STRUCT", "JSON",
 
     "schema",
+
+    "InsertIntoFiles",
+    "FilesTarget",
+    "FilesTargetOptions",
+    "FilesFormat",
+    "InsertFromFiles",
+    "FilesSource",
+    "FilesSourceOptions",
+    "CSVFormat",
+    "ParquetFormat",
+    "ORCFormat",
+    "AVROFormat",
+    "AmazonS3",
+    "AzureBlobStorage",
+    "AzureDataLakeStorage1",
+    "AzureDataLakeStorage2",
+    "GoogleCloudStorage",
+    "Compression",
 )
+
+
