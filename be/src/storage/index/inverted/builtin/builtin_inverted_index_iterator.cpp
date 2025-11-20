@@ -45,13 +45,6 @@ static std::string get_next_prefix(const Slice& prefix_s) {
     return next_prefix;
 }
 
-Status BuiltinInvertedIndexIterator::close() {
-    if (!_like_context) {
-        return Status::OK();
-    }
-    return LikePredicate::like_close(_like_context.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL);
-}
-
 Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roaring::Roaring* bit_map) {
     bool exact_match = false;
     Status st = _bitmap_itr->seek_dictionary(search_query, &exact_match);

@@ -24,9 +24,7 @@ class BuiltinInvertedIndexIterator final : public InvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
                                  OlapReaderStatistics* stats, std::unique_ptr<BitmapIndexIterator>& bitmap_itr)
-            : InvertedIndexIterator(index_meta, reader, stats),
-              _bitmap_itr(std::move(bitmap_itr)),
-              _like_context(nullptr) {}
+            : InvertedIndexIterator(index_meta, reader, stats), _bitmap_itr(std::move(bitmap_itr)) {}
 
     ~BuiltinInvertedIndexIterator() override = default;
 
@@ -35,15 +33,12 @@ public:
 
     Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
 
-    Status close() override;
-
 private:
     Status _equal_query(const Slice* search_query, roaring::Roaring* bit_map);
 
     Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
 
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
-    std::unique_ptr<FunctionContext> _like_context;
 };
 
 } // namespace starrocks
