@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -46,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
@@ -610,7 +612,16 @@ public class StatisticUtils {
         if (column instanceof SlotRef) {
             colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
         } else {
-            colName = ((SubfieldExpr) column).getPath();
+            SubfieldExpr subfieldExpr = (SubfieldExpr) column;
+            String childPath;
+            if (column.getChild(0) instanceof SlotRef) {
+                childPath = ((SlotRef) column.getChild(0)).getColumnName();
+            } else {
+                childPath = ExprToSql.toSql(column.getChild(0));
+            }
+
+            colName = childPath + "." + Joiner.on('.').join(subfieldExpr.getFieldNames());
+
         }
         return colName;
     }

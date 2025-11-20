@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.type.Type;
 
 public class CloneExpr extends Expr {
@@ -45,6 +44,6 @@ public class CloneExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCloneExpr(this, context);
+        return visitor.visitCloneExpr(this, context);
     }
 }

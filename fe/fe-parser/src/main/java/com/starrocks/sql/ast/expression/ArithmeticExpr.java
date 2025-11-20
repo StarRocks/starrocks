@@ -12,33 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ArithmeticExpr.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ScalarType;
 
@@ -112,11 +91,6 @@ public class ArithmeticExpr extends Expr {
     }
 
     @Override
-    public String toString() {
-        return ExprToSql.toSql(this);
-    }
-
-    @Override
     public Expr clone() {
         return new ArithmeticExpr(this);
     }
@@ -148,7 +122,7 @@ public class ArithmeticExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitArithmeticExpr(this, context);
+        return visitor.visitArithmeticExpr(this, context);
     }
 
     public Operator getOp() {

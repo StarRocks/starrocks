@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.transformer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
@@ -26,6 +27,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
@@ -33,6 +35,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -41,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -101,10 +105,10 @@ public class WindowTransformer {
         List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
 
         // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
-        if (AnalyticExpr.isRowNumberFn(callExpr.getFn())) {
+        if (isRowNumberFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for row_numer()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
-        } else if (AnalyticExpr.isNtileFn(callExpr.getFn())) {
+        } else if (isNtileFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for NTILE()");
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
 
@@ -113,11 +117,11 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-        } else if (AnalyticExpr.isCumeFn(callExpr.getFn())) {
+        } else if (isCumeFn(callExpr.getFn())) {
             Preconditions.checkState(windowFrame == null, "Unexpected window set for "
                     + callExpr.getFn().getFunctionName() + "()");
             windowFrame = AnalyticWindow.DEFAULT_WINDOW;
-        } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
+        } else if (isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);
                 Type firstType = callExpr.getChild(0).getType();
@@ -134,13 +138,13 @@ public class WindowTransformer {
                     callExpr.addChild(NullLiteral.create(firstType));
                 }
 
-                AnalyticExpr.checkDefaultValue(callExpr);
+                checkDefaultValue(callExpr);
                 // check the value whether out of range
                 ExprCastFunction.uncheckedCastChild(callExpr, IntegerType.BIGINT, 1);
 
-                AnalyticWindow.BoundaryType rightBoundaryType = AnalyticWindow.BoundaryType.FOLLOWING;
+                AnalyticWindowBoundary.BoundaryType rightBoundaryType = AnalyticWindowBoundary.BoundaryType.FOLLOWING;
                 if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {
-                    rightBoundaryType = AnalyticWindow.BoundaryType.PRECEDING;
+                    rightBoundaryType = AnalyticWindowBoundary.BoundaryType.PRECEDING;
                 }
 
                 Expr rightBoundary;
@@ -152,12 +156,12 @@ public class WindowTransformer {
                 BigDecimal offsetValue = BigDecimal.valueOf(ExprUtils.getConstFromExpr(rightBoundary));
 
                 windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS,
-                        new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING, null),
-                        new AnalyticWindow.Boundary(rightBoundaryType, rightBoundary, offsetValue));
+                        new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING, null),
+                        new AnalyticWindowBoundary(rightBoundaryType, rightBoundary, offsetValue));
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
-        } else if (AnalyticExpr.isApproxTopKFn(callExpr.getFn())) {
+        } else if (isApproxTopKFn(callExpr.getFn())) {
             Preconditions.checkState(CollectionUtils.isEmpty(orderByElements),
                     "Unexpected order by clause for approx_top_k()");
             Preconditions.checkState(windowFrame == null, "Unexpected window set for approx_top_k()");
@@ -167,8 +171,8 @@ public class WindowTransformer {
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
         // and not starting with UNBOUNDED PRECEDING.
         if (windowFrame != null
-                && windowFrame.getRightBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING
-                && windowFrame.getLeftBoundary().getType() != AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING) {
+                && windowFrame.getRightBoundary().getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING
+                && windowFrame.getLeftBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
             orderByElements = OrderByElement.reverse(orderByElements);
             windowFrame = windowFrame.reverse();
 
@@ -191,11 +195,11 @@ public class WindowTransformer {
         }
 
         if (windowFrame != null
-                && windowFrame.getLeftBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING
-                && windowFrame.getRightBoundary().getType() != AnalyticWindow.BoundaryType.PRECEDING
+                && windowFrame.getLeftBoundary().getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && windowFrame.getRightBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.PRECEDING
                 && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
                 !callExpr.getIgnoreNulls()) {
-            windowFrame.setRightBoundary(new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
+            windowFrame.setRightBoundary(new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null));
         }
 
         // Set the default window.
@@ -467,6 +471,104 @@ public class WindowTransformer {
         List<List<Ordering>> partitionPrefix = IntStream.rangeClosed(0, hyperSet.size())
                 .mapToObj(i -> hyperSet.subList(0, i)).collect(Collectors.toList());
         return partitionPrefix.contains(subSet);
+    }
+
+    public static boolean isAnalyticFn(Function fn) {
+        return fn instanceof AggregateFunction
+                && ((AggregateFunction) fn).isAnalyticFn();
+    }
+
+    public static boolean isOffsetFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.LEAD) || fn.functionName().equalsIgnoreCase(AnalyticExpr.LAG);
+    }
+
+    public static boolean isNtileFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.NTILE);
+    }
+
+    public static boolean isCumeFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.CUMEDIST) || fn.functionName().equalsIgnoreCase(
+                AnalyticExpr.PERCENTRANK);
+    }
+
+    public static boolean isRowNumberFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.ROWNUMBER);
+    }
+
+    public static boolean isApproxTopKFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(AnalyticExpr.APPROX_TOP_K);
+    }
+
+    /**
+     * check the value out of range in lag/lead() function
+     */
+    public static void checkDefaultValue(FunctionCallExpr call) throws AnalysisException {
+        Expr val = call.getChild(2);
+
+        if (!(val instanceof LiteralExpr)) {
+            return;
+        }
+
+        if (!call.getChild(0).getType().getPrimitiveType().isNumericType()) {
+            return;
+        }
+
+        double value = ExprUtils.getConstFromExpr(val);
+        PrimitiveType type = call.getChild(0).getType().getPrimitiveType();
+        boolean out = false;
+
+        if (type == PrimitiveType.TINYINT) {
+            if (value > Byte.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.SMALLINT) {
+            if (value > Short.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.INT) {
+            if (value > Integer.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.BIGINT) {
+            if (value > Long.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.FLOAT) {
+            if (value > Float.MAX_VALUE) {
+                out = true;
+            }
+        } else if (type == PrimitiveType.DOUBLE) {
+            if (value > Double.MAX_VALUE) {
+                out = true;
+            }
+        } else {
+            return;
+        }
+
+        if (out) {
+            throw new AnalysisException("Column type="
+                    + call.getChildren().get(0).getType() + ", value is out of range ");
+        }
     }
 
     /**

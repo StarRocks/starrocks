@@ -770,7 +770,8 @@ public class MaterializedViewAnalyzer {
             }
             List<String> sortKeys = new ArrayList<>();
             for (OrderByElement orderByElement : orderByElements) {
-                String column = orderByElement.castAsSlotRef();
+                Expr expr = orderByElement.getExpr();
+                String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in order by clause",
                             ExprToSql.toSql(orderByElement.getExpr()));
@@ -2165,10 +2166,10 @@ public class MaterializedViewAnalyzer {
         if (retentionCondtiionExpr == null) {
             return Optional.empty();
         }
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
-                refBaseTable.getBaseSchema().stream()
-                        .map(col -> new Field(col.getName(), col.getType(), null, null))
-                        .collect(Collectors.toList())));
+        List<Field> fields = new ArrayList<>();
+        mv.getBaseSchema().forEach(col ->
+                fields.add(new Field(col.getName(), col.getType(), null, null)));
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
         ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
         Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
         retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
@@ -2185,7 +2186,7 @@ public class MaterializedViewAnalyzer {
         }
         Expr retentionCondtiionExpr = exprOpt.get();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        List<ColumnRefOperator> columnRefOperators = refBaseTable.getBaseSchema()
+        List<ColumnRefOperator> columnRefOperators = mv.getBaseSchema()
                 .stream()
                 .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
                 .collect(Collectors.toList());
