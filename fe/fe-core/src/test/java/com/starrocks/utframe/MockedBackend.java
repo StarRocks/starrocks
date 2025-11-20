@@ -135,6 +135,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -247,6 +248,10 @@ public class MockedBackend {
         return starletPort;
     }
 
+    public MockBeThriftClient getMockBeThriftClient() {
+        return thriftClient;
+    }
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
@@ -282,12 +287,15 @@ public class MockedBackend {
         }
     }
 
-    private static class MockBeThriftClient extends BackendService.Client {
+    public static class MockBeThriftClient extends BackendService.Client {
         // task queue to save all agent tasks coming from Frontend
         private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
         private final TBackend tBackend;
         private long reportVersion = 0;
         private final LeaderImpl master = new LeaderImpl();
+
+        private volatile boolean captureAgentTask = false;
+        private final ConcurrentLinkedQueue<TAgentTaskRequest> capturedAgentTasks = new ConcurrentLinkedQueue<>();
 
         public MockBeThriftClient(MockedBackend backend) {
             super(null);
@@ -338,7 +346,22 @@ public class MockedBackend {
         @Override
         public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
             taskQueue.addAll(tasks);
+            if (captureAgentTask) {
+                capturedAgentTasks.addAll(tasks);
+            }
             return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        public void setCaptureAgentTask(boolean captureAgentTask) {
+            this.captureAgentTask = captureAgentTask;
+        }
+
+        public List<TAgentTaskRequest> getCapturedAgentTasks() {
+            return new ArrayList<>(capturedAgentTasks);
+        }
+
+        public void clearCapturedAgentTasks() {
+            capturedAgentTasks.clear();
         }
 
         @Override
