@@ -15,13 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
-<<<<<<< HEAD
-import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
-import com.starrocks.server.GlobalStateMgr;
-=======
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
->>>>>>> a1f4d85e89 ([UT] Fix some unstable tests (#65805))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
