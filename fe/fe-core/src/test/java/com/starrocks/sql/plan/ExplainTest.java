@@ -14,7 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ExplainTest extends PlanTestBase {
@@ -45,4 +50,42 @@ public class ExplainTest extends PlanTestBase {
                 + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
                 + "      |partitionRatio: 0/1, tabletRatio: 0/0");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDesensitizeExplain() throws Exception {
+        connectContext.getSessionVariable().setEnableDesensitizeExplain(true);
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 WHERE t0.v1 > 1000";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 > ?\n");
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 + t1.v5 > 1000";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "other join predicates: 2: v2 + 5: v5 > ?");
+
+        sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
+
+    }
+
+
+    @Test
+    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
+        String originalLevel = Config.query_detail_explain_level;
+        Config.query_detail_explain_level = "LOGICAL";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                    "EXPLAIN SELECT * FROM t0", connectContext);
+            Assertions.assertTrue(statementBase instanceof QueryStatement);
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            Assertions.assertTrue(queryStatement.isExplain());
+            Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
+        } finally {
+            Config.query_detail_explain_level = originalLevel;
+        }
+
+    }
+>>>>>>> 1e1ec8c260 ([BugFix] query_detail_explain_level configuration was not taking effect. (#63265))
 }
