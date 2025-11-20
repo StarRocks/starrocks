@@ -692,21 +692,16 @@ public class VariableMgr {
                 field.setAccessible(true);
                 Object defaultValue = field.get(defaultVar);
                 Object currentValue = field.get(sessionVar);
-                
+
                 // Only refresh if the value has changed
                 if (!java.util.Objects.equals(defaultValue, currentValue)) {
                     String valueStr = getValue(defaultVar, field);
-                    try {
-                        setValue(sessionVar, field, valueStr);
-                        refreshed = true;
-                        // If force is true, remove the variable from modifiedSessionVariables
-                        // since it has been forcibly reset to global default
-                        if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
-                            modifiedVars.remove(varName);
-                        }
-                    } catch (DdlException e) {
-                        LOG.warn("Failed to refresh variable {} for connection {}: {}", 
-                                varName, ctx.getConnectionId(), e.getMessage());
+                    setValue(sessionVar, field, valueStr);
+                    refreshed = true;
+                    // If force is true, remove the variable from modifiedSessionVariables
+                    // since it has been forcibly reset to global default
+                    if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                        modifiedVars.remove(varName);
                     }
                 } else if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
                     // Even if the value hasn't changed, if force is true and the variable
@@ -715,9 +710,11 @@ public class VariableMgr {
                     modifiedVars.remove(varName);
                     refreshed = true;
                 }
+            } catch (DdlException e) {
+                LOG.warn("Failed to setValue", e);
             } catch (IllegalAccessException e) {
-                LOG.warn("Failed to access field {} for connection {}: {}", 
-                        field.getName(), ctx.getConnectionId(), e.getMessage());
+                LOG.warn("Failed to access field {} for connection {}",
+                        field.getName(), ctx.getConnectionId(), e);
             }
         }
 

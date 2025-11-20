@@ -17,6 +17,11 @@ package com.starrocks.qe;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -27,11 +32,21 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 
 public class RefreshConnectionsStmtTest {
     private static StarRocksAssert starRocksAssert;
@@ -375,6 +390,170 @@ public class RefreshConnectionsStmtTest {
             Assertions.assertEquals(2000, testCtx.getSessionVariable().getQueryTimeoutS());
         } finally {
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(testCtx);
+        }
+    }
+
+    @Test
+    public void testRefreshConnectionsInternalWithNullScheduler() throws Exception {
+        ctxToRoot();
+        VariableMgr variableMgr = starRocksAssert.getCtx().getGlobalStateMgr().getVariableMgr();
+        ExecuteEnv env = ExecuteEnv.getInstance();
+        ConnectScheduler originalScheduler = env.getScheduler();
+        try {
+            Field schedulerField = ExecuteEnv.class.getDeclaredField("scheduler");
+            schedulerField.setAccessible(true);
+            schedulerField.set(env, null);
+            Assertions.assertDoesNotThrow(() -> {
+                variableMgr.refreshConnectionsInternal(false);
+            });
+        } finally {
+            Field schedulerField = ExecuteEnv.class.getDeclaredField("scheduler");
+            schedulerField.setAccessible(true);
+            schedulerField.set(env, originalScheduler);
+        }
+    }
+
+    @Test
+    public void testRefreshConnectionsWithExceptionInRefreshConnectionVariables() throws Exception {
+        ctxToRoot();
+        ExecuteEnv.setup();
+        ConnectContext testCtx = new ConnectContext();
+        testCtx.setGlobalStateMgr(starRocksAssert.getCtx().getGlobalStateMgr());
+        testCtx.setSessionVariable(starRocksAssert.getCtx().getGlobalStateMgr()
+                .getVariableMgr().newSessionVariable());
+        testCtx.setConnectionId(7);
+        testCtx.setQualifiedUser("aaa");
+        ExecuteEnv.getInstance().getScheduler().registerConnection(testCtx);
+        try {
+            String setGlobalSql = "SET GLOBAL query_timeout = 1200";
+            SetStmt setStmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(
+                    setGlobalSql, starRocksAssert.getCtx());
+            Analyzer.analyze(setStmt, starRocksAssert.getCtx());
+            SetExecutor setExecutor = new SetExecutor(starRocksAssert.getCtx(), setStmt);
+            setExecutor.execute();
+            String refreshSql = "REFRESH CONNECTIONS";
+            RefreshConnectionsStmt refreshStmt = (RefreshConnectionsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    refreshSql, starRocksAssert.getCtx());
+            Analyzer.analyze(refreshStmt, starRocksAssert.getCtx());
+            com.starrocks.qe.StmtExecutor executor = new com.starrocks.qe.StmtExecutor(
+                    starRocksAssert.getCtx(), refreshStmt);
+            Assertions.assertDoesNotThrow(() -> executor.execute());
+        } finally {
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(testCtx);
+        }
+    }
+
+    @Test
+    public void testForceRefreshWhenValueUnchangedButModified() throws Exception {
+        ctxToRoot();
+        ExecuteEnv.setup();
+        ConnectContext testCtx = new ConnectContext();
+        testCtx.setGlobalStateMgr(starRocksAssert.getCtx().getGlobalStateMgr());
+        testCtx.setSessionVariable(starRocksAssert.getCtx().getGlobalStateMgr()
+                .getVariableMgr().newSessionVariable());
+        testCtx.setConnectionId(8);
+        testCtx.setQualifiedUser("aaa");
+        ExecuteEnv.getInstance().getScheduler().registerConnection(testCtx);
+        try {
+            int globalValue = 1000;
+            String setGlobalSql = "SET GLOBAL query_timeout = " + globalValue;
+            SetStmt setStmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(
+                    setGlobalSql, starRocksAssert.getCtx());
+            Analyzer.analyze(setStmt, starRocksAssert.getCtx());
+            SetExecutor setExecutor = new SetExecutor(starRocksAssert.getCtx(), setStmt);
+            setExecutor.execute();
+            SystemVariable sessionVar = new SystemVariable(SetType.SESSION, "query_timeout",
+                    new IntLiteral((long) globalValue));
+            testCtx.modifySystemVariable(sessionVar, true);
+            Assertions.assertEquals(globalValue, testCtx.getSessionVariable().getQueryTimeoutS());
+            Assertions.assertTrue(testCtx.getModifiedSessionVariablesMap().containsKey("query_timeout"));
+            String refreshSqlForce = "REFRESH CONNECTIONS FORCE";
+            RefreshConnectionsStmt refreshStmtForce = (RefreshConnectionsStmt) UtFrameUtils.parseStmtWithNewParser(
+                    refreshSqlForce, starRocksAssert.getCtx());
+            Analyzer.analyze(refreshStmtForce, starRocksAssert.getCtx());
+            com.starrocks.qe.StmtExecutor executorForce = new com.starrocks.qe.StmtExecutor(
+                    starRocksAssert.getCtx(), refreshStmtForce);
+            executorForce.execute();
+            Assertions.assertEquals(globalValue, testCtx.getSessionVariable().getQueryTimeoutS());
+            Assertions.assertFalse(testCtx.getModifiedSessionVariablesMap().containsKey("query_timeout"));
+        } finally {
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(testCtx);
+        }
+    }
+
+    @Test
+    public void testNotifyOtherFEsWithRPCException() throws Exception {
+        ctxToRoot();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
+        Pair<String, Integer> selfNode = nodeMgr.getSelfNode();
+        String otherHost = "127.0.0.2";
+        if (selfNode.first.equals(otherHost)) {
+            otherHost = "127.0.0.3";
+        }
+        try {
+            nodeMgr.addFrontend(FrontendNodeType.FOLLOWER, otherHost, 9010);
+            new MockUp<ThriftRPCRequestExecutor>() {
+                @Mock
+                public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
+                        com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                        TNetworkAddress address,
+                        int timeoutMs,
+                        int tryTimes,
+                        ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+                    throw new TException("RPC call failed");
+                }
+            };
+            VariableMgr variableMgr = globalStateMgr.getVariableMgr();
+            Assertions.assertDoesNotThrow(() -> {
+                variableMgr.refreshConnections(false);
+            });
+        } finally {
+            try {
+                nodeMgr.dropFrontend(FrontendNodeType.FOLLOWER, otherHost, 9010);
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    @Test
+    public void testNotifyOtherFEsWithErrorResponse() throws Exception {
+        ctxToRoot();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
+        Pair<String, Integer> selfNode = nodeMgr.getSelfNode();
+        String otherHost = "127.0.0.3";
+        if (selfNode.first.equals(otherHost)) {
+            otherHost = "127.0.0.4";
+        }
+        try {
+            nodeMgr.addFrontend(FrontendNodeType.FOLLOWER, otherHost, 9010);
+            new MockUp<ThriftRPCRequestExecutor>() {
+                @Mock
+                public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
+                        com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                        TNetworkAddress address,
+                        int timeoutMs,
+                        int tryTimes,
+                        ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+                    TRefreshConnectionsResponse response = new TRefreshConnectionsResponse();
+                    TStatus status = new TStatus();
+                    status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                    status.setError_msgs(new ArrayList<>());
+                    status.addToError_msgs("Internal error occurred");
+                    response.setStatus(status);
+                    return (RESULT) response;
+                }
+            };
+            VariableMgr variableMgr = globalStateMgr.getVariableMgr();
+            Assertions.assertDoesNotThrow(() -> {
+                variableMgr.refreshConnections(false);
+            });
+        } finally {
+            try {
+                nodeMgr.dropFrontend(FrontendNodeType.FOLLOWER, otherHost, 9010);
+            } catch (Exception e) {
+            }
         }
     }
 }
