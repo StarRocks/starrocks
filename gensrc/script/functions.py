@@ -129,6 +129,7 @@ vectorized_functions = [
     [102570, "mod", True, False, "DECIMAL32", ["DECIMAL32", "DECIMAL32"], "MathFunctions::mod<TYPE_DECIMAL32>"],
     [102571, "mod", True, False, "DECIMAL64", ["DECIMAL64", "DECIMAL64"], "MathFunctions::mod<TYPE_DECIMAL64>"],
     [102572, "mod", True, False, "DECIMAL128", ["DECIMAL128", "DECIMAL128"], "MathFunctions::mod<TYPE_DECIMAL128>"],
+    [102573, "mod", True, False, "DECIMAL256", ["DECIMAL256", "DECIMAL256"], "MathFunctions::mod<TYPE_DECIMAL256>"],
 
     [10260, "positive", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::positive<TYPE_DOUBLE>"],
     [10261, "positive", True, False, "BIGINT", ["BIGINT"], "MathFunctions::positive<TYPE_BIGINT>"],
