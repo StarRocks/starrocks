@@ -175,6 +175,7 @@ public:
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
     Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool);
+    std::string debug_string() const;
 
 private:
     int64_t _id = 0;
