@@ -1333,7 +1333,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // If true, force CTE reuse when CTE contains LIMIT without ORDER BY to avoid unstable results.
     // When false, allow inline even if CTE has LIMIT without ORDER BY (may cause inconsistent results).
-    @VarAttr(name = CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY)
+    @VarAttr(name = CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY, flag = VariableMgr.INVISIBLE)
     private boolean cboCTEForceReuseLimitWithoutOrderBy = true;
 
     @VarAttr(name = PREFER_CTE_REWRITE, flag = VariableMgr.INVISIBLE)

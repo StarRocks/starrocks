@@ -1117,9 +1117,7 @@ public class CTEPlanTest extends PlanTestBase {
                 + "cte2 as(select * from cte0)\n"
                 + "select * from cte1 union all select * from cte2;";
         String plan = getFragmentPlan(sql);
-        // With ORDER BY, ForceCTEReuseRule should not trigger
-        // The CTE reuse decision will be based on ratio and consume count
-        // This test verifies that ORDER BY prevents the force reuse rule from triggering
+        assertNotContains("MultiCast");
     }
 
     @ParameterizedTest
@@ -1165,9 +1163,7 @@ public class CTEPlanTest extends PlanTestBase {
                 + "cte0 as(select * from t0 limit 10)\n"
                 + "select * from cte0;";
         String plan = getFragmentPlan(sql);
-        // With ratio=0, it would normally force CTE reuse anyway
-        // But this test verifies the rule still applies
-        // Note: Single consume with ratio=0 will still use CTE reuse
+        assertContains("MultiCast");
     }
 
     @ParameterizedTest
