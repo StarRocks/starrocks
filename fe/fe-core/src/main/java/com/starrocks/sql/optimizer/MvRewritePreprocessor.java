@@ -93,6 +93,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
@@ -519,10 +520,7 @@ public class MvRewritePreprocessor {
         int queryScanOpNum = MvUtils.getOlapScanNode(queryOptExpression).size();
         Set<String> queryTableNames = queryTables.stream().map(t -> t.getName()).collect(Collectors.toSet());
         List<MVCorrelation> mvCorrelations = Lists.newArrayList();
-<<<<<<< HEAD
-=======
         long timeoutMs = getPrepareTimeoutMsPerMV(connectContext, Math.min(validMVs.size(), maxRelatedMVsLimit));
->>>>>>> 7f9233bced ([BugFix] Fix mv rewrite prepare lock too many time (#65803))
         for (MaterializedViewWrapper wrapper : validMVs) {
             MaterializedView mv = wrapper.getMV();
             List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
@@ -570,12 +568,8 @@ public class MvRewritePreprocessor {
                                                               Set<MaterializedViewWrapper> relatedMVs,
                                                               OptExpression queryOptExpression) {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
-<<<<<<< HEAD
-=======
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
-        long timeoutMs = getPrepareTimeoutMsPerMV(connectContext, Math.min(relatedMVs.size(), maxRelatedMVsLimit));
         // to make unit test more stable, force build mv plan in unit test
->>>>>>> 7f9233bced ([BugFix] Fix mv rewrite prepare lock too many time (#65803))
         Set<MaterializedViewWrapper> validMVs = relatedMVs.stream()
                 .filter(wrapper -> isMVValidToRewriteQuery(connectContext, wrapper.getMV(), 
                             isForceLoadMVPlan(wrapper.getMV()), queryTables, false).isValid())
@@ -584,7 +578,6 @@ public class MvRewritePreprocessor {
                 validMVs.size(), relatedMVs.size());
 
         // choose max config related mvs for mv rewrite to avoid too much optimize time
-        int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
     }
 
@@ -592,10 +585,6 @@ public class MvRewritePreprocessor {
     public List<MaterializedViewWrapper> getMvWithPlanContext(List<MaterializedViewWrapper> validMVs) {
         // filter mvs which are active and have valid plans
         final List<MaterializedViewWrapper> mvWithPlanContexts = Lists.newArrayList();
-<<<<<<< HEAD
-=======
-        final long timeoutMs = getPrepareTimeoutMsPerMV(connectContext, validMVs.size());
->>>>>>> 7f9233bced ([BugFix] Fix mv rewrite prepare lock too many time (#65803))
         for (MaterializedViewWrapper wrapper : validMVs) {
             MaterializedView mv = wrapper.getMV();
             try {
@@ -720,6 +709,7 @@ public class MvRewritePreprocessor {
 
         List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos =
                 Lists.newArrayListWithExpectedSize(mvWithPlanContexts.size());
+        long timeoutMs = getPrepareTimeoutMsPerMV(connectContext, mvInfos.size());
         for (MaterializedViewWrapper wrapper : mvWithPlanContexts) {
             MaterializedView mv = wrapper.getMV();
             try {
@@ -743,7 +733,7 @@ public class MvRewritePreprocessor {
                 newDirectExecutorService();
         for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
             futures.add(CompletableFuture.supplyAsync(
-                    () -> prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second), exec)
+                    () -> prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second, timeoutMs), exec)
             );
         }
         try {
@@ -764,13 +754,8 @@ public class MvRewritePreprocessor {
                 candidateMvNames);
     }
 
-<<<<<<< HEAD
     private Void prepareMV(Tracers tracers, Set<Table> queryTables, MaterializedViewWrapper mvWithPlanContext,
-                           MvUpdateInfo mvUpdateInfo) {
-=======
-    private void prepareMV(Tracers tracers, Set<Table> queryTables, MaterializedViewWrapper mvWithPlanContext,
                            MvUpdateInfo mvUpdateInfo, long timeoutMs) {
->>>>>>> 7f9233bced ([BugFix] Fix mv rewrite prepare lock too many time (#65803))
         MaterializedView mv = mvWithPlanContext.getMV();
         MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
         Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
@@ -791,9 +776,7 @@ public class MvRewritePreprocessor {
             queryMaterializationContext.addValidCandidateMV(materializationContext);
         }
         logMVPrepare(tracers, connectContext, mv, "Prepare MV {} success", mv.getName());
-<<<<<<< HEAD
         return null;
-=======
     }
 
     /**
@@ -811,84 +794,6 @@ public class MvRewritePreprocessor {
         }
         // Ensure at least 1 second per MV, but not more than the total timeout
         return Math.max(1000, defaultTimeout / mvCount);
-    }
-
-    /**
-     * Process MVs with individual timeouts to allow continuation even if some timeout.
-     * Each MV gets a timeout of total_timeout / number_of_mvs to ensure fair distribution.
-     * 
-     * @param tracers Tracers for logging
-     * @param queryTables Query tables
-     * @param mvInfos List of MV info pairs to process
-     * @param exec Executor for async processing
-     */
-    private void processMVsWithIndividualTimeouts(Tracers tracers, Set<Table> queryTables,
-                                                 List<Pair<MaterializedViewWrapper, MvUpdateInfo>> mvInfos,
-                                                 Executor exec) {
-        if (mvInfos.isEmpty()) {
-            return;
-        }
-        long individualTimeoutMs = getPrepareTimeoutMsPerMV(connectContext, mvInfos.size());
-        logMVPrepare(connectContext, "Processing {} MVs with individual timeout of {} ms each", mvInfos.size(),
-                individualTimeoutMs);
-        
-        // Use thread-safe collections for tracking results from async operations
-        List<CompletableFuture<Void>> futures = Lists.newArrayListWithExpectedSize(mvInfos.size());
-        Set<String> timeoutMvNames = ConcurrentHashMap.newKeySet();
-        Set<String> failedMvNames = ConcurrentHashMap.newKeySet();
-        
-        // Create futures for each MV - don't handle exceptions here, handle them after get()
-        for (Pair<MaterializedViewWrapper, MvUpdateInfo> mvInfo : mvInfos) {
-            CompletableFuture<Void> future = CompletableFuture.supplyAsync(
-                    () -> {
-                        prepareMV(tracers, queryTables, mvInfo.first, mvInfo.second, individualTimeoutMs);
-                        return null;
-                    }, exec);
-            
-            futures.add(future);
-        }
-        
-        // Wait for each future with individual timeout and handle results
-        for (int i = 0; i < futures.size(); i++) {
-            CompletableFuture<Void> future = futures.get(i);
-            MaterializedView mv = mvInfos.get(i).first.getMV();
-            String mvName = mv.getName();
-            
-            try {
-                future.get(individualTimeoutMs, TimeUnit.MILLISECONDS);
-                // Success - no action needed
-            } catch (TimeoutException e) {
-                LOG.warn("MV {} preparation timeout after {} ms", mvName, individualTimeoutMs);
-                timeoutMvNames.add(mvName);
-                logMVPrepare(connectContext, "MV {} preparation timed out after {} ms", mvName, individualTimeoutMs);
-                // Cancel the future to stop processing
-                future.cancel(true);
-            } catch (InterruptedException e) {
-                LOG.warn("MV {} preparation interrupted", mvName);
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("MV preparation interrupted", e);
-            } catch (ExecutionException e) {
-                // Unwrap the actual cause from ExecutionException
-                Throwable cause = e.getCause() != null ? e.getCause() : e;
-                LOG.warn("MV {} preparation failed with exception", mvName, cause);
-                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(cause));
-                failedMvNames.add(mvName);
-            } catch (Exception e) {
-                // Catch any other unexpected exceptions
-                LOG.warn("MV {} preparation failed with unexpected exception", mvName, e);
-                logMVPrepare(connectContext, "MV {} preparation failed: {}", mvName, DebugUtil.getStackTrace(e));
-                failedMvNames.add(mvName);
-            }
-        }
-        
-        // Log summary
-        int successCount = mvInfos.size() - timeoutMvNames.size() - failedMvNames.size();
-        logMVPrepare(connectContext, "MV preparation summary: {} successful, {} timeout, {} failed out of {} total. " +
-                        "Timeout MVs: {}, Failed MVs: {}",
-                successCount, timeoutMvNames.size(), failedMvNames.size(), mvInfos.size(), 
-                timeoutMvNames.isEmpty() ? "none" : timeoutMvNames,
-                failedMvNames.isEmpty() ? "none" : failedMvNames);
->>>>>>> 7f9233bced ([BugFix] Fix mv rewrite prepare lock too many time (#65803))
     }
 
     /**
@@ -957,9 +862,6 @@ public class MvRewritePreprocessor {
                                                                      MvUpdateInfo mvUpdateInfo,
                                                                      Set<Table> queryTables,
                                                                      int level) {
-<<<<<<< HEAD
-        Preconditions.checkState(mvPlanContext != null);
-=======
         long timeoutMs = getPrepareTimeoutMsPerMV(context.getConnectContext(), 1);
         return buildMaterializationContext(context, mv, mvPlanContext, mvUpdateInfo, queryTables, level, timeoutMs);
     }
@@ -975,7 +877,6 @@ public class MvRewritePreprocessor {
             logMVPrepare(context.getConnectContext(), "MV {} plan context is null", mv.getName());
             return null;
         }
->>>>>>> 7f9233bced ([BugFix] Fix mv rewrite prepare lock too many time (#65803))
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         Preconditions.checkState(mvPlan != null);
 
