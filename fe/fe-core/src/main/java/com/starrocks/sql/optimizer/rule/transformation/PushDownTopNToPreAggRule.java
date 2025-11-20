@@ -93,6 +93,10 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
             return false;
         }
 
+        if (topn.getPartitionByColumns() != null || !topn.getPartitionPreAggCall().isEmpty()) {
+            return false;
+        }
+
         OptExpression topnChild = input.inputAt(0);
         LogicalAggregationOperator aggGlobal = (LogicalAggregationOperator) topnChild.getOp();
 
