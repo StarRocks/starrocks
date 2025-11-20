@@ -206,6 +206,7 @@ public class ExchangeNode extends PlanNode {
         }
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
+            msg.exchange_node.setOffset(offset);
         }
         SessionVariable sv = ConnectContext.get().getSessionVariable();
         msg.exchange_node.setEnable_parallel_merge(sv.isEnableParallelMerge());
