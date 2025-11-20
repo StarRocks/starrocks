@@ -17,7 +17,6 @@ displayed_sidebar: docs
 | DEFINITION  | タスクの SQL 定義。                                          |
 | EXPIRE_TIME | タスクの有効期限。                                           |
 
-## 
-リファレンス
+## リファレンス
 
 [`SUBMIT_TASK`](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md)
