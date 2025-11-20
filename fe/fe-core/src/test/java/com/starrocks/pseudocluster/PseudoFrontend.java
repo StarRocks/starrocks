@@ -178,6 +178,19 @@ public class PseudoFrontend {
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
                 Config.statistic_collect_query_timeout = 60;
 
+                // Re-apply thread pool size limits after config init (in case config file overrides them)
+                Config.lake_publish_version_max_threads = 2;
+                Config.query_deploy_threadpool_size = 2;
+                Config.lake_publish_delete_txnlog_max_threads = 2;
+                Config.max_broker_load_job_concurrency = 2;
+                Config.desired_max_waiting_jobs = 10;
+                Config.thrift_server_max_worker_threads = 2;
+                Config.mysql_service_io_threads_num = 2;
+                Config.max_mysql_service_task_threads_num = 2;
+                Config.http_async_threads_num = 2;
+                Config.dict_collect_thread_pool_size = 2;
+                Config.dict_collect_thread_pool_for_lake_size = 2;
+
                 Log4jConfig.initLogging();
 
                 // set dns cache ttl
