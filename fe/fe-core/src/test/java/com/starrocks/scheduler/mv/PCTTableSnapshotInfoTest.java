@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -42,7 +43,7 @@ class PCTTableSnapshotInfoTest {
         Partition partition = mock(Partition.class);
         PhysicalPartition mockDefault = mock(PhysicalPartition.class);
         when(partition.getDefaultPhysicalPartition()).thenReturn(mockDefault);
-        when(partition.getSubPartitions()).thenReturn(null);
+        when(partition.getSubPartitions()).thenReturn(Collections.emptyList());
         when(partition.getName()).thenReturn("p1");
         when(partition.getId()).thenReturn(1L);
         when(mockDefault.getVisibleVersion()).thenReturn(10L);
