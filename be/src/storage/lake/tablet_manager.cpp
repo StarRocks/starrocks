@@ -446,6 +446,13 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
     return get_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
 }
 
+StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_meta_cache,
+                                                               bool fill_data_cache, int64_t expected_gtid,
+                                                               const std::shared_ptr<FileSystem>& fs) {
+    CacheOptions cache_opts{.fill_meta_cache = fill_meta_cache, .fill_data_cache = fill_data_cache};
+    return get_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
@@ -497,6 +504,9 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         metadata_or = load_tablet_metadata(path, cache_opts.fill_data_cache, expected_gtid, fs);
         if (metadata_or.status().is_not_found()) {
             metadata_or = get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
+            if (metadata_or.ok() && cache_key.ok()) {
+                _metacache->cache_aggregation_partition(*cache_key, true);
+            }
         }
     }
 
