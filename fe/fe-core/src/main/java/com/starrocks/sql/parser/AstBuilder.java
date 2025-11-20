@@ -9577,7 +9577,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 return TypeFactory.createUnifiedDecimalType(precision);
             }
             return TypeFactory.createUnifiedDecimalType(10, 0);
-        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
+        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null ||
+                context.DECIMAL128() != null || context.DECIMAL256() != null) {
             if (!Config.enable_decimal_v3) {
                 throw new SemanticException("Config field enable_decimal_v3 is false now, " +
                         "turn it on before decimal32/64/128/256 are used, " +
