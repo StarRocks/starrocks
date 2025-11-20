@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -32,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.type.Type;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
