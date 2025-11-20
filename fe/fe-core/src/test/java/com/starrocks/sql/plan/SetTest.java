@@ -567,7 +567,7 @@ public class SetTest extends PlanTestBase {
         // order by null literal with limit offset
         sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  6:EXCHANGE\n" +
                 "     offset: 10\n" +
                 "     limit: 20");
 

@@ -785,7 +785,7 @@ public class LimitTest extends PlanTestBase {
                 "LIMIT \n" +
                 "  61202;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "7:MERGING-EXCHANGE\n" +
+        assertContains(plan, "7:EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
         assertContains(plan, "4:TOP-N\n" +
@@ -818,7 +818,7 @@ public class LimitTest extends PlanTestBase {
                 "  |  order by: <slot 9> 9: expr ASC, <slot 4> 4: S_NATIONKEY ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 21");
-        assertContains(plan, "5:MERGING-EXCHANGE\n" +
+        assertContains(plan, "5:EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
     }
@@ -855,7 +855,7 @@ public class LimitTest extends PlanTestBase {
     public void testConstantOrderByLimit() throws Exception {
         String sql = "select * from t0 order by 'abc' limit 100, 100 ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     offset: 100\n" +
                 "     limit: 100");
     }
@@ -864,7 +864,7 @@ public class LimitTest extends PlanTestBase {
     public void testOrderByConstant() throws Exception {
         String sql = "select * from t0 limit 100, 100";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     offset: 100\n" +
                 "     limit: 100");
     }
@@ -873,7 +873,7 @@ public class LimitTest extends PlanTestBase {
     public void testMergeLimit() throws Exception {
         String sql = "select * from (select * from t0 limit 100, 100) x limit 1, 2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     offset: 101\n" +
                 "     limit: 2");
 
@@ -883,13 +883,13 @@ public class LimitTest extends PlanTestBase {
 
         sql = "select * from (select * from t0 limit 1, 5) x limit 1, 100";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     offset: 2\n" +
                 "     limit: 4");
 
         sql = "select * from (select * from t0 limit 1, 5) x limit 3";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  1:EXCHANGE\n" +
                 "     offset: 1\n" +
                 "     limit: 3");
 
@@ -903,7 +903,7 @@ public class LimitTest extends PlanTestBase {
     public void testLimitAgg() throws Exception {
         String sql = "select count(*) from (select * from t0 limit 50, 20) xx;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  2:EXCHANGE\n" +
                 "     offset: 50\n" +
                 "     limit: 20");
     }
@@ -913,7 +913,7 @@ public class LimitTest extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         String sql = "select count(*) from (select * from TABLE(generate_series(1, 100000)) limit 50000, 10) x;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:MERGING-EXCHANGE\n" +
+        assertContains(plan, "4:EXCHANGE\n" +
                 "     offset: 50000\n" +
                 "     limit: 10");
     }
