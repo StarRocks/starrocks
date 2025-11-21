@@ -1000,6 +1000,18 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"replication_num\" = \"1\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `test_time` (\n" +
+                "  `__time` datetime NOT NULL DEFAULT \"1970-01-01 00:00:00\" COMMENT \"\",\n" +
+                "  `eventType` varchar(65533) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                "  `count` bigint(20) NULL DEFAULT \"1\" COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`__time`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
         ColocateTableBalancer.getInstance().setStop();
