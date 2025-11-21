@@ -248,7 +248,7 @@ Used for MySQL client compatibility. No practical usage.
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
 * **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
-* **Default**: 64
+* **Default**: 16
 * **Introduced in**: v3.1.9, v3.2.5
 
 ### cbo_prune_subfield
