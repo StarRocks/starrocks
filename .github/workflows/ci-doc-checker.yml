@@ -100,10 +100,17 @@ jobs:
         id: changed-files
         with:
           files: |
-            docs/en/**.md
-            docs/ja/**.md
-            docs/zh/**.md
+            docs/en/**/*.md
+            docs/ja/**/*.md
+            docs/zh/**/*.md
           separator: ","
+      - name: List all changed files
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          for file in ${ALL_CHANGED_FILES}; do
+            echo "$file was changed"
+          done
       - uses: DavidAnson/markdownlint-cli2-action@v21
         if: steps.changed-files.outputs.any_changed == 'true'
         with:
