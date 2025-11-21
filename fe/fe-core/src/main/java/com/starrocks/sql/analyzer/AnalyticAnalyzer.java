@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
@@ -101,7 +102,6 @@ public class AnalyticAnalyzer {
                                 ExprToSql.toSql(analyticFunction), analyticFunction.getPos());
             }
 
-            // TODO: remove this check when the backend can handle non-constants
             if (analyticFunction.getChildren().size() == 2) {
                 // do nothing
             } else if (analyticFunction.getChildren().size() == 3) {
@@ -126,7 +126,8 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (!ExprUtils.isLiteral(theThirdChild) && theThirdChild.isNullable()) {
+
+                if (!ExprUtils.isLiteral(theThirdChild) && !(theThirdChild instanceof SlotRef) && theThirdChild.isNullable()) {
                     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
                             analyticFunction.getChild(2).getPos());
                 }
