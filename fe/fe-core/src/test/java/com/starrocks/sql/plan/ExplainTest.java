@@ -50,9 +50,6 @@ public class ExplainTest extends PlanTestBase {
                 + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
                 + "      |partitionRatio: 0/1, tabletRatio: 0/0");
     }
-<<<<<<< HEAD
-=======
-
     @Test
     public void testDesensitizeExplain() throws Exception {
         connectContext.getSessionVariable().setEnableDesensitizeExplain(true);
@@ -87,5 +84,4 @@ public class ExplainTest extends PlanTestBase {
         }
 
     }
->>>>>>> 1e1ec8c260 ([BugFix] query_detail_explain_level configuration was not taking effect. (#63265))
 }

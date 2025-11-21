@@ -22,11 +22,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Config;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
->>>>>>> 1e1ec8c260 ([BugFix] query_detail_explain_level configuration was not taking effect. (#63265))
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
