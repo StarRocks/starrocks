@@ -2195,6 +2195,14 @@ struct TDynamicTabletJobsResponse {
     2: optional list<TDynamicTabletJobsItem> items;
 }
 
+struct TRefreshConnectionsRequest {
+    1: optional bool force;
+}
+
+struct TRefreshConnectionsResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2339,5 +2347,7 @@ service FrontendService {
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
     TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
+
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
 }
 
