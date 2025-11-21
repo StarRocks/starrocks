@@ -421,7 +421,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 - `expr`: 需要计算的目标字段。
 - `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
-- `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
+- `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。从4.0版本开始，`default`可以不是常量，而是一个列名。
 - `IGNORE NULLS`：从 3.0 版本开始，`LAG()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之前的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向前遍历 `offset` 行时会忽略取值为 NULL 的行，继续向前遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之前并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
 
 **示例**：
@@ -501,6 +501,33 @@ FROM test_tbl ORDER BY col_1;
 
 对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
+示例三： LAG() 中默认值设置为列名
+
+依然使用上面的数据表。
+
+```SQL
+SELECT col_1, col_2, LAG(col_2 ,2,col_1) OVER (ORDER BY col_1)
+FROM test_tbl ORDER BY col_1;
++-------+-------+-------------------------------------------------+
+| col_1 | col_2 | lag(col_2, 2, col_1) OVER (ORDER BY col_1 ASC ) |
++-------+-------+-------------------------------------------------+
+|     1 |  NULL |                                               1 |
+|     2 |     4 |                                               2 |
+|     3 |  NULL |                                            NULL |
+|     4 |     2 |                                               4 |
+|     5 |  NULL |                                            NULL |
+|     6 |     7 |                                               2 |
+|     7 |     6 |                                            NULL |
+|     8 |     5 |                                               7 |
+|     9 |  NULL |                                               6 |
+|    10 |  NULL |                                               5 |
++-------+-------+-------------------------------------------------+
+```
+
+可以看到对于第 1-2 行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值为当前行的 `col_1` 值。
+
+其他行与示例一相同。
+
 ## LEAD()
 
 用来计算当前行**之后**若干行的值。该函数可用于直接比较行间差值或进行数据过滤。
@@ -518,7 +545,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 - `expr`: 需要计算的目标字段。
 - `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
-- `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
+- `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。从4.0版本开始，`default`可以不是常量，而是一个列名。
 - `IGNORE NULLS`：从 3.0 版本开始，`LEAD()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之后的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向后遍历 `offset` 行时会忽略取值为 NULL 的行，继续向后遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之后并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
 
 **示例**：
@@ -597,6 +624,33 @@ FROM test_tbl ORDER BY col_1;
 可以看到对于第 7-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
 
 对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
+
+示例三： LEAD() 中默认值设置为列名
+
+依然使用上面的数据表。
+
+```SQL
+SELECT col_1, col_2, LEAD(col_2 ,2,col_1) OVER (ORDER BY col_1)
+FROM test_tbl ORDER BY col_1;
++-------+-------+--------------------------------------------------+
+| col_1 | col_2 | lead(col_2, 2, col_1) OVER (ORDER BY col_1 ASC ) |
++-------+-------+--------------------------------------------------+
+|     1 |  NULL |                                             NULL |
+|     2 |     4 |                                                2 |
+|     3 |  NULL |                                             NULL |
+|     4 |     2 |                                                7 |
+|     5 |  NULL |                                                6 |
+|     6 |     7 |                                                5 |
+|     7 |     6 |                                             NULL |
+|     8 |     5 |                                             NULL |
+|     9 |  NULL |                                                9 |
+|    10 |  NULL |                                               10 |
++-------+-------+--------------------------------------------------+
+```
+
+可以看到对于第 9-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值为当前行的 `col_1` 值。
+
+其他行与示例一相同。
 
 ## MAX()
 

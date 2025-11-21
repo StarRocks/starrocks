@@ -528,6 +528,7 @@ struct LeadLagState {
     T default_value;
     bool is_null = false;
     bool default_is_null = false;
+    bool default_value_is_constant = false; // only used for lag
 };
 
 template <LogicalType LT>
@@ -540,6 +541,7 @@ struct LeadLagState<LT, true> {
     bool default_is_null = false;
     int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
     size_t non_null_count;             // only used for lag
+    bool default_value_is_constant = false;
 };
 
 template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<LT>>
@@ -562,19 +564,26 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
 
         // get default value
         const Column* arg2 = args[2].get();
-        DCHECK(arg2->is_constant());
-        const auto* default_column = down_cast<const ConstColumn*>(arg2);
-        if (default_column->is_nullable()) {
-            this->data(state).default_is_null = true;
-        } else {
-            if constexpr (lt_is_array<LT>) {
-                const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
-                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
-                                                    AggDataTypeTraits<LT>::get_row_ref(*column, 0));
+        DCHECK(arg2 != nullptr);
+
+        if (arg2->is_constant()) {
+            this->data(state).default_value_is_constant = true;
+            const auto* default_column = down_cast<const ConstColumn*>(arg2);
+            if (default_column->is_nullable()) {
+                this->data(state).default_is_null = true;
             } else {
-                auto value = ColumnHelper::get_const_value<LT>(arg2);
-                AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+                if constexpr (lt_is_array<LT>) {
+                    const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
+                                                        AggDataTypeTraits<LT>::get_row_ref(*column, 0));
+                } else {
+                    auto value = ColumnHelper::get_const_value<LT>(arg2);
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+                }
             }
+        } else {
+            this->data(state).default_value_is_constant = false;
+            this->data(state).default_is_null = false;
         }
 
         if constexpr (ignoreNulls) {
@@ -680,12 +689,29 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 if (this->data(state).default_is_null) {
                     this->data(state).is_null = true;
                 } else {
-                    if constexpr (lt_is_array<LT>) {
-                        AggDataTypeTraits<LT>::assign_value(
-                                this->data(state).value,
-                                AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                    if (this->data(state).default_value_is_constant) {
+                        if constexpr (lt_is_array<LT>) {
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                        } else {
+                            this->data(state).value = this->data(state).default_value;
+                        }
                     } else {
-                        this->data(state).value = this->data(state).default_value;
+                        const Column* def_col = columns[2];
+                        if (def_col != nullptr && current_row >= 0 &&
+                            current_row < static_cast<int64_t>(def_col->size())) {
+                            this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row));
+                            if (!this->data(state).is_null) {
+                                const auto* column =
+                                        down_cast<const InputColumnType*>(ColumnHelper::get_data_column(def_col));
+                                AggDataTypeTraits<LT>::assign_value(
+                                        this->data(state).value,
+                                        AggDataTypeTraits<LT>::get_row_ref(*column, current_row));
+                            }
+                        } else {
+                            this->data(state).is_null = true;
+                        }
                     }
                 }
             } else {
@@ -699,16 +725,35 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             // frame_start < peer_group_start is for lag function
             // frame_end > peer_group_end is for lead function
             if ((frame_start < peer_group_start) | (frame_end > peer_group_end)) {
-                if (this->data(state).default_is_null) {
-                    this->data(state).is_null = true;
-                } else {
-                    this->data(state).is_null = false;
-                    if constexpr (lt_is_array<LT>) {
-                        AggDataTypeTraits<LT>::assign_value(
-                                this->data(state).value,
-                                AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                if (this->data(state).default_value_is_constant) {
+                    if (this->data(state).default_is_null) {
+                        this->data(state).is_null = true;
                     } else {
-                        this->data(state).value = this->data(state).default_value;
+                        this->data(state).is_null = false;
+                        if constexpr (lt_is_array<LT>) {
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_row_ref(*this->data(state).default_value, 0));
+                        } else {
+                            this->data(state).value = this->data(state).default_value;
+                        }
+                    }
+                } else {
+                    const int64_t offset = this->data(state).offset;
+                    const int64_t current_row_index = isLag ? (frame_end - 1 + offset) : (frame_end - 1 - offset);
+                    const Column* def_col = columns[2];
+                    if (def_col != nullptr && current_row_index >= 0 &&
+                        current_row_index < static_cast<int64_t>(def_col->size())) {
+                        this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row_index));
+                        if (!this->data(state).is_null) {
+                            const auto* column =
+                                    down_cast<const InputColumnType*>(ColumnHelper::get_data_column(def_col));
+                            AggDataTypeTraits<LT>::assign_value(
+                                    this->data(state).value,
+                                    AggDataTypeTraits<LT>::get_row_ref(*column, current_row_index));
+                        }
+                    } else {
+                        this->data(state).is_null = true;
                     }
                 }
                 return;
