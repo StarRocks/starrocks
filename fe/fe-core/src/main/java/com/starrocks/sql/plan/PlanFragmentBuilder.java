@@ -23,7 +23,6 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
@@ -3600,9 +3599,7 @@ public class PlanFragmentBuilder {
                 }
                 ExchangeNode exchangeNode = (ExchangeNode) child.getPlanRoot();
                 if (!exchangeNode.isMerge()) {
-                    SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
-                            Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
-                    exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                    exchangeNode.setOffset(limit.getOffset());
                 } else if (exchangeNode.getOffset() <= 0) {
                     exchangeNode.setOffset(limit.getOffset());
                 } else if (exchangeNode.getOffset() > 0) {
