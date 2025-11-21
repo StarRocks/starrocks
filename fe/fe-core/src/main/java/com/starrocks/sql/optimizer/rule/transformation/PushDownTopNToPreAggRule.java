@@ -85,15 +85,12 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
             return false;
         }
 
-        if (topn.getSortPhase() != SortPhase.PARTIAL) {
+        if (topn.getSortPhase() != SortPhase.PARTIAL || topn.hasOffset() || topn.getPredicate() != null) {
             return false;
         }
 
-        if (topn.hasOffset()) {
-            return false;
-        }
-
-        if (topn.getPartitionByColumns() != null || !topn.getPartitionPreAggCall().isEmpty()) {
+        if (topn.getPartitionByColumns() != null && !topn.getPartitionByColumns().isEmpty() ||
+                topn.getPartitionPreAggCall() != null && !topn.getPartitionPreAggCall().isEmpty()) {
             return false;
         }
 
