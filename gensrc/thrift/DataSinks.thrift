@@ -250,11 +250,7 @@ struct TIcebergTableSink {
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i64 target_max_file_size
-<<<<<<< HEAD
-=======
-    8: optional i32 tuple_id
     9: optional string data_location
->>>>>>> 10df1a2313 ([Enhancement] iceberg sink follows the table property "write.data.path" (#65727))
 }
 
 struct THiveTableSink {

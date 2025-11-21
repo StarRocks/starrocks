@@ -72,12 +72,7 @@ public class IcebergTableSink extends DataSink {
 
         // Try to set for tabular
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-<<<<<<< HEAD
                 buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
-=======
-                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
-                        this.tableLocation);
->>>>>>> 10df1a2313 ([Enhancement] iceberg sink follows the table property "write.data.path" (#65727))
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
@@ -107,13 +102,8 @@ public class IcebergTableSink extends DataSink {
         TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_TABLE_SINK);
         TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
         tIcebergTableSink.setTarget_table_id(targetTableId);
-<<<<<<< HEAD
-        tIcebergTableSink.setLocation(location);
-=======
-        tIcebergTableSink.setTuple_id(desc.getId().asInt());
         tIcebergTableSink.setLocation(tableLocation);
         tIcebergTableSink.setData_location(dataLocation);
->>>>>>> 10df1a2313 ([Enhancement] iceberg sink follows the table property "write.data.path" (#65727))
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
