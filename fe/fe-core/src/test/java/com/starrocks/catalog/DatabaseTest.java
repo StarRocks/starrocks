@@ -36,17 +36,12 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.concurrent.lock.LockManager;
-import com.starrocks.persist.CreateTableInfo;
-import com.starrocks.persist.EditLog;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
-import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
-import mockit.Expectations;
-import mockit.Mocked;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,51 +54,15 @@ public class DatabaseTest {
     private Database db;
     private long dbId = 10000;
 
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private EditLog editLog;
-
-    @Mocked
-    NodeMgr nodeMgr;
-
     @BeforeEach
     public void setup() {
         db = new Database(dbId, "dbTest");
-        new Expectations() {
-            {
-                editLog.logCreateTable((CreateTableInfo) any);
-                minTimes = 0;
+        UtFrameUtils.setUpForPersistTest();
+    }
 
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getNodeMgr();
-                minTimes = 0;
-                result = nodeMgr;
-
-                globalStateMgr.getLockManager();
-                minTimes = 0;
-                result = new LockManager();
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = 1L;
-
-                globalStateMgr.getGtidGenerator();
-                minTimes = 0;
-                result = new GtidGenerator();
-            }
-        };
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -166,14 +125,18 @@ public class DatabaseTest {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
         final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
-        Function f = new Function(name, argTypes, IntegerType.INT, false);
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        f.setBinaryType(TFunctionBinaryType.SRJAR);
+        f.setUserVisible(true);
         db.addFunction(f);
 
         // Add addDoubleDouble function to database
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setDb(db.getCatalogName());
         final Type[] argTypes2 = {FloatType.DOUBLE, FloatType.DOUBLE};
-        Function f2 = new Function(name2, argTypes2, FloatType.DOUBLE, false);
+        Function f2 = new ScalarFunction(name2, argTypes2, FloatType.DOUBLE, false);
+        f2.setBinaryType(TFunctionBinaryType.SRJAR);
+        f2.setUserVisible(true);
         db.addFunction(f2);
     }
 
@@ -182,7 +145,9 @@ public class DatabaseTest {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
         final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
-        Function f = new Function(name, argTypes, IntegerType.INT, false);
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        f.setBinaryType(TFunctionBinaryType.SRJAR);
+        f.setUserVisible(true);
 
         // Add the UDF for the first time
         db.addFunction(f);
@@ -196,7 +161,9 @@ public class DatabaseTest {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
         final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
-        Function f = new Function(name, argTypes, IntegerType.INT, false);
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        f.setBinaryType(TFunctionBinaryType.SRJAR);
+        f.setUserVisible(true);
 
         // Add the UDF for the first time
         db.addFunction(f, true, false);

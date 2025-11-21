@@ -39,6 +39,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
@@ -1693,7 +1694,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         // Test `use database` : check any privilege on any function in db
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn,
+        Function function = new ScalarFunction(fn,
                 Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);
@@ -2792,7 +2793,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testFunc() throws Exception {
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn,
+        Function function = new ScalarFunction(fn,
                 Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);
