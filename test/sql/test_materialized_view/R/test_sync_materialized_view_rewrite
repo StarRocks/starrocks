@@ -297,7 +297,7 @@ CREATE MATERIALIZED VIEW mv_test_base_table1 AS
 SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
 -- result:
 -- !result
-analyze full table test_base_table1 with sync mode;
+[UC]analyze full table test_base_table1 with sync mode;
 -- result:
 test_db_e3f75413b34b493eb4e027136dfe5df3.test_base_table1	analyze	status	OK
 -- !result

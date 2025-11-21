@@ -146,7 +146,7 @@ CREATE MATERIALIZED VIEW mv_test_base_table1 AS
 SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
 
 -- analyze table to global dict rewrite
-analyze full table test_base_table1 with sync mode;
+[UC]analyze full table test_base_table1 with sync mode;
 -- check rewrite by rollup mv
 function: wait_materialized_view_finish()
 function: wait_global_dict_ready("col3", "test_base_table1")
