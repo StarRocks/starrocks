@@ -78,8 +78,8 @@ public class ForceCTEReuseRule extends TransformationRule {
 
     /**
      * Visitor to check if there's a LogicalLimitOperator (LIMIT without ORDER BY)
-     * in the expression tree. LogicalTopNOperator (ORDER BY with optional LIMIT)
-     * is considered stable and doesn't need to force CTE reuse.
+     * in the expression tree. Since Limit will merge with TopN, checking for
+     * LogicalLimitOperator is sufficient.
      */
     private static class LimitWithoutOrderByVisitor extends OptExpressionVisitor<Boolean, Void> {
         @Override
@@ -98,13 +98,6 @@ public class ForceCTEReuseRule extends TransformationRule {
             // Found LogicalLimitOperator, which means LIMIT without ORDER BY
             // This is unstable and should force CTE reuse
             return true;
-        }
-
-        @Override
-        public Boolean visitLogicalTopN(OptExpression optExpression, Void context) {
-            // LogicalTopNOperator has ORDER BY, so it's stable
-            // Continue checking children but don't mark as unstable
-            return visit(optExpression, context);
         }
     }
 }
