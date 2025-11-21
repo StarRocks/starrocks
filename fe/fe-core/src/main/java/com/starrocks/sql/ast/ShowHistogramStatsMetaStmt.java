@@ -32,7 +32,7 @@ import com.starrocks.statistic.HistogramStatsMeta;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowHistogramStatsMetaStmt extends EnhancedShowStmt {
+public class ShowHistogramStatsMetaStmt extends ShowStmt {
 
     public ShowHistogramStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
                                       LimitElement limitElement, NodePosition pos) {
@@ -111,4 +111,3 @@ public class ShowHistogramStatsMetaStmt extends EnhancedShowStmt {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitShowHistogramStatsMetaStatement(this, context);
     }
 }
-

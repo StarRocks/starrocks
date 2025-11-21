@@ -17,7 +17,9 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnPosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -28,13 +30,13 @@ public class ColumnPositionTest {
     @Test
     public void testNormal() throws AnalysisException {
         ColumnPosition pos = ColumnPosition.FIRST;
-        pos.analyze();
+        analyze(pos);
         Assertions.assertEquals("FIRST", pos.toString());
         Assertions.assertNull(pos.getLastCol());
         Assertions.assertTrue(pos.isFirst());
 
         pos = new ColumnPosition("col");
-        pos.analyze();
+        analyze(pos);
         Assertions.assertEquals("AFTER `col`", pos.toString());
         Assertions.assertEquals("col", pos.getLastCol());
         Assertions.assertFalse(pos.isFirst());
@@ -42,10 +44,16 @@ public class ColumnPositionTest {
 
     @Test
     public void testNoCol() {
-        assertThrows(AnalysisException.class, () -> {
+        assertThrows(SemanticException.class, () -> {
             ColumnPosition pos = new ColumnPosition("");
-            pos.analyze();
+            analyze(pos);
             Assertions.fail("No exception throws.");
         });
+    }
+
+    private void analyze(ColumnPosition pos) {
+        if (pos != ColumnPosition.FIRST && Strings.isNullOrEmpty(pos.getLastCol())) {
+            throw new SemanticException("Column is empty.");
+        }
     }
 }
