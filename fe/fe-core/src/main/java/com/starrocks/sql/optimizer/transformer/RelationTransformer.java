@@ -161,9 +161,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class RelationTransformer implements AstVisitorExtendInterface<LogicalPlan, ExpressionMapping> {
     private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);

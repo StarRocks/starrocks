@@ -152,7 +152,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {

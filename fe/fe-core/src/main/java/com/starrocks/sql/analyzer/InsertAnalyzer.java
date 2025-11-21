@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.NullType;
@@ -564,7 +565,7 @@ public class InsertAnalyzer {
             Column column = table.getColumn(actualName);
             try {
                 Type type = literalExpr.isConstantNull() ? NullType.NULL : column.getType();
-                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), type);
+                Expr expr = LiteralExprFactory.create(literalExpr.getStringValue(), type);
                 insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());

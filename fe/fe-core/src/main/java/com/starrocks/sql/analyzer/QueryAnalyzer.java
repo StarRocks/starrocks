@@ -87,7 +87,7 @@ import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
@@ -670,7 +670,7 @@ public class QueryAnalyzer {
                 List<Expr> row = Lists.newArrayList();
                 for (int i = 0; i < columns.size(); ++i) {
                     try {
-                        row.add(LiteralExpr.create(fileInfo.get(i), columns.get(i).getType()));
+                        row.add(LiteralExprFactory.create(fileInfo.get(i), columns.get(i).getType()));
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

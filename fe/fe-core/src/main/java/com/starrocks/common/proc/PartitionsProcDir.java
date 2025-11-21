@@ -55,6 +55,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.DateType;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -178,7 +180,8 @@ public class PartitionsProcDir implements ProcDirInterface {
             long leftVal;
             long rightVal;
             if (subExpr.getChild(1) instanceof DateLiteral) {
-                leftVal = (new DateLiteral((String) element, DateType.DATETIME)).getLongValue();
+                LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
+                leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
                 rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             } else {
                 leftVal = Long.parseLong(element.toString());

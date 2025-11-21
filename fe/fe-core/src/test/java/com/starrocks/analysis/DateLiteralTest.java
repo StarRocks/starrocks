@@ -18,9 +18,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -31,28 +33,28 @@ public class DateLiteralTest {
     public void TwoDigitYear() {
         boolean hasException = false;
         try {
-            DateLiteral literal = new DateLiteral("1997-10-07", DateType.DATE);
+            DateLiteral literal = createDateLiteral("1997-10-07", DateType.DATE);
             Assertions.assertEquals(1997, literal.getYear());
 
-            DateLiteral literal2 = new DateLiteral("97-10-07", DateType.DATE);
+            DateLiteral literal2 = createDateLiteral("97-10-07", DateType.DATE);
             Assertions.assertEquals(1997, literal2.getYear());
 
-            DateLiteral literal3 = new DateLiteral("0097-10-07", DateType.DATE);
+            DateLiteral literal3 = createDateLiteral("0097-10-07", DateType.DATE);
             Assertions.assertEquals(97, literal3.getYear());
 
-            DateLiteral literal4 = new DateLiteral("99-10-07", DateType.DATE);
+            DateLiteral literal4 = createDateLiteral("99-10-07", DateType.DATE);
             Assertions.assertEquals(1999, literal4.getYear());
 
-            DateLiteral literal5 = new DateLiteral("70-10-07", DateType.DATE);
+            DateLiteral literal5 = createDateLiteral("70-10-07", DateType.DATE);
             Assertions.assertEquals(1970, literal5.getYear());
 
-            DateLiteral literal6 = new DateLiteral("69-10-07", DateType.DATE);
+            DateLiteral literal6 = createDateLiteral("69-10-07", DateType.DATE);
             Assertions.assertEquals(2069, literal6.getYear());
 
-            DateLiteral literal7 = new DateLiteral("00-10-07", DateType.DATE);
+            DateLiteral literal7 = createDateLiteral("00-10-07", DateType.DATE);
             Assertions.assertEquals(2000, literal7.getYear());
 
-        } catch (AnalysisException e) {
+        } catch (ParsingException e) {
             e.printStackTrace();
             hasException = true;
         }
@@ -63,12 +65,12 @@ public class DateLiteralTest {
     public void uncheckedCastTo() {
         boolean hasException = false;
         try {
-            DateLiteral literal = new DateLiteral("1997-10-07", DateType.DATE);
+            DateLiteral literal = createDateLiteral("1997-10-07", DateType.DATE);
             Expr castToExpr = ExprCastFunction.uncheckedCastTo(literal, DateType.DATETIME);
             Assertions.assertTrue(castToExpr instanceof DateLiteral);
             Assertions.assertEquals(castToExpr.getType(), DateType.DATETIME);
 
-            DateLiteral literal2 = new DateLiteral("1997-10-07 12:23:23", DateType.DATETIME);
+            DateLiteral literal2 = createDateLiteral("1997-10-07 12:23:23", DateType.DATETIME);
             Expr castToExpr2 = ExprCastFunction.uncheckedCastTo(literal2, DateType.DATETIME);
             Assertions.assertTrue(castToExpr2 instanceof DateLiteral);
         } catch (AnalysisException e) {
@@ -76,5 +78,13 @@ public class DateLiteralTest {
             hasException = true;
         }
         Assertions.assertFalse(hasException);
+    }
+
+    private DateLiteral createDateLiteral(String value, DateType type) throws ParsingException {
+        try {
+            return new DateLiteral(DateUtils.parseStrictDateTime(value), type);
+        } catch (RuntimeException e) {
+            throw new ParsingException("Invalid date literal: " + value, e);
+        }
     }
 }

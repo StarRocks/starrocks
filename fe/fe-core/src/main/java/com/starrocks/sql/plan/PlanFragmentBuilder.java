@@ -132,6 +132,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -1751,7 +1752,7 @@ public class PlanFragmentBuilder {
                         predicate.setChild(0, columnRefOperator);
                         try {
                             LiteralExpr literalExpr =
-                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(),
+                                    LiteralExprFactory.create(((ConstantOperator) operator1).getVarchar(),
                                             columnRefOperator.getType());
                             predicate.setChild(1,
                                     ConstantOperator.createObject(literalExpr.getRealObjectValue(),

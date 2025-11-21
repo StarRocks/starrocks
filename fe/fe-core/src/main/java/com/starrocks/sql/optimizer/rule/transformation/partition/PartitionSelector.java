@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
@@ -513,7 +514,7 @@ public class PartitionSelector {
         for (Map.Entry<ColumnRefOperator, Integer> entry : colRefIdxMap.entrySet()) {
             ColumnRefOperator colRef = entry.getKey();
             try {
-                LiteralExpr literalExpr = LiteralExpr.create(values.get(entry.getValue()), colRef.getType());
+                LiteralExpr literalExpr = LiteralExprFactory.create(values.get(entry.getValue()), colRef.getType());
                 ConstantOperator replace = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                 replaceMap.put(colRef, replace);
             } catch (Exception e) {

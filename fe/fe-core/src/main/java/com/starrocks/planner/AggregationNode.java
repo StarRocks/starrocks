@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -270,8 +271,8 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
                     try {
                         Type type = expr.getType();
-                        LiteralExpr minExpr = LiteralExpr.create(min, type);
-                        LiteralExpr maxExpr = LiteralExpr.create(max, type);
+                        LiteralExpr minExpr = LiteralExprFactory.create(min, type);
+                        LiteralExpr maxExpr = LiteralExprFactory.create(max, type);
                         // cast decimal literal to matched precision type
                         if (minExpr instanceof DecimalLiteral) {
                             minExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(minExpr, type);
