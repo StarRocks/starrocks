@@ -16,3 +16,7 @@ The following fields are provided in `tasks`:
 | DATABASE    | Database where the task belongs.                             |
 | DEFINITION  | SQL definition of the task.                                  |
 | EXPIRE_TIME | Time when the task expires.                                  |
+
+## Reference
+
+[`SUBMIT_TASK` documentation](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md)
