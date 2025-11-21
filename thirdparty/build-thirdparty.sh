@@ -476,7 +476,10 @@ build_llvm() {
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
 
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
+    BASE_DY_LIB_BASE=$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH="${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH}"
+
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
@@ -500,6 +503,7 @@ build_llvm() {
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
     ${BUILD_SYSTEM} install-LLVM
 
+    export LD_LIBRARY_PATH="${BASE_DY_LIB_BASE}"
     restore_compile_flags
 }
 # protobuf
