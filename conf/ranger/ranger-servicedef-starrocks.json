@@ -350,7 +350,35 @@
         "repository",
         "create resource group",
         "create global function",
-        "create storage volume"
+        "create storage volume",
+        "create warehouse"
+      ]
+    },
+    {
+      "itemId": 14,
+      "name": "warehouse",
+      "type": "string",
+      "level": 10,
+      "parent": "",
+      "mandatory": true,
+      "isValidLeaf": true,
+      "lookupSupported": true,
+      "recursiveSupported": false,
+      "excludesSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "validationRegEx": "",
+      "validationMessage": "",
+      "uiHint": "",
+      "label": "StarRocks Warehouse",
+      "description": "StarRocks Warehouse for compute resource isolation (Shared-Data architecture)",
+      "accessTypeRestrictions": [
+        "usage",
+        "alter",
+        "drop"
       ]
     }
   ],
@@ -489,6 +517,11 @@
       "itemId": 27,
       "name": "create storage volume",
       "label": "CREATE STORAGE VOLUME"
+    },
+    {
+      "itemId": 28,
+      "name": "create warehouse",
+      "label": "CREATE WAREHOUSE"
     }
   ],
   "configs": [

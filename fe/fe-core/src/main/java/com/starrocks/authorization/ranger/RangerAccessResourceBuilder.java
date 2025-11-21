@@ -96,4 +96,9 @@ public abstract class RangerAccessResourceBuilder implements ObjectTypeConverter
         rangerAccessResource.setValue(convertToRangerType(ObjectType.PIPE), pipe);
         return this;
     }
+
+    public RangerAccessResourceBuilder setWarehouse(String warehouse) {
+        rangerAccessResource.setValue(convertToRangerType(ObjectType.WAREHOUSE), warehouse);
+        return this;
+    }
 }

@@ -51,6 +51,8 @@ public class RangerStarRocksResource extends RangerAccessResourceImpl {
                 return "storage_volume";
             } else if (objectType.equals(ObjectType.PIPE)) {
                 return "pipe";
+            } else if (objectType.equals(ObjectType.WAREHOUSE)) {
+                return "warehouse";
             } else {
                 return "unknown";
             }
