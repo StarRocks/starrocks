@@ -187,9 +187,10 @@ void GlobalDriverExecutor::_worker_thread() {
                 auto o_id = get_backend_id();
                 int64_t be_id = o_id.has_value() ? o_id.value() : -1;
                 status = status.clone_and_append(fmt::format("BE:{}", be_id));
-                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                             << ", status=" << status;
+                LOG_IF(WARNING, !status.is_suppressed())
+                        << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                        << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                        << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
                 query_ctx->cancel(status, false);
                 runtime_state->set_is_cancelled(true);
