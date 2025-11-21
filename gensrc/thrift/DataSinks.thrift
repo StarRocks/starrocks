@@ -244,6 +244,7 @@ struct TSchemaTableSink {
 }
 
 struct TIcebergTableSink {
+    // table location
     1: optional string location
     2: optional string file_format
     3: optional i64 target_table_id
@@ -252,6 +253,7 @@ struct TIcebergTableSink {
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
+    9: optional string data_location
 }
 
 struct THiveTableSink {
