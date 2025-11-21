@@ -1063,6 +1063,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     @Override
     public void onCreate(Database database) throws DdlException {
+        super.onCreate(database);
         onReload(false, isActive(), true);
     }
 
