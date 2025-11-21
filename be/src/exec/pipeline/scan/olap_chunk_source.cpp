@@ -242,12 +242,6 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
     _params.sample_options = thrift_olap_scan_node.sample_options;
-    if (_runtime_state->query_options().__isset.gin_max_expansions) {
-        _params.gin_max_expansions = _runtime_state->query_options().gin_max_expansions;
-    }
-    if (_runtime_state->query_options().__isset.enable_phrase_query_sequential_opt) {
-        _params.enable_phrase_query_sequential_opt = _runtime_state->query_options().enable_phrase_query_sequential_opt;
-    }
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }

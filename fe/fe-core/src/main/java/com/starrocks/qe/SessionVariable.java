@@ -944,7 +944,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // GIN variables
     public static final String ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT = "enable_phrase_query_sequential_opt";
-    public static final String GIN_MAX_EXPANSIONS = "gin_max_expansions";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1925,9 +1924,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PHRASE_QUERY_SEQUENTIAL_OPT)
     private boolean enablePhraseQuerySequentialOpt = false;
-
-    @VarAttr(name = GIN_MAX_EXPANSIONS)
-    private int ginMaxExpansions = 50;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -5336,7 +5332,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
         tResult.setEnable_phrase_query_sequential_opt(enablePhraseQuerySequentialOpt);
-        tResult.setGin_max_expansions(ginMaxExpansions);
 
         tResult.setEnable_scan_datacache(enableScanDataCache);
         tResult.setEnable_populate_datacache(enablePopulateDataCache);

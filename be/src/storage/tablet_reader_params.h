@@ -100,9 +100,6 @@ struct TabletReaderParams {
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
-    // gin additional options
-    int32_t gin_max_expansions = 50;
-    bool enable_phrase_query_sequential_opt = false;
 
     bool use_vector_index = false;
 

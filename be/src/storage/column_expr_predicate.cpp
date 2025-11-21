@@ -284,8 +284,7 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
     return Status::OK();
 }
 Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
-                                                roaring::Roaring* row_bitmap,
-                                                GinQueryOptions* gin_query_options) const {
+                                                roaring::Roaring* row_bitmap) const {
     // Only support simple (NOT) LIKE/MATCH predicate for now
     // Root must be (NOT) LIKE/MATCH, and left child must be ColumnRef, which satisfy simple (NOT) LIKE/MATCH predicate
     // format as: col (NOT) LIKE/MATCH xxx, xxx must be string literal
@@ -333,7 +332,7 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
     // MATCH a empty string should always return empty set.
-    if (padded_value.empty() && match_type != TMatchType::MATCH_REGEXP) {
+    if (padded_value.empty()) {
         *row_bitmap -= *row_bitmap;
         return Status::OK();
     }
@@ -366,14 +365,13 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     default:
         break;
     }
-    gin_query_options->setQueryType(query_type);
 
     roaring::Roaring null_bitmap;
     RETURN_IF_ERROR(iterator->read_null(column_name, &null_bitmap));
     *row_bitmap -= null_bitmap;
 
     roaring::Roaring roaring;
-    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, gin_query_options, &roaring));
+    RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     if (with_not) {
         *row_bitmap -= roaring;
     } else {

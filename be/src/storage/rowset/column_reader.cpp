@@ -524,6 +524,13 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                 type = _column_type;
                             }
 
+                            if (opts.runtime_state != nullptr &&
+                                opts.runtime_state->query_options().__isset.enable_phrase_query_sequential_opt) {
+                                add_enable_phrase_query_sequential_opt_options(
+                                        index_meta.get(),
+                                        opts.runtime_state->query_options().enable_phrase_query_sequential_opt);
+                            }
+
                             ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
@@ -531,7 +538,6 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                             ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
                             RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
                                                                                           &_inverted_index));
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
 
                             return Status::OK();
                         })

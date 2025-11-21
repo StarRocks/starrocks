@@ -2372,14 +2372,7 @@ Status SegmentIterator::_apply_inverted_index() {
         std::string column_name(_schema.field(it->second)->name());
         for (const ColumnPredicate* pred : pred_list) {
             if (_inverted_index_iterators[cid]->is_untokenized() || pred->type() == PredicateType::kExpr) {
-                std::unique_ptr<GinQueryOptions> gin_query_options = std::make_unique<GinQueryOptions>();
-                gin_query_options->setEnablePhraseQuerySequentialOpt(_opts.enable_phrase_query_sequential_opt);
-                gin_query_options->setMaxExpansions(_opts.gin_max_expansions);
-                gin_query_options->setParserType(_inverted_index_iterators[cid]->get_inverted_index_analyser_type());
-                gin_query_options->setReaderType(_inverted_index_iterators[cid]->get_inverted_index_reader_type());
-
-                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap,
-                                                       gin_query_options.get());
+                Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
                 if (res.ok()) {
                     erased_preds.emplace(pred);
                     erased_pred_col_ids.emplace(cid);

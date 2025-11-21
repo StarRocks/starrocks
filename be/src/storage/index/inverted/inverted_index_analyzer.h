@@ -34,7 +34,7 @@ namespace starrocks {
 
 enum class InvertedIndexParserType;
 enum class InvertedIndexQueryType;
-class GinQueryOptions;
+class InvertedIndexCtx;
 
 using CharFilterMap = std::map<std::string, std::string>;
 
@@ -44,7 +44,7 @@ public:
 
     static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
                                                                  const std::wstring& field_name,
-                                                                 const GinQueryOptions* gin_query_options);
+                                                                 const InvertedIndexCtx* inverted_index_ctx);
 
     static StatusOr<std::vector<std::string>> get_analyse_result(const std::string& search_str,
                                                                  const std::wstring& field_name,

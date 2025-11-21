@@ -775,8 +775,6 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
-    seg_options.enable_phrase_query_sequential_opt = options.enable_phrase_query_sequential_opt;
-    seg_options.gin_max_expansions = options.gin_max_expansions;
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.enable_gin_filter = options.enable_gin_filter;
     seg_options.has_preaggregation = options.has_preaggregation;

@@ -203,8 +203,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.tablet_id = tablet_id();
-    seg_options.enable_phrase_query_sequential_opt = options.enable_phrase_query_sequential_opt;
-    seg_options.gin_max_expansions = options.gin_max_expansions;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
