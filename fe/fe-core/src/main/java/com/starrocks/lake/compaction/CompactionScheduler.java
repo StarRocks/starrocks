@@ -357,15 +357,17 @@ public class CompactionScheduler extends Daemon {
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
                                               info.computeResource, info.warehouseName);
         try {
+            LOG.info("Start creating compaction tasks for tableId: {}, partitionId: {}", table.getId(), partition.getId());
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
-                        partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId());
+                        partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table.getId());
                 task.sendRequest();
                 job.setAggregateTask(task);
                 LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
+                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(),
+                        table.getId(), partition.getId());
                 for (CompactionTask task : tasks) {
                     task.sendRequest();
                 }
@@ -387,7 +389,7 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, long tableId, long partitionId)
             throws StarRocksException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
@@ -406,6 +408,8 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.tableId = tableId;
+            request.partitionId = partitionId;
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -415,7 +419,7 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private CompactionTask createAggregateCompactionTask(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource, long partitionId)
+            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource, long partitionId, long tableId)
             throws StarRocksException, RpcException {
         // 1. build AggregateCompactRequest
         AggregateCompactRequest aggRequest = new AggregateCompactRequest();
@@ -442,6 +446,8 @@ public class CompactionScheduler extends Daemon {
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             request.skipWriteTxnlog = true;
+            request.tableId = tableId;
+            request.partitionId = partitionId;
 
             aggRequest.requests.add(request);
             aggRequest.computeNodes.add(nodePB);

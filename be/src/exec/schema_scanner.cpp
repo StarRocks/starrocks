@@ -28,6 +28,7 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
+#include "exec/schema_scanner/schema_be_tablet_write_log_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
@@ -199,6 +200,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeBvarsScanner>();
     case TSchemaTableType::SCH_BE_CLOUD_NATIVE_COMPACTIONS:
         return std::make_unique<SchemaBeCloudNativeCompactionsScanner>();
+    case TSchemaTableType::SCH_BE_TABLET_WRITE_LOG:
+        return std::make_unique<SchemaBeTabletWriteLogScanner>();
     case TSchemaTableType::STARROCKS_ROLE_EDGES:
         return std::make_unique<StarrocksRoleEdgesScanner>();
     case TSchemaTableType::STARROCKS_GRANT_TO_ROLES:

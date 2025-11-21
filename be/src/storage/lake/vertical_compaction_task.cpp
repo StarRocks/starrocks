@@ -14,6 +14,8 @@
 
 #include "storage/lake/vertical_compaction_task.h"
 
+#include "agent/master_info.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -21,6 +23,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
@@ -29,6 +32,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
 #include "util/defer_op.h"
+#include "util/time.h"
 
 namespace starrocks::lake {
 
@@ -114,7 +118,18 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     }
 
     LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-              << ", statistics: " << _context->stats->to_json_stats();
+              << ", statistics: " << _context->stats->to_json_stats()
+              << ", table_id: " << _context->table_id << ", partition_id: " << _context->partition_id;
+
+    if (config::enable_tablet_write_log) {
+        int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
+        int64_t finish_time = UnixMillis();
+        TabletWriteLogManager::instance()->add_compaction_log(
+                get_backend_id().value_or(0), _txn_id, _tablet.id(), _context->table_id, _context->partition_id,
+                _total_num_rows, input_bytes, writer->num_rows(), writer->data_size(),
+                _context->stats->read_segment_count, writer->files().size(), 0, "vertical", begin_time,
+                finish_time);
+    }
 
     return Status::OK();
 }

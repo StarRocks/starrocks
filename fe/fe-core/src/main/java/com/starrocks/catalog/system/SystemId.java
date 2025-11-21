@@ -107,6 +107,7 @@ public class SystemId {
     public static final long KEYWORDS_ID = 44L;
 
     public static final long APPLICABLE_ROLES_ID = 45L;
+    public static final long BE_TABLET_WRITE_LOG_ID = 46L;
 
     public static final long FE_THREADS_ID = 46L;
 
