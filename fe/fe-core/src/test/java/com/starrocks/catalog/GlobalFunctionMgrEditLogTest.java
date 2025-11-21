@@ -18,7 +18,6 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
