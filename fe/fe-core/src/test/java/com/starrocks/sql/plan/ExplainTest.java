@@ -14,7 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ExplainTest extends PlanTestBase {
@@ -44,5 +49,22 @@ public class ExplainTest extends PlanTestBase {
                 + "   - AGGREGATE(LOCAL) [1:v1] {rows: 1}\n"
                 + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
                 + "      |partitionRatio: 0/1, tabletRatio: 0/0");
+    }
+
+    @Test
+    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
+        String originalLevel = Config.query_detail_explain_level;
+        Config.query_detail_explain_level = "LOGICAL";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                    "EXPLAIN SELECT * FROM t0", connectContext);
+            Assertions.assertTrue(statementBase instanceof QueryStatement);
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            Assertions.assertTrue(queryStatement.isExplain());
+            Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
+        } finally {
+            Config.query_detail_explain_level = originalLevel;
+        }
+
     }
 }
