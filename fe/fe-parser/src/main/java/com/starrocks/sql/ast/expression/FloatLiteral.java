@@ -12,35 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/FloatLiteral.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.FloatType;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 
 import java.nio.ByteBuffer;
@@ -53,7 +30,7 @@ public class FloatLiteral extends LiteralExpr {
     public FloatLiteral() {
     }
 
-    public FloatLiteral(Double value) throws AnalysisException {
+    public FloatLiteral(Double value) {
         checkValue(value);
         init(value);
     }
@@ -61,30 +38,30 @@ public class FloatLiteral extends LiteralExpr {
     /**
      * C'tor forcing type, e.g., due to implicit cast
      */
-    public FloatLiteral(Double value, Type type) throws AnalysisException {
+    public FloatLiteral(Double value, Type type) {
         this.value = value;
         this.type = type;
         checkValue(value);
         analysisDone();
     }
 
-    public FloatLiteral(String value) throws AnalysisException {
+    public FloatLiteral(String value) {
         this(value, NodePosition.ZERO);
     }
 
-    public FloatLiteral(String value, Type type) throws AnalysisException {
+    public FloatLiteral(String value, Type type) {
         this(value, NodePosition.ZERO);
         this.type = type;
     }
 
-    public FloatLiteral(String value, NodePosition pos) throws AnalysisException {
+    public FloatLiteral(String value, NodePosition pos) {
         super(pos);
         Double floatValue = null;
         try {
             floatValue = Double.valueOf(value);
             checkValue(floatValue);
         } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid floating-point literal: " + value, e);
+            throw new ParsingException("Invalid floating-point literal: " + value, e);
         }
         init(floatValue);
     }
@@ -131,9 +108,9 @@ public class FloatLiteral extends LiteralExpr {
         type = Float.toString(fvalue).equals(Double.toString(value)) ? FloatType.FLOAT : FloatType.DOUBLE;
     }
 
-    private void checkValue(Double value) throws AnalysisException {
+    private void checkValue(Double value) {
         if (value.isInfinite() || value.isNaN()) {
-            throw new AnalysisException("Invalid literal:" + value);
+            throw new ParsingException("Invalid literal:" + value);
         }
     }
 
@@ -170,13 +147,12 @@ public class FloatLiteral extends LiteralExpr {
         return value;
     }
 
-
     public double getValue() {
         return value;
     }
 
     @Override
-    public void swapSign() throws NotImplementedException {
+    public void swapSign() throws UnsupportedOperationException {
         // swapping sign does not change the type
         value = -value;
     }
@@ -187,16 +163,7 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     @Override
-    public void parseMysqlParam(ByteBuffer data) {
-        if (type.getPrimitiveType() == PrimitiveType.FLOAT) {
-            value = data.getFloat();
-        } else if (type.getPrimitiveType() == PrimitiveType.DOUBLE) {
-            value = data.getDouble();
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitFloatLiteral(this, context);
+        return visitor.visitFloatLiteral(this, context);
     }
 }

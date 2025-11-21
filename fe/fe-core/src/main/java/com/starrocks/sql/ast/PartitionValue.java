@@ -18,6 +18,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.DateType;
@@ -68,19 +69,19 @@ public class PartitionValue implements ParseNode {
         }
 
         if (isMax()) {
-            return LiteralExpr.createInfinity(type, true);
+            return LiteralExprFactory.createInfinity(type, true);
         } else {
             if (type.isDatetime()) {
                 try {
-                    return LiteralExpr.create(value, type);
+                    return LiteralExprFactory.create(value, type);
                 } catch (AnalysisException ex) {
                     // partition value allowed DATETIME type like DATE
-                    LiteralExpr literalExpr = LiteralExpr.create(value, DateType.DATE);
+                    LiteralExpr literalExpr = LiteralExprFactory.create(value, DateType.DATE);
                     literalExpr.setType(DateType.DATETIME);
                     return literalExpr;
                 }
             } else {
-                return LiteralExpr.create(value, type);
+                return LiteralExprFactory.create(value, type);
             }
         }
     }

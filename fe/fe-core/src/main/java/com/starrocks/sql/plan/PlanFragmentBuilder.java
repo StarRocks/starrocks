@@ -130,9 +130,9 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -1752,7 +1752,7 @@ public class PlanFragmentBuilder {
                         predicate.setChild(0, columnRefOperator);
                         try {
                             LiteralExpr literalExpr =
-                                    LiteralExpr.create(((ConstantOperator) operator1).getVarchar(),
+                                    LiteralExprFactory.create(((ConstantOperator) operator1).getVarchar(),
                                             columnRefOperator.getType());
                             predicate.setChild(1,
                                     ConstantOperator.createObject(literalExpr.getRealObjectValue(),
@@ -3602,9 +3602,7 @@ public class PlanFragmentBuilder {
                 }
                 ExchangeNode exchangeNode = (ExchangeNode) child.getPlanRoot();
                 if (!exchangeNode.isMerge()) {
-                    SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
-                            Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
-                    exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                    exchangeNode.setOffset(limit.getOffset());
                 } else if (exchangeNode.getOffset() <= 0) {
                     exchangeNode.setOffset(limit.getOffset());
                 } else if (exchangeNode.getOffset() > 0) {

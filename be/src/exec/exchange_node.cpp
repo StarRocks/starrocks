@@ -40,6 +40,7 @@
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
@@ -61,7 +62,6 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0),
           _num_rows_skipped(0) {
     DCHECK_GE(_offset, 0);
-    DCHECK(_is_merging || (_offset == 0));
 }
 
 Status ExchangeNode::init(const TPlanNode& tnode, RuntimeState* state) {
@@ -254,6 +254,11 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
                 query_ctx->enable_pipeline_level_shuffle());
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
+
+        if (_offset > 0) {
+            operators.emplace_back(std::make_shared<OffsetOperatorFactory>(context->next_operator_id(), id(), _offset));
+        }
+
     } else {
         if ((_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) &&
             !_sort_exec_exprs.lhs_ordering_expr_ctxs().empty()) {

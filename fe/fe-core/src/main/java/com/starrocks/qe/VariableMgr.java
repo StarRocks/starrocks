@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -51,10 +52,18 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshConnectionsRequest;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -450,6 +459,7 @@ public class VariableMgr {
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
+            
             for (String varName : root.keySet()) {
                 VarContext varContext = getVarContext(varName);
                 if (varContext == null) {
@@ -546,6 +556,169 @@ public class VariableMgr {
         } else {
             return getValue(var, ctx.getField());
         }
+    }
+
+    /**
+     * Refresh all active connections to apply global variables.
+     * Only refreshes variables that haven't been modified by the session itself.
+     */
+    public void refreshConnections() {
+        refreshConnections(false);
+    }
+
+    /**
+     * Refresh all active connections to apply global variables.
+     *
+     * @param force if true, force refresh all variables even if they have been modified by the session.
+     *              When force is false, only variables that haven't been modified by the session are refreshed.
+     */
+    public void refreshConnections(boolean force) {
+        // Refresh on current node
+        refreshConnectionsInternal(force);
+
+        // Notify other FE nodes via RPC
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            notifyOtherFEsToRefreshConnections(force);
+        }
+    }
+
+    /**
+     * Notify other FE nodes to refresh connections via RPC.
+     */
+    private void notifyOtherFEsToRefreshConnections(boolean force) {
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                continue;
+            }
+
+            try {
+                TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+                request.setForce(force);
+                TRefreshConnectionsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.refreshConnections(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("Failed to notify FE {} to refresh connections: {}",
+                            fe.getHost(), response.getStatus().getError_msgs());
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to notify FE {} to refresh connections: {}", fe.getHost(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Internal method to refresh connections on the current node.
+     * Made package-private so it can be called from FrontendServiceImpl via RPC.
+     */
+    public void refreshConnectionsInternal(boolean force) {
+        if (ExecuteEnv.getInstance().getScheduler() == null) {
+            LOG.warn("ConnectScheduler is not initialized, skip refresh connections");
+            return;
+        }
+
+        Map<Long, ConnectContext> connectionMap = ExecuteEnv.getInstance().getScheduler().getCurrentConnectionMap();
+        if (connectionMap == null || connectionMap.isEmpty()) {
+            return;
+        }
+
+        // Get a snapshot of default session variables
+        SessionVariable defaultVar;
+        rLock.lock();
+        try {
+            defaultVar = (SessionVariable) defaultSessionVariable.clone();
+        } finally {
+            rLock.unlock();
+        }
+
+        int refreshedCount = 0;
+        for (ConnectContext ctx : connectionMap.values()) {
+            try {
+                if (refreshConnectionVariables(ctx, defaultVar, force)) {
+                    refreshedCount++;
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to refresh variables for connection {}: {}", 
+                        ctx.getConnectionId(), e.getMessage());
+            }
+        }
+
+        LOG.info("Refreshed {} connections", refreshedCount);
+    }
+
+    /**
+     * Refresh variables for a single connection.
+     * 
+     * @param ctx the connection context
+     * @param defaultVar the default session variables (current global defaults)
+     * @param force if true, force refresh all variables even if they have been modified by the session
+     * @return true if any variables were refreshed
+     */
+    private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar, boolean force) {
+        SessionVariable sessionVar = ctx.getSessionVariable();
+        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
+        
+        boolean refreshed = false;
+        
+        // Iterate through all session variables and refresh those that haven't been modified
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            VarAttr attr = field.getAnnotation(VarAttr.class);
+            if (attr == null) {
+                continue;
+            }
+
+            String varName = attr.name();
+
+            // Skip variables that have been modified by the session (unless force is true)
+            if (!force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                continue;
+            }
+
+            // Skip variables that are session-only (not affected by global changes)
+            if ((attr.flag() & SESSION_ONLY) != 0) {
+                continue;
+            }
+
+            // Skip variables that don't forward to leader (they're not affected by global changes)
+            if ((attr.flag() & DISABLE_FORWARD_TO_LEADER) != 0) {
+                continue;
+            }
+
+            try {
+                field.setAccessible(true);
+                Object defaultValue = field.get(defaultVar);
+                Object currentValue = field.get(sessionVar);
+
+                // Only refresh if the value has changed
+                if (!java.util.Objects.equals(defaultValue, currentValue)) {
+                    String valueStr = getValue(defaultVar, field);
+                    setValue(sessionVar, field, valueStr);
+                    refreshed = true;
+                    // If force is true, remove the variable from modifiedSessionVariables
+                    // since it has been forcibly reset to global default
+                    if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                        modifiedVars.remove(varName);
+                    }
+                } else if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                    // Even if the value hasn't changed, if force is true and the variable
+                    // was previously modified, remove it from modifiedSessionVariables
+                    // to allow future non-forced refreshes to update it
+                    modifiedVars.remove(varName);
+                    refreshed = true;
+                }
+            } catch (DdlException e) {
+                LOG.warn("Failed to setValue", e);
+            } catch (IllegalAccessException e) {
+                LOG.warn("Failed to access field {} for connection {}",
+                        field.getName(), ctx.getConnectionId(), e);
+            }
+        }
+
+        return refreshed;
     }
 
     private String getValue(Object obj, Field field) {

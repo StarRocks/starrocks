@@ -18,9 +18,10 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.DateType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
@@ -28,6 +29,7 @@ import com.starrocks.type.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -81,71 +83,77 @@ public final class ExprCastFunction {
     }
 
     private static Expr specializedUncheckedCast(Expr expr, Type targetType) throws AnalysisException {
-        if (expr instanceof FunctionCallExpr) {
-            Expr result = castFunctionCall((FunctionCallExpr) expr, targetType);
-            if (result != null) {
-                return result;
+        try {
+            if (expr instanceof FunctionCallExpr) {
+                Expr result = castFunctionCall((FunctionCallExpr) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof StringLiteral) {
-            Expr result = castStringLiteral((StringLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof StringLiteral) {
+                Expr result = castStringLiteral((StringLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof LargeIntLiteral) {
-            Expr result = castLargeIntLiteral((LargeIntLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof LargeIntLiteral) {
+                Expr result = castLargeIntLiteral((LargeIntLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof IntLiteral) {
-            Expr result = castIntLiteral((IntLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof IntLiteral) {
+                Expr result = castIntLiteral((IntLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof DateLiteral) {
-            Expr result = castDateLiteral((DateLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof DateLiteral) {
+                Expr result = castDateLiteral((DateLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof FloatLiteral) {
-            Expr result = castFloatLiteral((FloatLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof FloatLiteral) {
+                Expr result = castFloatLiteral((FloatLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof NullLiteral) {
-            Expr result = castNullLiteral((NullLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof NullLiteral) {
+                Expr result = castNullLiteral((NullLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof DecimalLiteral) {
-            Expr result = castDecimalLiteral((DecimalLiteral) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof DecimalLiteral) {
+                Expr result = castDecimalLiteral((DecimalLiteral) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof UserVariableExpr) {
-            Expr result = castUserVariableExpr((UserVariableExpr) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof UserVariableExpr) {
+                Expr result = castUserVariableExpr((UserVariableExpr) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof MapExpr) {
-            Expr result = castMapExpr((MapExpr) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof MapExpr) {
+                Expr result = castMapExpr((MapExpr) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
-        }
-        if (expr instanceof ArrayExpr) {
-            Expr result = castArrayExpr((ArrayExpr) expr, targetType);
-            if (result != null) {
-                return result;
+            if (expr instanceof ArrayExpr) {
+                Expr result = castArrayExpr((ArrayExpr) expr, targetType);
+                if (result != null) {
+                    return result;
+                }
             }
+        } catch (ParsingException e) {
+            throw new AnalysisException(e.getDetailMsg());
+        } catch (Exception e) {
+            throw new AnalysisException(e.getMessage());
         }
         return null;
     }
@@ -207,14 +215,10 @@ public final class ExprCastFunction {
 
     private static Expr convertStringLiteralToDate(String value, Type targetType) throws AnalysisException {
         try {
-            return new DateLiteral(value, targetType);
-        } catch (AnalysisException e) {
-            if (targetType.isDatetime()) {
-                DateLiteral literal = new DateLiteral(value, DateType.DATE);
-                literal.setType(DateType.DATETIME);
-                return literal;
-            }
-            throw e;
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(value);
+            return new DateLiteral(dateTime, targetType);
+        } catch (Exception e) {
+            throw new AnalysisException("Invalid date literal: " + value, e);
         }
     }
 
