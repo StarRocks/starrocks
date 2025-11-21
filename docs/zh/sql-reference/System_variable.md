@@ -247,7 +247,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
 * 描述：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
-* 默认值：64
+* 默认值：16
 * 类型：Int
 * 引入版本：v3.1.9, v3.2.5
 
