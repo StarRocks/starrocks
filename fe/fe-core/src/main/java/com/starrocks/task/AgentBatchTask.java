@@ -47,6 +47,7 @@ import com.starrocks.thrift.TCheckConsistencyReq;
 import com.starrocks.thrift.TClearAlterTaskRequest;
 import com.starrocks.thrift.TClearTransactionTaskRequest;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TClusterSnapshotRequest;
 import com.starrocks.thrift.TCompactionControlReq;
 import com.starrocks.thrift.TCompactionReq;
 import com.starrocks.thrift.TCreateTabletReq;
@@ -403,6 +404,12 @@ public class AgentBatchTask implements Runnable {
                 UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
                 TUpdateSchemaReq req = updateSchemaTask.toThrift();
                 tAgentTaskRequest.setUpdate_schema_req(req);
+                return tAgentTaskRequest;
+            }
+            case DATA_SNAPSHOT: {
+                ClusterSnapshotTask clusterSnapshotTask = (ClusterSnapshotTask) task;
+                TClusterSnapshotRequest req = clusterSnapshotTask.toThrift();
+                tAgentTaskRequest.setData_snapshot_req(req);
                 return tAgentTaskRequest;
             }
             default:

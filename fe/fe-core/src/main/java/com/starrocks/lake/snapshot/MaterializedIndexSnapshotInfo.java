@@ -16,14 +16,19 @@ package com.starrocks.lake.snapshot;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.List;
+
 public class MaterializedIndexSnapshotInfo {
     @SerializedName(value = "indexId")
     public final long indexId;
     @SerializedName(value = "shardGroupId")
     public final long shardGroupId;
+    @SerializedName(value = "tabletIds")
+    public final List<Long> tabletIds;
 
-    public MaterializedIndexSnapshotInfo(long indexId, long shardGroupId) {
+    public MaterializedIndexSnapshotInfo(long indexId, long shardGroupId, List<Long> tabletIds) {
         this.indexId = indexId;
         this.shardGroupId = shardGroupId;
+        this.tabletIds = tabletIds;
     }
 }

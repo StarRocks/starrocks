@@ -217,7 +217,8 @@ enum TTaskType {
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
-    NUM_TASK_TYPE
+    NUM_TASK_TYPE,
+    DATA_SNAPSHOT
 }
 
 enum TStmtType {

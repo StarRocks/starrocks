@@ -282,6 +282,18 @@ struct TUpdateSchemaReq {
     5: optional Descriptors.TOlapTableColumnParam column_param
 }
 
+struct TClusterSnapshotRequest {
+    1: required i64 job_id
+    2: required i64 db_id
+    3: required Types.TTableId table_id
+    4: required Types.TPartitionId partition_id
+    5: required Types.TPartitionId physical_partition_id
+    6: required Types.TVersion pre_version
+    7: required Types.TVersion new_version
+    8: required Types.TTabletId virtual_tablet
+    9: optional map<Types.TBackend, list<Types.TTabletId>> node_to_tablets
+}
+
 struct TUploadReq {
     1: required i64 job_id;
     2: required map<string, string> src_dest_map
@@ -514,6 +526,7 @@ struct TAgentTaskRequest {
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
+    33: optional TClusterSnapshotRequest data_snapshot_req
 }
 
 struct TAgentResult {
