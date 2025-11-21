@@ -884,10 +884,13 @@ public class DefaultCoordinator extends Coordinator {
             }
 
             queryStatus.setStatus(status);
-            LOG.warn(
-                    "one instance report fail throw updateStatus(), need cancel. job id: {}, query id: {}, instance id: {}",
-                    jobSpec.getLoadJobId(), DebugUtil.printId(jobSpec.getQueryId()),
-                    instanceId != null ? DebugUtil.printId(instanceId) : "NaN");
+            if (!status.isSuppressedError()) {
+                LOG.warn(
+                        "one instance report fail throw updateStatus(), need cancel. job id: {}, " +
+                                "query id: {}, instance id: {}",
+                        jobSpec.getLoadJobId(), DebugUtil.printId(jobSpec.getQueryId()),
+                        instanceId != null ? DebugUtil.printId(instanceId) : "NaN");
+            }
             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         } finally {
             lock.unlock();
@@ -912,7 +915,9 @@ public class DefaultCoordinator extends Coordinator {
                 throw new RpcException("unknown", status.getErrorMsg());
             } else {
                 String errMsg = status.getErrorMsg();
-                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
+                if (!status.isSuppressedError()) {
+                    LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
+                }
 
                 // hide host info
                 int hostIndex = errMsg.indexOf("host");
@@ -949,8 +954,10 @@ public class DefaultCoordinator extends Coordinator {
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
             connectContext.setErrorCodeOnce(status.getErrorCodeString());
-            LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
-                    DebugUtil.printId(jobSpec.getQueryId()));
+            if (!status.isSuppressedError()) {
+                LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
+                        DebugUtil.printId(jobSpec.getQueryId()));
+            }
         }
         updateStatus(status, null /* no instance id */);
 
@@ -1169,10 +1176,12 @@ public class DefaultCoordinator extends Coordinator {
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
-            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                    status, DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()),
-                    params.getBackend_id());
+            if (!status.isSuppressedError()) {
+                LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
+                        status, DebugUtil.printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(params.getFragment_instance_id()),
+                        params.getBackend_id());
+            }
             updateStatus(status, params.getFragment_instance_id());
         }
     }
