@@ -209,6 +209,26 @@ static void failure_function() {
     std::abort();
 }
 
+// Calculate timezone offset string dynamically
+static std::string get_timezone_offset_string(const google::LogMessageTime& time) {
+    char tz_str[7] = "+0000";
+
+    // Get timezone offset from LogMessageTime
+    long offset_seconds = time.gmtoffset().count();
+
+    int offset_hours = static_cast<int>(offset_seconds / 3600);
+    int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
+    if (offset_mins < 0) offset_mins = -offset_mins;
+
+    if (offset_seconds < 0) {
+        snprintf(tz_str, sizeof(tz_str), "-%02d%02d", -offset_hours, offset_mins);
+    } else {
+        snprintf(tz_str, sizeof(tz_str), "+%02d%02d", offset_hours, offset_mins);
+    }
+
+    return std::string(tz_str);
+}
+
 // Custom prefix formatter that includes timezone information
 static void custom_prefix_formatter(std::ostream& s, const google::LogMessage& message, void*) {
     const google::LogMessageTime& time = message.time();
@@ -229,40 +249,8 @@ static void custom_prefix_formatter(std::ostream& s, const google::LogMessage& m
           << '.' << std::setw(6) << time.usec();
     }
 
-    // Timezone offset (cached, calculated once at first call)
-    static const char* cached_timezone_str = []() {
-        static char tz_str[7] = "+0000";
-        // Calculate timezone offset once using current time
-        std::time_t now = std::time(nullptr);
-        struct std::tm tm_local;
-        localtime_r(&now, &tm_local);
-
-        // Get timezone offset using gmtoff if available, otherwise calculate
-        long offset_seconds = 0;
-#ifdef __USE_MISC
-        offset_seconds = tm_local.tm_gmtoff;
-#else
-        // Fallback: use timezone variable
-        extern long timezone;
-        offset_seconds = -timezone;
-        if (tm_local.tm_isdst > 0) {
-            offset_seconds -= 3600; // Adjust for DST
-        }
-#endif
-
-        int offset_hours = static_cast<int>(offset_seconds / 3600);
-        int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
-        if (offset_mins < 0) offset_mins = -offset_mins;
-
-        if (offset_seconds < 0) {
-            snprintf(tz_str, sizeof(tz_str), "-%02d%02d", -offset_hours, offset_mins);
-        } else {
-            snprintf(tz_str, sizeof(tz_str), "+%02d%02d", offset_hours, offset_mins);
-        }
-        return tz_str;
-    }();
-
-    s << ' ' << cached_timezone_str;
+    // Timezone offset (calculated dynamically)
+    s << ' ' << get_timezone_offset_string(time);
 
     // Thread ID (simplified, use hash to get a shorter ID)
     std::hash<std::thread::id> hasher;
