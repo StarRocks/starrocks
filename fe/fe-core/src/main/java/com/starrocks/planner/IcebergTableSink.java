@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -40,7 +41,8 @@ public class IcebergTableSink extends DataSink {
     protected final TupleDescriptor desc;
     private final long targetTableId;
     private final String fileFormat;
-    private final String location;
+    private final String tableLocation;
+    private final String dataLocation;
     private final String compressionType;
     private final long targetMaxFileSize;
     private final boolean isStaticPartitionSink;
@@ -52,7 +54,8 @@ public class IcebergTableSink extends DataSink {
                             SessionVariable sessionVariable, String targetBranch) {
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
-        this.location = nativeTable.location();
+        this.tableLocation = nativeTable.location();
+        this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
         this.isStaticPartitionSink = isStaticPartitionSink;
@@ -71,7 +74,7 @@ public class IcebergTableSink extends DataSink {
         // Try to set for tabular
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
-                        this.location);
+                        this.tableLocation);
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
@@ -102,7 +105,8 @@ public class IcebergTableSink extends DataSink {
         TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
         tIcebergTableSink.setTarget_table_id(targetTableId);
         tIcebergTableSink.setTuple_id(desc.getId().asInt());
-        tIcebergTableSink.setLocation(location);
+        tIcebergTableSink.setLocation(tableLocation);
+        tIcebergTableSink.setData_location(dataLocation);
         tIcebergTableSink.setFile_format(fileFormat);
         tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
