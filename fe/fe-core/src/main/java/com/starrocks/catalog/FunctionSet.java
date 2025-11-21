@@ -221,6 +221,7 @@ public class FunctionSet {
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String STRING_AGG = "string_agg";
     public static final String FORMAT_BYTES = "format_bytes";
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
