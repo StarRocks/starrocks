@@ -86,7 +86,6 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.MysqlParamParser;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;

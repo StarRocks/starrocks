@@ -14,12 +14,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

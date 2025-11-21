@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -41,8 +41,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.load.routineload.LoadDataSourceType;
-import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

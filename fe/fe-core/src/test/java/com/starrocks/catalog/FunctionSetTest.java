@@ -16,7 +16,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;

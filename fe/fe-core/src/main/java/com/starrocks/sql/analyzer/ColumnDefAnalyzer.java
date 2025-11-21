@@ -105,7 +105,7 @@ public class ColumnDefAnalyzer {
             typeDef.setType(extendedPrecision(typeDef.getType(), Config.enable_legacy_compatibility_for_replication));
         }
 
-        typeDef.analyze();
+        TypeDefAnalyzer.analyze(typeDef);
 
         Type type = typeDef.getType();
 

@@ -44,7 +44,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;

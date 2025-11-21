@@ -24,6 +24,7 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -80,7 +81,6 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -106,6 +106,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -1599,11 +1600,11 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
         TableName tableName = new TableName("db", "tbl");
-        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
+        ColumnDef c1 = new ColumnDef("col1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)), true);
         AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
 
-        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
-        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
+        ColumnDef c2 = new ColumnDef("col2", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)), true);
+        ColumnDef c3 = new ColumnDef("col3", new TypeDef(TypeFactory.createType(PrimitiveType.VARCHAR)), true);
         List<ColumnDef> cols = new ArrayList<>();
         cols.add(c2);
         cols.add(c3);
@@ -1617,7 +1618,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.clear();
 
         // must be default null
-        ColumnDef c4 = new ColumnDef("col4", TypeDef.create(PrimitiveType.INT), false);
+        ColumnDef c4 = new ColumnDef("col4", new TypeDef(TypeFactory.createType(PrimitiveType.INT)), false);
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
         AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
@@ -1627,7 +1628,7 @@ public class IcebergMetadataTest extends TableTestBase {
         // drop/rename/modify column
         DropColumnClause dropColumnClause = new DropColumnClause("col1", null, new HashMap<>());
         ColumnRenameClause columnRenameClause = new ColumnRenameClause("col2", "col22");
-        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), true);
+        ColumnDef newCol = new ColumnDef("col1", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)), true);
         Map<String, String> properties = new HashMap<>();
         ModifyColumnClause modifyColumnClause =
                 new ModifyColumnClause(newCol, ColumnPosition.FIRST, null, properties);

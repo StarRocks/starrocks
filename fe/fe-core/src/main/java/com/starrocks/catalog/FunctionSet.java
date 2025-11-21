@@ -51,7 +51,6 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;

@@ -39,8 +39,8 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.thrift.TExpr;
@@ -318,7 +318,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         THdfsPartition tPartition = new THdfsPartition();
         tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(ExprToThriftVisitor::treeToThrift)
+                .map(ExprToThrift::treeToThrift)
                 .collect(Collectors.toList()));
 
         hdfsScanRange.setPartition_value(tPartition);
@@ -337,7 +337,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                     value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 }
 
-                extendedColumns.put(slot.getId().asInt(), ExprToThriftVisitor.treeToThrift(value));
+                extendedColumns.put(slot.getId().asInt(), ExprToThrift.treeToThrift(value));
                 if (!extendedColumnSlotIds.contains(slot.getId().asInt())) {
                     extendedColumnSlotIds.add(slot.getId().asInt());
                 }

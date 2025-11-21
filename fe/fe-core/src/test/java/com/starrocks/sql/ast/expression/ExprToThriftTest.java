@@ -17,9 +17,11 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -51,7 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public class ExprToThriftVisitorTest {
+public class ExprToThriftTest {
 
     @Test
     public void testExprToThriftCoverage() {
@@ -79,7 +81,7 @@ public class ExprToThriftVisitorTest {
     }
 
     private static TExprNode convert(Expr expr) {
-        TExpr thrift = ExprToThriftVisitor.treeToThrift(expr);
+        TExpr thrift = ExprToThrift.treeToThrift(expr);
         Assertions.assertFalse(thrift.getNodes().isEmpty(), "No nodes produced");
         return thrift.getNodes().get(0);
     }
@@ -143,7 +145,7 @@ public class ExprToThriftVisitorTest {
             }));
             cases.add(nodeCase("InformationFunction", ExprCaseFactory::buildInformationFunction,
                     TExprNodeType.INFO_FUNC, node -> Assertions.assertEquals(new TInfoFunc(11, "cluster"),
-                    node.getInfo_func())));
+                            node.getInfo_func())));
             cases.add(nodeCase("TimestampArithmeticExpr", ExprCaseFactory::buildTimestampArithmeticExpr,
                     TExprNodeType.COMPUTE_FUNCTION_CALL));
             cases.add(nodeCase("LambdaFunctionExpr", ExprCaseFactory::buildLambdaFunctionExpr,
@@ -397,9 +399,11 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildLambdaFunctionExpr() {
             SlotRef argSlot = buildSlotRef();
-            LambdaFunctionExpr lambda =
-                    new LambdaFunctionExpr(List.of(new IntLiteral(1), argSlot),
-                            Map.of(argSlot, new IntLiteral(2)));
+            List<Expr> children = new ArrayList<>(List.of(new IntLiteral(1), argSlot));
+            Map<SlotRef, Expr> commonSubOperatorMap = Map.of(argSlot, new IntLiteral(2));
+            children.addAll(commonSubOperatorMap.keySet());
+            children.addAll(commonSubOperatorMap.values());
+            LambdaFunctionExpr lambda = new LambdaFunctionExpr(children, commonSubOperatorMap.size());
             lambda.setType(IntegerType.INT);
             lambda.setOriginType(IntegerType.INT);
             return lambda;
@@ -510,7 +514,7 @@ public class ExprToThriftVisitorTest {
         }
 
         private static Expr buildFieldReference() {
-            FieldReference ref = new FieldReference(1, new TableName("db", "tbl"));
+            FieldReference ref = new FieldReference(1, new TableName("db", "tbl").toString());
             ref.setType(IntegerType.INT);
             ref.setOriginType(IntegerType.INT);
             return ref;

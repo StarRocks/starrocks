@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
@@ -159,7 +160,7 @@ public class StructFieldDesc implements ParseNode {
                     }
                 }
             }
-            typeDef.analyze();
+            TypeDefAnalyzer.analyze(typeDef);
             if (fieldPos != null) {
                 fieldPos.analyze();
             }
