@@ -109,7 +109,7 @@ public class GINIndexTest extends PlanTestBase {
                 () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
-                    put(IndexParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT), "true");
+                    put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
                     put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
                     put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
                     put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
@@ -136,7 +136,7 @@ public class GINIndexTest extends PlanTestBase {
         Index index = new Index(indexId, indexName, columns, IndexType.GIN, "", new HashMap<>() {{
             put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
-            put(IndexParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT), "true");
+            put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
             put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
             put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
@@ -155,12 +155,12 @@ public class GINIndexTest extends PlanTestBase {
 
         Assertions.assertEquals(new HashMap<String, String>(){{
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
-            put(IndexParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT), "true");
+            put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
         Assertions.assertEquals(new HashMap<String, String>(){{
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
-            put(IndexParamsKey.SUPPORT_PHRASE.name().toLowerCase(Locale.ROOT), "true");
+            put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
         Assertions.assertEquals(new HashMap<String, String>(){{

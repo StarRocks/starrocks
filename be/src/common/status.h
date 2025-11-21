@@ -112,9 +112,6 @@ public:
     static Status InternalError(std::string_view msg) { return Status(TStatusCode::INTERNAL_ERROR, msg); }
     static Status RuntimeError(std::string_view msg) { return Status(TStatusCode::RUNTIME_ERROR, msg); }
     static Status Cancelled(std::string_view msg) { return Status(TStatusCode::CANCELLED, msg); }
-    static Status InvertedIndexEvaluateSkipped(std::string_view msg) {
-        return Status(TStatusCode::INVERTED_INDEX_EVALUATE_SKIPPED, msg);
-    }
 
     static Status MemoryLimitExceeded(std::string_view msg) { return Status(TStatusCode::MEM_LIMIT_EXCEEDED, msg); }
 

@@ -36,22 +36,10 @@ StatusOr<InvertedImplementType> get_inverted_imp_type(const TabletIndex& tablet_
 std::string inverted_index_parser_type_to_string(InvertedIndexParserType parser_type);
 
 InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::string& parser_str);
-InvertedParserMode get_inverted_index_parser_mode_from_string(const std::string& parser_mode_str);
 
 std::string get_parser_string_from_properties(const std::map<std::string, std::string>& properties);
 
-InvertedParserMode get_parser_mode_from_properties(const std::map<std::string, std::string>& properties);
-
-std::string get_support_phrase_from_properties(const std::map<std::string, std::string>& properties);
-
-std::map<std::string, std::string> get_parser_char_filter_map_from_properties(
-        const std::map<std::string, std::string>& properties);
-
-int32_t get_ignore_above_from_properties(const std::map<std::string, std::string>& properties);
-
-bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties);
-
-std::string get_stop_words_from_properties(const std::map<std::string, std::string>& properties);
+std::string get_omit_term_freq_and_position_from_properties(const std::map<std::string, std::string>& properties);
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties);
 

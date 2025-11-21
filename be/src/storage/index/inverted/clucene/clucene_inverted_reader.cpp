@@ -58,25 +58,6 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
 
-    // query type should be set at ColumnPredicate#seek_inverted_index
-    const auto query_type = gin_query_options->getQueryType();
-    bool should_analyze = gin_query_options->getParserType() != InvertedIndexParserType::PARSER_NONE &&
-                          gin_query_options->getParserType() != InvertedIndexParserType::PARSER_UNKNOWN;
-    int32_t ignore_above = get_ignore_above_from_properties(_tablet_index->index_properties());
-    if (!should_analyze) {
-        if (search_str.size() > ignore_above) {
-            // It means the search string is longer than the value stored in the clucene. None of result will be matched.
-            // Just fallback to segment read.
-            return Status::InvertedIndexEvaluateSkipped("query value is too long, evaluate skipped.");
-        }
-        if (query_type == InvertedIndexQueryType::LESS_THAN_QUERY ||
-            query_type == InvertedIndexQueryType::LESS_EQUAL_QUERY ||
-            query_type == InvertedIndexQueryType::GREATER_THAN_QUERY ||
-            query_type == InvertedIndexQueryType::GREATER_EQUAL_QUERY) {
-            return Status::InvertedIndexEvaluateSkipped("Evaluate range query has been skipped.");
-        }
-    }
-
     if (!index_exists(_index_path)) {
         LOG(WARNING) << "inverted index path: " << _index_path << " not exist.";
         return Status::NotFound(fmt::format("Not exists index_file {}", _index_path.c_str()));
@@ -87,16 +68,14 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
         ASSIGN_OR_RETURN(auto dir, _inverted_index_reader->open(_tablet_index));
         lucene::search::IndexSearcher index_searcher(dir.get());
 
-        gin_query_options->setCharFilterMap(
-                get_parser_char_filter_map_from_properties(_tablet_index->index_properties()));
-        gin_query_options->setLowerCase(get_lower_case_from_properties(_tablet_index->index_properties()));
-        gin_query_options->setStopWords(get_stop_words_from_properties(_tablet_index->index_properties()));
-
         const auto match_operator_context = std::make_unique<MatchOperatorContext>();
         match_operator_context->gin_query_options = gin_query_options;
         match_operator_context->searcher = &index_searcher;
         match_operator_context->column_name = column_name;
         match_operator_context->search_str = search_str;
+
+        // query type should be set at ColumnPredicate#seek_inverted_index
+        const auto query_type = gin_query_options->getQueryType();
 
         if (query_type == InvertedIndexQueryType::LESS_EQUAL_QUERY ||
             query_type == InvertedIndexQueryType::GREATER_EQUAL_QUERY) {

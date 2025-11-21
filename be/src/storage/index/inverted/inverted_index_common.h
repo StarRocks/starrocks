@@ -31,43 +31,19 @@ enum class InvertedIndexParserType {
     PARSER_CHINESE = 4,
 };
 
-enum class InvertedParserMode { COARSE_GRAINED, FINE_GRAINED };
-
 const std::string INVERTED_IMP_KEY = "imp_lib";
 const std::string TYPE_CLUCENE = "clucene";
-
 const std::string INVERTED_INDEX_PARSER_KEY = "parser";
 const std::string INVERTED_INDEX_PARSER_UNKNOWN = "unknown";
 const std::string INVERTED_INDEX_PARSER_NONE = "none";
 const std::string INVERTED_INDEX_PARSER_STANDARD = "standard";
 const std::string INVERTED_INDEX_PARSER_ENGLISH = "english";
 const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
-
 const std::string LIKE_FN_NAME = "like";
 
-const std::string INVERTED_INDEX_PARSER_MODE_KEY = "parser_mode";
-const std::string INVERTED_INDEX_PARSER_COARSE_GRAINED = "coarse_grained";
-const std::string INVERTED_INDEX_PARSER_FINE_GRAINED = "fine_grained";
-
-const std::string INVERTED_INDEX_SUPPORT_PHRASE_KEY = "support_phrase";
-const std::string INVERTED_INDEX_SUPPORT_PHRASE_YES = "true";
-const std::string INVERTED_INDEX_SUPPORT_PHRASE_NO = "false";
-
-const std::string INVERTED_INDEX_CHAR_FILTER_TYPE_KEY = "char_filter_type";
-const std::string INVERTED_INDEX_CHAR_FILTER_TYPE_REPLACE = "char_replace";
-const std::string INVERTED_INDEX_CHAR_FILTER_PATTERN_KEY = "char_filter_pattern";
-const std::string INVERTED_INDEX_CHAR_FILTER_REPLACEMENT_KEY = "char_filter_replacement";
-
-const std::string INVERTED_INDEX_IGNORE_ABOVE_KEY = "ignore_above";
-const std::string INVERTED_INDEX_IGNORE_ABOVE_DEFAULT = "256";
-
-const std::string INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
-const std::string INVERTED_INDEX_LOWER_CASE_YES = "true";
-const std::string INVERTED_INDEX_LOWER_CASE_NO = "false";
-
-const std::string INVERTED_INDEX_STOP_WORDS_KEY = "stopwords";
-const std::string INVERTED_INDEX_STOP_WORDS_DEFAULT = "";
-const std::string INVERTED_INDEX_STOP_WORDS_NONE = "none";
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_KEY = "omit_term_freq_and_position";
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_YES = "true";
+const std::string INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_NO = "false";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 

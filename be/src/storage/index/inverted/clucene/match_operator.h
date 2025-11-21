@@ -24,6 +24,7 @@
 
 #include "common/status.h"
 #include "roaring/roaring.hh"
+#include "storage/index/inverted/inverted_index_common.h"
 
 namespace starrocks {
 
@@ -117,8 +118,9 @@ protected:
     virtual Status _match_internal(roaring::Roaring& result) = 0;
 
     static void parser_slop(std::string& query, InvertedIndexQueryInfo& query_info);
-    Status parser_info(std::string& query, const std::wstring& field_name, InvertedIndexQueryInfo& query_info,
-                       const bool& sequential_opt) const;
+    static Status parser_info(std::string& query, const std::wstring& field_name,
+                              const InvertedIndexParserType& parser_type, const InvertedIndexQueryType& query_type,
+                              InvertedIndexQueryInfo& query_info, const bool& sequential_opt);
 
     MatchOperatorContext* _ctx;
     GinQueryOptions* _gin_query_options;

@@ -55,10 +55,6 @@ public:
               _inverted_index(inverted_index) {
         _parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_inverted_index->index_properties()));
-        _parser_mode = get_parser_mode_from_properties(_inverted_index->index_properties());
-        _ignore_above = get_ignore_above_from_properties(_inverted_index->index_properties());
-        _should_analyze = _parser_type != InvertedIndexParserType::PARSER_NONE &&
-                          _parser_type != InvertedIndexParserType::PARSER_UNKNOWN;
     }
 
     ~CLuceneInvertedWriterImpl() override {
@@ -90,7 +86,7 @@ public:
         RETURN_IF_ERROR(open_index_directory());
         RETURN_IF_ERROR(create_char_string_reader());
 
-        ASSIGN_OR_RETURN(_analyzer, InvertedIndexAnalyzer::create_analyzer(_gin_query_options.get()));
+        ASSIGN_OR_RETURN(_analyzer, InvertedIndexAnalyzer::create_analyzer(_parser_type));
         if (_analyzer == nullptr) {
             return Status::InternalError(fmt::format("Inverted index analyzer could not be created for parser type: {}",
                                                      inverted_index_parser_type_to_string(_parser_type)));
@@ -114,10 +110,10 @@ public:
                 const char* s = _val->data;
                 size_t size = _val->size;
 
-                if ((!_should_analyze && _val->get_size() > _ignore_above) || (_should_analyze && _val->empty())) {
-                    _index_writer->addNullDocument(_doc.get());
-                } else {
-                    if (_should_analyze) {
+                if (!_val->empty()) {
+                    if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH ||
+                        _parser_type == InvertedIndexParserType::PARSER_CHINESE ||
+                        _parser_type == InvertedIndexParserType::PARSER_STANDARD) {
                         _char_string_reader->init(s, size, false);
                         auto stream = _analyzer->reusableTokenStream(_field->name(), _char_string_reader.get());
                         _field->setValue(stream);
@@ -125,6 +121,8 @@ public:
                         _field->setValue(const_cast<char*>(s), size);
                     }
                     _index_writer->addDocument(_doc.get());
+                } else {
+                    _index_writer->addNullDocument(_doc.get());
                 }
                 ++_val;
                 _rid++;
@@ -205,11 +203,6 @@ private:
     Status init_inverted_index_context() {
         _gin_query_options = std::make_shared<GinQueryOptions>();
         _gin_query_options->setParserType(_parser_type);
-        _gin_query_options->setParserMode(_parser_mode);
-        _gin_query_options->setCharFilterMap(
-                get_parser_char_filter_map_from_properties(_inverted_index->index_properties()));
-        _gin_query_options->setLowerCase(get_lower_case_from_properties(_inverted_index->index_properties()));
-        _gin_query_options->setStopWords(get_stop_words_from_properties(_inverted_index->index_properties()));
         return Status::OK();
     }
 
@@ -220,7 +213,7 @@ private:
 
     Status create_char_string_reader() {
         try {
-            _char_string_reader = InvertedIndexAnalyzer::create_reader(_gin_query_options->getCharFilterMap());
+            _char_string_reader = std::make_unique<lucene::util::SStringReader<char>>();
             return Status::OK();
         } catch (CLuceneError& e) {
             return Status::InternalError(fmt::format("inverted index create string reader failed: {}", e.what()));
@@ -234,8 +227,9 @@ private:
                                 ? static_cast<int>(lucene::document::Field::INDEX_UNTOKENIZED)
                                 : static_cast<int>(lucene::document::Field::INDEX_TOKENIZED);
         _field = new lucene::document::Field(_field_name.c_str(), field_config);
-        _field->setOmitTermFreqAndPositions(get_support_phrase_from_properties(_inverted_index->index_properties()) ==
-                                            INVERTED_INDEX_SUPPORT_PHRASE_NO);
+        _field->setOmitTermFreqAndPositions(
+                get_omit_term_freq_and_position_from_properties(_inverted_index->index_properties()) ==
+                INVERTED_INDEX_OMIT_TERM_FREQ_AND_POSITION_YES);
         return Status::OK();
     }
 
@@ -249,9 +243,6 @@ private:
     std::unique_ptr<lucene::util::Reader> _char_string_reader{};
 
     InvertedIndexParserType _parser_type;
-    InvertedParserMode _parser_mode;
-    uint32_t _ignore_above;
-    bool _should_analyze;
 
     std::shared_ptr<CLuceneFileWriter> _index_file_writer;
 

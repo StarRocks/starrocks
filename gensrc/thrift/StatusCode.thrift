@@ -74,7 +74,6 @@ enum TStatusCode {
     ES_INVALID_CONTEXTID            = 20,
     ES_INVALID_OFFSET               = 21,
     ES_REQUEST_ERROR                = 22,
-    INVERTED_INDEX_EVALUATE_SKIPPED = 23,
 
     END_OF_FILE         = 30,
     NOT_FOUND           = 31,
