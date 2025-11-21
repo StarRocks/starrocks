@@ -97,7 +97,7 @@ public class PaimonTableSink extends DataSink {
         this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
         if (sessionVariable.isEnablePaimonNativeWriter()) {
             if (!paimonTable.supportNativeWriter()) {
-                LOG.info("Fallback to JNI writer for paimon table {}", paimonTable.getTableName());
+                LOG.info("Fallback to JNI writer for paimon table {}", paimonTable.getCatalogTableName());
             }
         }
         this.useNativeWriter = sessionVariable.isEnablePaimonNativeWriter() && paimonTable.supportNativeWriter();

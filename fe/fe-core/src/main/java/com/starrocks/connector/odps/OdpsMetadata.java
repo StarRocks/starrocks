@@ -311,7 +311,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         Set<String> filter = new HashSet<>(partitionNames);
         return partitions.stream()
                 .filter(partition -> filter.contains(partition.toString(false, true)))
-                .map(p -> new OdpsPartition(odps.tables().get(odpsTable.getDbName(), odpsTable.getTableName()), p))
+                .map(p -> new OdpsPartition(odps.tables().get(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()), p))
                 .collect(Collectors.toList());
     }
 
@@ -370,7 +370,7 @@ public class OdpsMetadata implements ConnectorMetadata {
                                                     .build());
             TableBatchReadSession odpsTableScanSession;
             if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PREDICATE_PUSHDOWN))) {
-                Predicate odpsPredicate = EntityConvertUtils.convertPredicate(predicate,
+                Predicate odpsPredicate = EntityConvertUtils.convertPredicate(params.getPredicate(),
                         ImmutableSet.copyOf(odpsTable.getPartitionColumnNames()));
                 LOG.info("try to push down predicate {}", odpsPredicate);
                 tableReadSessionBuilder.withFilterPredicate(odpsPredicate);

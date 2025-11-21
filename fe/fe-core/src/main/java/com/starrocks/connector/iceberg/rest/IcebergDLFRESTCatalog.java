@@ -59,6 +59,7 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -143,7 +144,7 @@ public class IcebergDLFRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void createDb(String dbName, Map<String, String> properties) {
+    public void createDB(String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -166,7 +167,7 @@ public class IcebergDLFRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public void dropDb(String dbName) throws MetaNotFoundException {
+    public void dropDB(String dbName) throws MetaNotFoundException {
         Database database;
         try {
             database = getDB(dbName);
@@ -237,15 +238,16 @@ public class IcebergDLFRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean createView(ConnectorViewDefinition definition, boolean replace) {
+    public boolean createView(String catalogName, ConnectorViewDefinition definition, boolean replace) {
         Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
+        Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
         ViewBuilder viewBuilder = delegate.buildView(TableIdentifier.of(definition.getDatabaseName(), definition.getViewName()));
         viewBuilder = viewBuilder.withSchema(schema)
                 .withQuery("starrocks", definition.getInlineViewDef())
                 .withDefaultNamespace(Namespace.of(definition.getDatabaseName()))
                 .withDefaultCatalog(definition.getCatalogName())
                 .withProperties(buildProperties(definition))
-                .withLocation(defaultTableLocation(definition.getDatabaseName(), definition.getViewName()));
+                .withLocation(defaultTableLocation(ns, definition.getViewName()));
 
         if (replace) {
             viewBuilder.createOrReplace();
@@ -289,10 +291,10 @@ public class IcebergDLFRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public String defaultTableLocation(String dbName, String tableName) {
-        Map<String, String> properties = delegate.loadNamespaceMetadata(Namespace.of(dbName));
+    public String defaultTableLocation(Namespace ns, String tableName) {
+        Map<String, String> properties = delegate.loadNamespaceMetadata(ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
-        checkArgument(databaseLocation != null, "location must be set for %s.%s", dbName, tableName);
+        checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
 
         if (databaseLocation.endsWith("/")) {
             return databaseLocation + tableName;
@@ -302,8 +304,8 @@ public class IcebergDLFRESTCatalog implements IcebergCatalog {
     }
 
     @Override
-    public Map<String, Object> loadNamespaceMetadata(String dbName) {
-        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(Namespace.of(dbName)));
+    public Map<String, String> loadNamespaceMetadata(Namespace ns) {
+        return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
     }
 
     private Map<String, String> buildProperties(ConnectorViewDefinition definition) {
