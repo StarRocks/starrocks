@@ -123,7 +123,7 @@ private:
 
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
-    build_filesystem_from_shard_info(ShardId shard_id, const ShardInfo& info, const Configuration& conf);
+    build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
             ShardId shard_id, std::string_view scheme, const Configuration& conf);
     absl::Status invalidate_fs(const ShardInfo& shard);

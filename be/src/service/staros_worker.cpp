@@ -230,7 +230,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
     // Build the filesystem under no lock, so the op won't hold the lock for a long time.
     // It is possible that multiple filesystems are built for the same shard from multiple threads under no lock here.
-    auto fs_or = build_filesystem_from_shard_info(id, shard_info, conf);
+    auto fs_or = build_filesystem_from_shard_info(shard_info, conf);
     if (!fs_or.ok()) {
         return fs_or.status();
     }
@@ -272,7 +272,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     if (!info_or.ok()) {
         return info_or.status();
     }
-    auto fs_or = build_filesystem_from_shard_info(id, info_or.value(), conf);
+    auto fs_or = build_filesystem_from_shard_info(info_or.value(), conf);
     if (!fs_or.ok()) {
         return fs_or.status();
     }
@@ -282,7 +282,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
-StarOSWorker::build_filesystem_from_shard_info(ShardId shard_id, const ShardInfo& info, const Configuration& conf) {
+StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf) {
     auto localconf = build_conf_from_shard_info(info);
     if (!localconf.ok()) {
         return localconf.status();
@@ -292,7 +292,7 @@ StarOSWorker::build_filesystem_from_shard_info(ShardId shard_id, const ShardInfo
         return scheme.status();
     }
 
-    return new_shared_filesystem(shard_id, *scheme, *localconf);
+    return new_shared_filesystem(info.id, *scheme, *localconf);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
