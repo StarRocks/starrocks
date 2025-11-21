@@ -56,20 +56,27 @@ public class ExportMgrTest {
             Assertions.assertEquals(2, mgr.getIdToJob().size());
 
             // 3. job 1 finished
-            mgr.replayUpdateJobState(job1.getId(), ExportJob.JobState.FINISHED);
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(
+                    job1.getId(),  ExportJob.JobState.FINISHED, System.currentTimeMillis(),
+                    job1.getSnapshotPaths(), job1.getExportedTempPath(), job1.getExportedFiles(), job1.getFailMsg());
+            mgr.replayUpdateJobInfo(updateInfo);
             Assertions.assertEquals(2, mgr.getIdToJob().size());
 
             // 4. job 2 finished, but expired
             Config.history_job_keep_max_second = 1;
             Thread.sleep(2000);
-            mgr.replayUpdateJobState(job2.getId(), ExportJob.JobState.FINISHED);
+            updateInfo = new ExportJob.ExportUpdateInfo(job2.getId(),  ExportJob.JobState.FINISHED, System.currentTimeMillis(),
+                    job2.getSnapshotPaths(), job2.getExportedTempPath(), job2.getExportedFiles(), job2.getFailMsg());
+            mgr.replayUpdateJobInfo(updateInfo);
             Assertions.assertEquals(1, mgr.getIdToJob().size());
 
             // 5. create job 3
             ExportJob job3 = new ExportJob(3, new UUID(3, 3));
             job3.setTableName(new TableName("dummy", "dummy"));
             mgr.replayCreateExportJob(job3);
-            mgr.replayUpdateJobState(job3.getId(), ExportJob.JobState.FINISHED);
+            updateInfo = new ExportJob.ExportUpdateInfo(job3.getId(),  ExportJob.JobState.FINISHED, System.currentTimeMillis(),
+                    job3.getSnapshotPaths(), job3.getExportedTempPath(), job3.getExportedFiles(), job3.getFailMsg());
+            mgr.replayUpdateJobInfo(updateInfo);
             Assertions.assertEquals(2, mgr.getIdToJob().size());
 
             // 6. get job by queryId

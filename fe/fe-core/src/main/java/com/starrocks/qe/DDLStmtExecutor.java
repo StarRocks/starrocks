@@ -37,7 +37,6 @@ import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.load.EtlJobType;
-import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -886,12 +885,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    PluginInfo info = context.getGlobalStateMgr().getPluginMgr().uninstallPlugin(stmt.getPluginName());
-                    if (null != info) {
-                        GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(info);
-                    }
-                    LOG.info("uninstall plugin = " + stmt.getPluginName());
-
+                    context.getGlobalStateMgr().getPluginMgr().uninstallPluginFromStmt(stmt);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
