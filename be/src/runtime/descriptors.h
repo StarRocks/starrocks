@@ -174,14 +174,17 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
+    const std::vector<TExpr>& thrift_partition_key_exprs() const { return _thrift_partition_key_exprs; }
     Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool);
+    std::string debug_string() const;
 
 private:
     int64_t _id = 0;
     THdfsFileFormat::type _file_format;
     std::string _location;
 
-    const std::vector<TExpr>& _thrift_partition_key_exprs;
+    // holding thrift exprs for partition keys for duplication check during runtime
+    const std::vector<TExpr> _thrift_partition_key_exprs;
     std::vector<ExprContext*> _partition_key_value_evals;
 };
 
