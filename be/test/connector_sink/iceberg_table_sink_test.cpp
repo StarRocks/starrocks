@@ -95,4 +95,99 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     EXPECT_EQ(sink_ctx->sort_ordering->sort_descs.descs.size(), 1);
 }
 
+// Test case for verifying the path construction logic in IcebergTableSink
+TEST_F(IcebergTableSinkTest, path_construction_logic) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(0).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    TColumn t_column;
+    t_column.__set_column_name("c1");
+    t_iceberg_table.__set_columns({t_column});
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1, false);
+
+    // Test case 1: data_location is set and not empty, should use data_location
+    {
+        TDataSink data_sink;
+        TIcebergTableSink iceberg_table_sink;
+        iceberg_table_sink.__set_location("s3://bucket/table-location");
+        iceberg_table_sink.__set_data_location("s3://bucket/data-location");
+        data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+        std::vector<starrocks::TExpr> exprs = {};
+        IcebergTableSink sink(&_pool, exprs);
+        pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
+
+        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+        pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+        pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+        auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+        auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+
+        // Should use data_location when it's set and not empty
+        EXPECT_EQ(sink_ctx->path, "s3://bucket/data-location");
+    }
+
+    // Test case 2: data_location is not set, should use location + "/data"
+    {
+        TDataSink data_sink;
+        TIcebergTableSink iceberg_table_sink;
+        iceberg_table_sink.__set_location("s3://bucket/table-location");
+        // data_location is not set
+        data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+        std::vector<starrocks::TExpr> exprs = {};
+        IcebergTableSink sink(&_pool, exprs);
+        pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(2, 2)};
+
+        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+        pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+        pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+        auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+        auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+
+        // Should use location + "/data" when data_location is not set
+        EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
+    }
+
+    // Test case 3: data_location is set but empty, should use location + "/data"
+    {
+        TDataSink data_sink;
+        TIcebergTableSink iceberg_table_sink;
+        iceberg_table_sink.__set_location("s3://bucket/table-location");
+        iceberg_table_sink.__set_data_location(""); // Empty data_location
+        data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+        std::vector<starrocks::TExpr> exprs = {};
+        IcebergTableSink sink(&_pool, exprs);
+        pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(3, 3)};
+
+        EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
+
+        pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+        pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
+        auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
+        auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+
+        // Should use location + "/data" when data_location is empty
+        EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
+    }
+}
 } // namespace starrocks
