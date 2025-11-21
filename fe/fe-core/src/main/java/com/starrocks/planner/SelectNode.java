@@ -35,8 +35,8 @@
 package com.starrocks.planner;
 
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSelectNode;
@@ -74,7 +74,7 @@ public class SelectNode extends PlanNode {
         msg.select_node = new TSelectNode();
         if (commonSlotMap != null) {
             commonSlotMap.forEach((key, value) -> msg.select_node.putToCommon_slot_map(
-                    key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
+                    key.asInt(), ExprToThrift.treeToThrift(value)));
         }
     }
 

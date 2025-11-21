@@ -39,9 +39,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import java.math.BigInteger;
 import java.util.TimeZone;
-import com.starrocks.sql.ast.expression.LiteralExprFactory;
 
 public class LiteralExprTest {
 

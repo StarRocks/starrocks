@@ -17,8 +17,8 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Multimap;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 import java.util.stream.Collectors;

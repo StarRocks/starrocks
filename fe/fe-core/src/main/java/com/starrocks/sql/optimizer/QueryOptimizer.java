@@ -26,7 +26,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;

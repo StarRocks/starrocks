@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;

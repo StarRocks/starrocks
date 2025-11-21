@@ -15,10 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Function;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.CollectionElementExpr;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
@@ -100,7 +100,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         Assertions.assertEquals(TExprNodeType.MAP_ELEMENT_EXPR,
-                ExprToThriftVisitor
+                ExprToThrift
                         .treeToThrift(collectionElementExpr3).getNodes().get(0).getNode_type());
     }
 
@@ -135,7 +135,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         Assertions.assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR,
-                ExprToThriftVisitor
+                ExprToThrift
                         .treeToThrift(collectionElementExpr2).getNodes().get(0).getNode_type());
     }
 

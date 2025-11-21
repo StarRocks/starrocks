@@ -16,8 +16,8 @@ package com.starrocks.catalog.combinator;
 
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.Type;

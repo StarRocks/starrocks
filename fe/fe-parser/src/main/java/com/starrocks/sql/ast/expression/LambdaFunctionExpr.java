@@ -12,16 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.Map;
 
 public class LambdaFunctionExpr extends Expr {
     private int commonSubOperatorNum = 0;
@@ -36,16 +32,10 @@ public class LambdaFunctionExpr extends Expr {
         this.children.addAll(arguments);
     }
 
-    // transformed from operators before pushing down to BE.
-    public LambdaFunctionExpr(List<Expr> arguments, Map<SlotRef, Expr> commonSubOperatorMap) {
+    public LambdaFunctionExpr(List<Expr> arguments, int commonSubOperatorNum) {
         this.children.addAll(arguments);
-        this.commonSubOperatorNum = commonSubOperatorMap.size();
-        if (!commonSubOperatorMap.isEmpty()) { // flatten commonSubOperatorMap's slot_id and sub_expr to children
-            children.addAll(commonSubOperatorMap.keySet());
-            children.addAll(commonSubOperatorMap.values());
-        }
+        this.commonSubOperatorNum = commonSubOperatorNum;
     }
-
 
     public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
@@ -56,18 +46,6 @@ public class LambdaFunctionExpr extends Expr {
         return commonSubOperatorNum;
     }
 
-    public void checkValidAfterToExpr() { // before to operator, its type is LambdaArgument, after to SlotRef
-        // 1 lambda expr, at least 1 lambda argument and common sub op's slotref + expr
-        Preconditions.checkState(children.size() >= 2 + 2 * commonSubOperatorNum,
-                "lambda expr's children num " + children.size() + " should >= " + (2 + 2 * commonSubOperatorNum));
-        int realChildrenNum = getChildren().size() - 2 * commonSubOperatorNum;
-        for (int i = 1; i < realChildrenNum; i++) {
-            Preconditions.checkState(getChild(i) instanceof SlotRef,
-                    i + "-th lambda argument should be type of SlotRef, but actually " + getChild(i));
-        }
-    }
-
-
     @Override
     public Expr clone() {
         return new LambdaFunctionExpr(this);
@@ -75,7 +53,7 @@ public class LambdaFunctionExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitLambdaFunctionExpr(this, context);
+        return visitor.visitLambdaFunctionExpr(this, context);
     }
 
 }

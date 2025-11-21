@@ -30,7 +30,7 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;

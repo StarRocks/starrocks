@@ -32,40 +32,35 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.sql.ast;
 
 import com.google.common.collect.Sets;
-import com.starrocks.thrift.TJoinOp;
 
 import java.util.Set;
 
 public enum JoinOperator {
-    INNER_JOIN("INNER JOIN", "⋈", TJoinOp.INNER_JOIN),
-    LEFT_OUTER_JOIN("LEFT OUTER JOIN", "⟕", TJoinOp.LEFT_OUTER_JOIN),
+    INNER_JOIN("INNER JOIN", "⋈"),
+    LEFT_OUTER_JOIN("LEFT OUTER JOIN", "⟕"),
 
-    LEFT_SEMI_JOIN("LEFT SEMI JOIN", "⋉", TJoinOp.LEFT_SEMI_JOIN),
-    LEFT_ANTI_JOIN("LEFT ANTI JOIN", "◁", TJoinOp.LEFT_ANTI_JOIN),
-    RIGHT_SEMI_JOIN("RIGHT SEMI JOIN", "⋊", TJoinOp.RIGHT_SEMI_JOIN),
-    RIGHT_ANTI_JOIN("RIGHT ANTI JOIN", "▷", TJoinOp.RIGHT_ANTI_JOIN),
-    RIGHT_OUTER_JOIN("RIGHT OUTER JOIN", "⟖", TJoinOp.RIGHT_OUTER_JOIN),
-    FULL_OUTER_JOIN("FULL OUTER JOIN", "⟗", TJoinOp.FULL_OUTER_JOIN),
-    CROSS_JOIN("CROSS JOIN", "×", TJoinOp.CROSS_JOIN), // Variant of the LEFT ANTI JOIN that is used for the equal of
+    LEFT_SEMI_JOIN("LEFT SEMI JOIN", "⋉"),
+    LEFT_ANTI_JOIN("LEFT ANTI JOIN", "◁"),
+    RIGHT_SEMI_JOIN("RIGHT SEMI JOIN", "⋊"),
+    RIGHT_ANTI_JOIN("RIGHT ANTI JOIN", "▷"),
+    RIGHT_OUTER_JOIN("RIGHT OUTER JOIN", "⟖"),
+    FULL_OUTER_JOIN("FULL OUTER JOIN", "⟗"),
+    CROSS_JOIN("CROSS JOIN", "×"), // Variant of the LEFT ANTI JOIN that is used for the equal of
     // NOT IN subqueries. It can have a single equality join conjunct
     // that returns TRUE when the rhs is NULL.
-    NULL_AWARE_LEFT_ANTI_JOIN("NULL AWARE LEFT ANTI JOIN", "▷*",
-            TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN),
+    NULL_AWARE_LEFT_ANTI_JOIN("NULL AWARE LEFT ANTI JOIN", "▷*"),
 
-    ASOF_INNER_JOIN("ASOF INNER JOIN", "⋈ₐ", TJoinOp.ASOF_INNER_JOIN),
-    ASOF_LEFT_OUTER_JOIN("ASOF LEFT OUTER JOIN", "⟕ₐ", TJoinOp.ASOF_LEFT_OUTER_JOIN);
+    ASOF_INNER_JOIN("ASOF INNER JOIN", "⋈ₐ"),
+    ASOF_LEFT_OUTER_JOIN("ASOF LEFT OUTER JOIN", "⟕ₐ");
 
     private final String description;
     private final String algebra;
-    private final TJoinOp thriftJoinOp;
-
-    JoinOperator(String description, String algebra, TJoinOp thriftJoinOp) {
+    JoinOperator(String description, String algebra) {
         this.description = description;
         this.algebra = algebra;
-        this.thriftJoinOp = thriftJoinOp;
     }
 
     @Override
@@ -75,10 +70,6 @@ public enum JoinOperator {
 
     public String toAlgebra() {
         return algebra;
-    }
-
-    public TJoinOp toThrift() {
-        return thriftJoinOp;
     }
 
     public boolean isOuterJoin() {
@@ -190,5 +181,4 @@ public enum JoinOperator {
         return this == LEFT_OUTER_JOIN || this == ASOF_LEFT_OUTER_JOIN;
     }
 }
-
 

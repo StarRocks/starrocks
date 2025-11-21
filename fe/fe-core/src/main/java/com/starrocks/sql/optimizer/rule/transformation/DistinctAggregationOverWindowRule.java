@@ -18,7 +18,7 @@ import com.google.common.base.Functions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;

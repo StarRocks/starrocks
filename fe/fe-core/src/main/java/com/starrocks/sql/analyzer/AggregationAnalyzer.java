@@ -123,7 +123,7 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitFieldReference(FieldReference node, Void context) {
-            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName().toString();
+            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName();
             throw new SemanticException(colInfo + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }

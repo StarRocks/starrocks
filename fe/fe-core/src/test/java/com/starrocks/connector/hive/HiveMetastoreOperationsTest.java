@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -32,11 +33,11 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -360,8 +361,8 @@ public class HiveMetastoreOperationsTest {
                 false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
-                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                        new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
                 "hive",
                 null,
                 new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
@@ -411,8 +412,8 @@ public class HiveMetastoreOperationsTest {
                 false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
-                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                        new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
                 "hive",
                 null,
                 new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
@@ -451,8 +452,8 @@ public class HiveMetastoreOperationsTest {
                 true,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
-                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                        new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
                 "hive",
                 null,
                 new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
@@ -490,8 +491,8 @@ public class HiveMetastoreOperationsTest {
                 true,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
-                        new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                        new ColumnDef("p1", TypeDef.create(PrimitiveType.INT))),
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                        new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
                 "hive",
                 null,
                 new ListPartitionDesc(Lists.newArrayList("p1"), new ArrayList<>()),
@@ -529,8 +530,8 @@ public class HiveMetastoreOperationsTest {
                 false,
                 new TableName("hive_catalog", "hive_db", "hive_table"),
                 Lists.newArrayList(
-                        new ColumnDef("col1", TypeDef.create(PrimitiveType.INT)),
-                        new ColumnDef("col2", TypeDef.create(PrimitiveType.INT))),
+                        new ColumnDef("col1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                        new ColumnDef("col2", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
                 "hive",
                 null,
                 new ListPartitionDesc(Lists.newArrayList("col1"), new ArrayList<>()),

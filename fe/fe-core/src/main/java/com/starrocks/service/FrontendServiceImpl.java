@@ -62,6 +62,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -137,6 +138,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -163,9 +165,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
@@ -945,7 +945,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (ctx == null) {
             return result;
         }
-        SetType setType = SetType.fromThrift(params.getVarType());
+        SetType setType = ExprToThrift.setTypeFromThrift(params.getVarType());
         List<List<String>> rows = GlobalStateMgr.getCurrentState().getVariableMgr().dump(setType,
                 ctx.getSessionVariable(), null);
         if (setType != SetType.VERBOSE) {
@@ -1954,7 +1954,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -1962,7 +1962,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -1975,7 +1975,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> ExprToThriftVisitor
+                                .map(value -> ExprToThrift
                                         .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -1986,7 +1986,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> ExprToThriftVisitor
+                                .map(value1 -> ExprToThrift
                                         .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2368,7 +2368,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> ExprToThriftVisitor
+                .map(value -> ExprToThrift
                         .treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
@@ -2384,7 +2384,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -2392,7 +2392,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -2404,7 +2404,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> ExprToThriftVisitor
+                                .map(value -> ExprToThrift
                                         .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2415,7 +2415,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> ExprToThriftVisitor
+                                .map(value1 -> ExprToThrift
                                         .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());

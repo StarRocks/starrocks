@@ -15,32 +15,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.thrift.TVarType;
-
 // Set statement type.
 public enum SetType {
     GLOBAL,
     SESSION,
     USER,
     VERBOSE;
-
-    public TVarType toThrift() {
-        if (this == SetType.GLOBAL) {
-            return TVarType.GLOBAL;
-        }
-        return TVarType.SESSION;
-    }
-
-    public static SetType fromThrift(TVarType tType) {
-        if (tType == TVarType.GLOBAL) {
-            return SetType.GLOBAL;
-        }
-
-        if (tType == TVarType.VERBOSE) {
-            return SetType.VERBOSE;
-        }
-        return SetType.SESSION;
-    }
 
     public String toString() {
         switch (this) {

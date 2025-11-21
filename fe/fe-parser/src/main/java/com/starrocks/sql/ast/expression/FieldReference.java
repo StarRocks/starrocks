@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 
 import java.util.Objects;
 
@@ -27,23 +26,23 @@ import java.util.Objects;
  */
 public class FieldReference extends Expr {
     private final int fieldIndex;
-    private final TableName tblName;
+    private final String tblName;
 
-    public FieldReference(int fieldIndex, TableName tableName) {
+    public FieldReference(int fieldIndex, String tableName) {
         this.fieldIndex = fieldIndex;
         this.tblName = tableName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitFieldReference(this, context);
+        return visitor.visitFieldReference(this, context);
     }
 
     public int getFieldIndex() {
         return fieldIndex;
     }
 
-    public TableName getTblName() {
+    public String getTblName() {
         return tblName;
     }
 

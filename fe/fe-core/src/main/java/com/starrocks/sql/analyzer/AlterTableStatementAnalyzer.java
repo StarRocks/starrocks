@@ -19,6 +19,7 @@ import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.StarRocksException;
@@ -29,7 +30,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;

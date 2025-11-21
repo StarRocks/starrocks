@@ -39,7 +39,6 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;

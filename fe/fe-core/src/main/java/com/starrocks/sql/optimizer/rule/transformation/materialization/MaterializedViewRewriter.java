@@ -41,7 +41,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PermutationGenerator;

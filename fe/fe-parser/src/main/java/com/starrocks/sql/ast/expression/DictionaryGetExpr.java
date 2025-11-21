@@ -17,15 +17,11 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TDictionaryGetExpr;
 
 import java.util.List;
 
 public class DictionaryGetExpr extends Expr {
-
-    private TDictionaryGetExpr dictionaryGetExpr;
     private boolean skipStateCheck;
     private long dictionaryId;
     private long dictionaryTxnId;
@@ -62,14 +58,6 @@ public class DictionaryGetExpr extends Expr {
     @Override
     public Expr clone() {
         return new DictionaryGetExpr(this);
-    }
-
-    public TDictionaryGetExpr getDictionaryGetExpr() {
-        return dictionaryGetExpr;
-    }
-
-    public void setDictionaryGetExpr(TDictionaryGetExpr dictionaryGetExpr) {
-        this.dictionaryGetExpr = dictionaryGetExpr;
     }
 
     public void setSkipStateCheck(boolean skipStateCheck) {
@@ -114,6 +102,6 @@ public class DictionaryGetExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDictionaryGetExpr(this, context);
+        return visitor.visitDictionaryGetExpr(this, context);
     }
 }

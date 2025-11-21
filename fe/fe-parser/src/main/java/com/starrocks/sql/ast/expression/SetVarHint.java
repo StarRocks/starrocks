@@ -14,9 +14,7 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -33,18 +31,6 @@ public class SetVarHint extends HintNode {
         this.value = value;
     }
 
-    public long getSqlModeHintValue() {
-        long sqlMode = 0L;
-        if (value.containsKey("sql_mode")) {
-            try {
-                sqlMode = SqlModeHelper.encode(value.get("sql_mode"));
-            } catch (Exception e) {
-                // do nothing
-            }
-        }
-        return sqlMode;
-    }
-
     @Override
     public Map<String, String> getValue() {
         return value;
@@ -53,6 +39,6 @@ public class SetVarHint extends HintNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSetVarHint(this, context);
+        return visitor.visitSetVarHint(this, context);
     }
 }
