@@ -1231,15 +1231,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
-<<<<<<< HEAD
-                        nativeTbl.location(), dataFile.partition_path);
+                        IcebergUtil.tableDataLocation(nativeTbl), dataFile.partition_path);
                 PartitionData partitionData = partitionDataFromPath(
                         relativePartitionLocation, nullFingerprint, partitionSpec, nativeTbl);
-=======
-                        IcebergUtil.tableDataLocation(nativeTbl), dataFile.partition_path);
-                IcebergPartitionData partitionData = IcebergPartitionData.partitionDataFromPath(
-                        relativePartitionLocation, nullFingerprint, partitionSpec);
->>>>>>> 10df1a2313 ([Enhancement] iceberg sink follows the table property "write.data.path" (#65727))
                 builder.withPartition(partitionData);
                 // builder.withPartitionPath(relativePartitionLocation);
             }
@@ -1294,7 +1288,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new Append(transaction);
     }
 
-<<<<<<< HEAD
     public PartitionData partitionDataFromPath(String relativePartitionPath,
                                                String partitionNullFingerprint, PartitionSpec spec,
                                                org.apache.iceberg.Table table) {
@@ -1400,16 +1393,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         return data;
     }
 
-    public static String getIcebergRelativePartitionPath(String tableLocation, String partitionLocation) {
-        tableLocation = tableLocation.endsWith("/") ? tableLocation.substring(0, tableLocation.length() - 1) : tableLocation;
-        String tableLocationWithData = tableLocation + "/data/";
-        String path = PartitionUtil.getSuffixName(tableLocationWithData, partitionLocation);
-=======
     public static String getIcebergRelativePartitionPath(String tableDataLocation, String partitionLocation) {
         tableDataLocation = tableDataLocation.endsWith("/") ? tableDataLocation.substring(0, tableDataLocation.length() - 1) :
                 tableDataLocation;
         String path = PartitionUtil.getSuffixName(tableDataLocation, partitionLocation);
->>>>>>> 10df1a2313 ([Enhancement] iceberg sink follows the table property "write.data.path" (#65727))
         if (path.startsWith("/")) {
             path = path.substring(1);
         }
