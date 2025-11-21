@@ -348,7 +348,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                     "(" + quoteColumnKey + ")), -1) ";
             long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                     ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
-            String dataSizeFunction =  "COUNT(*) * " + elementTypeSize + " * " + collectionSizeFunction;
+            String dataSizeFunction =
+                    "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + collectionSizeFunction.trim() + ")";
             context.put("hllFunction", "'00'");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
