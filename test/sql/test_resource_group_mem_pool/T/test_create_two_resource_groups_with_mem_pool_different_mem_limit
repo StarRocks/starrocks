@@ -1,0 +1,26 @@
+-- name: test_create_two_resource_groups_with_mem_pool_different_mem_limit
+
+[UC] drop resource group shared_resource_group_for_alex;
+[UC] drop resource group shared_resource_group_for_brad;
+
+[UC] create resource group shared_resource_group_for_alex
+to (user='alex') 
+with (
+  'cpu_weight' = '7',
+  'mem_limit' = '55%',
+  'mem_pool' = 'shared_pool_for_alex_and_brad'
+);
+
+create resource group shared_resource_group_for_brad
+to (user='brad') 
+with (
+  'cpu_weight' = '7',
+  'mem_limit' = '88%',
+  'mem_pool' = 'shared_pool_for_alex_and_brad'
+);
+
+show verbose resource groups all;
+show verbose resource groups all;
+
+[UC] drop resource group shared_resource_group_for_alex;
+[UC] drop resource group shared_resource_group_for_brad;
