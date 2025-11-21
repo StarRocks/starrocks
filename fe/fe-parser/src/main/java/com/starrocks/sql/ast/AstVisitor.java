@@ -121,6 +121,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitRefreshConnectionsStatement(RefreshConnectionsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitDelBackendBlackListStatement(DelBackendBlackListStmt statement, C context) {
         return visitStatement(statement, context);
     }

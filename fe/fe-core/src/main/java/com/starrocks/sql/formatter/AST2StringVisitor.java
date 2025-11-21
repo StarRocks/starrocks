@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -331,6 +332,14 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         }
 
         return sb.append(Joiner.on(",").join(setVarList)).toString();
+    }
+
+    @Override
+    public String visitRefreshConnectionsStatement(RefreshConnectionsStmt stmt, Void context) {
+        if (stmt.isForce()) {
+            return "REFRESH CONNECTIONS FORCE";
+        }
+        return "REFRESH CONNECTIONS";
     }
 
     @Override
