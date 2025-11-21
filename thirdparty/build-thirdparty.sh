@@ -477,7 +477,7 @@ build_llvm() {
     rm -rf CMakeCache.txt CMakeFiles/
 
     BASE_DY_LIB_BASE=$LD_LIBRARY_PATH
-    export LD_LIBRARY_PATH="${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
@@ -496,8 +496,6 @@ build_llvm() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
-    # TODO(yueyang): Add more targets.
-    # This is a little bit hack, we need to minimize the build time and binary size.
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
