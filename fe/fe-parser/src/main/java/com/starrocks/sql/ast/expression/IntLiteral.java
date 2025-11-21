@@ -35,14 +35,9 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.validate.ValidateException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
@@ -116,13 +111,13 @@ public class IntLiteral extends LiteralExpr {
         analysisDone();
     }
 
-    public IntLiteral(String value, Type type) throws AnalysisException {
+    public IntLiteral(String value, Type type) {
         super();
         long longValue = -1L;
         try {
             longValue = Long.parseLong(value);
         } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid number format: " + value);
+            throw new ParsingException("Invalid number format: " + value);
         }
 
         boolean valid = true;
@@ -151,7 +146,7 @@ public class IntLiteral extends LiteralExpr {
         }
 
         if (!valid) {
-            throw new AnalysisException("Number out of range[" + value + "]. type: " + type);
+            throw new ParsingException("Number out of range[" + value + "]. type: " + type);
         }
 
         this.value = longValue;
@@ -297,8 +292,7 @@ public class IntLiteral extends LiteralExpr {
             case BIGINT:
                 return value;
             default:
-                throw new StarRocksPlannerException("Error int literal type " + type.getPrimitiveType(),
-                        ErrorType.INTERNAL_ERROR);
+                throw new ParsingException("Error int literal type " + type.getPrimitiveType());
         }
     }
 
@@ -321,9 +315,8 @@ public class IntLiteral extends LiteralExpr {
         return (double) value;
     }
 
-
     @Override
-    public void swapSign() throws NotImplementedException {
+    public void swapSign() throws UnsupportedOperationException {
         // swapping sign does not change the type
         value = -value;
     }
@@ -335,27 +328,7 @@ public class IntLiteral extends LiteralExpr {
     }
 
     @Override
-    public void parseMysqlParam(ByteBuffer data) {
-        switch (type.getPrimitiveType()) {
-            case TINYINT:
-                value = data.get();
-                break;
-            case SMALLINT:
-                value = data.getChar();
-                break;
-            case INT:
-                value = data.getInt();
-                break;
-            case BIGINT:
-                value = data.getLong();
-                break;
-            default:
-                throw new ValidateException("unknown binary data for type:" + type.getPrimitiveType(), ErrorType.INTERNAL_ERROR);
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitIntLiteral(this, context);
+        return visitor.visitIntLiteral(this, context);
     }
 }

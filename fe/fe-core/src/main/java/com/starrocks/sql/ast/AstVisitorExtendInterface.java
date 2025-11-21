@@ -18,44 +18,33 @@ import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
-import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
-import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
-import com.starrocks.sql.ast.expression.LargeIntLiteral;
-import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
-import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.MultiInPredicate;
-import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.UserVariableHint;
-import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -879,55 +868,12 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     // ------------------------------------------- Literal ------------------------------------------
-    default R visitLiteral(LiteralExpr node, C context) {
+
+    default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
         return visitExpression(node, context);
     }
 
-    default R visitBoolLiteral(BoolLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitDateLiteral(DateLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitIntLiteral(IntLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
     default R visitDecimalLiteral(DecimalLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitVarBinaryLiteral(VarBinaryLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitLargeIntLiteral(LargeIntLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitNullLiteral(NullLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitFloatLiteral(FloatLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitStringLiteral(StringLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitLargeStringLiteral(LargeStringLiteral node, C context) {
-        return visitStringLiteral(node, context);
-    }
-
-    default R visitMaxLiteral(MaxLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitIntervalLiteral(IntervalLiteral node, C context) {
         return visitLiteral(node, context);
     }
 

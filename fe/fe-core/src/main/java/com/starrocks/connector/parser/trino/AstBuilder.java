@@ -20,7 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.ast.CTERelation;
@@ -211,6 +211,7 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -233,8 +234,8 @@ import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryTy
 import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.PRECEDING;
 import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.type.DateType.DATETIME;
 import static com.starrocks.type.DateType.TIME;
 import static com.starrocks.type.FloatType.FLOAT;
@@ -958,7 +959,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else {
                 throw new ParsingException("Numeric overflow " + intLiteral);
             }
-        } catch (NumberFormatException | AnalysisException e) {
+        } catch (NumberFormatException | ParsingException e) {
             throw new ParsingException("Invalid numeric literal: " + node);
         }
     }
@@ -981,7 +982,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 return new DecimalLiteral(decimal);
             }
 
-        } catch (AnalysisException | NumberFormatException e) {
+        } catch (ParsingException | NumberFormatException e) {
             throw new ParsingException(e.getMessage());
         }
     }
@@ -994,7 +995,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } else {
                 return new DecimalLiteral(node.getValue());
             }
-        } catch (AnalysisException e) {
+        } catch (ParsingException e) {
             throw new ParsingException(e.getMessage());
         }
     }
@@ -1003,8 +1004,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitGenericLiteral(GenericLiteral node, ParseTreeContext context) {
         if (node.getType().equalsIgnoreCase("date")) {
             try {
-                return new DateLiteral(node.getValue(), DateType.DATE);
-            } catch (AnalysisException e) {
+                LocalDateTime dateTime = DateUtils.parseStrictDateTime(node.getValue());
+                return new DateLiteral(dateTime, DateType.DATE);
+            } catch (RuntimeException e) {
                 throw new ParsingException(e.getMessage());
             }
         } else if (node.getType().equalsIgnoreCase("json")) {
@@ -1012,7 +1014,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } else if (node.getType().equalsIgnoreCase("real")) {
             try {
                 return new FloatLiteral(node.getValue());
-            } catch (AnalysisException e) {
+            } catch (ParsingException e) {
                 throw new RuntimeException(e);
             }
         }
@@ -1052,16 +1054,19 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             String value = node.getValue();
             String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
             ZoneId zoneId = parseTimeZoneFromString(formattedValue);
+            String literalValue = parseDateTimeFromString(formattedValue);
             if (zoneId == null) {
-                return new DateLiteral(formattedValue, DateType.DATETIME);
+                LocalDateTime dateTime = DateUtils.parseStrictDateTime(literalValue);
+                return new DateLiteral(dateTime, DateType.DATETIME);
             } else {
+                LocalDateTime dateTime = DateUtils.parseStrictDateTime(literalValue);
                 return new FunctionCallExpr("convert_tz", List.of(
-                        new DateLiteral(parseDateTimeFromString(formattedValue), DateType.DATETIME),
+                        new DateLiteral(dateTime, DateType.DATETIME),
                         new VariableExpr("time_zone"),
                         new com.starrocks.sql.ast.expression.StringLiteral(zoneId.toString())
                 ));
             }
-        } catch (AnalysisException e) {
+        } catch (ParsingException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
     }
