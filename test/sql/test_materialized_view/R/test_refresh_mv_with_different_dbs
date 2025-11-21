@@ -34,11 +34,11 @@ INSERT INTO db_${uuid0}_2.t1 VALUES (1,2,2);
 -- !result
 [UC]analyze full table t1;
 -- result:
-db_460a6e8e006a458c8f3cb50de43ee7a7_1.t1	analyze	status	OK
+db_a832548c24ca415286ad6c9c05ba293f_1.t1	analyze	status	OK
 -- !result
 [UC]analyze full table db_${uuid0}_2.t1;
 -- result:
-db_460a6e8e006a458c8f3cb50de43ee7a7_2.t1	analyze	status	OK
+db_a832548c24ca415286ad6c9c05ba293f_2.t1	analyze	status	OK
 -- !result
 CREATE MATERIALIZED VIEW mv1
 DISTRIBUTED BY HASH(k1) BUCKETS 10
@@ -51,9 +51,9 @@ function: wait_async_materialized_view_finish("db_${uuid0}_1", "mv1")
 -- result:
 None
 -- !result
-function: check_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;", "mv1")
+function: print_hit_materialized_view("SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4 FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1;", "mv1")
 -- result:
-None
+True
 -- !result
 SELECT t1.k1 as k1, t1.k2 as k2, t2.k1 as k3, t2.k2 as k4
 FROM t1 join db_${uuid0}_2.t1 t2 on t1.k1=t2.k1 order by 1, 2, 3, 4;

@@ -1,4 +1,4 @@
--- name: test_mv_rewrite_with_iceberg
+-- name: test_mv_rewrite_with_iceberg @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -69,9 +69,9 @@ SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='
 -- !result
 SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
-2020-06-18	5
-2020-06-21	7
 2020-06-15	3
+2020-06-21	7
+2020-06-18	5
 -- !result
 INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1  VALUES
     (1,"2020-06-15", 1),(2,"2020-06-15", 1);

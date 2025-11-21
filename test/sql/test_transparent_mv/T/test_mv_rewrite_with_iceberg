@@ -1,4 +1,4 @@
--- name: test_mv_rewrite_with_iceberg
+-- name: test_mv_rewrite_with_iceberg @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (
