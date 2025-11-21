@@ -17,15 +17,8 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-=======
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
 import com.starrocks.thrift.TExprMinMaxValue;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StringType;
->>>>>>> c6be8935f5 ([BugFix] Fix class cast exception when building scan range (#65149))
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Types;
@@ -126,11 +119,11 @@ public class IcebergUtilTest {
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(5, "date", Types.StringType.get()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(5), "id", IntegerType.INT, true),
-                new SlotDescriptor(new SlotId(3), "date", StringType.STRING, true)
+                new SlotDescriptor(new SlotId(5), "id", Type.INT, true),
+                new SlotDescriptor(new SlotId(3), "date", Type.STRING, true)
         );
-        slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
-        slots.get(1).setColumn(new Column("date", StringType.STRING, true));
+        slots.get(0).setColumn(new Column("id", Type.INT, true));
+        slots.get(1).setColumn(new Column("date", Type.STRING, true));
         var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-01".getBytes()));
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
