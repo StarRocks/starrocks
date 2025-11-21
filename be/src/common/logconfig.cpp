@@ -29,6 +29,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 
@@ -207,6 +209,70 @@ static void failure_function() {
     std::abort();
 }
 
+// Custom prefix formatter that includes timezone information
+static void custom_prefix_formatter(std::ostream& s, const google::LogMessage& message, void*) {
+    const google::LogMessageTime& time = message.time();
+
+    // Severity level (single character)
+    s << google::GetLogSeverityName(message.severity())[0];
+
+    // Date and time
+    if (FLAGS_log_year_in_prefix) {
+        // Format: YYYYMMDD HH:MM:SS.uuuuuu +HHMM
+        s << std::setfill('0') << std::setw(4) << (1900 + time.year()) << std::setw(2) << (1 + time.month())
+          << std::setw(2) << time.day() << ' ' << std::setw(2) << time.hour() << ':' << std::setw(2) << time.min()
+          << ':' << std::setw(2) << time.sec() << '.' << std::setw(6) << time.usec();
+    } else {
+        // Format: MMDD HH:MM:SS.uuuuuu +HHMM
+        s << std::setfill('0') << std::setw(2) << (1 + time.month()) << std::setw(2) << time.day() << ' '
+          << std::setw(2) << time.hour() << ':' << std::setw(2) << time.min() << ':' << std::setw(2) << time.sec()
+          << '.' << std::setw(6) << time.usec();
+    }
+
+    // Timezone offset (cached, calculated once at first call)
+    static const char* cached_timezone_str = []() {
+        static char tz_str[7] = "+0000";
+        // Calculate timezone offset once using current time
+        std::time_t now = std::time(nullptr);
+        struct std::tm tm_local;
+        localtime_r(&now, &tm_local);
+
+        // Get timezone offset using gmtoff if available, otherwise calculate
+        long offset_seconds = 0;
+#ifdef __USE_MISC
+        offset_seconds = tm_local.tm_gmtoff;
+#else
+        // Fallback: use timezone variable
+        extern long timezone;
+        offset_seconds = -timezone;
+        if (tm_local.tm_isdst > 0) {
+            offset_seconds -= 3600; // Adjust for DST
+        }
+#endif
+
+        int offset_hours = static_cast<int>(offset_seconds / 3600);
+        int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
+        if (offset_mins < 0) offset_mins = -offset_mins;
+
+        if (offset_seconds < 0) {
+            snprintf(tz_str, sizeof(tz_str), "-%02d%02d", -offset_hours, offset_mins);
+        } else {
+            snprintf(tz_str, sizeof(tz_str), "+%02d%02d", offset_hours, offset_mins);
+        }
+        return tz_str;
+    }();
+
+    s << ' ' << cached_timezone_str;
+
+    // Thread ID (simplified, use hash to get a shorter ID)
+    std::hash<std::thread::id> hasher;
+    size_t thread_hash = hasher(message.thread_id());
+    s << ' ' << std::setfill(' ') << std::setw(5) << (thread_hash % 100000) << ' ';
+
+    // File and line
+    s << message.basename() << ':' << message.line() << "] ";
+}
+
 bool init_glog(const char* basename, bool install_signal_handler) {
     std::lock_guard<std::mutex> logging_lock(logging_mutex);
 
@@ -307,6 +373,11 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     }
 
     google::InitGoogleLogging(basename);
+
+    // Install custom prefix formatter to include timezone information if enabled
+    if (config::sys_log_timezone) {
+        google::InstallPrefixFormatter(&custom_prefix_formatter, nullptr);
+    }
 
     // dump trace info may access some runtime stats
     // if runtime stats broken we won't dump stack
