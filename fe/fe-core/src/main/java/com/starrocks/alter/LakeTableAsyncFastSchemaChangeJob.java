@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -135,9 +134,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     private void updateCatalogUnprotected(Database db, LakeTable table) {
         if (disableFastSchemaEvolutionV2) {
             // only update the property, no need to update schema which is actually not changed
-            TableProperty tableProperty = table.getTableProperty();
-            tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, "false");
-            tableProperty.buildCloudNativeFastSchemaEvolutionV2();
+            table.setFastSchemaEvolutionV2(false);
             LOG.info("Schema change job finish to disable {}, job_id: {}, table: {}",
                     PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, getJobId(), table.getName());
             return;
