@@ -576,6 +576,8 @@ TEST(TestRuntimeProfile, testUpdateMinMax) {
     ASSERT_EQ(4, base_c2->min_value().value());
     ASSERT_TRUE(base_c2->max_value().has_value());
     ASSERT_EQ(12, base_c2->max_value().value());
+    auto* base_c3 = profile->get_counter("counter3");
+    ASSERT_TRUE(base_c3 != nullptr);
     ASSERT_EQ(10, base_c3->value());
     ASSERT_TRUE(base_c3->min_value().has_value());
     ASSERT_EQ(5, base_c3->min_value().value());
