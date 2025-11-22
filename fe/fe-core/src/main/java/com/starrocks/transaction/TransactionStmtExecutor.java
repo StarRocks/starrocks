@@ -20,6 +20,7 @@ import com.google.common.primitives.Ints;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -60,7 +61,6 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -81,27 +81,47 @@ public class TransactionStmtExecutor {
     private static final Logger LOG = LogManager.getLogger(TransactionStmtExecutor.class);
 
     public static void beginStmt(ConnectContext context, BeginStmt stmt) {
+        beginStmt(context, stmt, TransactionState.LoadJobSourceType.INSERT_STREAMING);
+    }
+
+    public static void beginStmt(ConnectContext context, BeginStmt stmt,
+                                 TransactionState.LoadJobSourceType sourceType) {
+        beginStmt(context, stmt, sourceType, null);
+    }
+
+    // Overload allowing explicit label override for creating the transaction state.
+    // If labelOverride is null or empty, it falls back to the default label built from executionId.
+    public static void beginStmt(ConnectContext context, BeginStmt stmt,
+                                 TransactionState.LoadJobSourceType sourceType,
+                                 String labelOverride) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         if (context.getTxnId() != 0) {
-            //Repeated begin does not create a new transaction
+            // Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
             String label = explicitTxnState.getTransactionState().getLabel();
             long transactionId = explicitTxnState.getTransactionState().getTransactionId();
-            context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
+            context.getState().setOk(0, 0,
+                    buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
             return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getTransactionIDGenerator().getNextTransactionId();
-        String label = DebugUtil.printId(context.getExecutionId());
-        TransactionState transactionState = new TransactionState(transactionId, label, null,
-                TransactionState.LoadJobSourceType.INSERT_STREAMING,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+        String label = (labelOverride != null && !labelOverride.isEmpty())
+                ? labelOverride
+                : DebugUtil.printId(context.getExecutionId());
+        TransactionState transactionState = new TransactionState(
+                transactionId,
+                label,
+                null,
+                sourceType,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
                 context.getExecTimeout() * 1000L);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
         transactionState.setComputeResource(context.getCurrentComputeResource());
-        boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        boolean combinedTxnLog = LakeTableHelper.supportCombinedTxnLog(sourceType);
         transactionState.setUseCombinedTxnLog(combinedTxnLog);
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
@@ -109,7 +129,8 @@ public class TransactionStmtExecutor {
         globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
 
         context.setTxnId(transactionId);
-        context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
+        context.getState().setOk(0, 0,
+                buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
     }
 
     public static void loadData(Database database,
@@ -119,7 +140,7 @@ public class TransactionStmtExecutor {
                                 OriginStatement originStmt,
                                 ConnectContext context) {
         Coordinator coordinator = new DefaultCoordinator.Factory().createInsertScheduler(
-                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
@@ -147,6 +168,8 @@ public class TransactionStmtExecutor {
             if (!transactionState.getTableIdList().contains(targetTable.getId())) {
                 transactionState.addTableIdList(targetTable.getId());
             }
+            // record modified table id in explicit txn state for later SELECT validation
+            explicitTxnState.addModifiedTableId(targetTable.getId());
 
             for (TableName tableName : m.keySet()) {
                 if (explicitTxnState.getTableHasExplicitStmt(tableName.getTbl())) {
@@ -183,6 +206,9 @@ public class TransactionStmtExecutor {
         }
 
         transactionState.addTableIdList(tableId);
+
+        // record modified table id in explicit txn state for later SELECT validation
+        explicitTxnState.addModifiedTableId(tableId);
 
         explicitTxnState.addTransactionItem(item);
 

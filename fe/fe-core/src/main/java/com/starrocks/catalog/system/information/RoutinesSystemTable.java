@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.type.DateType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -33,29 +33,29 @@ public class RoutinesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("SPECIFIC_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DTD_IDENTIFIER", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_BODY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_DEFINITION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("EXTERNAL_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("EXTERNAL_LANGUAGE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARAMETER_STYLE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_DETERMINISTIC", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SQL_DATA_ACCESS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SQL_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SECURITY_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CREATED", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_ALTERED", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("SQL_MODE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ROUTINE_COMMENT", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DEFINER", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("COLLATION_CONNECTION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DATABASE_COLLATION", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("SPECIFIC_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DTD_IDENTIFIER", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_BODY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_DEFINITION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("EXTERNAL_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("EXTERNAL_LANGUAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARAMETER_STYLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_DETERMINISTIC", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SQL_DATA_ACCESS", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SQL_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SECURITY_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CREATED", DateType.DATETIME)
+                        .column("LAST_ALTERED", DateType.DATETIME)
+                        .column("SQL_MODE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ROUTINE_COMMENT", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DEFINER", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DATABASE_COLLATION", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), SCH_PROCEDURES);
     }
 }

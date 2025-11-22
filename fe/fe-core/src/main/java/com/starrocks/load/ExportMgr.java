@@ -41,6 +41,7 @@ import com.google.gson.Gson;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -61,7 +62,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -116,8 +116,7 @@ public class ExportMgr implements MemoryTrackable {
         ExportJob job = createJob(jobId, queryId, stmt);
         writeLock();
         try {
-            unprotectAddJob(job);
-            GlobalStateMgr.getCurrentState().getEditLog().logExportCreate(job);
+            GlobalStateMgr.getCurrentState().getEditLog().logExportCreate(job, wal -> unprotectAddJob(job));
         } finally {
             writeUnlock();
         }
@@ -363,26 +362,11 @@ public class ExportMgr implements MemoryTrackable {
         }
     }
 
-    @Deprecated
-    public void replayUpdateJobState(long jobId, ExportJob.JobState newState) {
-        writeLock();
-        try {
-            ExportJob job = idToJob.get(jobId);
-            job.updateState(newState, true, System.currentTimeMillis());
-            if (isJobExpired(job, System.currentTimeMillis())) {
-                LOG.info("remove expired job: {}", job);
-                idToJob.remove(jobId);
-            }
-        } finally {
-            writeUnlock();
-        }
-    }
-
     public void replayUpdateJobInfo(ExportJob.ExportUpdateInfo info) {
         writeLock();
         try {
             ExportJob job = idToJob.get(info.jobId);
-            job.updateState(info.state, true, info.stateChangeTime);
+            job.changeState(info.state, info.stateChangeTime);
             if (isJobExpired(job, System.currentTimeMillis())) {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(info.jobId);

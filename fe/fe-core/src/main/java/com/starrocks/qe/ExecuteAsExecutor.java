@@ -19,7 +19,9 @@ import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,7 +30,7 @@ import java.util.List;
 import java.util.Set;
 
 public class ExecuteAsExecutor {
-    private static final Logger LOG = LogManager.getLogger(ExecuteAsStmt.class);
+    private static final Logger LOG = LogManager.getLogger(ExecuteAsExecutor.class);
 
     /**
      * Only set current user, won't reset any other context, for example, current database.
@@ -40,14 +42,19 @@ public class ExecuteAsExecutor {
      * MySQL [test_priv]> select * from test_table2;
      * ERROR 1064 (HY000): No database selected
      */
-    public static void execute(ExecuteAsStmt stmt, ConnectContext ctx) {
+    public static void execute(ExecuteAsStmt stmt, ConnectContext ctx) throws DdlException {
         // only support WITH NO REVERT for now
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
         UserRef user = stmt.getToUser();
         // Create UserIdentity with ephemeral flag for external users
-        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        UserIdentity userIdentity;
+        if (user.isExternal()) {
+            userIdentity = UserIdentity.createEphemeralUserIdent(user.getUser(), user.getHost());
+        } else {
+            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        }
         ctx.setCurrentUserIdentity(userIdentity);
 
         // Refresh groups and roles for all users based on security integration
@@ -57,6 +64,13 @@ public class ExecuteAsExecutor {
             UserProperty userProperty = ctx.getGlobalStateMgr().getAuthenticationMgr()
                     .getUserProperty(user.getUser());
             ctx.updateByUserProperty(userProperty);
+
+            //Execute As not affect session variables, so we need to reset the session variables
+            SetStmt setStmt = ctx.getModifiedSessionVariables();
+            if (setStmt != null) {
+                SetExecutor executor = new SetExecutor(ctx, setStmt);
+                executor.execute();
+            }
         }
     }
 
@@ -76,7 +90,7 @@ public class ExecuteAsExecutor {
             ctx.setGroups(groups);
 
             // Refresh current role IDs based on user + groups
-            ctx.setCurrentRoleIds(userIdentity);
+            ctx.setCurrentRoleIds(userIdentity, groups);
 
             LOG.info("Refreshed groups {} and roles for user {}", groups, userIdentity);
         } catch (Exception e) {

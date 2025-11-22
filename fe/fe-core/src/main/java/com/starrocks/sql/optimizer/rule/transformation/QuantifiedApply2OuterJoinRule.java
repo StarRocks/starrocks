@@ -18,10 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -53,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.BooleanType;
 
 import java.util.Arrays;
 import java.util.List;
@@ -465,16 +465,16 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             whenThen.add(ConstantOperator.createBoolean(false));
 
             whenThen.add(new IsNullPredicateOperator(inPredicate.getChild(0)));
-            whenThen.add(ConstantOperator.createNull(Type.BOOLEAN));
+            whenThen.add(ConstantOperator.createNull(BooleanType.BOOLEAN));
 
             whenThen.add(new IsNullPredicateOperator(true, inPredicate.getChild(1)));
             whenThen.add(ConstantOperator.createBoolean(true));
 
             whenThen.add(BinaryPredicateOperator.lt(countNulls, countRows));
-            whenThen.add(ConstantOperator.createNull(Type.BOOLEAN));
+            whenThen.add(ConstantOperator.createNull(BooleanType.BOOLEAN));
 
             ScalarOperator caseWhen =
-                    new CaseWhenOperator(Type.BOOLEAN, null, ConstantOperator.createBoolean(false), whenThen);
+                    new CaseWhenOperator(BooleanType.BOOLEAN, null, ConstantOperator.createBoolean(false), whenThen);
 
             if (isNotIn) {
                 caseWhenMap.put(apply.getOutput(),

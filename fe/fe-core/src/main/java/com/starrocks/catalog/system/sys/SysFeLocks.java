@@ -22,10 +22,7 @@ import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
@@ -42,6 +39,10 @@ import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.thrift.TException;
@@ -59,14 +60,14 @@ public class SysFeLocks {
         return new SystemTable(SystemId.FE_LOCKS_ID, NAME,
                 Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("lock_type", ScalarType.createVarcharType(64))
-                        .column("lock_object", ScalarType.createVarcharType(64))
-                        .column("lock_mode", ScalarType.createVarcharType(64))
-                        .column("start_time", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("hold_time_ms", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("thread_info", ScalarType.createVarcharType(64))
-                        .column("granted", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("waiter_list", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("lock_type", TypeFactory.createVarcharType(64))
+                        .column("lock_object", TypeFactory.createVarcharType(64))
+                        .column("lock_mode", TypeFactory.createVarcharType(64))
+                        .column("start_time", DateType.DATETIME)
+                        .column("hold_time_ms", IntegerType.BIGINT)
+                        .column("thread_info", TypeFactory.createVarcharType(64))
+                        .column("granted", BooleanType.BOOLEAN)
+                        .column("waiter_list", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.SYS_FE_LOCKS);
     }
@@ -74,19 +75,12 @@ public class SysFeLocks {
     @VisibleForTesting
     public static TFeLocksRes listLocks(TFeLocksReq request, boolean authenticate) throws TException {
         TAuthInfo auth = request.getAuth_info();
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // authorize
         try {
             if (authenticate) {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {

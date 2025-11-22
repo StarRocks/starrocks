@@ -24,6 +24,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.thrift.TDeletionVectorDescriptor;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -42,23 +43,26 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(DeltaConnectorScanRangeSource.class);
-    private DeltaLakeTable table;
-    private RemoteFileInfoSource remoteFileInfoSource;
-    private RemoteFileInputFormat remoteFileInputFormat;
-    private final AtomicLong partitionIdGen = new AtomicLong(0L);
+    private final DeltaLakeTable table;
+    private final RemoteFileInfoSource remoteFileInfoSource;
+    private final RemoteFileInputFormat remoteFileInputFormat;
+    private final PartitionIdGenerator partitionIdGenerator;
+
     private Map<PartitionKey, Long> partitionKeys = new HashMap<>();
     private Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
 
-    public DeltaConnectorScanRangeSource(DeltaLakeTable table, RemoteFileInfoSource remoteFileInfoSource) {
+    public DeltaConnectorScanRangeSource(DeltaLakeTable table,
+                                         RemoteFileInfoSource remoteFileInfoSource,
+                                         PartitionIdGenerator partitionIdGenerator) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.remoteFileInputFormat = DeltaUtils.getRemoteFileFormat(table.getDeltaMetadata().getFormat().getProvider());
+        this.partitionIdGenerator = partitionIdGenerator;
     }
 
     private long addPartition(FileScanTask fileScanTask) throws AnalysisException {
@@ -72,7 +76,7 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
             return partitionKeys.get(partitionKey);
         }
 
-        long partitionId = partitionIdGen.getAndIncrement();
+        long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
         FileStatus fileStatus = fileScanTask.getFileStatus();
         Path filePath = new Path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =

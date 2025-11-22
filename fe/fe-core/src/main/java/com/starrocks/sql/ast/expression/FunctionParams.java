@@ -121,7 +121,7 @@ public class FunctionParams {
     public String getOrderByStringToSql() {
         if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();
-            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::toSql).
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(ExprToSql::toSql).
                     collect(Collectors.joining(" ")));
             return sb.toString();
         } else {
@@ -132,7 +132,7 @@ public class FunctionParams {
     public String getOrderByStringToExplain() {
         if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();
-            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::explain).
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(ExprToSql::explain).
                     collect(Collectors.joining(" ")));
             return sb.toString();
         } else {
@@ -192,7 +192,7 @@ public class FunctionParams {
             if (i != 0) {
                 result = result.concat(",");
             }
-            result = result.concat(exprsNames.get(i) + "=>" + exprs.get(i).toSql());
+            result = result.concat(exprsNames.get(i) + "=>" + ExprToSql.toSql(exprs.get(i)));
         }
         return result;
     }

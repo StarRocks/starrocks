@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 #### type
 
 データソースのタイプです。値を `iceberg` に設定します。
+
+#### SecurityParams
+
+StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
+
+Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
+
+##### catalog.access.control
+
+データアクセス制御ポリシー。有効な値：
+
+- `native` (デフォルト): StarRocks 組み込みのデータアクセス制御システムを使用します。
+- `allowall`: すべてのデータアクセスチェックをカタログ自体に委譲します。
+- `ranger`: データアクセスチェックを Apache Ranger に委譲します。
 
 #### MetastoreParams
 
@@ -261,7 +276,7 @@ REST catalog 用の `MetastoreParams`:
 
 - `iceberg.catalog.security`
   - 必須: いいえ
-  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2`。`OAUTH2` 認証プロトコルには `token` または `credential` が必要です。
+  - 説明: 使用する認証プロトコルのタイプ。デフォルト: `NONE`。有効な値: `OAUTH2` および `JWT`。この項目が `OAUTH2` に設定されている場合、`token` または `credential` のいずれかが必要です。この項目が `JWT` に設定されている場合、ユーザーは `JWT` メソッドを使用して StarRocks クラスターにログインする必要があります。`token` または `credential` を省略することも可能です。その場合、StarRocks はログイン済みユーザーの JWT を使用して Catalog にアクセスします。
 
 - `iceberg.catalog.oauth2.token`
   - 必須: いいえ
@@ -745,8 +760,10 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Iceberg 関連のメタデータ（Table Cache、Partition Name Cache、Manifest 内の Data File Cache および Delete Data File Cache を含む）をキャッシュするかどうか。 |
 | iceberg_manifest_cache_with_column_statistics | false                 | 列の統計をキャッシュするかどうか。                  |
-| iceberg_manifest_cache_max_num                | 100000                | キャッシュできる Manifest ファイルの最大数。     |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | Data File Cache のリフレッシュをトリガーする最小の Manifest ファイル長。 |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
+| iceberg_table_cache_refresh_interval_sec      | 60                    | Iceberg テーブルキャッシュの非同期更新がトリガーされる間隔（秒単位）。v3.5.7 以降でサポートされています。 |
 
 v3.4 以降、StarRocks は、以下のパラメーターを設定することで、Iceberg メタデータを読み取ることで Iceberg テーブルの統計情報を取得できます。これにより、Iceberg テーブルの統計情報の収集を積極的にトリガーする必要はありません。
 
@@ -1325,6 +1342,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...
 partition_column_definition1,partition_column_definition2...])
 [partition_desc]
+[ORDER BY sort_desc)]
 [PROPERTIES ("key" = "value", ...)]
 [AS SELECT query]
 ```
@@ -1368,6 +1386,26 @@ column_name
 パーティション列は非パーティション列の後に定義される必要があります。パーティション列は FLOAT、DOUBLE、DECIMAL、および DATETIME を除くすべてのデータ型をサポートし、デフォルト値として `NULL` を使用することはできません。
 
 :::
+
+##### ORDER BY
+
+v4.0 以降、StarRocks は ORDER BY 句を介して Iceberg テーブルのソートキーを指定する機能をサポートしています。これにより、指定されたソートキーに基づいて同一データファイル内のデータを並べ替えることが可能です。
+
+ORDER BY 句には複数のソートキーを含めることができ、以下の形式で指定します：
+
+```SQL
+ORDER BY (column_name [sort_direction] [nulls_order], ...)
+```
+
+- `column_name`: ソートキーとして使用する列の名前。テーブルスキーマに存在する列でなければなりません。現在、Transform 式はサポートされていません。
+- `sort_direction`: ソート方向。有効な値: `ASC` (デフォルト) および `DESC`。
+- `nulls_order`: NULL 値の順序。有効な値: `NULLS FIRST` (`ASC` 指定時のデフォルト) および `NULLS LAST` (`DESC` 指定時のデフォルト)。
+
+`sort_direction` および `nulls_order` はオプションです。例えば、以下の各々は有効な `sort_desc` です：
+
+- `column_name`
+- `column_name ASC`
+- `column_name DESC NULLS FIRST`
 
 ##### PROPERTIES
 

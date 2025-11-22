@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -134,6 +135,16 @@ public class RuntimeProfile {
 
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy) {
         return addCounter(name, type, strategy, ROOT_COUNTER);
+    }
+
+    @VisibleForTesting
+    public void addCounter(String name, String parentName, Counter counter) {
+        this.counterMap.put(name, Pair.create(counter, parentName));
+        if (!childCounterMap.containsKey(parentName)) {
+            childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+        }
+        Set<String> childNames = childCounterMap.get(parentName);
+        childNames.add(name);
     }
 
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {

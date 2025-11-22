@@ -15,8 +15,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
@@ -32,6 +32,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -64,21 +67,21 @@ public class AlterTableOperationAnalyzerTest {
 
         // Fix Optional.get() warnings by checking isPresent()
         ConstantOperator rewriteAllOp = clause.getAnalyzedArgs().get("rewrite_all");
-        if (rewriteAllOp.castTo(ScalarType.BOOLEAN).isPresent()) {
+        if (rewriteAllOp.castTo(BooleanType.BOOLEAN).isPresent()) {
             Assertions.assertEquals(ConstantOperator.createBoolean(true),
-                    rewriteAllOp.castTo(ScalarType.BOOLEAN).get());
+                    rewriteAllOp.castTo(BooleanType.BOOLEAN).get());
         }
 
         ConstantOperator minFileSizeOp = clause.getAnalyzedArgs().get("min_file_size_bytes");
-        if (minFileSizeOp.castTo(ScalarType.BIGINT).isPresent()) {
+        if (minFileSizeOp.castTo(IntegerType.BIGINT).isPresent()) {
             Assertions.assertEquals(ConstantOperator.createBigint(100),
-                    minFileSizeOp.castTo(ScalarType.BIGINT).get());
+                    minFileSizeOp.castTo(IntegerType.BIGINT).get());
         }
 
         ConstantOperator batchSizeOp = clause.getAnalyzedArgs().get("batch_size");
-        if (batchSizeOp.castTo(ScalarType.BIGINT).isPresent()) {
+        if (batchSizeOp.castTo(IntegerType.BIGINT).isPresent()) {
             Assertions.assertEquals(ConstantOperator.createBigint(200),
-                    batchSizeOp.castTo(ScalarType.BIGINT).get());
+                    batchSizeOp.castTo(IntegerType.BIGINT).get());
         }
     }
 
@@ -182,7 +185,7 @@ public class AlterTableOperationAnalyzerTest {
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(new IcebergTable());
 
         // Test with older_than parameter
-        Expr olderThan = new DateLiteral("2024-01-01 00:00:00", ScalarType.DATETIME);
+        Expr olderThan = new DateLiteral(DateUtils.parseStrictDateTime("2024-01-01 00:00:00"), DateType.DATETIME);
 
         AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "EXPIRE_SNAPSHOTS",
                 List.of(new ProcedureArgument("OLDER_THAN", olderThan)), null);
@@ -233,7 +236,7 @@ public class AlterTableOperationAnalyzerTest {
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(new IcebergTable());
 
         // Test with older_than parameter
-        Expr olderThan = new DateLiteral("2024-01-01 00:00:00", ScalarType.DATETIME);
+        Expr olderThan = new DateLiteral(DateUtils.parseStrictDateTime("2024-01-01 00:00:00"), DateType.DATETIME);
 
         AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "REMOVE_ORPHAN_FILES",
                 List.of(new ProcedureArgument("OLDER_THAN", olderThan)), null);

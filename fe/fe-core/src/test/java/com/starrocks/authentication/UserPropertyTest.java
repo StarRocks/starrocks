@@ -439,19 +439,6 @@ public class UserPropertyTest {
         Assertions.assertEquals(2, context.getSessionVariable().getStatisticCollectParallelism());
 
         try {
-            // the session variable statistic_collect_parallel has been set to 2, and it is not equal to its default value 1
-            // updateByUserProperty will ignore setting the session variable statistic_collect_parallel.
-            userProperty = new UserProperty();
-            Map<String, String> sessionVariables = userProperty.getSessionVariables();
-            sessionVariables.put("statistic_collect_parallel", "100");
-            userProperty.setSessionVariables(sessionVariables);
-            context.updateByUserProperty(userProperty);
-        } catch (Exception e) {
-            throw e;
-        }
-        Assertions.assertEquals(2, context.getSessionVariable().getStatisticCollectParallelism()); // not 100
-
-        try {
             // catalog is valid
             String createExternalCatalog = "CREATE EXTERNAL CATALOG myCatalog " + "PROPERTIES( " + "   \"type\"=\"hive\", " +
                     "   \"hive.metastore.uris\"=\"thrift://xx.xx.xx.xx:9083\" " + ");";

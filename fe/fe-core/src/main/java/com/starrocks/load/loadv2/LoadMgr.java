@@ -144,11 +144,10 @@ public class LoadMgr implements MemoryTrackable {
                         "There are more than " + Config.desired_max_waiting_jobs + " load jobs in waiting queue, "
                                 + "please retry later.");
             }
-            createLoadJob(loadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         } finally {
             writeUnlock();
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
 
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
@@ -271,12 +270,8 @@ public class LoadMgr implements MemoryTrackable {
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
-        addLoadJob(loadJob);
-        if (!loadJob.isCompleted()) {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
-        }
         // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         return loadJob;
     }
 
@@ -330,7 +325,12 @@ public class LoadMgr implements MemoryTrackable {
                 .build());
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -346,7 +346,12 @@ public class LoadMgr implements MemoryTrackable {
 
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -390,15 +395,18 @@ public class LoadMgr implements MemoryTrackable {
 
         // 2. remove from dbIdToLabelToLoadJobs
         Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
-        List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
-        sameLabelJobs.remove(job);
-        if (sameLabelJobs.isEmpty()) {
-            labelToLoadJobs.remove(label);
+        if (labelToLoadJobs != null) {
+            List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
+            if (sameLabelJobs != null) {
+                sameLabelJobs.remove(job);
+                if (sameLabelJobs.isEmpty()) {
+                    labelToLoadJobs.remove(label);
+                }
+            }
+            if (labelToLoadJobs.isEmpty()) {
+                dbIdToLabelToLoadJobs.remove(dbId);
+            }
         }
-        if (labelToLoadJobs.isEmpty()) {
-            dbIdToLabelToLoadJobs.remove(dbId);
-        }
-
         // 3. remove spark launcher log
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();

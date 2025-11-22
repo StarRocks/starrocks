@@ -95,11 +95,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.common.ErrorCode.ERR_LOCK_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 
 /**
@@ -948,6 +950,13 @@ public class DatabaseTransactionMgr {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
+                    // Handle replication transaction separately
+                    // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
+                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
+                    if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
+                        states = states.subList(0, Math.max(i, 1));
+                        break;
+                    }
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
@@ -1076,7 +1085,8 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds) throws StarRocksException {
+    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+            throws StarRocksException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
         if (errorReplicaIds == null) {
@@ -1111,7 +1121,17 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        if (lockTimeoutMs > 0) {
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE, lockTimeoutMs,
+                    TimeUnit.MILLISECONDS)) {
+                finishSpan.end();
+                throw new StarRocksException(ERR_LOCK_ERROR,
+                        "Failed to acquire lock on database " + db.getId() + ", tables: " + tableIdList + " within " +
+                                lockTimeoutMs + " ms");
+            }
+        } else {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+        }
         try {
             transactionState.writeLock();
             try {
@@ -1900,18 +1920,20 @@ public class DatabaseTransactionMgr {
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                if (!isCheckpoint) {
-                    LOG.info("replay a committed transaction {}", transactionState.getBrief());
+            if (db != null) {
+                if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                    if (!isCheckpoint) {
+                        LOG.info("replay a committed transaction {}", transactionState.getBrief());
+                    }
+                    LOG.debug("replay a committed transaction {}", transactionState);
+                    updateCatalogAfterCommitted(transactionState, db);
+                } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                    if (!isCheckpoint) {
+                        LOG.info("replay a visible transaction {}", transactionState.getBrief());
+                    }
+                    LOG.debug("replay a visible transaction {}", transactionState);
+                    updateCatalogAfterVisible(transactionState, db);
                 }
-                LOG.debug("replay a committed transaction {}", transactionState);
-                updateCatalogAfterCommitted(transactionState, db);
-            } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
-                if (!isCheckpoint) {
-                    LOG.info("replay a visible transaction {}", transactionState.getBrief());
-                }
-                LOG.debug("replay a visible transaction {}", transactionState);
-                updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState);
             if (transactionState.isExpired(System.currentTimeMillis())) {
@@ -2190,6 +2212,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTransactionMetrics(TransactionState txnState) {
+        TransactionMetricRegistry.getInstance().update(txnState);
         if (txnState.getTableIdList().isEmpty()) {
             return;
         }

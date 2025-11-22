@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
@@ -23,11 +23,11 @@ import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -87,12 +87,13 @@ public class MetaFunctionsTest extends MVTestBase {
 
     @Test
     public void testInspectMemory() {
-        MetaFunctions.inspectMemory(new ConstantOperator("report", Type.VARCHAR));
+        MetaFunctions.inspectMemory(new ConstantOperator("report", VarcharType.VARCHAR));
     }
 
     @Test
     public void testInspectMemoryFailed() {
-        assertThrows(SemanticException.class, () -> MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR)));
+        assertThrows(SemanticException.class,
+                () -> MetaFunctions.inspectMemory(new ConstantOperator("abc", VarcharType.VARCHAR)));
     }
 
     @Test
@@ -100,31 +101,31 @@ public class MetaFunctionsTest extends MVTestBase {
         MemoryUsageTracker.registerMemoryTracker("Report", new ReportHandler());
         try {
             MetaFunctions.inspectMemoryDetail(
-                    new ConstantOperator("abc", Type.VARCHAR),
-                    new ConstantOperator("def", Type.VARCHAR));
+                    new ConstantOperator("abc", VarcharType.VARCHAR),
+                    new ConstantOperator("def", VarcharType.VARCHAR));
             Assertions.fail();
         } catch (Exception ex) {
         }
         try {
             MetaFunctions.inspectMemoryDetail(
-                    new ConstantOperator("report", Type.VARCHAR),
-                    new ConstantOperator("def", Type.VARCHAR));
+                    new ConstantOperator("report", VarcharType.VARCHAR),
+                    new ConstantOperator("def", VarcharType.VARCHAR));
             Assertions.fail();
         } catch (Exception ex) {
         }
         try {
             MetaFunctions.inspectMemoryDetail(
-                    new ConstantOperator("report", Type.VARCHAR),
-                    new ConstantOperator("reportHandler.abc", Type.VARCHAR));
+                    new ConstantOperator("report", VarcharType.VARCHAR),
+                    new ConstantOperator("reportHandler.abc", VarcharType.VARCHAR));
             Assertions.fail();
         } catch (Exception ex) {
         }
         MetaFunctions.inspectMemoryDetail(
-                new ConstantOperator("report", Type.VARCHAR),
-                new ConstantOperator("reportHandler", Type.VARCHAR));
+                new ConstantOperator("report", VarcharType.VARCHAR),
+                new ConstantOperator("reportHandler", VarcharType.VARCHAR));
         MetaFunctions.inspectMemoryDetail(
-                new ConstantOperator("report", Type.VARCHAR),
-                new ConstantOperator("reportHandler.reportQueue", Type.VARCHAR));
+                new ConstantOperator("report", VarcharType.VARCHAR),
+                new ConstantOperator("reportHandler.reportQueue", VarcharType.VARCHAR));
     }
 
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
@@ -287,5 +288,156 @@ public class MetaFunctionsTest extends MVTestBase {
     public void inspectTablePartitionInfoThrowsExceptionForNonExistentTable() {
         assertThrows(SemanticException.class,
                 () -> MetaFunctions.inspectTablePartitionInfo(ConstantOperator.createVarchar("test.non_existent_table")));
+    }
+
+    @Test
+    public void testInspectRelatedMvWithNoRelatedMVs() throws Exception {
+        starRocksAssert.withTable("create table base_table_no_mv(k1 int, v1 int) properties('replication_num'='1')");
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_no_mv"));
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals("[]", result.getVarchar());
+        starRocksAssert.dropTable("base_table_no_mv");
+    }
+
+    @Test
+    public void testInspectRelatedMvWithSingleMV() throws Exception {
+        starRocksAssert.withTable("create table base_table_single_mv(k1 int, v1 int) properties('replication_num'='1')");
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_single distributed by random " +
+                "as select k1, sum(v1) from test.base_table_single_mv group by k1");
+        
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_single_mv"));
+        Assertions.assertNotNull(result);
+        String json = result.getVarchar();
+        Assertions.assertTrue(json.contains("\"name\":\"mv_single\""));
+        Assertions.assertTrue(json.contains("\"level\":0"));
+        Assertions.assertTrue(json.contains("\"related_mvs\":[]"));
+        
+        starRocksAssert.dropMaterializedView("mv_single");
+        starRocksAssert.dropTable("base_table_single_mv");
+    }
+
+    @Test
+    public void testInspectRelatedMvWithNestedMVs() throws Exception {
+        // Create base table
+        starRocksAssert.withTable("create table base_table_nested(k1 int, v1 int) properties('replication_num'='1')");
+        
+        // Create first level MV
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_level_0 distributed by random " +
+                "as select k1, sum(v1) as sum_v1 from test.base_table_nested group by k1");
+        
+        // Create second level MV (nested)
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_level_1 distributed by random " +
+                "as select k1, sum(sum_v1) as total from test.mv_level_0 group by k1");
+        
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_nested"));
+        Assertions.assertNotNull(result);
+        String json = result.getVarchar();
+        
+        // Check level 0 MV
+        Assertions.assertTrue(json.contains("\"name\":\"mv_level_0\""));
+        Assertions.assertTrue(json.contains("\"level\":0"));
+        
+        // Check nested level 1 MV
+        Assertions.assertTrue(json.contains("\"name\":\"mv_level_1\""));
+        Assertions.assertTrue(json.contains("\"level\":1"));
+        
+        // Clean up in reverse order
+        starRocksAssert.dropMaterializedView("mv_level_1");
+        starRocksAssert.dropMaterializedView("mv_level_0");
+        starRocksAssert.dropTable("base_table_nested");
+    }
+
+    @Test
+    public void testInspectRelatedMvWithMultipleMVsAtSameLevel() throws Exception {
+        starRocksAssert.withTable("create table base_table_multi_mv(k1 int, v1 int, v2 int) properties('replication_num'='1')");
+        
+        // Create multiple MVs at level 0
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_multi_1 distributed by random " +
+                "as select k1, sum(v1) from test.base_table_multi_mv group by k1");
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_multi_2 distributed by random " +
+                "as select k1, sum(v2) from test.base_table_multi_mv group by k1");
+        
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_multi_mv"));
+        Assertions.assertNotNull(result);
+        String json = result.getVarchar();
+        
+        // Both MVs should be at level 0
+        Assertions.assertTrue(json.contains("\"name\":\"mv_multi_1\"") || json.contains("\"name\":\"mv_multi_2\""));
+        Assertions.assertTrue(json.contains("\"level\":0"));
+        
+        starRocksAssert.dropMaterializedView("mv_multi_1");
+        starRocksAssert.dropMaterializedView("mv_multi_2");
+        starRocksAssert.dropTable("base_table_multi_mv");
+    }
+
+    @Test
+    public void testInspectRelatedMvWithDeepNesting() throws Exception {
+        // Create base table
+        starRocksAssert.withTable("create table base_table_deep(k1 int, v1 int) properties('replication_num'='1')");
+        
+        // Create level 0 MV
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_deep_0 distributed by random " +
+                "as select k1, sum(v1) as sum_v1 from test.base_table_deep group by k1");
+        
+        // Create level 1 MV
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_deep_1 distributed by random " +
+                "as select k1, sum(sum_v1) as sum_v2 from test.mv_deep_0 group by k1");
+        
+        // Create level 2 MV
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_deep_2 distributed by random " +
+                "as select k1, sum(sum_v2) as sum_v3 from test.mv_deep_1 group by k1");
+        
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_deep"));
+        Assertions.assertNotNull(result);
+        String json = result.getVarchar();
+        
+        // Verify all levels exist
+        Assertions.assertTrue(json.contains("\"name\":\"mv_deep_0\""));
+        Assertions.assertTrue(json.contains("\"level\":0"));
+        Assertions.assertTrue(json.contains("\"name\":\"mv_deep_1\""));
+        Assertions.assertTrue(json.contains("\"level\":1"));
+        Assertions.assertTrue(json.contains("\"name\":\"mv_deep_2\""));
+        Assertions.assertTrue(json.contains("\"level\":2"));
+        
+        // Clean up in reverse order
+        starRocksAssert.dropMaterializedView("mv_deep_2");
+        starRocksAssert.dropMaterializedView("mv_deep_1");
+        starRocksAssert.dropMaterializedView("mv_deep_0");
+        starRocksAssert.dropTable("base_table_deep");
+    }
+
+    @Test
+    public void testInspectRelatedMvThrowsExceptionForNonExistentTable() {
+        assertThrows(SemanticException.class,
+                () -> MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.non_existent_table")));
+    }
+
+    @Test
+    public void testInspectRelatedMvReturnsValidJsonStructure() throws Exception {
+        starRocksAssert.withTable("create table base_table_json(k1 int, v1 int) properties('replication_num'='1')");
+        starRocksAssert.withRefreshedMaterializedView("create materialized view mv_json distributed by random " +
+                "as select k1, sum(v1) from test.base_table_json group by k1");
+        
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(ConstantOperator.createVarchar("test.base_table_json"));
+        Assertions.assertNotNull(result);
+        String json = result.getVarchar();
+        
+        // Verify JSON structure contains required fields
+        Assertions.assertTrue(json.contains("\"id\":"));
+        Assertions.assertTrue(json.contains("\"name\":"));
+        Assertions.assertTrue(json.contains("\"level\":"));
+        Assertions.assertTrue(json.contains("\"related_mvs\":"));
+        
+        starRocksAssert.dropMaterializedView("mv_json");
+        starRocksAssert.dropTable("base_table_json");
+    }
+
+    @Test
+    public void testInspectRelatedMvWithExternalTable() throws Exception {
+        ConstantOperator result = MetaFunctions.inspectRelatedMv(
+                ConstantOperator.createVarchar("test.mysql_external_table"));
+        Assertions.assertNotNull(result);
+        // External tables typically have no related MVs
+        Assertions.assertEquals("[]", result.getVarchar());
     }
 }

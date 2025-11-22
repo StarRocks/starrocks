@@ -17,13 +17,12 @@ package com.starrocks.catalog.system.information;
 import com.google.api.client.util.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -36,6 +35,9 @@ import com.starrocks.thrift.TColumnStatsUsage;
 import com.starrocks.thrift.TColumnStatsUsageReq;
 import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.Collections;
@@ -61,10 +63,10 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
                         .column("TABLE_NAME", SystemTable.createNameType())
                         .column("COLUMN_NAME", SystemTable.createNameType())
 
-                        .column("USAGE", Type.STRING, "use case of this column stats")
-                        .column("LAST_USED", Type.DATETIME, "last time when using this column stats")
+                        .column("USAGE", StringType.STRING, "use case of this column stats")
+                        .column("LAST_USED", DateType.DATETIME, "last time when using this column stats")
 
-                        .column("CREATED", Type.DATETIME, "create time of this column stats")
+                        .column("CREATED", DateType.DATETIME, "create time of this column stats")
                         .build(),
                 TSchemaTableType.SCH_COLUMN_STATS_USAGE);
     }
@@ -139,9 +141,9 @@ public class ColumnStatsUsageSystemTable extends SystemTable {
         Optional<Pair<TableName, ColumnId>> names = columnFullId.toNames();
         List<ScalarOperator> result = Lists.newArrayList();
         result.add(ConstantOperator.createVarchar(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
-        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getDb()).orElse(null), Type.VARCHAR));
-        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getTbl()).orElse(null), Type.VARCHAR));
-        result.add(ConstantOperator.createNullableObject(names.map(x -> x.second.getId()).orElse(null), Type.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getDb()).orElse(null), VarcharType.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.first.getTbl()).orElse(null), VarcharType.VARCHAR));
+        result.add(ConstantOperator.createNullableObject(names.map(x -> x.second.getId()).orElse(null), VarcharType.VARCHAR));
         result.add(ConstantOperator.createVarchar(columnUsage.getUseCaseString()));
         result.add(ConstantOperator.createDatetime(columnUsage.getLastUsed()));
         result.add(ConstantOperator.createDatetime(columnUsage.getCreated()));

@@ -79,6 +79,19 @@ PROPERTIES (
 - 必須: はい
 - 説明: LDAP サービスにログインするために使用されるユーザーの属性。例: `uid`。
 
+:::note
+
+**DN パス機構**: LDAP セキュリティインテグレーションは DN パス機能をサポートします。
+
+- 認証成功後、システムはユーザーのログイン名と完全な DN の両方を記録します。
+- Group Provider と組み合わせると、DN 情報が自動的にグループプロバイダに渡されます。
+- Group Provider で `ldap_user_search_attr` が設定されていない場合、グループマッチングには DN が使用されます。
+- このメカニズムは Microsoft AD のような複雑な LDAP 環境に特に適しています。
+
+詳細は[ユーザーグループの認証](../group_provider.md)の DN マッチングメカニズムを参照してください。
+
+:::
+
 ##### authentication_ldap_simple_bind_root_dn
 
 - 必須: はい
@@ -360,6 +373,14 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 :::note
 `ldap_bind_root_pwd` は SHOW CREATE SECURITY INTEGRATION が実行されたときにマスクされます。
 :::
+
+## セキュリティ統合によるStarRocksへの接続
+
+- LDAP経由でStarRocksに接続する方法については、[LDAP認証 - StarRocksへの接続](./ldap_authentication.md#mysql-クライアントから-ldap-で接続する)を参照してください。
+- JWT 経由で StarRocks に接続する方法については、[JSON Web Token 認証 - StarRocks への接続](./jwt_authentication.md#mysql-クライアントから-jwt-で接続する) を参照してください。
+- OAuth 2.0 経由で StarRocks に接続する方法については、[OAuth 2.0 認証 - StarRocks への接続](./oauth2_authentication.md#jdbc-クライアントからの-oauth-20-接続) を参照してください。
+
+DeepL.com（無料版）で翻訳しました。
 
 ## See also
 

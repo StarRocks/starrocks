@@ -52,6 +52,18 @@ const string ScanNode::_s_num_scanner_threads_started = "NumScannerThreadsStarte
 
 Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.common && tnode.common.__isset.heavy_exprs && !tnode.common.heavy_exprs.empty()) {
+        _heavy_expr_slot_ids.reserve(tnode.common.heavy_exprs.size());
+        _heavy_expr_ctxs.reserve(tnode.common.heavy_exprs.size());
+
+        for (auto const& [key, val] : tnode.common.heavy_exprs) {
+            ExprContext* context;
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            _heavy_expr_slot_ids.emplace_back(key);
+            _heavy_expr_ctxs.emplace_back(context);
+        }
+    }
+
     const TQueryOptions& options = state->query_options();
     if (options.__isset.io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = options.io_tasks_per_scan_operator;
@@ -94,17 +106,19 @@ Status ScanNode::prepare(RuntimeState* state) {
 }
 
 // Distribute morsels from a single queue to multiple queues
-static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeline::MorselQueuePtr morsel_queue,
-                                                                          int dop) {
+static StatusOr<std::map<int, pipeline::MorselQueuePtr>> uniform_distribute_morsels(
+        pipeline::MorselQueuePtr morsel_queue, int dop) {
+    std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
     std::map<int, pipeline::Morsels> morsels_per_driver;
     int driver_seq = 0;
     while (!morsel_queue->empty()) {
-        auto maybe_morsel = morsel_queue->try_get();
-        DCHECK(maybe_morsel.ok());
-        morsels_per_driver[driver_seq].push_back(std::move(maybe_morsel.value()));
+        auto maybe_morsel_status_or = morsel_queue->try_get();
+        if (UNLIKELY(!maybe_morsel_status_or.ok())) {
+            return maybe_morsel_status_or.status();
+        }
+        morsels_per_driver[driver_seq].push_back(std::move(maybe_morsel_status_or.value()));
         driver_seq = (driver_seq + 1) % dop;
     }
-    std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
 
     auto morsel_queue_type = morsel_queue->type();
     DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
@@ -144,7 +158,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
         if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
-            auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
+            ASSIGN_OR_RETURN(auto morsel_queue_map, uniform_distribute_morsels(std::move(morsel_queue), scan_dop));
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
                                                                             /*could_local_shuffle*/ true);
         } else {

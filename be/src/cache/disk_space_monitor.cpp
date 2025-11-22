@@ -224,10 +224,10 @@ dev_t DiskSpace::FileSystemWrapper::device_id(const std::string& path) {
     return DataCacheUtils::disk_device_id(path);
 }
 
-DiskSpaceMonitor::DiskSpaceMonitor(LocalCacheEngine* cache)
+DiskSpaceMonitor::DiskSpaceMonitor(LocalDiskCacheEngine* cache)
         : _cache(cache), _fs(std::make_shared<DiskSpace::FileSystemWrapper>()) {}
 
-DiskSpaceMonitor::DiskSpaceMonitor(LocalCacheEngine* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs)
+DiskSpaceMonitor::DiskSpaceMonitor(LocalDiskCacheEngine* cache, std::shared_ptr<DiskSpace::FileSystemWrapper> fs)
         : _cache(cache), _fs(std::move(fs)) {}
 
 DiskSpaceMonitor::~DiskSpaceMonitor() {
@@ -307,7 +307,11 @@ void DiskSpaceMonitor::_adjust_datacache_callback() {
         lck.unlock();
 
         int64_t kWaitTimeout = config::datacache_disk_adjust_interval_seconds * 1000 * 1000;
-        static const int64_t kCheckInterval = 1000 * 1000;
+#ifdef BE_TEST
+        static const int64_t kCheckInterval = 10 * 1000; // 10ms for faster shutdown in test environment
+#else
+        static const int64_t kCheckInterval = 1000 * 1000; // 1 second
+#endif
         auto cond = [this]() { return is_stopped(); };
         auto ret = Awaitility().timeout(kWaitTimeout).interval(kCheckInterval).until(cond);
         if (ret) {

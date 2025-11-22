@@ -79,6 +79,19 @@ PROPERTIES (
 - Required: Yes
 - Description: The user's attribute used to log in to the LDAP service, for example, `uid`.
 
+:::note
+
+**DN Passing Mechanism**: LDAP security integration supports DN passing functionality.
+
+- After successful authentication, the system records both the user's login name and complete DN.
+- When combined with Group Provider, DN information is automatically passed to the Group Provider.
+- If `ldap_user_search_attr` is not configured for the Group Provider, DN will be used for group matching.
+- This mechanism is particularly suitable for complex LDAP environments like Microsoft AD.
+
+For more details, see the DN matching mechanism in [Authenticate User Groups](../group_provider.md).
+
+:::
+
 ##### authentication_ldap_simple_bind_root_dn
 
 - Required: Yes
@@ -360,6 +373,12 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 :::note
 `ldap_bind_root_pwd` is masked when SHOW CREATE SECURITY INTEGRATION is executed.
 :::
+
+## Connect to StarRocks via a security integration
+
+- For instructions on how to connect to StarRocks via LDAP, see [LDAP Authentication - Connect to StarRocks](./ldap_authentication.md#connect-from-mysql-client-with-ldap).
+- For instructions on how to connect to StarRocks via JWT, see [JSON Web Token Authentication - Connect to StarRocks](./jwt_authentication.md#connect-from-mysql-client-with-jwt).
+- For instructions on how to connect to StarRocks via OAuth 2.0, see [OAuth 2.0 Authentication - Connect to StarRocks](./oauth2_authentication.md#connect-from-jdbc-client-with-oauth-20).
 
 ## See also
 

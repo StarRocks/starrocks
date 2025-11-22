@@ -32,6 +32,9 @@ INSERT INTO t1 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '20
                       (1, 'beijing2', 20, '2024-01-01'), (2, 'guangdong2', 20, '2024-01-01'), (3, 'guangdong2', 20, '2024-01-02'), (4, 'nanjing', NULL, NULL);
 -- result:
 -- !result
+set enable_rewrite_simple_agg_to_meta_scan=false;
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY (province, date_trunc('day', dt))
 REFRESH DEFERRED MANUAL

@@ -36,8 +36,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "testutil/assert.h"
 
@@ -296,7 +296,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
             std::string key("abc0");
             PageCacheHandle handle;
             auto data = std::make_unique<std::vector<uint8_t>>(1024);
-            ObjectCacheWriteOptions opts;
+            MemCacheWriteOptions opts;
             ASSERT_OK(_page_cache->insert(key, data.get(), opts, &handle));
             ASSERT_TRUE(_page_cache->lookup(key, &handle));
             data.release();
@@ -324,6 +324,8 @@ void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegi
 }
 
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
+    pipeline::ExecStateReporterMetrics exec_metrics;
+    exec_metrics.register_all_metrics();
     auto instance = StarRocksMetrics::instance()->metrics();
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_total"));
     ASSERT_NE(nullptr, instance->get_metric("memtable_flush_duration_us"));
@@ -362,6 +364,8 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     assert_threadpool_metrics_register("replicate_snapshot", instance);
     assert_threadpool_metrics_register("load_channel", instance);
     assert_threadpool_metrics_register("merge_commit", instance);
+    assert_threadpool_metrics_register("exec_state_report", instance);
+    assert_threadpool_metrics_register("priority_exec_state_report", instance);
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_eos_total"));
     ASSERT_NE(nullptr, instance->get_metric("load_channel_add_chunks_duration_us"));

@@ -548,7 +548,9 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                 state->is_partial_match = true;
                 state->flat_column_type = TYPE_JSON;
             }
-            state->flat_path = flat_path.substr(1);
+            // Remove leading dot if flat_path is not empty
+            // flat_path starts with "." when paths are added, but can be empty if no paths were added
+            state->flat_path = flat_path.empty() ? "" : flat_path.substr(1);
             state->init_flat = true;
         });
     }
@@ -574,6 +576,7 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
     RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields_ptrs()));
     auto res = transform.mutable_result();
     DCHECK_EQ(1, res.size());
+    res[0]->check_or_die();
     return res[0];
 }
 
@@ -657,13 +660,21 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
 
     } else {
         // full match
+        StatusOr<ColumnPtr> ret;
         if (ResultType != state->flat_column_type) {
             DCHECK(state->cast_expr != nullptr);
             Chunk chunk;
             chunk.append_column(flat_column, 0);
-            return state->cast_expr->evaluate_checked(nullptr, &chunk);
+            ret = state->cast_expr->evaluate_checked(nullptr, &chunk);
+        } else {
+            ret = std::move(flat_column->clone());
         }
-        return Column::mutate(std::move(flat_column));
+        if (ret.ok()) {
+            ret.value()->check_or_die();
+            return Column::mutate(std::move(ret.value()));
+        } else {
+            return ret;
+        }
     }
 }
 

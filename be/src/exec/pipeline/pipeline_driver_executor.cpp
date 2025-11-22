@@ -27,6 +27,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -44,7 +45,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
-          _exec_state_reporter(new ExecStateReporter(cpuids)),
+          _exec_state_reporter(new ExecStateReporter(cpuids, metrics->get_exec_state_reporter_metrics())),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
           _metrics(metrics->get_driver_executor_metrics()) {}
 
@@ -112,12 +113,13 @@ void GlobalDriverExecutor::_worker_thread() {
         }
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
+        const TQueryType::type query_type = fragment_ctx->query_type();
 
         driver->increment_schedule_times();
         _metrics->driver_schedule_count.increment(1);
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
-
+        DUMP_TRACE_IF_TIMEOUT(config::pipeline_process_timeout_guard_ms);
         SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
@@ -166,7 +168,7 @@ void GlobalDriverExecutor::_worker_thread() {
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
             int64_t end_time = driver->get_active_time();
-            _metrics->driver_execution_time.increment(end_time - start_time);
+            _metrics->driver_execution_time.increment(query_type, end_time - start_time);
             _metrics->exec_running_tasks.increment(-1);
             _metrics->exec_finished_tasks.increment(1);
 
@@ -185,9 +187,10 @@ void GlobalDriverExecutor::_worker_thread() {
                 auto o_id = get_backend_id();
                 int64_t be_id = o_id.has_value() ? o_id.value() : -1;
                 status = status.clone_and_append(fmt::format("BE:{}", be_id));
-                LOG(WARNING) << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
-                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
-                             << ", status=" << status;
+                LOG_IF(WARNING, !status.is_suppressed())
+                        << "[Driver] Process error, query_id=" << print_id(driver->query_ctx()->query_id())
+                        << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id())
+                        << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", std::string(status.message()));
                 query_ctx->cancel(status, false);
                 runtime_state->set_is_cancelled(true);
@@ -358,9 +361,10 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     }
 
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
-    auto fragment_id = fragment_ctx->fragment_instance_id();
+    auto instance_id = fragment_ctx->fragment_instance_id();
+    auto query_id = fragment_ctx->query_id();
 
-    auto report_task = [params, exec_env, fe_addr, fragment_id]() {
+    auto report_task = [params, exec_env, fe_addr, instance_id, query_id]() {
         int retry_times = 0;
         int max_retry_times = config::report_exec_rpc_request_retry_num;
         while (retry_times++ < max_retry_times) {
@@ -374,20 +378,20 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
 
             if (!status.ok()) {
                 if (status.is_not_found()) {
-                    VLOG(1) << "[Driver] Fail to report exec state due to query not found: fragment_instance_id="
-                            << print_id(fragment_id);
+                    VLOG(1) << "[Driver] Fail to report exec state due to query not found. fragment_instance_id="
+                            << print_id(instance_id) << ", query_id=" << print_id(query_id);
                 } else {
-                    LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                                 << ", status: " << status.to_string() << ", retry_times=" << retry_times
-                                 << ", max_retry_times=" << max_retry_times;
+                    LOG(WARNING) << "[Driver] Fail to report exec state. fragment_instance_id=" << print_id(instance_id)
+                                 << ", query_id=" << print_id(query_id) << ", status: " << status.to_string()
+                                 << ", retry_times=" << retry_times << ", max_retry_times=" << max_retry_times;
                     // if it is done exec state report, we should retry
                     if (params->__isset.done && params->done) {
                         continue;
                     }
                 }
             } else {
-                VLOG(1) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
-                        << ", is_done=" << params->done;
+                VLOG(1) << "[Driver] Succeed to report exec state. fragment_instance_id=" << print_id(instance_id)
+                        << ", query_id=" << print_id(query_id) << ", is_done=" << params->done;
             }
             break;
         }
@@ -395,10 +399,11 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
 
     // if it is done exec state report, We need to ensure that this report is executed with priority
     // and is retried as much as possible to ensure success.
-    // Otherwise, it may result in the query or ingestion status getting stuck.
-    this->_exec_state_reporter->submit(std::move(report_task), done);
-    VLOG(2) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
-            << ", is_done=" << done;
+    // Otherwise, it may result in the ingestion status getting stuck.
+    bool priority = done && fragment_ctx->runtime_state()->query_options().query_type == TQueryType::LOAD;
+    this->_exec_state_reporter->submit(std::move(report_task), priority);
+    VLOG(2) << "[Driver] Submit exec state report task. fragment_instance_id=" << print_id(instance_id)
+            << ", query_id=" << print_id(query_id) << ", is_done=" << done;
 }
 
 void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {

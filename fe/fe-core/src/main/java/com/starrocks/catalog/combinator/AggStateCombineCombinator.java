@@ -16,9 +16,10 @@ package com.starrocks.catalog.combinator;
 
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,7 +61,8 @@ public final class AggStateCombineCombinator extends AggregateFunction {
             if (aggFunc.getAggStateDesc() != null) {
                 aggStateDesc = aggFunc.getAggStateDesc().clone();
             } else {
-                aggStateDesc = new AggStateDesc(aggFunc);
+                aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType(), 
+                        Arrays.asList(aggFunc.getArgs()), AggStateDesc.isAggFuncResultNullable(aggFunc.functionName()));
             }
             aggStateCombineFunc.setAggStateDesc(aggStateDesc);
             // set agg state desc for the function's result type so can be used as the later agg state functions.

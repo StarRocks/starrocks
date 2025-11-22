@@ -74,6 +74,7 @@ sidebar_label: "能力边界"
 | [时间粒度上卷对齐分区 (STRING 类型)](use_cases/create_partitioned_materialized_view.md#时间粒度上卷对齐分区) | 通过在分区键上使用 `date_trunc` 函数，创建一个分区粒度大于基表的物化视图。分区键必须为 STRING 类型。 | v3.1.4+<br />v3.2+ |
 | [自定义时间粒度对齐分区](use_cases/create_partitioned_materialized_view.md#自定义时间粒度对齐分区)             | 使用 `date_trunc` 函数与 `time_slice` 或 `date_slice` 函数自定义时间粒度来创建物化视图分区。 | v3.2+              |
 | [多基表对齐分区](use_cases/create_partitioned_materialized_view.md#多基表对齐分区)                     | 如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，可以基于多张基表创建分区物化视图。 | v3.3+              |
+| [多分区列对齐](use_cases/create_partitioned_materialized_view.md#多分区列对齐)                     | 为物化视图指定多个分区列，一一映射基表的分区列。                                 | v3.5+              |
 
 **不同 Join 方式**
 
@@ -86,7 +87,7 @@ sidebar_label: "能力边界"
 | 外部数据源 | 支持场景和版本                                                           | 稳定版本    |
 | :----------------- | :----------------------------------------------------------- | :--------- |
 | Hive               | <ul><li>非分区表：v2.5.4 & v3.0+</li><li>DATE 和 DATETIME 类型分区：v2.5.4 & v3.0+</li><li>STRING 类型分区键转化为 DATE 类型：v3.1.4 & v3.2+</li><li>基于 Hive 视图的物化视图：待支持</li><li>多级分区：待支持</li></ul> | v2.5.13+<br />v3.0.6+<br />v3.1.5+<br />v3.2+ |
-| Iceberg            | <ul><li>非分区表：v3.0+</li><li>DATE 和 DATETIME 类型分区：v3.1.4 & v3.2+</li><li>STRING 类型分区键转化为 DATE 类型：v3.1.4 & v3.2+</li><li>基于 Iceberg 视图的物化视图：待支持</li><li>Partition Transform：v3.2.3</li><li>分区级刷新：v3.1.7 & v3.2.3</li><li>多级分区：待支持</li></ul> | v3.1.5+<br />v3.2+                            |
+| Iceberg            | <ul><li>非分区表：v3.0+</li><li>DATE 和 DATETIME 类型分区：v3.1.4 & v3.2+</li><li>STRING 类型分区键转化为 DATE 类型：v3.1.4 & v3.2+</li><li>基于 Iceberg 视图的物化视图：待支持</li><li>Partition Transform：v3.2.3</li><li>分区级刷新：v3.1.7 & v3.2.3</li><li>多级分区：v3.5+</li></ul> | v3.1.5+<br />v3.2+                            |
 | Hudi               | <ul><li>非分区表：v3.2+</li><li>DATE 和 DATETIME 类型分区：v3.2+</li><li>多级分区：待支持</li></ul> | 不稳定                                        |
 | Paimon             | <ul><li>非分区表：v2.5.4 & v3.0+</li><li>DATE 和 DATETIME 类型分区：待支持</li><li>多级分区：待支持</li></ul> | 不稳定                                        |
 | DeltaLake          | <ul><li>非分区表：v3.2+</li><li>分区表：待支持</li><li>多级分区：待支持</li></ul>                | 不稳定                                        |

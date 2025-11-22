@@ -39,7 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -52,10 +52,22 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshConnectionsRequest;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -66,6 +78,8 @@ import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -195,61 +209,61 @@ public class VariableMgr {
     private boolean setValue(Object obj, Field field, String value) throws DdlException {
         VarAttr attr = field.getAnnotation(VarAttr.class);
 
-        String variableName;
-        if (attr.show().isEmpty()) {
-            variableName = attr.name();
-        } else {
-            variableName = attr.show();
-        }
+        String varName = attr.show().isEmpty() ? attr.name() : attr.show();
+        Method setter = SessionVariable.SETTER_MAP.get(field.getName());
+        Object parsed = parseValue(field.getType(), varName, value);
 
-        String convertedVal = VariableVarConverters.convert(variableName, value);
         try {
-            switch (field.getType().getSimpleName()) {
-                case "boolean":
-                    if (convertedVal.equalsIgnoreCase("ON")
-                            || convertedVal.equalsIgnoreCase("TRUE")
-                            || convertedVal.equalsIgnoreCase("1")) {
-                        field.setBoolean(obj, true);
-                    } else if (convertedVal.equalsIgnoreCase("OFF")
-                            || convertedVal.equalsIgnoreCase("FALSE")
-                            || convertedVal.equalsIgnoreCase("0")) {
-                        field.setBoolean(obj, false);
-                    } else {
-                        throw new IllegalAccessException();
-                    }
-                    break;
-                case "byte":
-                    field.setByte(obj, Byte.parseByte(convertedVal));
-                    break;
-                case "short":
-                    field.setShort(obj, Short.parseShort(convertedVal));
-                    break;
-                case "int":
-                    field.setInt(obj, Integer.parseInt(convertedVal));
-                    break;
-                case "long":
-                    field.setLong(obj, Long.parseLong(convertedVal));
-                    break;
-                case "float":
-                    field.setFloat(obj, Float.parseFloat(convertedVal));
-                    break;
-                case "double":
-                    field.setDouble(obj, Double.parseDouble(convertedVal));
-                    break;
-                case "String":
-                    field.set(obj, convertedVal);
-                    break;
-                default:
-                    // Unsupported type variable.
-                    ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
+            if (setter != null) {
+                setter.invoke(obj, parsed);
+            } else {
+                field.set(obj, parsed);
             }
         } catch (NumberFormatException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
-        } catch (IllegalAccessException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, variableName, value);
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
+        } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, varName, value);
         }
 
         return true;
+    }
+
+    private Object parseValue(Class<?> type, String varName, String raw) throws DdlException {
+        String v = VariableVarConverters.convert(varName, raw);
+        try {
+            if (type == boolean.class || type == Boolean.class) {
+                if (v.equalsIgnoreCase("ON")
+                        || v.equalsIgnoreCase("TRUE")
+                        || v.equals("1")) {
+                    return true;
+                } else if (v.equalsIgnoreCase("OFF")
+                        || v.equalsIgnoreCase("FALSE")
+                        || v.equalsIgnoreCase("0")) {
+                    return false;
+                } else {
+                    throw new NumberFormatException();
+                }
+            }
+            if (type == byte.class || type == Byte.class) {
+                return Byte.parseByte(v);
+            } else if (type == short.class || type == Short.class) {
+                return Short.parseShort(v);
+            } else if (type == int.class || type == Integer.class) {
+                return Integer.parseInt(v);
+            } else if (type == long.class || type == Long.class) {
+                return Long.parseLong(v);
+            } else if (type == float.class || type == Float.class) {
+                return Float.parseFloat(v);
+            } else if (type == double.class || type == Double.class) {
+                return Double.parseDouble(v);
+            } else if (type == String.class) {
+                return v;
+            }
+        } catch (NumberFormatException e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
+        }
+        ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, varName);
+        return null;
     }
 
     public SessionVariable newSessionVariable() {
@@ -278,13 +292,14 @@ public class VariableMgr {
     public void checkSystemVariableExist(SystemVariable setVar) throws DdlException {
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
+            // NOTE: findSimilarVarNames uses fuzzy search, which is slow
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable(),
                     findSimilarVarNames(setVar.getVariable()));
         }
     }
 
     public boolean containsVariable(String name) {
-        return ctxByVarName.containsKey(name);
+        return ctxByVarName.containsKey(name) || aliases.containsKey(name);
     }
 
     // Entry of handling SetVarStmt
@@ -343,7 +358,8 @@ public class VariableMgr {
 
     public void setCaseInsensitive(boolean caseInsensitive) throws DdlException {
         VarContext ctx = getVarContext(GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE);
-        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE, String.valueOf(caseInsensitive));
+        setGlobalVariableAndWriteEditLog(ctx, GlobalVariable.ENABLE_TABLE_NAME_CASE_INSENSITIVE,
+                String.valueOf(caseInsensitive));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -443,6 +459,7 @@ public class VariableMgr {
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
+            
             for (String varName : root.keySet()) {
                 VarContext varContext = getVarContext(varName);
                 if (varContext == null) {
@@ -480,39 +497,39 @@ public class VariableMgr {
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
-                    desc.setType(Type.BOOLEAN);
+                    desc.setType(BooleanType.BOOLEAN);
                     desc.setValue(field.getBoolean(obj));
                     break;
                 case "byte":
-                    desc.setType(Type.TINYINT);
+                    desc.setType(IntegerType.TINYINT);
                     desc.setValue(field.getByte(obj));
                     break;
                 case "short":
-                    desc.setType(Type.SMALLINT);
+                    desc.setType(IntegerType.SMALLINT);
                     desc.setValue(field.getShort(obj));
                     break;
                 case "int":
-                    desc.setType(Type.INT);
+                    desc.setType(IntegerType.INT);
                     desc.setValue(field.getInt(obj));
                     break;
                 case "long":
-                    desc.setType(Type.BIGINT);
+                    desc.setType(IntegerType.BIGINT);
                     desc.setValue(field.getLong(obj));
                     break;
                 case "float":
-                    desc.setType(Type.FLOAT);
+                    desc.setType(FloatType.FLOAT);
                     desc.setValue(field.getFloat(obj));
                     break;
                 case "double":
-                    desc.setType(Type.DOUBLE);
+                    desc.setType(FloatType.DOUBLE);
                     desc.setValue(field.getDouble(obj));
                     break;
                 case "String":
-                    desc.setType(Type.VARCHAR);
+                    desc.setType(VarcharType.VARCHAR);
                     desc.setValue((String) field.get(obj));
                     break;
                 default:
-                    desc.setType(Type.VARCHAR);
+                    desc.setType(VarcharType.VARCHAR);
                     desc.setValue("");
                     break;
             }
@@ -539,6 +556,169 @@ public class VariableMgr {
         } else {
             return getValue(var, ctx.getField());
         }
+    }
+
+    /**
+     * Refresh all active connections to apply global variables.
+     * Only refreshes variables that haven't been modified by the session itself.
+     */
+    public void refreshConnections() {
+        refreshConnections(false);
+    }
+
+    /**
+     * Refresh all active connections to apply global variables.
+     *
+     * @param force if true, force refresh all variables even if they have been modified by the session.
+     *              When force is false, only variables that haven't been modified by the session are refreshed.
+     */
+    public void refreshConnections(boolean force) {
+        // Refresh on current node
+        refreshConnectionsInternal(force);
+
+        // Notify other FE nodes via RPC
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            notifyOtherFEsToRefreshConnections(force);
+        }
+    }
+
+    /**
+     * Notify other FE nodes to refresh connections via RPC.
+     */
+    private void notifyOtherFEsToRefreshConnections(boolean force) {
+        List<Frontend> allFrontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
+                continue;
+            }
+
+            try {
+                TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+                request.setForce(force);
+                TRefreshConnectionsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.refreshConnections(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("Failed to notify FE {} to refresh connections: {}",
+                            fe.getHost(), response.getStatus().getError_msgs());
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to notify FE {} to refresh connections: {}", fe.getHost(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Internal method to refresh connections on the current node.
+     * Made package-private so it can be called from FrontendServiceImpl via RPC.
+     */
+    public void refreshConnectionsInternal(boolean force) {
+        if (ExecuteEnv.getInstance().getScheduler() == null) {
+            LOG.warn("ConnectScheduler is not initialized, skip refresh connections");
+            return;
+        }
+
+        Map<Long, ConnectContext> connectionMap = ExecuteEnv.getInstance().getScheduler().getCurrentConnectionMap();
+        if (connectionMap == null || connectionMap.isEmpty()) {
+            return;
+        }
+
+        // Get a snapshot of default session variables
+        SessionVariable defaultVar;
+        rLock.lock();
+        try {
+            defaultVar = (SessionVariable) defaultSessionVariable.clone();
+        } finally {
+            rLock.unlock();
+        }
+
+        int refreshedCount = 0;
+        for (ConnectContext ctx : connectionMap.values()) {
+            try {
+                if (refreshConnectionVariables(ctx, defaultVar, force)) {
+                    refreshedCount++;
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to refresh variables for connection {}: {}", 
+                        ctx.getConnectionId(), e.getMessage());
+            }
+        }
+
+        LOG.info("Refreshed {} connections", refreshedCount);
+    }
+
+    /**
+     * Refresh variables for a single connection.
+     * 
+     * @param ctx the connection context
+     * @param defaultVar the default session variables (current global defaults)
+     * @param force if true, force refresh all variables even if they have been modified by the session
+     * @return true if any variables were refreshed
+     */
+    private boolean refreshConnectionVariables(ConnectContext ctx, SessionVariable defaultVar, boolean force) {
+        SessionVariable sessionVar = ctx.getSessionVariable();
+        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
+        
+        boolean refreshed = false;
+        
+        // Iterate through all session variables and refresh those that haven't been modified
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            VarAttr attr = field.getAnnotation(VarAttr.class);
+            if (attr == null) {
+                continue;
+            }
+
+            String varName = attr.name();
+
+            // Skip variables that have been modified by the session (unless force is true)
+            if (!force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                continue;
+            }
+
+            // Skip variables that are session-only (not affected by global changes)
+            if ((attr.flag() & SESSION_ONLY) != 0) {
+                continue;
+            }
+
+            // Skip variables that don't forward to leader (they're not affected by global changes)
+            if ((attr.flag() & DISABLE_FORWARD_TO_LEADER) != 0) {
+                continue;
+            }
+
+            try {
+                field.setAccessible(true);
+                Object defaultValue = field.get(defaultVar);
+                Object currentValue = field.get(sessionVar);
+
+                // Only refresh if the value has changed
+                if (!java.util.Objects.equals(defaultValue, currentValue)) {
+                    String valueStr = getValue(defaultVar, field);
+                    setValue(sessionVar, field, valueStr);
+                    refreshed = true;
+                    // If force is true, remove the variable from modifiedSessionVariables
+                    // since it has been forcibly reset to global default
+                    if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                        modifiedVars.remove(varName);
+                    }
+                } else if (force && modifiedVars != null && modifiedVars.containsKey(varName)) {
+                    // Even if the value hasn't changed, if force is true and the variable
+                    // was previously modified, remove it from modifiedSessionVariables
+                    // to allow future non-forced refreshes to update it
+                    modifiedVars.remove(varName);
+                    refreshed = true;
+                }
+            } catch (DdlException e) {
+                LOG.warn("Failed to setValue", e);
+            } catch (IllegalAccessException e) {
+                LOG.warn("Failed to access field {} for connection {}",
+                        field.getName(), ctx.getConnectionId(), e);
+            }
+        }
+
+        return refreshed;
     }
 
     private String getValue(Object obj, Field field) {

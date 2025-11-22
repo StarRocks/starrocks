@@ -52,7 +52,7 @@ import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.9.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.10.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
@@ -338,11 +338,11 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     }
 
     private boolean hasRowFilter() {
-        return rowFilter != null && rowFilter != Expressions.alwaysTrue();
+        return rowFilter != alwaysTrue();
     }
 
     private boolean hasPartitionFilter() {
-        return partFilter != null && partFilter != Expressions.alwaysTrue();
+        return partFilter != alwaysTrue();
     }
 
     private boolean inPartitionSet(F fileToCheck) {
@@ -422,32 +422,22 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         if (lazyEvaluator == null) {
             Expression projected = Projections.inclusive(spec, caseSensitive).project(rowFilter);
             Expression finalPartFilter = Expressions.and(projected, partFilter);
-            if (finalPartFilter != null) {
-                this.lazyEvaluator = new Evaluator(spec.partitionType(), finalPartFilter, caseSensitive);
-            } else {
-                this.lazyEvaluator =
-                        new Evaluator(spec.partitionType(), Expressions.alwaysTrue(), caseSensitive);
-            }
+            this.lazyEvaluator = new Evaluator(spec.partitionType(), finalPartFilter, caseSensitive);
         }
         return lazyEvaluator;
     }
 
     private InclusiveMetricsEvaluator metricsEvaluator() {
         if (lazyMetricsEvaluator == null) {
-            if (rowFilter != null) {
-                this.lazyMetricsEvaluator =
-                        new InclusiveMetricsEvaluator(spec.schema(), rowFilter, caseSensitive);
-            } else {
-                this.lazyMetricsEvaluator =
-                        new InclusiveMetricsEvaluator(spec.schema(), Expressions.alwaysTrue(), caseSensitive);
-            }
+            this.lazyMetricsEvaluator =
+                    new InclusiveMetricsEvaluator(spec.schema(), rowFilter, caseSensitive);
         }
         return lazyMetricsEvaluator;
     }
 
     private static boolean requireStatsProjection(Expression rowFilter, Collection<String> columns) {
         // Make sure we have all stats columns for metrics evaluator
-        return rowFilter != Expressions.alwaysTrue()
+        return rowFilter != alwaysTrue()
                 && columns != null
                 && !columns.containsAll(ManifestReader.ALL_COLUMNS)
                 && !columns.containsAll(STATS_COLUMNS);

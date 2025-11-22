@@ -91,9 +91,24 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version, bool batch_apply = false);
 
+    Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                  const std::shared_ptr<FileSystem>& fs, uint32_t seg,
+                                  const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
+                                  ChunkPtr* out_chunk);
+
+    Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
+                                      MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
+                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment);
+
+    Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
+                                Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
+                                MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
+                                const RowsetUpdateStateParams& params);
+
     Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                               const TabletMetadataPtr& metadata, Tablet* tablet,
-                                              MetaFileBuilder* builder, int64_t base_version);
+                                              IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
@@ -199,7 +214,7 @@ public:
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
-    Status execute_index_major_compaction(const TabletMetadata& metadata, TxnLogPB* txn_log);
+    Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
@@ -207,11 +222,13 @@ public:
 
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
+    int64_t get_index_memory_size(int64_t tablet_id) const;
+
 private:
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
-                      PrimaryIndex& index, DeletesMap* new_deletes);
+                      PrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update);
 
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const MutableColumnPtr& upsert, PrimaryIndex& index,

@@ -79,6 +79,19 @@ PROPERTIES (
 - 必需：是
 - 描述：用于登录 LDAP 服务的用户属性，例如 `uid`。
 
+:::note
+
+**DN 传递机制**：LDAP 安全集成支持 DN 传递功能。
+
+- 认证成功后，系统会同时记录用户的登录名和完整 DN。
+- 当与 Group Provider 结合使用时，DN 信息会自动传递给 Group Provider。
+- 如果 Group Provider 未配置 `ldap_user_search_attr` 参数，将使用 DN 进行组匹配。
+- 这种机制特别适用于 Microsoft AD 等复杂 LDAP 环境。
+
+有关详细信息，请参见[认证用户组](../group_provider.md)中的 DN 匹配机制说明。
+
+:::
+
 ##### authentication_ldap_simple_bind_root_dn
 
 - 必需：是
@@ -360,6 +373,12 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 :::note
 执行 SHOW CREATE SECURITY INTEGRATION 时，`ldap_bind_root_pwd` 会被隐藏。
 :::
+
+## 通过安全集成连接到 StarRocks
+
+- 有关如何通过 LDAP 连接到 StarRocks 的说明，请参阅 [LDAP 认证 - 连接到 StarRocks](./ldap_authentication.md#从-mysql-客户端连接-ldap)。
+- 有关通过 JWT 连接 StarRocks 的说明，请参阅 [JSON Web Token 认证 - 连接 StarRocks](./jwt_authentication.md#使用-jwt-从-mysql-客户端连接)。
+- 有关通过 OAuth 2.0 连接 StarRocks 的说明，请参阅 [OAuth 2.0 认证 - 连接 StarRocks](./oauth2_authentication.md#使用-oauth-20-从-jdbc-客户端连接)。
 
 ## 另见
 

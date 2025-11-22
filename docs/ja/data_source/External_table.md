@@ -6,9 +6,13 @@ displayed_sidebar: docs
 
 :::note
 
+外部テーブル機能は、特定の特殊な使用ケースを除き推奨されなくなり、将来のリリースで廃止される可能性があります。一般的なシナリオで外部データソースからのデータを管理およびクエリするには、[External Catalog](./catalog/catalog_overview.md) の使用が推奨されます。
+
 - v3.0以降、Hive、Iceberg、Hudiからデータをクエリするには、catalogを使用することを推奨します。詳細は [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./catalog/iceberg/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) を参照してください。
 
 - v3.1以降、MySQLとPostgreSQLからデータをクエリするには [JDBC catalog](../data_source/catalog/jdbc_catalog.md) を、Elasticsearchからデータをクエリするには [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) を使用することを推奨します。
+
+- v3.2.9 および v3.3.1 以降では、Oracle および SQL Server からデータをクエリするには [JDBC カタログ](../data_source/catalog/jdbc_catalog.md) の使用を推奨します。
 
 - 外部テーブル機能は、StarRocksにデータをロードするために設計されており、外部システムに対して通常の操作として効率的なクエリを実行するためのものではありません。より効率的な解決策は、データをStarRocksにロードすることです。
 
@@ -682,7 +686,7 @@ select count(*) from profile_wos_p7;
 
 ### キャッシュされたHiveテーブルメタデータの更新
 
-* Hiveのパーティション情報と関連するファイル情報はStarRocksにキャッシュされます。キャッシュは `hive_meta_cache_refresh_interval_s` で指定された間隔で更新されます。デフォルト値は7200です。`hive_meta_cache_ttl_s` はキャッシュのタイムアウト期間を指定し、デフォルト値は86400です。
+* Hiveのパーティション情報と関連するファイル情報はStarRocksにキャッシュされます。キャッシュは `hive_meta_cache_refresh_interval_s` で指定された間隔で更新されます。デフォルト値は7200です。
   * キャッシュされたデータは手動で更新することもできます。
     1. Hiveでテーブルにパーティションが追加または削除された場合、`REFRESH EXTERNAL TABLE hive_t` コマンドを実行して、StarRocksにキャッシュされたテーブルメタデータを更新する必要があります。`hive_t` はStarRocks内のHive外部テーブルの名前です。
     2. Hiveの一部のパーティション内のデータが更新された場合、`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` コマンドを実行して、StarRocksにキャッシュされたデータを更新する必要があります。`hive_t` はStarRocks内のHive外部テーブルの名前です。`'k1=01/k2=02'` と `'k1=03/k2=04'` はデータが更新されたHiveパーティションの名前です。

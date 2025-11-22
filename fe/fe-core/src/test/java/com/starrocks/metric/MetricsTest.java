@@ -17,26 +17,20 @@
 
 package com.starrocks.metric;
 
-import com.starrocks.clone.TabletSchedCtx;
-import com.starrocks.clone.TabletScheduler;
-import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.JvmMonitorProcDir;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 
-public class MetricsTest {
+public class MetricsTest extends StarRocksTestBase {
 
     @BeforeAll
     public static void setUp() {
@@ -72,7 +66,7 @@ public class MetricsTest {
         JvmStats jvmStats = jvmStatCollector.stats();
         jsonMetricVisitor.visitJvm(jvmStats);
         String output = jsonMetricVisitor.build();
-        System.out.println(output);
+        logSysInfo(output);
         List<String> metricNames = Arrays.asList(
                 "jvm_old_gc",
                 "jvm_young_gc",
@@ -90,11 +84,11 @@ public class MetricsTest {
     public void testPrometheusJvmStats() {
         PrometheusMetricVisitor prometheusMetricVisitor = new PrometheusMetricVisitor("sr_fe_jvm_stat_test");
         JvmStatCollector jvmStatCollector = new JvmStatCollector();
-        System.out.println(jvmStatCollector.toString());
+        logSysInfo(jvmStatCollector.toString());
         JvmStats jvmStats = jvmStatCollector.stats();
         prometheusMetricVisitor.visitJvm(jvmStats);
         String output = prometheusMetricVisitor.build();
-        System.out.println(output);
+        logSysInfo(output);
         List<String> metricNames = Arrays.asList(
                 "jvm_old_gc",
                 "jvm_young_gc",
@@ -122,7 +116,7 @@ public class MetricsTest {
     public void testProcDirJvmStats() throws AnalysisException {
         JvmMonitorProcDir jvmMonitorProcDir = new JvmMonitorProcDir();
         List<List<String>> rows = jvmMonitorProcDir.fetchResult().getRows();
-        System.out.println(rows);
+        logSysInfo(rows);
         List<String> metricNames = Arrays.asList(
                 "gc old collection count",
                 "gc old collection time",
@@ -132,7 +126,7 @@ public class MetricsTest {
                 "mem pool old used"
         );
         for (String metricName : metricNames) {
-            System.out.println(metricName);
+            logSysInfo(metricName);
             Assertions.assertTrue(jvmProcDirResultRowsContains(rows, metricName));
         }
     }
@@ -223,100 +217,6 @@ public class MetricsTest {
         );
         for (String metricName : metricNames) {
             Assertions.assertTrue(output.contains(metricName));
-        }
-    }
-
-    @Test
-    public void testCloneMetrics() {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
-
-        TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
-        TabletSchedulerStat stat = tabletScheduler.getStat();
-        stat.counterCloneTask.incrementAndGet(); // 1
-        stat.counterCloneTaskSucceeded.incrementAndGet(); // 1
-        stat.counterCloneTaskInterNodeCopyBytes.addAndGet(100L);
-        stat.counterCloneTaskInterNodeCopyDurationMs.addAndGet(10L);
-        stat.counterCloneTaskIntraNodeCopyBytes.addAndGet(101L);
-        stat.counterCloneTaskIntraNodeCopyDurationMs.addAndGet(11L);
-
-        TabletSchedCtx ctx1 = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, 1L, 2L, 3L, 4L, 1001L, System.currentTimeMillis());
-        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx1);
-        TabletSchedCtx ctx2 = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, 1L, 2L, 3L, 4L, 1002L, System.currentTimeMillis());
-        Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx2);
-        Set<Long> allTabletIds = Deencapsulation.getField(tabletScheduler, "allTabletIds");
-        allTabletIds.add(1001L);
-        allTabletIds.add(1002L);
-
-        // check
-        List<Metric> scheduledTabletNum = MetricRepo.getMetricsByName("scheduled_tablet_num");
-        Assertions.assertEquals(1, scheduledTabletNum.size());
-        Assertions.assertEquals(2L, (Long) scheduledTabletNum.get(0).getValue());
-
-        List<Metric> scheduledPendingTabletNums = MetricRepo.getMetricsByName("scheduled_pending_tablet_num");
-        Assertions.assertEquals(2, scheduledPendingTabletNums.size());
-        for (Metric metric : scheduledPendingTabletNums) {
-            // label 0 is is_leader
-            MetricLabel label = (MetricLabel) metric.getLabels().get(1);
-            String type = label.getValue();
-            if (type.equals("REPAIR")) {
-                Assertions.assertEquals(0L, metric.getValue());
-            } else if (type.equals("BALANCE")) {
-                Assertions.assertEquals(1L, metric.getValue());
-            } else {
-                Assertions.fail("Unknown type: " + type);
-            }
-        }
-
-        List<Metric> scheduledRunningTabletNums = MetricRepo.getMetricsByName("scheduled_running_tablet_num");
-        Assertions.assertEquals(2, scheduledRunningTabletNums.size());
-        for (Metric metric : scheduledRunningTabletNums) {
-            // label 0 is is_leader
-            MetricLabel label = (MetricLabel) metric.getLabels().get(1);
-            String type = label.getValue();
-            if (type.equals("REPAIR")) {
-                Assertions.assertEquals(1L, metric.getValue());
-            } else if (type.equals("BALANCE")) {
-                Assertions.assertEquals(0L, metric.getValue());
-            } else {
-                Assertions.fail("Unknown type: " + type);
-            }
-        }
-
-        List<Metric> cloneTaskTotal = MetricRepo.getMetricsByName("clone_task_total");
-        Assertions.assertEquals(1, cloneTaskTotal.size());
-        Assertions.assertEquals(1L, (Long) cloneTaskTotal.get(0).getValue());
-
-        List<Metric> cloneTaskSuccess = MetricRepo.getMetricsByName("clone_task_success");
-        Assertions.assertEquals(1, cloneTaskSuccess.size());
-        Assertions.assertEquals(1L, (Long) cloneTaskSuccess.get(0).getValue());
-
-        List<Metric> cloneTaskCopyBytes = MetricRepo.getMetricsByName("clone_task_copy_bytes");
-        Assertions.assertEquals(2, cloneTaskCopyBytes.size());
-        for (Metric metric : cloneTaskCopyBytes) {
-            MetricLabel label = (MetricLabel) metric.getLabels().get(0);
-            String type = label.getValue();
-            if (type.equals("INTER_NODE")) {
-                Assertions.assertEquals(100L, metric.getValue());
-            } else if (type.equals("INTRA_NODE")) {
-                Assertions.assertEquals(101L, metric.getValue());
-            } else {
-                Assertions.fail("Unknown type: " + type);
-            }
-        }
-
-        List<Metric> cloneTaskCopyDurationMs = MetricRepo.getMetricsByName("clone_task_copy_duration_ms");
-        Assertions.assertEquals(2, cloneTaskCopyDurationMs.size());
-        for (Metric metric : cloneTaskCopyDurationMs) {
-            MetricLabel label = (MetricLabel) metric.getLabels().get(0);
-            String type = label.getValue();
-            if (type.equals("INTER_NODE")) {
-                Assertions.assertEquals(10L, metric.getValue());
-            } else if (type.equals("INTRA_NODE")) {
-                Assertions.assertEquals(11L, metric.getValue());
-            } else {
-                Assertions.fail("Unknown type: " + type);
-            }
         }
     }
 }

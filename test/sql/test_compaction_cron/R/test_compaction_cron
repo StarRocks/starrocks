@@ -77,7 +77,7 @@ DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "base_compaction_forbidden_time_ranges" = "* 8-18 * * *",
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -97,7 +97,7 @@ DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "base_compaction_forbidden_time_ranges" = "* 7-20 * * *",
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -116,7 +116,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",

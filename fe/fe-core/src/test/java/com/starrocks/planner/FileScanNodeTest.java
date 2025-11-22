@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -40,6 +39,7 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -99,9 +99,9 @@ public class FileScanNodeTest {
             throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, true);
+        Column c1 = new Column("c1", IntegerType.BIGINT, true);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
         columns.add(c2);
         List<String> columnNames = Lists.newArrayList("c1", "c2");
 
@@ -364,9 +364,8 @@ public class FileScanNodeTest {
         Assertions.assertEquals(0, rangeDescs.get(0).size);
 
         // case 5
-        // 1 file which size is 0 in json format
-        // result: 1 range
-        // file groups
+        // 2 file groups, one is 0, one is very large in json format
+        // result: 2 ranges
 
         fileGroups = Lists.newArrayList();
         files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
@@ -377,16 +376,26 @@ public class FileScanNodeTest {
         Deencapsulation.setField(brokerFileGroup, "fileFormat", "json");
         fileGroups.add(brokerFileGroup);
 
-        // file status
+        files2 = Lists.newArrayList("hdfs://127.0.0.1:9001/file2");
+        desc2 = new DataDescription("testTable", null, files2, columnNames, null, null, "json", false, null);
+        brokerFileGroup2 = new BrokerFileGroup(desc2);
+        Deencapsulation.setField(brokerFileGroup2, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup2, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup2, "fileFormat", "json");
+        fileGroups.add(brokerFileGroup2);
+
         fileStatusesList = Lists.newArrayList();
         fileStatusList = Lists.newArrayList();
         fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
         fileStatusesList.add(fileStatusList);
 
+        fileStatusList2 = Lists.newArrayList();
+        fileStatusList2.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 1073741824, true));
+        fileStatusesList.add(fileStatusList2);
         
         descTable = new DescriptorTable();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1,
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
                 WarehouseManager.DEFAULT_RESOURCE);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(descTable);
@@ -394,11 +403,19 @@ public class FileScanNodeTest {
 
         // check
         locationsList = scanNode.getScanRangeLocations(0);
-        System.out.println(locationsList);
-        Assertions.assertEquals(1, locationsList.size());
-        rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
-        Assertions.assertEquals(1, rangeDescs.size());
-        Assertions.assertEquals(0, rangeDescs.get(0).size);
+        Assertions.assertEquals(2, locationsList.size());
+        for (TScanRangeLocations locations : locationsList) {
+            rangeDescs = locations.scan_range.broker_scan_range.ranges;
+            String path = rangeDescs.get(0).path;
+            if (path.endsWith("file1")) {
+                Assertions.assertEquals(1, rangeDescs.size());
+                Assertions.assertEquals(0, rangeDescs.get(0).size);
+            } else {
+                Assertions.assertTrue(path.endsWith("file2"));
+                Assertions.assertEquals(1, rangeDescs.size());
+                Assertions.assertEquals(1073741824, rangeDescs.get(0).size);
+            }
+        }
 
         // case 6
         // csv file compression type

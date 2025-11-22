@@ -42,6 +42,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;

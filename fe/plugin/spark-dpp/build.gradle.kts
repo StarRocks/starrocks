@@ -23,7 +23,6 @@ java {
 }
 
 group = "com.starrocks"
-version = "1.0.0"
 
 // Property equivalent to fe_ut_parallel in Maven
 val feUtParallel = project.findProperty("fe_ut_parallel") ?: "1"

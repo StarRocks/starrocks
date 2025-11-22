@@ -1,0 +1,233 @@
+-- name: test_iceberg_add_files_from_tbl
+
+create external catalog iceberg_add_files_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive", 
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create external catalog hive_add_files_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0};
+
+-- test partitioned iceberg with single partition(tinyint)
+create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_tinyint(
+    c_smallint smallint,
+    c_int int,
+    c_tinyint tinyint
+) partition by(c_tinyint) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_tinyint");
+
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_tinyint values(1,1,1),(2,2,2);
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_tinyint(
+    c_smallint smallint,
+    c_int int,
+    c_tinyint tinyint
+) partition by(c_tinyint);
+
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_tinyint execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_tinyint");
+
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_tinyint order by c_tinyint;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_tinyint force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_tinyint force;
+
+-- test partitioned iceberg with single partition(date)
+create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date");
+
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date values(1, 1, '2020-01-01'),(2, 2, '2020-01-02'),(3,3,'2020-01-03'),(4,4,'2020-01-04'),(5,5,'2020-01-05');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date");
+
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date order by c_date;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date;
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date);
+
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date") where c_date>='2020-01-03';
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date order by c_date;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;
+
+-- test partitioned iceberg with multi partition(date, string)
+create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string(
+    c_smallint smallint,
+    c_int int,
+    c_date date,
+    c_string string 
+) partition by(c_date, c_string) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date_string");
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string
+ values(1, 1, '2020-01-01', '2020-01-01 00:00:00'), (1, 1, '2020-01-02', '2020-01-02 00:00:00');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string(
+    c_smallint smallint,
+    c_int int,
+    c_date date,
+    c_string string
+) partition by(c_date, c_string);
+
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string") where c_date='2020-01-01';
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string order by c_date;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string force;
+
+-- test partitioned iceberg table which contains date string partition column, location only have one partition
+ create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date");
+
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date values (1, 1, '2020-01-01'),(2, 2, '2020-01-02');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string(
+    c_smallint smallint,
+    c_int int,
+    c_date date,
+    c_string string
+) partition by(c_date, c_string);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string execute add_files(source_table='hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date');
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_string force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;
+
+-- test partitioned iceberg table which has date partition column, location has date and string partition column
+create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string(
+    c_smallint smallint,
+    c_int int,
+    c_date date,
+    c_string string 
+) partition by(c_date, c_string) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date_string");
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string
+ values(1, 1, '2020-01-01', '2020-01-01 00:00:00'), (1, 1, '2020-01-02', '2020-01-02 00:00:00');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_string string,
+    c_date date
+) partition by(c_date);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string");
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date_string force;
+
+-- test partitioned iceberg table with transform
+ create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date");
+
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date values (1, 1, '2020-01-01'),(2, 2, '2020-01-02');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_month(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by month(c_date);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_month execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date");
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date_month force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;
+
+-- test unpartitioned iceberg table with partitioned data
+ create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date");
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date values(1,2,'2020-01-01'),(2,3,'2020-01-02');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar execute add_files (source_table = "hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date") where c_date='2020-01-01';
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar force;
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar(
+    c_smallint smallint,
+    c_int int
+);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar execute add_files (source_table = "hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date") where c_date='2020-01-02';
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_unpar force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;
+
+
+-- test partitioned iceberg table with orc file_format
+ create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date", "file_format" = "orc");
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date values(1,2, '2020-01-01'), (2,3, '2020-01-02');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date execute add_files (source_table = "hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date");
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date order by c_date;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force; 
+
+
+-- test partitioned iceberg with partition pruning
+create table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date) properties ("location" = "oss://${oss_bucket}/iceberg_add_files_db_${uuid0}/hive_par_date");
+
+insert into hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date values(1, 1, '2020-01-01'),(2, 2, '2020-01-02'),(3,3,'2020-01-03'),(4,4,'2020-01-04'),(5,5,'2020-01-05');
+
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date);
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date") where c_date>='2020-01-03';
+
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date order by c_date;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date;
+create table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date(
+    c_smallint smallint,
+    c_int int,
+    c_date date
+) partition by(c_date);
+
+alter table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date execute add_files(source_table="hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date") where days_add(c_date, 2) >= '2020-01-06';
+select * from iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date order by c_date;
+
+drop table iceberg_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.iceberg_par_date force;
+drop table hive_add_files_${uuid0}.iceberg_add_files_db_${uuid0}.hive_par_date force;

@@ -32,6 +32,7 @@ public:
               _fill_cache(fill_cache),
               _lake_io_opts(std::move(lake_io_opts)) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status load_from_meta(const TabletMetadataPtr& metadata, const DelvecPagePB& delvec_page, DelVectorPtr* pdelvec);
     Status load_from_file(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
 private:

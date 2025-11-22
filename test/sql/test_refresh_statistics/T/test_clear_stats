@@ -1,4 +1,4 @@
--- name: test_clear_stats
+-- name: test_clear_stats @sequential @slow
 CREATE DATABASE test_clear_stats;
 use test_clear_stats;
 CREATE TABLE tbl (

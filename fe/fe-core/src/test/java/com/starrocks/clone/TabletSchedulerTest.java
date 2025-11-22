@@ -36,7 +36,6 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
@@ -64,6 +63,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -294,9 +294,9 @@ public class TabletSchedulerTest {
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
         Backend be1 = new Backend(1, "192.168.0.1", 9030);
-        be1.setAlive(true);
-        be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
+        be1.setAlive(true);
+        be1.updateDisks(backendDisks1,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
 
         TDisk td21 = new TDisk("/path21", 1L, 2L, true);
         td21.setPath_hash(21);
@@ -306,9 +306,9 @@ public class TabletSchedulerTest {
         backendDisks2.put("/path21", td21);
         backendDisks2.put("/path22", td22);
         Backend be2 = new Backend(2, "192.168.0.2", 9030);
-        be2.updateDisks(backendDisks2);
-        be2.setAlive(true);
         systemInfoService.addBackend(be2);
+        be2.updateDisks(backendDisks2,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        be2.setAlive(true);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", (Class<?>[]) null);
@@ -432,7 +432,7 @@ public class TabletSchedulerTest {
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumn(new Column("k1", Type.INT))
+                .addColumn(new Column("k1", IntegerType.INT))
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()

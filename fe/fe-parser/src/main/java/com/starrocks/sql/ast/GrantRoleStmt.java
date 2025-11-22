@@ -23,6 +23,7 @@ public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
     public GrantRoleStmt(List<String> granteeRole, UserRef user, NodePosition pos) {
         super(granteeRole, user, pos);
     }
+
     public GrantRoleStmt(List<String> granteeRole, String group, GrantType grantType, NodePosition pos) {
         super(granteeRole, group, grantType, pos);
     }

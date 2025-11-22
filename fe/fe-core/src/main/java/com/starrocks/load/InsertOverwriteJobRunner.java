@@ -15,6 +15,7 @@
 package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -52,13 +53,18 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.InsertOverwriteJobStats;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.PartitionCommitInfo;
+import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -229,7 +235,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
 
@@ -357,19 +363,13 @@ public class InsertOverwriteJobRunner {
         }
         long createPartitionStartTimestamp = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
-        Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.READ)) {
+        if (!db.isExist()) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
-        OlapTable targetTable;
-        try {
-            targetTable = checkAndGetTable(db, tableId);
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
-        }
+        OlapTable targetTable = checkAndGetTable(db, tableId);
         // acquire compute resource
         ComputeResource computeResource = context.getCurrentComputeResource();
         if (computeResource == null) {
@@ -385,21 +385,21 @@ public class InsertOverwriteJobRunner {
         LOG.info("insert overwrite job {} start to garbage collect", job.getJobId());
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
+        if (db == null || !db.isExist()) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
+        }
+        Preconditions.checkState(table instanceof OlapTable);
+        OlapTable targetTable = (OlapTable) table;
+
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
-
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-            if (table == null) {
-                throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
-            }
-            Preconditions.checkState(table instanceof OlapTable);
-            OlapTable targetTable = (OlapTable) table;
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
@@ -475,13 +475,17 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         OlapTable tmpTargetTable = null;
         InsertOverwriteJobStats stats = new InsertOverwriteJobStats();
         stats.setSourcePartitionIds(job.getSourcePartitionIds());
         stats.setTargetPartitionIds(job.getTmpPartitionIds());
+        
+        // Collect partition tablet row counts for statistics sampling
+        com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
+        
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -498,8 +502,18 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
-            List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+            List<Long> tmpPartitionIds = job.getTmpPartitionIds();
+            if (tmpPartitionIds == null) {
+                throw new DmlException("tmp partitions are empty for job:%s", job.getJobId());
+            }
+            List<String> tmpPartitionNames = tmpPartitionIds.stream()
+                    .map(partitionId -> {
+                        Partition partition = targetTable.getPartition(partitionId);
+                        if (partition == null) {
+                            throw new DmlException("temp partition id:%s does not exist", partitionId);
+                        }
+                        return partition.getName();
+                    })
                     .collect(Collectors.toList());
             Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
@@ -527,25 +541,110 @@ public class InsertOverwriteJobRunner {
                             throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
                         }
                         tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
-                        job.setTmpPartitionIds(tmpPartitionNames.stream()
-                                .map(name -> targetTable.getPartition(name, true).getId())
-                                .collect(Collectors.toList()));
+                        
+                        List<Long> dynamicSourcePartitionIds = new ArrayList<>();
+                        for (String tempPartitionName : tmpPartitionNames) {
+                            String oldPartitionName = tempPartitionName.substring(
+                                    tempPartitionName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT) + 1);
+                            Partition oldPartition = targetTable.getPartition(oldPartitionName, false);
+                            if (oldPartition != null) {
+                                dynamicSourcePartitionIds.add(oldPartition.getId());
+                            }
+                        }
+                        
+                        // Collect target partition IDs for stats (the new temp partitions)
+                        List<Long> dynamicTargetPartitionIds = tmpPartitionNames.stream()
+                                .map(name -> {
+                                    Partition partition = targetTable.getPartition(name, true);
+                                    if (partition == null) {
+                                        throw new DmlException("temp partition %s does not exist", name);
+                                    }
+                                    return partition.getId();
+                                })
+                                .collect(Collectors.toList());
+                        
+                        job.setTmpPartitionIds(dynamicTargetPartitionIds);
+                        tmpPartitionIds = dynamicTargetPartitionIds;
+
+                        if (stats.getSourcePartitionIds().isEmpty()) {
+                            stats.setSourcePartitionIds(dynamicSourcePartitionIds);
+                        }
+
+                        if (stats.getTargetPartitionIds().isEmpty()) {
+                            stats.setTargetPartitionIds(dynamicTargetPartitionIds);
+                        }
+
+                        if (stats.getSourceRows() == 0) {
+                            // Recalculate sumSourceRows for dynamic overwrite
+                            sumSourceRows = dynamicSourcePartitionIds.stream()
+                                    .mapToLong(pid -> targetTable.mayGetPartition(pid).stream()
+                                            .mapToLong(Partition::getRowCount).sum())
+                                    .sum();
+                            stats.setSourceRows(sumSourceRows);
+                        }
                     }
                     LOG.info("dynamic overwrite job {} replace tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
+                    ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
                     targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
                 } else {
+                    ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
                     targetTable.replaceTempPartitions(dbId, sourcePartitionNames, tmpPartitionNames, true, false);
                 }
             } else if (partitionInfo instanceof SinglePartitionInfo) {
+                ensureTempPartitionsVisible(targetTable, tmpPartitionIds);
                 targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
 
-            long sumTargetRows = job.getTmpPartitionIds().stream()
-                    .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
-                    .sum();
+            long sumTargetRows = 0;
+            if (insertStmt != null && !isReplay) {
+                TransactionState txnState = GlobalStateMgr.getCurrentState()
+                        .getGlobalTransactionMgr()
+                        .getTransactionState(dbId, insertStmt.getTxnId());
+                if (txnState != null) {
+                    // Get target rows from TxnCommitAttachment
+                    if (txnState.getTxnCommitAttachment() != null) {
+                        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+                        if (attachment instanceof InsertTxnCommitAttachment) {
+                            sumTargetRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+                        }
+                    }
+                    
+                    // Collect tablet row counts from TableCommitInfo for statistics sampling
+                    TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(tableId);
+                    if (tableCommitInfo != null) {
+                        for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
+                            long physicalPartitionId = entry.getKey();
+                            PartitionCommitInfo partitionCommitInfo = entry.getValue();
+                            Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                            
+                            PhysicalPartition physicalPartition = targetTable.getPhysicalPartition(physicalPartitionId);
+                            if (physicalPartition != null) {
+                                Partition partition = targetTable.getPartition(physicalPartition.getParentId());
+                                if (partition != null && !tabletRows.isEmpty() &&
+                                        stats.getTargetPartitionIds().contains(partition.getId())) {
+                                    long partitionId = partition.getId();
+                                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId,
+                                            tabletId, rowCount));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (sumTargetRows == 0) {
+                LOG.warn("TxnCommitAttachment is null or invalid, fallback to partition.getRowCount() for " +
+                        "table_id={}, partition_ids={}, txn_id={}", 
+                        tableId, job.getTmpPartitionIds(), insertStmt != null ? insertStmt.getTxnId() : "null");
+                sumTargetRows = job.getTmpPartitionIds().stream()
+                        .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
+                        .sum();
+            }
+
             stats.setTargetRows(sumTargetRows);
+            stats.setPartitionTabletRowCounts(partitionTabletRowCounts);
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
@@ -591,7 +690,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, tableId, LockType.READ)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
@@ -634,5 +733,29 @@ public class InsertOverwriteJobRunner {
 
     protected void testDoCommit(boolean isReplay) {
         doCommit(isReplay);
+    }
+
+    protected void ensureTempPartitionsVisible(OlapTable targetTable, List<Long> partitionIds) {
+        if (partitionIds == null) {
+            return;
+        }
+        for (Long partitionId : partitionIds) {
+            if (partitionId == null) {
+                continue;
+            }
+            Partition partition = targetTable.getPartition(partitionId);
+            if (partition == null) {
+                throw new DmlException("temp partition id:%s does not exist", partitionId);
+            }
+            if (hasCommittedNotVisible(partitionId)) {
+                throw new DmlException("temp partition %s still has committed transactions not visible",
+                        partition.getName());
+            }
+        }
+    }
+
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
     }
 }

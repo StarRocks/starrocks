@@ -22,8 +22,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
@@ -39,7 +41,6 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -234,6 +235,24 @@ public class MetaUtils {
             result.put(column.getColumnId(), column);
         }
         return result;
+    }
+
+    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
+        List<String> columnNames = new ArrayList<>();
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        List<Column> baseSchema = olapTable.getBaseSchema();
+        if (baseIndexMeta.getSortKeyIdxes() != null) {
+            for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
+                columnNames.add(baseSchema.get(i).getName());
+            }
+        } else {
+            for (Column column : baseSchema) {
+                if (column.isKey()) {
+                    columnNames.add(column.getName());
+                }
+            }
+        }
+        return columnNames;
     }
 
     public static List<String> getColumnNamesByColumnIds(Table table, List<ColumnId> columnIds) {

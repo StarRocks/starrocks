@@ -23,9 +23,11 @@ java {
 }
 
 group = "com.starrocks"
-version = "1.0.0"
 
 dependencies {
+    implementation(project(":fe-grammar"))
+    implementation(project(":fe-type"))
+
     implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.commons:commons-lang3")
     implementation("com.google.guava:guava")
@@ -62,13 +64,4 @@ tasks.withType<Checkstyle>().configureEach {
     ignoreFailures = false  // Match Maven behavior: failsOnError=true
     // Avoid circular dependency: Checkstyle should not depend on compiled classes
     classpath = files()
-}
-
-// Bind checkstyle to run before compilation
-tasks.compileJava {
-    dependsOn(tasks.checkstyleMain)
-}
-
-tasks.compileTestJava {
-    dependsOn(tasks.checkstyleTest)
 }

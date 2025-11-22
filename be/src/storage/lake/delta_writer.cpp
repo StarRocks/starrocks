@@ -313,7 +313,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                         UniqueId(_load_id).to_thrift(),
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
-                        _tablet_manager->tablet_root_location(_tablet_id));
+                        _tablet_manager->tablet_root_location(_tablet_id), nullptr);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
             // Init SpillMemTableSink
@@ -359,6 +359,7 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
+    RETURN_IF_ERROR(_mem_table->prepare());
     _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }

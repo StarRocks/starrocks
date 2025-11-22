@@ -307,18 +307,14 @@ uint32_t NullableColumn::serialize_default(uint8_t* pos) const {
     return sizeof(bool);
 }
 
-size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                                   size_t count) const {
+size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                   uint32_t max_row_size, size_t start, size_t count) const {
     const auto null_data = _null_column->immutable_data();
-    _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
-    for (size_t i = start; i < start + count; i++) {
-        if (null_data[i] == 0) {
-            _data_column->serialize(i, dst + (i - start) * byte_interval + byte_offset + 1);
-        } else {
-            _data_column->serialize_default(dst + (i - start) * byte_interval + byte_offset + 1);
-        }
-    }
-    return _null_column->type_size() + _data_column->type_size();
+    const size_t null_size = _null_column->type_size();
+    _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, null_size, start, count);
+    const size_t data_size = _data_column->serialize_batch_at_interval_with_null_masks(
+            dst, byte_offset, byte_interval, max_row_size - null_size, start, count, null_data.data());
+    return null_size + data_size;
 }
 
 void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
@@ -529,11 +525,11 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool 
 }
 
 void NullableColumn::check_or_die() const {
-    CHECK_EQ(_null_column->size(), _data_column->size());
+    DCHECK_EQ(_null_column->size(), _data_column->size());
     // when _has_null=true, the column may have no null value, so don't check.
     if (!_has_null) {
         auto null_data = _null_column->immutable_data();
-        CHECK(!SIMD::contain_nonzero(null_data, 0));
+        DCHECK(!SIMD::contain_nonzero(null_data, 0));
     }
     _data_column->check_or_die();
     _null_column->check_or_die();

@@ -30,7 +30,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
 
     @Override
     public void authenticate(
-            AuthenticationContext authContext,
+            AccessControlContext authContext,
             UserIdentity userIdentity,
             byte[] authResponse) throws AuthenticationException {
         String usePassword = authResponse.length == 0 ? "NO" : "YES";
@@ -57,7 +57,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host)
+    public byte[] authSwitchRequestPacket(AccessControlContext authContext, String user, String host)
             throws AuthenticationException {
         return authContext.getAuthDataSalt();
     }

@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 本文介绍如何管理 SQL 黑名单 (SQL Blacklist)。
 
-您可以在 StarRocks 中维护一个 SQL 黑名单，以在某些场景下禁止特定类型的 SQL，避免此类 SQL 导致集群宕机或者其他预期之外的行为。黑名单功能在 Query、INSERT 和 CTAS 语句下生效。
+您可以在 StarRocks 中维护一个 SQL 黑名单，以在某些场景下禁止特定类型的 SQL，避免此类 SQL 导致集群宕机或者其他预期之外的行为。黑名单仅适用于 SELECT 语句、INSERT 语句（v3.1 及以上版本）以及 CTAS 语句（v3.4 及以上版本）。
 
 > **注意**
 >
@@ -61,6 +61,24 @@ ADD SQLBLACKLIST "<sql>";
     ```sql
     ADD SQLBLACKLIST "select id_int \\* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select (id_int \\* 9 \\- 8) \\/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable";
     ```
+
+* 禁止所有 INSERT INTO 语句：
+
+    ~~~sql
+    ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*";
+    ~~~
+
+* 禁止所有 INSERT INTO ... VALUES 语句：
+
+    ~~~sql
+    ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+.*values\\s*\\(";
+    ~~~
+
+* 禁止所有 INSERT INTO ... VALUES 语句，但针对系统定义视图 `_statistics_.column_statistics` 的操作除外：
+
+    ~~~sql
+    ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(";
+    ~~~
 
 ## 展示黑名单列表
 

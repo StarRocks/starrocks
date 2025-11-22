@@ -4,6 +4,46 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.8
+
+发布日期：2025年9月30日
+
+### 行为变更
+
+- 参数 `enable_lake_tablet_internal_parallel` 默认设置为 `true`，存算分离集群中的云原生表默认开启并行扫描，以提升单查询的内部并行度。但这可能会增加峰值资源使用量。 [#62159](https://github.com/StarRocks/starrocks/pull/62159)
+
+### 问题修复
+
+修复了以下问题：
+
+- Delta Lake 分区列名被强制转换为小写，导致与实际列名不一致。 [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- Iceberg 清理 Manifest 缓存的并发竞争可能触发 NullPointerException (NPE)。 [#63052](https://github.com/StarRocks/starrocks/pull/63052) [#63043](https://github.com/StarRocks/starrocks/pull/63043)
+- Iceberg 扫描阶段未捕获的通用异常会中断扫描范围提交，且未生成指标。 [#62994](https://github.com/StarRocks/starrocks/pull/62994)
+- 复杂的多层投影视图在物化视图改写中可能生成无效执行计划或缺失列统计信息。 [#62918](https://github.com/StarRocks/starrocks/pull/62918) [#62198](https://github.com/StarRocks/starrocks/pull/62198)
+- Hive 表构建的物化视图中分区列大小写不一致时被错误拒绝。 [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+- 物化视图刷新仅使用创建者的默认角色，可能导致权限不足问题。 [#62396](https://github.com/StarRocks/starrocks/pull/62396)
+- 分区名大小写不敏感时，基于 List 分区的物化视图可能触发重复名称错误。 [#62389](https://github.com/StarRocks/starrocks/pull/62389)
+- 物化视图恢复失败后残留的版本映射导致后续增量刷新被跳过，返回空结果。 [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- 物化视图恢复后的异常分区可能导致 FE 重启时触发 NullPointerException。 [#62563](https://github.com/StarRocks/starrocks/pull/62563)
+- 非全局聚合查询错误地应用了聚合下推改写，生成无效计划。 [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- Tablet 删除状态仅在内存中更新而未持久化，导致 GC 仍将其视为运行中并跳过回收。 [#63623](https://github.com/StarRocks/starrocks/pull/63623)
+- 查询与删除 Tablet 并发执行可能导致 delvec 过早清理并报错 "no delete vector found"。 [#63291](https://github.com/StarRocks/starrocks/pull/63291)
+- 主键索引的 Base Compaction 和 Cumulative Compaction 共用 `max_rss_rowid` 的问题。 [#63277](https://github.com/StarRocks/starrocks/pull/63277)
+- LakePersistentIndex 析构函数在初始化失败后运行可能导致 BE 崩溃。 [#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- Publish 线程池优雅关闭时静默丢弃队列任务且未标记失败，导致版本缺口并错误显示“全部成功”。 [#62417](https://github.com/StarRocks/starrocks/pull/62417)
+- Rebalance 过程中新增 BE 上新克隆的副本被立即判定为冗余并删除，阻止数据迁移至新节点。 [#62542](https://github.com/StarRocks/starrocks/pull/62542)
+- 读取 Tablet 最大版本时缺少锁，导致副本事务决策不一致。 [#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- `date_trunc` 等值条件与原始列范围谓词组合时被化简为点区间，可能返回空结果集（例如 `date_trunc('month', dt)='2025-09-01' AND dt>'2025-09-23'`）。 [#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- 非确定性谓词（如随机/时间函数）下推导致结果不一致。 [#63495](https://github.com/StarRocks/starrocks/pull/63495)
+- CTE 重用决策后缺失 Consumer 节点，导致执行计划不完整。 [#62784](https://github.com/StarRocks/starrocks/pull/62784)
+- 表函数与低基数字典编码共存时的类型不匹配可能导致崩溃。 [#62466](https://github.com/StarRocks/starrocks/pull/62466) [#62292](https://github.com/StarRocks/starrocks/pull/62292)
+- 过大的 CSV 被拆分为并行片段时，每个片段都会跳过表头行，导致数据丢失。 [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- 在未指定数据库的情况下，`SHOW CREATE ROUTINE LOAD` 返回了同名的其他数据库中的任务。 [#62745](https://github.com/StarRocks/starrocks/pull/62745)
+- 并发清理导入任务时 `sameLabelJobs` 变为 null，触发 NullPointerException。 [#63042](https://github.com/StarRocks/starrocks/pull/63042)
+- 当所有 Tablet 已进入回收站时，BE 下线操作仍被阻塞。 [#62781](https://github.com/StarRocks/starrocks/pull/62781)
+- `OPTIMIZE TABLE` 任务在线程池拒绝后卡在 PENDING 状态。 [#62300](https://github.com/StarRocks/starrocks/pull/62300)
+- 清理脏 Tablet 元数据时 GTID 参数顺序错误。 [#62275](https://github.com/StarRocks/starrocks/pull/62275)
+
 ## 3.4.7
 
 发布日期：2025 年 9 月 1 日

@@ -1,0 +1,30 @@
+-- name: test_stream_load_non_utf8_json
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c1` int,
+  `c2` STRING
+) PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "format: json" -T ${root_path}/sql/test_stream_load/data/non_utf8.json ${url}/api/db_${uuid0}/t1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select c1, hex(c2) from db_${uuid0}.t1;
+-- result:
+1	0B
+-- !result

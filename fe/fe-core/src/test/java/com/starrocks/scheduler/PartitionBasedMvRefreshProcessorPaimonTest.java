@@ -27,8 +27,6 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.Collection;
 
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.MOCK_PAIMON_CATALOG_NAME;
@@ -101,7 +99,6 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
                     String query = "SELECT d, count(pk) FROM " +
                             "`paimon0`.`pmn_db1`.`partitioned_table` as a group by d;";
                     String plan = getFragmentPlan(query);
-                    System.out.println(plan);
                     PlanTestBase.assertContains(plan, "     TABLE: paimon_parttbl_mv1\n" +
                             "     PREAGGREGATION: ON\n" +
                             "     partitions=10/10\n" +
@@ -114,14 +111,5 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-    }
-
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
     }
 }

@@ -19,10 +19,9 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.io.CharStreams;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -30,6 +29,9 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.util.Util;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TCacheParam;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
@@ -393,6 +395,7 @@ public class QueryCacheTest {
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -918,8 +921,10 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -950,8 +955,10 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -981,8 +988,8 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new IntLiteral(rangeValue.get(0), Type.INT), PrimitiveType.INT);
-            endKey.pushColumn(new IntLiteral(rangeValue.get(1), Type.INT), PrimitiveType.INT);
+            startKey.pushColumn(new IntLiteral(rangeValue.get(0), IntegerType.INT), PrimitiveType.INT);
+            endKey.pushColumn(new IntLiteral(rangeValue.get(1), IntegerType.INT), PrimitiveType.INT);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1013,8 +1020,10 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1045,8 +1054,10 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1077,8 +1088,10 @@ public class QueryCacheTest {
         for (List<String> rangeValue : rangeValues) {
             startKey = new PartitionKey();
             endKey = new PartitionKey();
-            startKey.pushColumn(new DateLiteral(rangeValue.get(0), Type.DATETIME), PrimitiveType.DATETIME);
-            endKey.pushColumn(new DateLiteral(rangeValue.get(1), Type.DATETIME), PrimitiveType.DATETIME);
+            startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(0)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
+            endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime(rangeValue.get(1)), DateType.DATETIME),
+                    PrimitiveType.DATETIME);
             expectRanges.add(Range.closedOpen(startKey, endKey).toString());
         }
         Set<String> rangeSet = rangeMap.values().stream().collect(Collectors.toSet());
@@ -1098,9 +1111,11 @@ public class QueryCacheTest {
         Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assertions.assertTrue(!rangeMap.isEmpty());
         PartitionKey startKey = new PartitionKey();
-        startKey.pushColumn(new DateLiteral("2022-01-03 00:00:00", Type.DATETIME), PrimitiveType.DATETIME);
+        startKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime("2022-01-03 00:00:00"), DateType.DATETIME),
+                PrimitiveType.DATETIME);
         PartitionKey endKey = new PartitionKey();
-        endKey.pushColumn(new DateLiteral("2022-01-03 00:00:01", Type.DATETIME), PrimitiveType.DATETIME);
+        endKey.pushColumn(new DateLiteral(DateUtils.parseStrictDateTime("2022-01-03 00:00:01"), DateType.DATETIME),
+                PrimitiveType.DATETIME);
         Range<PartitionKey> expectRange = Range.closedOpen(startKey, endKey);
         rangeMap.values().stream().collect(Collectors.toSet()).contains(expectRange.toString());
     }
@@ -1560,5 +1575,19 @@ public class QueryCacheTest {
                 .map(Optional::get)
                 .collect(Collectors.toSet());
         Assertions.assertEquals(digests.size(), columnNames.length);
+    }
+
+    @Test
+    public void testQueryCacheWithHeavyExprPushDown() {
+        String sql0 = "select (ifnull(sum(murmur_hash3_32(k)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(l)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(c)), 0)+" +
+                "ifnull(sum(murmur_hash3_32(__c_0)), 0)) as fingerprint " +
+                "from (SELECT REGEXP_REPLACE(Referer,'^https?://(?:www\\.)?([^/]+)/.*$','\\1') AS k," +
+                "left(AVG(length(Referer)),6) AS l,COUNT(*) AS c," +
+                "(min(Referer)) as __c_0  FROM hits WHERE Referer <> '' " +
+                "GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25) as t";
+        Optional<PlanFragment> frag = getCachedFragment(sql0);
+        Assertions.assertTrue(frag.isPresent());
     }
 }

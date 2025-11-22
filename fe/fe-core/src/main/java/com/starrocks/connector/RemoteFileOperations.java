@@ -94,6 +94,11 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getRemoteFiles(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+        boolean isRecursive = this.isRecursive;
+        if (params.getIsRecursive().isPresent()) {
+            // override the default recursive option
+            isRecursive = params.getIsRecursive().get();
+        }
         RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
@@ -303,6 +308,23 @@ public class RemoteFileOperations {
 
     public boolean deleteIfExists(Path path, boolean recursive) {
         return HiveWriteUtils.deleteIfExists(path, recursive, conf);
+    }
+
+    public void truncateLocations(List<String> paths) {
+        for (String location : paths) {
+            try {
+                Path path = new Path(location);
+                if (!deleteIfExists(path, true)) {
+                    throw new StarRocksConnectorException("Failed to delete path : %s", location);
+                }
+                HiveWriteUtils.createDirectoryIfNotExists(path, conf);
+                LOG.info("Truncate data in partition location: {}", location);
+            } catch (Exception e) {
+                LOG.error("Failed to truncate data in location: {}", location, e);
+                throw new StarRocksConnectorException("Failed to truncate data in location: %s. msg: %s",
+                        location, e.getMessage());
+            }
+        }
     }
 
     public FileStatus[] listStatus(Path path) {

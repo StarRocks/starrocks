@@ -64,6 +64,7 @@ from lib import data_delete_lib
 from lib import data_insert_lib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
+from lib.mysql_prepared_stmt_lib import MysqlPreparedStmtLib
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
@@ -140,6 +141,7 @@ T_R_TABLE = "t_r_table"
 
 SECRET_INFOS = {}
 TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
+TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
 
 
 class StarrocksSQLApiLib(object):
@@ -155,6 +157,7 @@ class StarrocksSQLApiLib(object):
         self.db = list()
         self.resource = list()
         self.mysql_lib = MysqlLib()
+        self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
         self.hive_lib = HiveLib()
@@ -588,6 +591,7 @@ class StarrocksSQLApiLib(object):
             "password": self.mysql_password,
         }
         self.mysql_lib.connect(mysql_dict)
+        self.mysql_prepared_stmt_lib.connect(mysql_dict)
 
     def create_starrocks_conn_pool(self):
         self.connection_pool = PooledDB(
@@ -618,6 +622,7 @@ class StarrocksSQLApiLib(object):
 
     def close_starrocks(self):
         self.mysql_lib.close()
+        self.mysql_prepared_stmt_lib.close()
 
     def close_trino(self):
         self.trino_lib.close()
@@ -644,15 +649,21 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
-    def create_database_and_table(self, database_name, table_name, table_sql_path=None, tolerate_exist=False):
+    def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
+                                  tolerate_exist=False):
         """
         create database, use database and create table
         Args:
+            catalog_name:     catalog
             database_name:    db
             table_name:       table
             table_sql_path:   sql dir
             tolerate_exist:   tolerate if not exists
         """
+        if catalog_name is not None:
+            set_catalog_res = self.execute_sql("set catalog %s" % catalog_name)
+            tools.assert_true(set_catalog_res["status"], "set catalog failed")
+
         # create database
         create_db_res = self.create_database(database_name, tolerate_exist=tolerate_exist)
         tools.assert_true(create_db_res["status"], "create database failed")
@@ -1442,7 +1453,7 @@ class StarrocksSQLApiLib(object):
         else:
             if exp.startswith(REGEX_FLAG):
                 log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
-                tools.assert_regexp_matches(
+                tools.assert_regex(
                     r"%s" % str(act),
                     exp[len(REGEX_FLAG) :],
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
@@ -1564,7 +1575,7 @@ class StarrocksSQLApiLib(object):
 
         # create record table
         try:
-            self.create_database_and_table(T_R_DB, T_R_TABLE, "sql_framework", True)
+            self.create_database_and_table("default_catalog", T_R_DB, T_R_TABLE, "sql_framework", True)
         except AssertionError:
             self_print(f"Failed to create DB/Table to save the results, please check the env!", ColorEnum.RED)
             sys.exit(1)
@@ -1974,6 +1985,23 @@ class StarrocksSQLApiLib(object):
                 time.sleep(pending_time_ms / 1000)
                 retry_times += 1
         return res
+    
+    def wait_show_materialized_view_finish(self, mv_name, check_count=60):
+        """
+        wait show materialized view job finish and return status
+        """
+        last_refresh_state = ""
+        show_sql = f"SHOW MATERIALIZED VIEWS WHERE NAME='{mv_name}'"
+        count = 0
+        time.sleep(1)
+        while count < check_count:
+            res = self.execute_sql(show_sql, True)
+            last_refresh_state = res["result"][-1][12]
+            if last_refresh_state in TASK_RUN_FINAL_STATES:
+                break
+            time.sleep(1)
+            count += 1
+        tools.assert_true(last_refresh_state in TASK_RUN_FINAL_STATES, "wait show materialized view finish error: %s" % last_refresh_state)
 
     def wait_async_materialized_view_finish(self, current_db, mv_name, check_count=None):
         """
@@ -2134,48 +2162,71 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan))
 
+    def _with_materialized_view_rewrite(self, func, *args, **kwargs):
+        """
+        Helper to temporarily set enable_materialized_view_rewrite to true,
+        call func(*args, **kwargs), and restore the original value.
+        """
+        get_var_sql = "show variables like 'enable_materialized_view_rewrite';"
+        orig_res = self.execute_sql(get_var_sql, True)
+        orig_value = None
+        if orig_res and orig_res.get("result") and len(orig_res["result"]) > 0:
+            orig_value = orig_res["result"][0][1]
+        try:
+            self.execute_sql("set enable_materialized_view_rewrite = true;", True)
+            return func(*args, **kwargs)
+        finally:
+            if orig_value is not None:
+                self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
+
     def print_hit_materialized_view(self, query, *expects) -> bool:
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
+        def check_mv():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return False
+            plan = str(res["result"])
+            for expect in expects:
+                if plan.find(expect) > 0:
+                    return True
             return False
-        plan = str(res["result"])
-        for expect in expects:
-            if plan.find(expect) > 0:
-                return True
-        return False
+        return self._with_materialized_view_rewrite(check_mv)
 
     def print_hit_materialized_views(self, query) -> str:
         """
         print all mv_names hit in query
         """
         time.sleep(1)
-        sql = "explain %s" % (query)
-        res = self.retry_execute_sql(sql, True)
-        if not res["status"]:
-            print(res)
-            return ""
-        plan = res["result"]
-        if not plan:
-            return ""
-        mv_name = None
-        ans = []
-        for line in plan:
-            if len(line) != 1:
-                continue
-            content = line[0]
-            if content.find("MaterializedView: true") > 0:
-                if mv_name:
-                    ans.append(mv_name)
-                mv_name = None
-            if content.find("TABLE:") > 0:
-                mv_name = content.split("TABLE:")[1].strip()
-        return ",".join(ans)
+        def extract_mvs():
+            sql = "explain %s" % (query)
+            res = self.retry_execute_sql(sql, True)
+            if not res["status"]:
+                print(res)
+                return ""
+            plan = res["result"]
+            if not plan:
+                return ""
+            mv_name = None
+            ans = []
+            for line in plan:
+                if len(line) != 1:
+                    continue
+                content = line[0]
+                if content.find("MaterializedView: true") > 0:
+                    if mv_name:
+                        ans.append(mv_name)
+                    mv_name = None
+                if content.find("TABLE:") > 0:
+                    mv_name = content.split("TABLE:")[1].strip()
+            # sort the mv_names to make the result deterministic
+            ans.sort()
+            return ",".join(ans)
+        return self._with_materialized_view_rewrite(extract_mvs)
 
     def assert_equal_result(self, *sqls):
         if len(sqls) < 2:
@@ -2727,7 +2778,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
     def wait_compaction_finish(self, table_name: str, expected_num_segments: int):
         timeout = 300
         scan_table_sql = (
-            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false)*/ COUNT(1) FROM {table_name}"
+            f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
         fetch_segments_sql = r"""
             with profile as (
@@ -3042,6 +3093,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             cursor.close()
             conn.close()
 
+    def execute_prepared_sql(self, sql, params):
+        return self.mysql_prepared_stmt_lib.execute_prepared(sql, params)
+
+    def execute_with_prepared_connection(self, sql):
+        return self.mysql_prepared_stmt_lib.execute(sql)
+
     def assert_trace_times_contains(self, query, *expects):
         """
         assert trace times result contains expect string
@@ -3155,7 +3212,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             act.append(processed_row)
 
         log.info("[check regex]: %s" % exp[len(REGEX_FLAG) :])
-        tools.assert_regexp_matches(
+        tools.assert_regex(
             r"%s" % str(act),
             exp[len(REGEX_FLAG) :],
             "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
@@ -3247,3 +3304,231 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         result_str = column_separator.join(column_values)
         log.info(f"Final result: {result_str}")
         return result_str
+
+    def get_timestamp_ms(self):
+        """
+        Get current timestamp in milliseconds
+        """
+        import time
+        timestamp_ms = int(time.time() * 1000)
+        # print(f"Generated timestamp: {timestamp_ms}")
+        return timestamp_ms
+
+    def get_last_query_id(self):
+        """
+        Get the query_id of the last query
+        """
+        sql = "select last_query_id()"
+        result = self.execute_sql(sql, True)
+
+        if not result["status"]:
+            # print(f"Failed to get last query id: {result}")
+            return None
+
+        if "result" not in result or len(result["result"]) == 0:
+            # print("No query id found")
+            return None
+
+        query_id = result["result"][0][0]
+        # print(f"Last query id: {query_id}")
+        return query_id
+
+    def get_query_details(self):
+        url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time=0"
+        result = self.get_http_request(url)
+        query_details = json.loads(result)
+        return query_details
+
+    def _find_query_detail(self, filter_func):
+        query_details = self.get_query_details()
+
+        # Find matching query_id, prioritize records with FINISHED state
+        finished_detail = None
+        unfinished_detail = None
+
+        for detail in query_details:
+            if filter_func(detail):
+                state = detail.get("state", "")
+                if state == "FINISHED":
+                    finished_detail = detail
+                else:
+                    unfinished_detail = detail
+
+        # Prioritize records with FINISHED state.
+        if finished_detail:
+            return finished_detail
+        elif unfinished_detail:
+            return unfinished_detail
+        else:
+            return None
+
+    def _wait_for_query_detail(self, filter_func, raw_result=False):
+        timeout_sec = 5
+        for retry_count in range(timeout_sec):
+            query_detail = self._find_query_detail(filter_func)
+            if query_detail is None:
+                if retry_count + 1 < timeout_sec:  # Not the last retry
+                    time.sleep(1)
+                continue
+
+            if raw_result:
+                return query_detail
+
+            # To ensure that the output string is in a JSON-compatible format that can be processed by the
+            # function `parse_json()` in StarRocks, escaping is required.
+            def escaped_str(s):
+                return s.replace('\n', r'\n').replace('"', r'\"')
+
+            escaped_detail = {}
+            for key, value in query_detail.items():
+                key = escaped_str(key)
+                if type(value) is str:
+                    value = escaped_str(value)
+                escaped_detail[key] = value
+            escaped_detail_str = json.dumps(escaped_detail)
+            return escaped_detail_str
+
+        tools.assert_true(False, "Failed to get query detail after 3 retries")
+
+    def wait_for_query_detail(self, query_id, raw_result=False):
+        return self._wait_for_query_detail(lambda detail: detail.get("queryId") == query_id, raw_result)
+
+    def wait_for_prepared_stmt_detail(self, prepared_stmt_id):
+        def is_prepared_stmt_detail(detail):
+            return 'preparedStmtId' in detail and detail['preparedStmtId'] == prepared_stmt_id \
+                and 'command' in detail and detail['command'] == 'MySQL.COM_STMT_PREPARE'
+
+        return self._wait_for_query_detail(is_prepared_stmt_detail)
+
+    def assert_prepared_stmt_details(self):
+        query_details = self.get_query_details()
+        for detail in query_details:
+            if 'command' not in detail or detail['command'] != 'MySQL.COM_STMT_PREPARE':
+                continue
+            query_id = detail['queryId']
+
+            if 'profile' not in detail:
+                continue
+            profile_query_id_res = re.match(r'[\w\W]*Query ID: (.*)[\w\W]*', detail['profile'])
+            if not profile_query_id_res:
+                continue
+            profile_query_id = profile_query_id_res.group(1)
+
+            tools.assert_equals(query_id, profile_query_id)
+
+    def assert_query_detail_field(self, query_detail, field_name, expected_value=None):
+        """
+        Validate field values in query detail
+        """
+        if query_detail is None:
+            # print("Query detail is None")
+            return False
+
+        if field_name not in query_detail:
+            # print(f"Field {field_name} not found in query detail")
+            return False
+
+        actual_value = query_detail[field_name]
+        # print(f"Field {field_name}: {actual_value}")
+
+        if expected_value is not None:
+            if actual_value != expected_value:
+                # print(
+                #     f"Field {field_name} mismatch: expected {expected_value}, got {actual_value}")
+                return False
+
+        return True
+
+    def query_detail_check(self, sql=None, expected_scan_rows=None, expected_return_rows=None):
+        """
+        Comprehensive function to test query detail API using assertions to validate results
+        
+        Args:
+            sql: SQL statement to execute
+            expected_scan_rows: Expected scanRows value
+            expected_return_rows: Expected returnRows value  
+            
+        Returns:
+            dict: Dictionary containing test results
+        """
+        import time
+
+        # 1. Get timestamp
+
+        # 2. Execute SQL statement
+        # print(f"Executing SQL: {sql}")
+        result = self.execute_sql(sql, True)
+
+        if not result["status"]:
+            # print(f"Failed to execute SQL: {result}")
+            tools.assert_true(False, f"SQL execution failed: {result}")
+
+        # 3. Get query_id
+        query_id = self.get_last_query_id()
+        if query_id is None:
+            # print("Failed to get query_id")
+            tools.assert_true(False, "Failed to get query_id")
+
+        # 4. Wait a bit to ensure query detail is collected
+        time.sleep(1)
+
+        # 5. Get query detail, retry up to 3 times
+        query_detail = self.wait_for_query_detail(query_id, raw_result=True)
+
+        # 6. Validate each field and assert
+        # print("=== Query Detail API Test Results ===")
+        # print(f"Timestamp: {timestamp_ms}")
+        # print(f"Query ID: {query_id}")
+        # print(f"Query Detail: {query_detail}")
+
+        # Validate scanRows
+        if expected_scan_rows is not None:
+            actual_scan_rows = query_detail.get("scanRows")
+            tools.assert_equal(
+                expected_scan_rows, actual_scan_rows,
+                f"scanRows mismatch: expected {expected_scan_rows}, got {actual_scan_rows}"
+            )
+            # print(f"✓ scanRows validation passed: {actual_scan_rows}")
+        else:
+            # print(f"scanRows: {query_detail.get('scanRows')}")
+            pass
+
+        # Validate returnRows
+        if expected_return_rows is not None:
+            actual_return_rows = query_detail.get("returnRows")
+            tools.assert_equal(
+                expected_return_rows, actual_return_rows,
+                f"returnRows mismatch: expected {expected_return_rows}, got {actual_return_rows}"
+            )
+            # print(f"✓ returnRows validation passed: {actual_return_rows}")
+        else:
+            # print(f"returnRows: {query_detail.get('returnRows')}")
+            pass
+
+        # Validate cpuCostNs
+        actual_cpu_cost_ns = query_detail.get("cpuCostNs")
+        tools.assert_true(
+            actual_cpu_cost_ns > 0,
+            f"cpuCostNs is negative: {actual_cpu_cost_ns}"
+        )
+        # print(f"✓ cpuCostNs validation passed: {actual_cpu_cost_ns}")
+
+        # Validate scanBytes
+        actual_scan_bytes = query_detail.get("scanBytes")
+        tools.assert_true(
+            actual_scan_bytes > 0,
+            f"scanBytes is negative: {actual_scan_bytes}"
+        )
+        # print(f"✓ scanBytes validation passed: {actual_scan_bytes}")
+
+        # Validate memCostBytes
+        actual_mem_cost_bytes = query_detail.get("memCostBytes")
+        tools.assert_true(
+            actual_mem_cost_bytes > 0,
+            f"memCostBytes is negative: {actual_mem_cost_bytes}"
+        )
+        # print(f"✓ memCostBytes validation passed: {actual_mem_cost_bytes}")
+
+        return {
+            "success": True
+        }

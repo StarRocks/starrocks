@@ -68,14 +68,13 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
@@ -95,6 +94,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.mv.MaterializedViewDependencyGraph;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
@@ -214,8 +214,7 @@ import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
@@ -247,6 +246,8 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
@@ -311,7 +312,7 @@ public class GlobalStateMgr {
 
     private final Load load;
     private final LoadMgr loadMgr;
-    private final RoutineLoadMgr routineLoadMgr;
+    private RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
     private final BatchWriteMgr batchWriteMgr;
     private final ExportMgr exportMgr;
@@ -1354,7 +1355,7 @@ public class GlobalStateMgr {
                 // changes in concurrency
                 variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
                                 SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
-                                LiteralExpr.create("true", Type.BOOLEAN)),
+                                LiteralExprFactory.create("true", BooleanType.BOOLEAN)),
                         false);
             }
             checkCaseInsensitive();
@@ -1727,24 +1728,29 @@ public class GlobalStateMgr {
     @VisibleForTesting
     public void processMvRelatedMeta() {
         long startMillis = System.currentTimeMillis();
+        List<MaterializedView> allMVs = new ArrayList<>();
         for (Database db : localMetastore.getIdToDb().values()) {
             for (MaterializedView mv : db.getMaterializedViews()) {
-                // set `postLoadImage` flag to true to indicate that this is called after image loading
-                mv.onReload(true);
+                allMVs.add(mv);
             }
         }
 
-        // we should reset reloaded flags after each round of reloading for all materializedViews
-        int count = 0;
-        for (Database db : localMetastore.getIdToDb().values()) {
-            for (MaterializedView mv : db.getMaterializedViews()) {
-                count++;
-                mv.setReloaded(false);
-            }
+        // Process in topological order
+        List<MaterializedView> topoOrder = Config.enable_mv_post_image_reload_cache ?
+                MaterializedViewDependencyGraph.buildTopologicalOrder(allMVs) : allMVs;
+        long topoBuildDuration = System.currentTimeMillis() - startMillis;
+
+        // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
+        boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
+        for (MaterializedView mv : topoOrder) {
+            // set `postLoadImage` flag to true to indicate that this is called after image loading
+            mv.onReload(isReloadAsync);
         }
 
         long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("finish processing all tables' related materialized views in {}ms, total mv count: {}", duration, count);
+        LOG.info("finish processing all tables' related materialized views in {}ms, " +
+                "isReLoadAsync:{}, total mv count: {}, topo mv order:{}, topo build cost(ms):{}", duration, isReloadAsync,
+                allMVs.size(), topoOrder.size(), topoBuildDuration);
     }
 
     public void loadHeader(DataInputStream dis) throws IOException {
@@ -2845,5 +2851,9 @@ public class GlobalStateMgr {
 
     public void setJwkMgr(JwkMgr jwkMgr) {
         this.jwkMgr = jwkMgr;
+    }
+
+    public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {
+        this.routineLoadMgr = routineLoadMgr;
     }
 }

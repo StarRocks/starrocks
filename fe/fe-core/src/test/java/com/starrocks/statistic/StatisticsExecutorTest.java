@@ -22,8 +22,8 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -40,6 +40,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -85,6 +87,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
     @Test
     public void testCollectStatisticSync(@Mocked StmtExecutor executor) throws Exception {
+        Config.internal_log_json_format = true;
         // mock
         MockUp<StmtExecutor> mock = new MockUp<StmtExecutor>() {
             @Mock
@@ -236,7 +239,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Table table = HiveTable.builder().setTableName("test_table").build();
         StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
                 database, table, List.of(), Lists.newArrayList("col1", "col2"),
-                Lists.newArrayList(Type.INT, Type.INT),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
 
         new MockUp<ExternalFullStatisticsCollectJob>() {
@@ -261,7 +264,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
         statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
                 database, table, List.of(), Lists.newArrayList("col1", "col3"),
-                Lists.newArrayList(Type.INT, Type.STRING),
+                Lists.newArrayList(IntegerType.INT, StringType.STRING),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
         statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false,
                 true /* resetWarehouse */);

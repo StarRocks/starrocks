@@ -217,6 +217,7 @@ set(STORAGE_FILES
     lake/lake_primary_key_recover.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
+    lake/tablet_writer.cpp
     load_spill_block_manager.cpp
     load_chunk_spiller.cpp
     sstable/block_builder.cpp
@@ -283,6 +284,6 @@ if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
 endif()
 
-add_library(Storage STATIC
+ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )

@@ -24,6 +24,16 @@
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
 
+#ifdef __APPLE__
+#include <signal.h>
+#ifndef SIGRTMIN
+#define SIGRTMIN (SIGUSR1)
+#endif
+#ifndef SYS_rt_tgsigqueueinfo
+#define SYS_rt_tgsigqueueinfo 0
+#endif
+#endif
+
 #include <thread>
 #include <tuple>
 
@@ -69,7 +79,7 @@ struct StackTraceTask {
             char buf[1024];
             bool success = false;
             // symbolize costs a lot of time, so mock it in test mode
-#ifndef BE_TEST
+#if !defined(BE_TEST) && !defined(__APPLE__)
             success = google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf));
 #else
             std::tuple<void*, char*, size_t> tuple = {addrs[i], buf, sizeof(buf)};
@@ -416,10 +426,10 @@ void __wrap___cxa_throw(void* thrown_exception, std::type_info* info, void (*des
 #elif defined(__GNUC__)
 void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
 #endif
+    // to avoid recursively throwing std::bad_alloc exception when check memory limit in memory tracker.
+    SCOPED_SET_CATCHED(false);
     auto print_level = ExceptionStackContext::get_instance()->get_level();
     if (print_level != 0) {
-        // to avoid recursively throwing std::bad_alloc exception when check memory limit in memory tracker.
-        SCOPED_SET_CATCHED(false);
         string exception_name = ExceptionStackContext::get_exception_name((void*)info);
         if ((print_level == 1 && ExceptionStackContext::get_instance()->prefix_in_white_list(exception_name)) ||
             print_level == -1 ||
@@ -439,7 +449,7 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
     }
     // call the real __cxa_throw():
 
-#if defined(ADDRESS_SANITIZER)
+#if defined(ADDRESS_SANITIZER) && !defined(__APPLE__)
     __interceptor___cxa_throw(thrown_exception, info, dest);
 #else
     __real___cxa_throw(thrown_exception, info, dest);

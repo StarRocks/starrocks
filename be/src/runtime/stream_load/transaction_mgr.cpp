@@ -347,7 +347,7 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
     if (ctx->body_sink != nullptr) {
         // 1. finish stream pipe & wait it done
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
-            ctx->buffer->flip();
+            ctx->buffer->flip_to_read();
             RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
             ctx->buffer = nullptr;
         }

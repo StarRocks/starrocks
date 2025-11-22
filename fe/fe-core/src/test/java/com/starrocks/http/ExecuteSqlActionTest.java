@@ -13,33 +13,48 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.awaitility.Awaitility;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @TestMethodOrder(MethodName.class)
 public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
 
+    @BeforeEach
+    @Override
+    public void setUp() throws Exception {
+        setUpWithCatalog();
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getDb(new ConnectContext(), "default_catalog", DB_NAME) != null);
+    }
+
     @Override
     protected void doSetUp() throws Exception {
+        Config.query_detail_explain_level = "NORMAL";
         MetricRepo.init();
         ExecuteEnv.setup();
     }
 
     @Test
     public void test1ExecuteSqlSuccess() throws Exception {
-        super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"query\" :  \"kill 1\" }");
 

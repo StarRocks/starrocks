@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
@@ -35,6 +34,7 @@ import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -46,8 +46,10 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.metrics.ScanReportParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,20 +68,25 @@ public class IcebergScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
     private CloudConfiguration cloudConfiguration = null;
-    protected TvrVersionRange tvrVersionRange;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private volatile boolean reachLimit = false;
     private int selectedPartitionCount = -1;
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
+    private PartitionIdGenerator partitionIdGenerator = null;
+    private IcebergMetricsReporter icebergScanMetricsReporter;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
+                           PartitionIdGenerator partitionIdGenerator) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
+        this.partitionIdGenerator = partitionIdGenerator;
+        this.icebergScanMetricsReporter = new IcebergMetricsReporter();
+        this.icebergTable.setIcebergMetricsReporter(icebergScanMetricsReporter);
         setupCloudCredential();
     }
 
@@ -140,7 +147,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, true);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true,
+                scanOptimizeOption.getCanUseMinMaxOpt());
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -180,7 +188,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
+                scanOptimizeOption.getCanUseMinMaxOpt());
     }
 
     private void setupCloudCredential() {
@@ -237,10 +246,6 @@ public class IcebergScanNode extends ScanNode {
     // for unit tests
     public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
-    }
-
-    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
-        this.tvrVersionRange = tvrVersionRange;
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -316,7 +321,6 @@ public class IcebergScanNode extends ScanNode {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
             // for global dict
             output.append(explainColumnDict(prefix));
-
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -349,6 +353,14 @@ public class IcebergScanNode extends ScanNode {
                     String.format("partitions=%s/%s", selectedPartitionCount,
                             partitionNames.isEmpty() ? 1 : partitionNames.size()));
             output.append("\n");
+
+            //record scan metrics, should cosume all scan ranges too.
+            //print scan metrics
+            if ((icebergScanMetricsReporter != null) && (icebergScanMetricsReporter.getScanReport() != null)) {
+                output.append(prefix).append("Iceberg Scan Metrics: \n");
+                output.append(prefix).append("\t").append(
+                        ScanReportParser.toJson(icebergScanMetricsReporter.getScanReport())).append("\n");
+            }
         }
 
         if (morParams.getScanTaskType() == IcebergMORParams.ScanTaskType.EQ_DELETE) {

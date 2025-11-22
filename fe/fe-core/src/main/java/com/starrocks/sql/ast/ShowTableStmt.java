@@ -15,21 +15,22 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLES
-public class ShowTableStmt extends ShowStmt {
+public class ShowTableStmt extends EnhancedShowStmt {
     private static final String NAME_COL_PREFIX = "Tables_in_";
     private static final String TYPE_COL = "Table_type";
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
@@ -84,18 +85,18 @@ public class ShowTableStmt extends ShowStmt {
         }
         // Columns
         SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"),
                 NAME_COL_PREFIX + db);
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, NAME_COL_PREFIX + db),
-                item.getExpr().clone(null));
+                item.getExpr().clone());
         if (isVerbose) {
             item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_TYPE"), TYPE_COL);
             selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
+            aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone());
         }
-        where = where.substitute(aliasMap);
+        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(
                 BinaryType.EQ,

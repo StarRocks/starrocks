@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -24,9 +25,9 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Arrays;
@@ -39,7 +40,7 @@ import static com.starrocks.common.util.Util.normalizeName;
 //
 // Syntax:
 //      SHOW MATERIALIZED VIEWS { FROM | IN } db
-public class ShowMaterializedViewsStmt extends ShowStmt {
+public class ShowMaterializedViewsStmt extends EnhancedShowStmt {
     private static final List<String> META_DATA = Arrays.asList(
             "id",
             "database_name",
@@ -132,20 +133,20 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
         }
         // Columns
         SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         for (String column : META_DATA) {
             if (ALIAS_MAP.containsKey(column)) {
                 SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, ALIAS_MAP.get(column)),
                         column);
                 selectList.addItem(item);
-                aliasMap.put(new SlotRef(null, column), item.getExpr().clone(null));
+                aliasMap.put(new SlotRef(null, column), item.getExpr().clone());
             } else {
                 SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, column), column);
                 selectList.addItem(item);
-                aliasMap.put(new SlotRef(null, column), item.getExpr().clone(null));
+                aliasMap.put(new SlotRef(null, column), item.getExpr().clone());
             }
         }
-        where = where.substitute(aliasMap);
+        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
 
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(

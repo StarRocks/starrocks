@@ -249,7 +249,7 @@ private:
 
     void _garbage_collection();
 
-    void _reset_mem_table();
+    Status _reset_mem_table();
 
     void _set_state(State state, const Status& st);
 

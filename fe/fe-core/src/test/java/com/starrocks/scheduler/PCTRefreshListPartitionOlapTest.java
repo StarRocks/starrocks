@@ -22,7 +22,8 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.common.Config;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -60,6 +61,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        Config.query_detail_explain_level = "NORMAL";
         MVTestBase.beforeClass();
         // table whose partitions have multiple values
         T1 = "CREATE TABLE t1 (\n" +
@@ -1565,11 +1567,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         executeInsertSql(sql2);
 
         List<String> s1PartitionNames = extractColumnValues(sql1, 0);
-        System.out.println(s1PartitionNames);
         addListPartition("s1", s1PartitionNames);
 
         List<String> s2PartitionNames = extractColumnValues(sql2, 0);
-        System.out.println(s2PartitionNames);
         addListPartition("s2", s2PartitionNames);
         starRocksAssert.withRefreshedMaterializedView(String.format("CREATE MATERIALIZED VIEW %s\n" +
                         "PARTITION BY col1\n" +

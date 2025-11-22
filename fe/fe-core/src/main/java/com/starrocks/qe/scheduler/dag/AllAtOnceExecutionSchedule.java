@@ -18,6 +18,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -41,11 +42,16 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
 
     class TracerContext implements AutoCloseable {
         Tracers savedTracers;
+        ConnectContext savedConnectContext;
 
-        TracerContext(Tracers currentTracers) {
+        TracerContext(Tracers currentTracers, ConnectContext connectContext) {
             if (currentTracers != null) {
                 savedTracers = Tracers.get();
                 Tracers.set(currentTracers);
+            }
+            if (connectContext != null) {
+                savedConnectContext = ConnectContext.get();
+                ConnectContext.set(connectContext);
             }
         }
 
@@ -54,6 +60,9 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
             if (savedTracers != null) {
                 Tracers.set(savedTracers);
             }
+            if (savedConnectContext != null) {
+                ConnectContext.set(savedConnectContext);
+            }
         }
     }
 
@@ -61,6 +70,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         List<DeployState> states;
         ExecutorService executorService;
         Tracers currentTracers;
+        ConnectContext currentConnectContext;
 
         DeployScanRangesTask(List<DeployState> states) {
             this.states = states;
@@ -71,7 +81,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
             if (cancelled || states.isEmpty()) {
                 return;
             }
-            try (TracerContext tracerContext = new TracerContext(currentTracers)) {
+            try (TracerContext tracerContext = new TracerContext(currentTracers, currentConnectContext)) {
                 runOnce();
             }
             // If run in the executor service, we need to start the next turn.
@@ -88,7 +98,8 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 for (DeployState state : states) {
                     deployer.deployFragments(state);
                 }
-            } catch (StarRocksException | RpcException e) {
+            } catch (Exception e) {
+                // there could be a lot of reasons to fail, just cancel the query
                 LOG.warn("Failed to assign incremental scan ranges to deploy states", e);
                 coordinator.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, e.getMessage());
                 throw new RuntimeException(e);
@@ -128,6 +139,7 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
         if (option.useQueryDeployExecutor) {
             deployScanRangesTask.executorService = GlobalStateMgr.getCurrentState().getQueryDeployExecutor();
             deployScanRangesTask.currentTracers = Tracers.get();
+            deployScanRangesTask.currentConnectContext = ConnectContext.get();
         }
     }
 

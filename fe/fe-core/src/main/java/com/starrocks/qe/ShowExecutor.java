@@ -45,16 +45,10 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.ActionSet;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.authorization.CatalogPEntryObject;
-import com.starrocks.authorization.DbPEntryObject;
 import com.starrocks.authorization.ObjectType;
-import com.starrocks.authorization.PrivilegeBuiltinConstants;
-import com.starrocks.authorization.PrivilegeEntry;
-import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.ShowGrantsExecutor;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -78,8 +72,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UserIdentity;
@@ -128,6 +122,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.meta.BlackListSql;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -149,7 +144,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -159,12 +153,11 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
-import com.starrocks.sql.ast.GrantRevokeClause;
-import com.starrocks.sql.ast.GrantType;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -234,13 +227,12 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRef;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -272,6 +264,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -451,8 +444,8 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitHelpStatement(HelpStmt statement, ConnectContext context) {
             ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("is_it_category", ScalarType.createVarchar(1)))
+                    .addColumn(new Column("name", TypeFactory.createVarchar(64)))
+                    .addColumn(new Column("is_it_category", TypeFactory.createVarchar(1)))
                     .build();
             return new ShowResultSet(metaData, EMPTY_SET);
         }
@@ -696,7 +689,7 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
-            String catalogName = statement.getCatalogName();
+            String catalogName = context.getCurrentCatalog();
             String dbName = statement.getDb();
             List<List<String>> rows = Lists.newArrayList();
 
@@ -766,8 +759,8 @@ public class ShowExecutor {
                                         }
 
                                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                                                .addColumn(new Column("Materialized View", TypeFactory.createVarchar(20)))
+                                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarchar(30)))
                                                 .build();
                                         return new ShowResultSet(showResultSetMetaData, rows);
                                     }
@@ -792,10 +785,10 @@ public class ShowExecutor {
                     rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
 
                     ShowResultSetMetaData showViewResultSetMeta = ShowResultSetMetaData.builder()
-                            .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                            .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                            .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                            .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
+                            .addColumn(new Column("View", TypeFactory.createVarchar(20)))
+                            .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
+                            .addColumn(new Column("character_set_client", TypeFactory.createVarchar(30)))
+                            .addColumn(new Column("collation_connection", TypeFactory.createVarchar(30)))
                             .build();
                     return new ShowResultSet(showViewResultSetMeta, rows);
                 } else if (table instanceof MaterializedView) {
@@ -807,17 +800,17 @@ public class ShowExecutor {
                         rows.add(Lists.newArrayList(table.getName(), sb, "utf8", "utf8_general_ci"));
 
                         ShowResultSetMetaData showViewResultSetMeta = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                                .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
-                                .addColumn(new Column("character_set_client", ScalarType.createVarchar(30)))
-                                .addColumn(new Column("collation_connection", ScalarType.createVarchar(30)))
+                                .addColumn(new Column("View", TypeFactory.createVarchar(20)))
+                                .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
+                                .addColumn(new Column("character_set_client", TypeFactory.createVarchar(30)))
+                                .addColumn(new Column("collation_connection", TypeFactory.createVarchar(30)))
                                 .build();
                         return new ShowResultSet(showViewResultSetMeta, rows);
                     } else {
                         rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
                         ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                                .addColumn(new Column("Materialized View", ScalarType.createVarchar(20)))
-                                .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
+                                .addColumn(new Column("Materialized View", TypeFactory.createVarchar(20)))
+                                .addColumn(new Column("Create Materialized View", TypeFactory.createVarchar(30)))
                                 .build();
                         return new ShowResultSet(showResultSetMetaData, rows);
                     }
@@ -854,8 +847,8 @@ public class ShowExecutor {
                 rows.add(Lists.newArrayList(tableName, createViewSql));
 
                 ShowResultSetMetaData showResultSetMetaData = ShowResultSetMetaData.builder()
-                        .addColumn(new Column("View", ScalarType.createVarchar(20)))
-                        .addColumn(new Column("Create View", ScalarType.createVarchar(30)))
+                        .addColumn(new Column("View", TypeFactory.createVarchar(20)))
+                        .addColumn(new Column("Create View", TypeFactory.createVarchar(30)))
                         .build();
                 return new ShowResultSet(showResultSetMetaData, rows);
             } else {
@@ -913,7 +906,8 @@ public class ShowExecutor {
                             row.add(tConnectionInfo.getIsPending());
                             row.add(tConnectionInfo.getWarehouse());
                             row.add(tConnectionInfo.getCngroup());
-
+                            row.add(tConnectionInfo.getCatalog());
+                            row.add(tConnectionInfo.getQueryId());
                             rowSet.add(row);
                         }
                     } catch (TException e) {
@@ -1066,7 +1060,7 @@ public class ShowExecutor {
             // Only success
             ShowResultSetMetaData showMetaData = statement.getIsVerbose() ? showResultMetaFactory.getMetadata(statement) :
                     ShowResultSetMetaData.builder()
-                            .addColumn(new Column("Function Name", ScalarType.createVarchar(256))).build();
+                            .addColumn(new Column("Function Name", TypeFactory.createVarchar(256))).build();
             return new ShowResultSet(showMetaData, resultRowSet);
         }
 
@@ -1122,7 +1116,7 @@ public class ShowExecutor {
                         defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
                     }
                     final String aggType = col.getAggregationType() == null
-                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
+                            || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().getSqlName();
                     if (statement.isVerbose()) {
                         // Field Type Collation Null Key Default Extra
                         // Privileges Comment
@@ -1320,7 +1314,7 @@ public class ShowExecutor {
             }
             if (routineLoadJob.getWhereExpr() != null) {
                 createRoutineLoadSql.append(",\nWHERE ");
-                createRoutineLoadSql.append(routineLoadJob.getWhereExpr().toSql());
+                createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
             }
 
             createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());
@@ -1460,9 +1454,17 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowDataDistributionStatement(ShowDataDistributionStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            if (dbName == null) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            }
+
             //check privilege
             try {
-                Authorizer.checkAnyActionOnTable(context, new TableName(statement.getDbName(), statement.getTblName()));
+                Authorizer.checkAnyActionOnTable(context, new TableName(dbName, statement.getTblName()));
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         context.getCurrentUserIdentity(),
@@ -1472,7 +1474,7 @@ public class ShowExecutor {
 
             List<List<String>> results;
             try {
-                results = MetadataViewer.getDataDistribution(statement);
+                results = MetadataViewer.getDataDistribution(dbName, statement.getTblName(), statement.getPartitionDef());
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -1920,7 +1922,7 @@ public class ShowExecutor {
                 BackupJob backupJob = (BackupJob) jobI;
 
                 // check privilege
-                List<TableRef> tableRefs = backupJob.getTableRef();
+                List<TableRefPersist> tableRefs = backupJob.getTableRef();
                 AtomicBoolean privilegeDeny = new AtomicBoolean(false);
                 tableRefs.forEach(tableRef -> {
                     TableName tableName = tableRef.getName();
@@ -2058,120 +2060,8 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
-            AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
-            try {
-                List<List<String>> infos = new ArrayList<>();
-                if (statement.getGrantType().equals(GrantType.ROLE)) {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(statement.getGroupOrRole());
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
-
-                    Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByRole(statement.getGroupOrRole());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(null, statement.getGroupOrRole()), typeToPrivilegeEntryList));
-                } else {
-                    UserRef user = statement.getUser();
-                    UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(userIdentity);
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
-
-                    if (!userIdentity.isEphemeral()) {
-                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList =
-                                authorizationManager.getTypeToPrivilegeEntryListByUser(userIdentity);
-                        infos.addAll(privilegeToRowString(authorizationManager,
-                                new GrantRevokeClause(statement.getUser(), null), typeToPrivilegeEntryList));
-                    }
-                }
-                return new ShowResultSet(showResultMetaFactory.getMetadata(statement), infos);
-            } catch (PrivilegeException e) {
-                throw new SemanticException(e.getMessage());
-            }
-        }
-
-        private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
-                                                        Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList)
-                throws PrivilegeException {
-            List<List<String>> infos = new ArrayList<>();
-            for (Map.Entry<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntry
-                    : typeToPrivilegeEntryList.entrySet()) {
-                for (PrivilegeEntry privilegeEntry : typeToPrivilegeEntry.getValue()) {
-                    ObjectType objectType = typeToPrivilegeEntry.getKey();
-                    String catalogName;
-                    try {
-                        catalogName = getCatalogNameFromPEntry(objectType, privilegeEntry);
-                    } catch (MetaNotFoundException e) {
-                        // ignore this entry
-                        continue;
-                    }
-                    List<String> info = new ArrayList<>();
-                    info.add(userOrRoleName.getRoleName() != null ?
-                            userOrRoleName.getRoleName() : userOrRoleName.getUser().toString());
-                    info.add(catalogName);
-
-                    GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(new ArrayList<>(), objectType.name(),
-                            userOrRoleName, null, privilegeEntry.isWithGrantOption());
-
-                    grantPrivilegeStmt.setObjectType(objectType);
-                    ActionSet actionSet = privilegeEntry.getActionSet();
-                    List<PrivilegeType> privList = authorizationManager.analyzeActionSet(objectType, actionSet);
-                    grantPrivilegeStmt.setPrivilegeTypes(privList);
-                    grantPrivilegeStmt.setObjectList(Lists.newArrayList(privilegeEntry.getObject()));
-
-                    try {
-                        info.add(AstToSQLBuilder.toSQL(grantPrivilegeStmt));
-                        infos.add(info);
-                    } catch (com.starrocks.sql.common.MetaNotFoundException e) {
-                        //Ignore the case of MetaNotFound in the show statement, such as metadata being deleted
-                    }
-                }
-            }
-
-            return infos;
-        }
-
-        private String getCatalogNameFromPEntry(ObjectType objectType, PrivilegeEntry privilegeEntry)
-                throws MetaNotFoundException {
-            if (objectType.equals(ObjectType.CATALOG)) {
-                CatalogPEntryObject catalogPEntryObject =
-                        (CatalogPEntryObject) privilegeEntry.getObject();
-                if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                    return null;
-                } else {
-                    return getCatalogNameById(catalogPEntryObject.getId());
-                }
-            } else if (objectType.equals(ObjectType.DATABASE)) {
-                DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
-                if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                    return null;
-                }
-                return getCatalogNameById(dbPEntryObject.getCatalogId());
-            } else if (objectType.equals(ObjectType.TABLE)) {
-                TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
-                if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                    return null;
-                }
-                return getCatalogNameById(tablePEntryObject.getCatalogId());
-            } else {
-                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            }
-        }
-
-        private String getCatalogNameById(long catalogId) throws MetaNotFoundException {
-            if (CatalogMgr.isInternalCatalog(catalogId)) {
-                return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-            }
-
-            CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-            Optional<Catalog> catalogOptional = catalogMgr.getCatalogById(catalogId);
-            if (!catalogOptional.isPresent()) {
-                throw new MetaNotFoundException("cannot find catalog");
-            }
-
-            return catalogOptional.get().getName();
+            ShowGrantsExecutor executor = new ShowGrantsExecutor();
+            return executor.execute(statement, context, showResultMetaFactory.getMetadata(statement));
         }
 
         @Override
@@ -2283,7 +2173,7 @@ public class ShowExecutor {
         public ShowResultSet visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
             List<List<String>> results;
             try {
-                results = MetadataViewer.getTabletStatus(statement);
+                results = MetadataViewer.getTabletStatus(statement, context);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -2295,7 +2185,22 @@ public class ShowExecutor {
                                                                         ConnectContext context) {
             List<List<String>> results;
             try {
-                results = MetadataViewer.getTabletDistribution(statement);
+                // Get database name from statement or context
+                String dbName = statement.getDbName();
+                if (dbName == null) {
+                    dbName = context.getDatabase();
+                }
+                
+                PartitionRef partitionRef = statement.getPartitionRef();
+                PartitionNames partitionNames = null;
+                if (partitionRef != null) {
+                    partitionNames = new PartitionNames(
+                            partitionRef.isTemp(),
+                            partitionRef.getPartitionNames(),
+                            partitionRef.getPos());
+                }
+                
+                results = MetadataViewer.getTabletDistribution(dbName, statement.getTblName(), partitionNames);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -3057,7 +2962,11 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            Predicate predicate = showStmt.getPredicate();
+            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
+                return rows;
+            }
+
+            Predicate predicate = sortedShowStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }

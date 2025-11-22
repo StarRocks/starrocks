@@ -45,6 +45,7 @@
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
+DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
@@ -160,6 +161,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
+#ifdef FIU_ENABLE
+                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
+#endif
+                    desc->add_observer(_runtime_state, &_observer);
                 }
             }
 
@@ -328,7 +333,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
                     curr_op->common_metrics()->add_info_string("ErrorMsg", std::string(return_status.message()));
-                    LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
+                    LOG_IF(WARNING, !return_status.is_suppressed())
+                            << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
 
@@ -754,7 +760,7 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
-    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx, true);
+    auto timer = std::make_unique<RFScanWaitTimeout>(true);
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);

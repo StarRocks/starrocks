@@ -787,6 +787,8 @@ struct TAuditStatistics {
     8: optional i64 spill_bytes
     10: optional i64 transmitted_bytes
     9: optional list<TAuditStatisticsItem> stats_items
+    11: optional i64 read_local_cnt
+    12: optional i64 read_remote_cnt
 }
 
 struct TReportAuditStatisticsParams {
@@ -1988,7 +1990,9 @@ struct TConnectionInfo {
     9: optional string info;
     10: optional string isPending;
     11: optional string warehouse;
-	12: optional string cngroup;
+    12: optional string cngroup;
+    13: optional string catalog;
+    14: optional string queryId;
 }
 
 struct TListConnectionResponse {
@@ -2191,6 +2195,14 @@ struct TDynamicTabletJobsResponse {
     2: optional list<TDynamicTabletJobsItem> items;
 }
 
+struct TRefreshConnectionsRequest {
+    1: optional bool force;
+}
+
+struct TRefreshConnectionsResponse {
+    1: optional Status.TStatus status;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2335,5 +2347,7 @@ service FrontendService {
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
     TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
+
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
 }
 

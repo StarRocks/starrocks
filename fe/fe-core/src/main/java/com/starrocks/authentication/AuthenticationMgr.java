@@ -25,7 +25,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -611,12 +610,22 @@ public class AuthenticationMgr {
     // ---------------------------------------- Group Provider Statement --------------------------------------
 
     public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        // Check if group provider already exists
+        if (this.nameToGroupProviderMap.containsKey(stmt.getName())) {
+            if (stmt.isIfNotExists()) {
+                // If IF NOT EXISTS is specified, silently return without error
+                return;
+            } else {
+                throw new DdlException("Group provider '" + stmt.getName() + "' already exists");
+            }
+        }
+
         GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
         groupProvider.init();
-        this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER,
-                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateGroupProvider(
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()),
+                wal -> nameToGroupProviderMap.put(stmt.getName(), groupProvider));
     }
 
     public void replayCreateGroupProvider(String name, Map<String, String> properties) {
@@ -629,12 +638,22 @@ public class AuthenticationMgr {
         }
     }
 
-    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
-        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(stmt.getName());
+    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.get(stmt.getName());
+        if (groupProvider == null) {
+            if (stmt.isIfExists()) {
+                // If IF EXISTS is specified, silently return without error
+                return;
+            } else {
+                throw new DdlException("Group provider '" + stmt.getName() + "' does not exist");
+            }
+        }
+
         groupProvider.destroy();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
-                new GroupProviderLog(stmt.getName(), null));
+        GlobalStateMgr.getCurrentState().getEditLog().logDropGroupProvider(
+                new GroupProviderLog(stmt.getName(), null),
+                wal -> nameToGroupProviderMap.remove(stmt.getName()));
     }
 
     public void replayDropGroupProvider(String name) {

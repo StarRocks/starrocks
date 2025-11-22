@@ -35,12 +35,15 @@ namespace starrocks::lake {
 Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
+    int64_t input_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
         _total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         // do not check `is_overlapped`, we want actual segment count here
         _context->stats->read_segment_count += rowset->num_segments();
+        // real input bytes, which need to remove deleted rows
+        input_bytes += rowset->data_size_after_deletion();
     }
 
     const auto& store_paths = ExecEnv::GetInstance()->store_paths();
@@ -54,6 +57,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
                                                                  true /** is compaction**/, _tablet_schema));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
+
+    if (should_enable_pk_parallel_execution(input_bytes)) {
+        writer->try_enable_pk_parallel_execution();
+    }
 
     std::vector<std::vector<uint32_t>> column_groups;
     CompactionUtils::split_column_into_groups(_tablet_schema->num_columns(), _tablet_schema->sort_key_idxes(),

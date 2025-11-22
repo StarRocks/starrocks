@@ -21,6 +21,7 @@
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
@@ -121,7 +122,7 @@ void LakeDataSource::close(RuntimeState* state) {
     if (_reader) {
         // close reader to update statistics before update counters
         _reader->close();
-        update_counter();
+        update_counter(state);
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -133,8 +134,9 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
-    auto* chunk_ptr = chunk->get();
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
@@ -374,8 +376,9 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         _params.plan_node_id = _morsel->get_plan_node_id();
         _params.scan_range = _morsel->get_scan_range();
     }
-    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema), need_split,
-                                                 _provider->could_split_physically(), _morsel->rowsets()));
+    ASSIGN_OR_RETURN(_reader,
+                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically(),
+                                        _morsel->rowsets(), _tablet_schema));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -470,6 +473,28 @@ Status LakeDataSource::init_column_access_paths(Schema* schema) {
             }
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
+        }
+    }
+    // Preserve access paths referenced by extended columns even if not selected by pushdown
+    {
+        std::unordered_set<const ColumnAccessPath*> kept;
+        kept.reserve(new_one.size());
+        for (const auto& p : new_one) kept.insert(p.get());
+
+        for (size_t i = 0; i < _tablet_schema->num_columns(); ++i) {
+            const auto& col = _tablet_schema->column(i);
+            if (!col.is_extended() || col.extended_info() == nullptr || col.extended_info()->access_path == nullptr) {
+                continue;
+            }
+            const ColumnAccessPath* needed = col.extended_info()->access_path;
+            if (kept.find(needed) != kept.end()) continue;
+            for (auto& owned : _column_access_paths) {
+                if (owned.get() == needed) {
+                    new_one.emplace_back(std::move(owned));
+                    kept.insert(needed);
+                    break;
+                }
+            }
         }
     }
     _column_access_paths = std::move(new_one);
@@ -602,7 +627,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
-    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 
@@ -673,7 +698,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
-void LakeDataSource::update_counter() {
+void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
@@ -868,6 +893,9 @@ void LakeDataSource::update_counter() {
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
+    if (state && state->query_ctx()) {
+        state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);
     }
 }
 

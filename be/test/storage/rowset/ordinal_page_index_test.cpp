@@ -40,7 +40,7 @@
 #include <memory>
 #include <string>
 
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_tracker.h"

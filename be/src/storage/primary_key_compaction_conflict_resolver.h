@@ -25,6 +25,7 @@ namespace starrocks {
 class DelvecLoader;
 class Schema;
 class PrimaryIndex;
+class Segment;
 
 struct CompactConflictResolveParams {
     int64_t tablet_id = 0;
@@ -45,8 +46,15 @@ public:
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>&
                     handler) = 0;
+    // This function won't read data from each segment files. Only need to get segment's row count.
+    virtual Status segment_iterator(
+            const std::function<
+                    Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
+                           const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) = 0;
 
     Status execute();
+
+    Status execute_without_update_index();
 };
 
 } // namespace starrocks

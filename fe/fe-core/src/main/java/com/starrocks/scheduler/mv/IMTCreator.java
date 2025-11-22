@@ -26,6 +26,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -34,7 +35,6 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.UnsupportedException;
@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -200,10 +201,14 @@ class IMTCreator {
                     keyColumns.add(newColumn);
                 }
 
-                TypeDef typeDef = TypeDef.create(refOp.getType().getPrimitiveType());
-                ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef);
-                columnDef.setIsKey(isKey);
-                columnDef.setAllowNull(!isKey);
+                TypeDef typeDef = new TypeDef(TypeFactory.createType(refOp.getType().getPrimitiveType()));
+                ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef,
+                        /* isKey */ isKey,
+                        /* aggregateType */ null,
+                        /* aggStateDesc */ null,
+                        /* isAllowNull */ !isKey,
+                        /* defaultValueDef */ ColumnDef.DefaultValueDef.NOT_SET,
+                        /* comment */ "");
                 columnDefs.add(columnDef);
             }
 

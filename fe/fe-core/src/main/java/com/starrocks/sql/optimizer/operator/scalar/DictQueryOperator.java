@@ -17,8 +17,8 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.thrift.TDictQueryExpr;
+import com.starrocks.type.Type;
 
 import java.util.List;
 

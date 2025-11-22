@@ -54,8 +54,8 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -107,8 +107,6 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
-import com.starrocks.persist.DeleteSqlBlackLists;
-import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
@@ -167,6 +165,7 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -180,6 +179,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
@@ -199,7 +199,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
@@ -210,6 +209,7 @@ import com.starrocks.sql.ast.warehouse.SetWarehouseStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -253,6 +253,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -286,7 +287,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
 
 // Do one COM_QUERY process.
@@ -315,11 +316,10 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
-    private boolean statisticsConsumed = false;
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
-    private PrepareStmtContext prepareStmtContext;
+    private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
 
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
@@ -327,6 +327,10 @@ public class StmtExecutor {
     }
 
     public static StmtExecutor newInternalExecutor(ConnectContext ctx, StatementBase parsedStmt) {
+        // Set query source to INTERNAL for system/internal queries only if not already set
+        if (ctx.getQuerySource().equals(QueryDetail.QuerySource.EXTERNAL)) {
+            ctx.setQuerySource(QueryDetail.QuerySource.INTERNAL);
+        }
         return new StmtExecutor(ctx, parsedStmt, true);
     }
 
@@ -377,6 +381,9 @@ public class StmtExecutor {
         // Add some import variables in profile
         SessionVariable variables = context.getSessionVariable();
         if (variables != null) {
+            // Add SQL dialect as a separate info string
+            summaryProfile.addInfoString(ProfileManager.SQL_DIALECT, variables.getSqlDialect());
+
             StringBuilder sb = new StringBuilder();
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
@@ -457,6 +464,12 @@ public class StmtExecutor {
             }
         }
 
+        // keep explicit transaction semantics consistent: let the leader run any read statements so it can enforce
+        // validation (for example, checking tables already modified in the same transaction)
+        if (context != null && context.getTxnId() != 0 && context.isQueryStmt(parsedStmt)) {
+            return true;
+        }
+
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if (parsedStmt instanceof QueryStatement) {
             // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
@@ -511,6 +524,26 @@ public class StmtExecutor {
 
     public StatementBase getParsedStmt() {
         return parsedStmt;
+    }
+
+    public String getPreparedStmtId() {
+        // For EXECUTE, either `parsedStmt` is an `ExecuteStmt`, or `prepareStmtContext` has already been set.
+        // Initially, `parsedStmt` is an `ExecuteStmt`. After it matches the corresponding `PrepareStmt`, `parsedStmt` is replaced
+        // with a `QueryStatement`, while `prepareStmtContext` stores the associated `PrepareStmt` information.
+        if (parsedStmt != null && parsedStmt instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
+            return executeStmt.getStmtName();
+        }
+        if (prepareStmtContext != null) {
+            return prepareStmtContext.getStmt().getName();
+        }
+
+        // For PREPARE.
+        if (parsedStmt != null && parsedStmt instanceof PrepareStmt) {
+            PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
+            return prepareStmt.getName();
+        }
+        return null;
     }
 
     public int getExecTimeout() {
@@ -568,11 +601,11 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     context.getDumpInfo().setStatement(parsedStmt);
                 }
-                if (parsedStmt instanceof ShowStmt) {
+                if (parsedStmt instanceof EnhancedShowStmt) {
                     com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     Authorizer.check(parsedStmt, context);
 
-                    QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                    QueryStatement selectStmt = ((EnhancedShowStmt) parsedStmt).toSelectStmt();
                     if (selectStmt != null) {
                         parsedStmt = selectStmt;
                         execPlan = StatementPlanner.plan(parsedStmt, context);
@@ -656,7 +689,7 @@ public class StmtExecutor {
         }
 
         try {
-            context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
+            context.getState().setIsQuery(context.isQueryStmt(parsedStmt));
             if (parsedStmt.isExistQueryScopeHint()) {
                 processQueryScopeHint();
             }
@@ -776,7 +809,7 @@ public class StmtExecutor {
                                 String queryId = DebugUtil.printId(context.getExecutionId());
                                 ProfileManager.getInstance().removeProfile(queryId);
                                 // reset compute resource
-                                context.tryAcquireResource(true);
+                                context.ensureCurrentComputeResourceAvailable();
                             } else {
                                 // Release all resources after the query finish as soon as possible, as query profile is
                                 // asynchronous which can be delayed a long time.
@@ -818,6 +851,8 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
+            } else if (parsedStmt instanceof RefreshConnectionsStmt) {
+                handleRefreshConnectionsStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
             } else if (parsedStmt instanceof SetWarehouseStmt) {
@@ -894,6 +929,15 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+        } catch (LargeInPredicateException e) {
+            // Re-throw LargeInPredicateException to trigger a full retry from parser stage
+            // The query will be re-parsed and re-executed with enable_large_in_predicate=false
+            // to use the traditional expression-based approach instead of raw constant optimization
+            String sql = originStmt != null ? originStmt.originStmt : "";
+            String truncatedSql = sql.length() > 200 ? sql.substring(0, 200) + "..." : sql;
+            LOG.error("LargeInPredicate optimization failed, sql: {}, error: {}. Will retry with" +
+                    " enable_large_in_predicate=false.", truncatedSql, e.getMessage());
+            throw e;
         } catch (StarRocksException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
@@ -959,6 +1003,8 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addScanBytes(execStats.getScanBytes() != null ? execStats.getScanBytes() : 0);
         context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
         context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);
+        context.getAuditEventBuilder().addReadLocalCnt(execStats.readLocalCnt != null ? execStats.readLocalCnt : 0);
+        context.getAuditEventBuilder().addReadRemoteCnt(execStats.readRemoteCnt != null ? execStats.readRemoteCnt : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
         context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
     }
@@ -1345,6 +1391,18 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
+    // Process refresh connections statement.
+    private void handleRefreshConnectionsStmt() {
+        try {
+            RefreshConnectionsStmt stmt = (RefreshConnectionsStmt) parsedStmt;
+            GlobalStateMgr.getCurrentState().getVariableMgr().refreshConnections(stmt.isForce());
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
     private Coordinator.Factory getCoordinatorFactory() {
         return new DefaultCoordinator.Factory();
     }
@@ -1387,8 +1445,9 @@ public class StmtExecutor {
             }
         }
 
+        // TODO(liuzihe): support execute in FE for Arrow Flight SQL.
         boolean executeInFe = !isExplainAnalyze && !isSchedulerExplain && !isOutfileQuery
-                && canExecuteInFe(context, execPlan.getPhysicalPlan());
+                && canExecuteInFe(context, execPlan.getPhysicalPlan()) && !(context instanceof ArrowFlightSqlConnectContext);
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
@@ -1415,7 +1474,7 @@ public class StmtExecutor {
         if (executeInFe) {
             coord = new FeExecuteCoordinator(context, execPlan);
         } else {
-            coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
+            coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable, execPlan);
         }
 
         // Predict the cost of this query
@@ -1494,7 +1553,12 @@ public class StmtExecutor {
         }
 
         if (context instanceof ArrowFlightSqlConnectContext) {
-            coord.join(0);
+            coord.join(context.getSessionVariable().getQueryTimeoutS());
+            if (!isOutfileQuery) {
+                context.getState().setEof();
+            }
+            // TODO(liuzihe): process query statistics for Arrow Flight SQL. For now query statistics is passed by the final
+            //  batch, so we need to change the implementation to support Arrow Flight SQL.
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
@@ -1879,32 +1943,15 @@ public class StmtExecutor {
             throw new SemanticException("Sql pattern cannot be empty");
         }
 
-        long id = GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(id, sqlPattern.pattern()));
+        GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
     }
 
     private void handleDelSqlBlackListStmt() {
-        DelSqlBlackListStmt delSqlBlackListStmt = (DelSqlBlackListStmt) parsedStmt;
-        List<Long> indexs = delSqlBlackListStmt.getIndexs();
-        if (indexs != null) {
-            for (long id : indexs) {
-                GlobalStateMgr.getCurrentState().getSqlBlackList().delete(id);
-            }
-            GlobalStateMgr.getCurrentState().getEditLog()
-                    .logDeleteSQLBlackList(new DeleteSqlBlackLists(indexs));
-        }
+        GlobalStateMgr.getCurrentState().getSqlBlackList().deleteBlackSql((DelSqlBlackListStmt) parsedStmt);
     }
 
     private void handleAddBackendBlackListStmt() throws StarRocksException {
-        AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
-        Authorizer.check(addBackendBlackListStmt, context);
-        for (Long beId : addBackendBlackListStmt.getBackendIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            if (sis.getBackend(beId) == null) {
-                throw new StarRocksException("Not found backend: " + beId);
-            }
-            SimpleScheduler.getHostBlacklist().addByManual(beId);
-        }
+        GlobalStateMgr.getCurrentState().getSqlBlackList().addBlackSql((AddBackendBlackListStmt) parsedStmt, context);
     }
 
     private void handleDelBackendBlackListStmt() throws StarRocksException {
@@ -2143,7 +2190,7 @@ public class StmtExecutor {
 
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
-                        .addColumn(new Column("Explain String", ScalarType.createVarchar(20)))
+                        .addColumn(new Column("Explain String", TypeFactory.createVarchar(20)))
                         .build();
         sendMetaData(metaData);
 
@@ -2382,46 +2429,34 @@ public class StmtExecutor {
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        // for one StmtExecutor, only consume PQueryStatistics once
-        // so call getQueryStatisticsForAuditLog will return a emtpy PQueryStatistics if this is not the first call
-        if (statisticsConsumed) {
-            // create a empty PQueryStatistics
-            PQueryStatistics stats = normalizeQueryStatistics(null);
-            statisticsForAuditLog = stats;
-            return stats;
+        if (statisticsForAuditLog == null && coord != null) {
+            statisticsForAuditLog = coord.getAuditStatistics();
         }
-
-        PQueryStatistics stats = statisticsForAuditLog;
-        if (stats == null && coord != null) {
-            // for insert stmt
-            stats = coord.getAuditStatistics();
+        if (statisticsForAuditLog == null) {
+            statisticsForAuditLog = new PQueryStatistics();
         }
-
-        stats = normalizeQueryStatistics(stats);
-
-        statisticsForAuditLog = stats;
-        statisticsConsumed = true;
-        return stats;
-    }
-
-    private PQueryStatistics normalizeQueryStatistics(PQueryStatistics stats) {
-        PQueryStatistics normalized = (stats != null) ? stats : new PQueryStatistics();
-        if (normalized.scanBytes == null) {
-            normalized.scanBytes = 0L;
+        if (statisticsForAuditLog.scanBytes == null) {
+            statisticsForAuditLog.scanBytes = 0L;
         }
-        if (normalized.scanRows == null) {
-            normalized.scanRows = 0L;
+        if (statisticsForAuditLog.scanRows == null) {
+            statisticsForAuditLog.scanRows = 0L;
         }
-        if (normalized.cpuCostNs == null) {
-            normalized.cpuCostNs = 0L;
+        if (statisticsForAuditLog.cpuCostNs == null) {
+            statisticsForAuditLog.cpuCostNs = 0L;
         }
-        if (normalized.memCostBytes == null) {
-            normalized.memCostBytes = 0L;
+        if (statisticsForAuditLog.memCostBytes == null) {
+            statisticsForAuditLog.memCostBytes = 0L;
         }
-        if (normalized.spillBytes == null) {
-            normalized.spillBytes = 0L;
+        if (statisticsForAuditLog.spillBytes == null) {
+            statisticsForAuditLog.spillBytes = 0L;
         }
-        return normalized;
+        if (statisticsForAuditLog.readLocalCnt == null) {
+            statisticsForAuditLog.readLocalCnt = 0L;
+        }
+        if (statisticsForAuditLog.readRemoteCnt == null) {
+            statisticsForAuditLog.readRemoteCnt = 0L;
+        }
+        return statisticsForAuditLog;
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
@@ -2442,7 +2477,7 @@ public class StmtExecutor {
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, db.getId(), olapTable.getId(), context.getCurrentWarehouseId(),
                 insertStmt.isDynamicOverwrite());
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, olapTable.getId(), LockType.WRITE)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
@@ -2452,7 +2487,7 @@ public class StmtExecutor {
                     job.isDynamicOverwrite());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
@@ -2616,7 +2651,7 @@ public class StmtExecutor {
         String trackingSql = "";
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
-                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                    context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean needQuery = false;
@@ -2814,12 +2849,17 @@ public class StmtExecutor {
                         commitInfo.setIs_overwrite(true);
                     }
                 }
+
                 IcebergTableSink sink = (IcebergTableSink) execPlan.getFragments().get(0).getSink();
                 IcebergMetadata.IcebergSinkExtra extra = null;
                 extra = fillRewriteFiles(stmt, execPlan, commitInfos, extra);
-
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                        catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                if (context.getSkipFinishSink()) {
+                    context.getFinishSinkHandler()
+                            .finish(catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                } else {
+                    context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                            catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                }
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
             } else if (targetTable.isHiveTable()) {
@@ -2984,7 +3024,6 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
-            recordExecStatsIntoContext();
         }
 
         String errMsg = "";
@@ -3043,7 +3082,7 @@ public class StmtExecutor {
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
 
             coord = getCoordinatorFactory().createQueryScheduler(
-                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 
             coord.exec();
@@ -3103,7 +3142,7 @@ public class StmtExecutor {
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = getCoordinatorFactory().createQueryScheduler(
-                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift(), plan);
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 
             coord.exec();
@@ -3156,8 +3195,8 @@ public class StmtExecutor {
         }
 
         boolean isQuery = context.isQueryStmt(parsedStmt);
-        QueryDetail queryDetail = new QueryDetail(
 
+        QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
                 context.connectionId,
@@ -3169,7 +3208,11 @@ public class StmtExecutor {
                 context.getQualifiedUser(),
                 Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
                 context.getCurrentWarehouseName(),
-                context.getCurrentCatalog());
+                context.getCurrentCatalog(),
+                context.getCommandStr(),
+                getPreparedStmtId());
+        // Set query source from context
+        queryDetail.setQuerySource(context.getQuerySource());
         context.setQueryDetail(queryDetail);
         // copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -3223,6 +3266,8 @@ public class StmtExecutor {
             queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+            queryDetail.calculateCacheMissRatio(statistics.readLocalCnt == null ? 0 : statistics.readLocalCnt,
+                    statistics.readRemoteCnt == null ? 0 : statistics.readRemoteCnt);
         }
         queryDetail.setCatalog(ctx.getCurrentCatalog());
 

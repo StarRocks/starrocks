@@ -31,6 +31,8 @@ public class MaterializedViewExceptions {
 
     public static final String INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED = "metadata backup/restore mv corrupted:";
 
+    public static final String INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES = "mv consecutive failures: ";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -69,7 +71,7 @@ public class MaterializedViewExceptions {
         return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
     }
 
-    public static String inactiveReasonForBaseTableActive(String tableName) {
+    public static String inactiveReasonForBaseTableInActive(String tableName) {
         return "base-mv inactive: " + tableName;
     }
 
@@ -95,5 +97,9 @@ public class MaterializedViewExceptions {
 
     public static SemanticException reportBaseTableNotExists(String tableName) {
         return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
+    }
+
+    public static String inactiveReasonForConsecutiveFailures(String mvName) {
+        return INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES + mvName;
     }
 }

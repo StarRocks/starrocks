@@ -42,7 +42,7 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(AuthenticationContext authContext, UserIdentity userIdentity, byte[] authResponse)
+    public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         /*
           If the auth plugin used by the client for this authentication is not AUTHENTICATION_OAUTH2_CLIENT,
@@ -80,7 +80,7 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authMoreDataPacket(AuthenticationContext authContext, String user, String host) {
+    public byte[] authMoreDataPacket(AccessControlContext authContext, String user, String host) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         byte[] bytes = oAuth2Context.authServerUrl().getBytes(StandardCharsets.UTF_8);
         MysqlCodec.writeInt2(outputStream, bytes.length);
@@ -98,12 +98,12 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public byte[] authSwitchRequestPacket(AuthenticationContext authContext, String user, String host) {
+    public byte[] authSwitchRequestPacket(AccessControlContext authContext, String user, String host) {
         return authMoreDataPacket(authContext, user, host);
     }
 
     @Override
-    public void checkLoginSuccess(int connectionId, AuthenticationContext context) throws AuthenticationException {
+    public void checkLoginSuccess(int connectionId, AccessControlContext context) throws AuthenticationException {
         if (context.getAuthToken() == null) {
             String authUrl = oAuth2Context.authServerUrl() +
                     "?response_type=code" +

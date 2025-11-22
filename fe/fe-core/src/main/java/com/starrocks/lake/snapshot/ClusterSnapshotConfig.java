@@ -29,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.base.Preconditions;
+import com.starrocks.server.WarehouseManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -145,6 +146,12 @@ public class ClusterSnapshotConfig {
         @JsonProperty("heartbeat_service_port")
         private int heartbeatServicePort;
 
+        @JsonProperty("warehouse")
+        private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+
+        @JsonProperty("cngroup")
+        private String cngroup;
+
         public String getHost() {
             return host;
         }
@@ -161,9 +168,26 @@ public class ClusterSnapshotConfig {
             this.heartbeatServicePort = heartbeatServicePort;
         }
 
+        public String getWarehouse() {
+            return warehouse;
+        }
+
+        public void setWarehouse(String warehouse) {
+            this.warehouse = warehouse;
+        }
+
+        public String getCNGroup() {
+            return cngroup;
+        }
+
+        public void setCNGroup(String cngroup) {
+            this.cngroup = cngroup;
+        }
+
         @Override
         public String toString() {
-            return "ComputeNode [host=" + host + ", heartbeatServicePort=" + heartbeatServicePort + "]";
+            return "ComputeNode [host=" + host + ", heartbeatServicePort=" + heartbeatServicePort +
+                    ", warehouse=" + warehouse + ", cngroup=" + cngroup + "]";
         }
     }
 

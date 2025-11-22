@@ -40,6 +40,7 @@ select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from w1;
 
 
 alter resource group rg_${uuid0} with ('big_query_cpu_second_limit'='0','big_query_scan_rows_limit'='1');
+set enable_rewrite_simple_agg_to_meta_scan = false;
 select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from t1;
 
 

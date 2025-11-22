@@ -46,6 +46,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -2035,6 +2036,23 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
     }
 
+
+    @Test
+    public void testListMVWithIcebergTable5() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY ds \n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, date_trunc('month', ts) as ds  " +
+                " FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
+        final MaterializedView mv = getMv(mvName);
+        Assertions.assertTrue(mv.getPartitionInfo().isListPartition());
+    }
+
     @Test
     public void testRefBaseTablePartitionWithTransform() throws Exception {
         final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
@@ -2050,6 +2068,40 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         connectContext);
         MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
         Assertions.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
+    }
+
+    @Test
+    public void testRefBaseTablePartitionWithTransform2() throws Exception {
+        final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY ds\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, date_trunc('month', ts) as ds  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;";
+        CreateMaterializedViewStatement stmt =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                        connectContext);
+        MaterializedViewAnalyzer.analyze(stmt, starRocksAssert.getCtx());
+        Assertions.assertTrue(stmt.isRefBaseTablePartitionWithTransform());
+    }
+
+    @Test
+    public void testRefBaseTablePartitionWithTransform3() throws Exception {
+        final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY ds\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n," +
+                "\"partition_retention_condition\" = \"ds >= current_date() - interval 1 month\"\n" +
+                ")\n" +
+                "AS SELECT id, data, date_trunc('month', ts) as ds  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;";
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = getMv("test", "test_mv1");
+        String reason = mv.getInactiveReason();
+        Assertions.assertNull(reason);
     }
 
     @Test

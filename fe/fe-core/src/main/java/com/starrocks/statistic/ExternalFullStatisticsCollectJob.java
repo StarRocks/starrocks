@@ -16,22 +16,26 @@
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -45,11 +49,14 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
@@ -57,8 +64,10 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.PartitionUtil.ICEBERG_DEFAULT_PARTITION;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
 
 public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
@@ -79,6 +88,9 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     protected List<String> partitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    // Skip collecting statistics for default partition in iceberg table,
+    // because we can not generate partition predicates for it.
+    private static final Set<String> DO_NOT_COLLECT_PARTITIONS = Set.of(ICEBERG_DEFAULT_PARTITION);
 
     public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
                                             List<String> columnNames, List<Type> columnTypes,
@@ -139,6 +151,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         List<String> totalQuerySQL = new ArrayList<>();
         for (String partitionName : partitionNames) {
             for (int i = 0; i < columnNames.size(); i++) {
+                if (DO_NOT_COLLECT_PARTITIONS.contains(partitionName)) {
+                    LOG.info("Skip collect full statistics for partition: {} in table: {}",
+                            partitionName, table.getName());
+                    continue;
+                }
                 totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partitionName, columnNames.get(i),
                         columnTypes.get(i)));
             }
@@ -166,8 +183,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
         // all table now, partition later
-        context.put("partitionNameStr", PartitionUtil.normalizePartitionName(partitionName,
-                table.getPartitionColumnNames(), nullValue));
+        context.put("partitionNameStr", table.isIcebergTable() ? partitionName :
+                PartitionUtil.normalizePartitionName(partitionName, table.getPartitionColumnNames(), nullValue));
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
         context.put("dbName", db.getOriginName());
@@ -189,21 +206,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         if (table.isUnPartitioned()) {
             context.put("partitionPredicate", "1=1");
         } else {
-            List<String> partitionColumnNames = table.getPartitionColumnNames();
-            List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
-            List<String> partitionPredicate = Lists.newArrayList();
-            for (int i = 0; i < partitionColumnNames.size(); i++) {
-                String partitionColumnName = partitionColumnNames.get(i);
-                String partitionValue = partitionValues.get(i);
-                if (partitionValue.equals(nullValue)) {
-                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
-                } else if (isSupportedPartitionTransform(partitionColumnName)) {
-                    partitionPredicate.add(IcebergPartitionUtils.convertPartitionFieldToPredicate((IcebergTable) table,
-                            partitionColumnName, partitionValue));
-                } else {
-                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
-                }
-            }
+            List<String> partitionPredicate = generatePartitionPredicates(table, partitionName, nullValue);
             context.put("partitionPredicate", Joiner.on(" AND ").join(partitionPredicate));
         }
 
@@ -211,25 +214,68 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         return builder.toString();
     }
 
+    private List<String> generatePartitionPredicates(Table table, String partitionName, String nullValue) {
+        if (table.isIcebergTable()) {
+            return generatePartitionPredicatesForIcebergTable((IcebergTable) table, partitionName);
+        }
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+        List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+        List<String> partitionPredicate = Lists.newArrayList();
+        for (int i = 0; i < partitionColumnNames.size(); i++) {
+            String partitionColumnName = partitionColumnNames.get(i);
+            String partitionValue = partitionValues.get(i);
+            if (partitionValue.equals(nullValue)) {
+                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+            } else {
+                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+            }
+        }
+        return partitionPredicate;
+    }
+
+    private List<String> generatePartitionPredicatesForIcebergTable(IcebergTable table, String partitionName) {
+        List<PartitionInfo> partitionInfos = IcebergPartitionTraits.build(table).
+                getPartitions(Lists.newArrayList(partitionName));
+        Preconditions.checkArgument(partitionInfos.size() == 1,
+                "Partition %s not found in table %s", partitionName, table.getName());
+        Partition partition = (Partition) partitionInfos.get(0);
+        PartitionSpec spec = table.getNativeTable().specs().get(partition.getSpecId());
+        if (spec == null) {
+            // Fallback to current spec when the provided specId is not found
+            spec = table.getNativeTable().spec();
+        }
+
+        Schema schema = spec.schema();
+        List<PartitionField> partitionFields = spec.fields();
+        List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+        if (partitionValues.size() != partitionFields.size()) {
+            throw new StarRocksConnectorException("Partition values size %s not match spec fields size %s in %s",
+                    partitionValues.size(), partitionFields.size(), partitionName);
+        }
+
+        List<String> partitionPredicate = Lists.newArrayList();
+        for (int i = 0; i < partitionFields.size(); i++) {
+            PartitionField field = partitionFields.get(i);
+            String partitionColumnName = schema.findColumnName(field.sourceId());
+            String partitionValue = partitionValues.get(i);
+            if (partitionValue.equals(IcebergApiConverter.PARTITION_NULL_VALUE)) {
+                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+            } else if (isSupportedPartitionTransform(field)) {
+                partitionPredicate.add(IcebergPartitionUtils.convertPartitionTransformToPredicate(table, field,
+                        partitionColumnName, partitionValue));
+            } else {
+                partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
+            }
+        }
+        return partitionPredicate;
+    }
+
     // only iceberg table support partition transform
     // now only support identity/year/month/day/hour transform
-    boolean isSupportedPartitionTransform(String partitionColumn) {
+    boolean isSupportedPartitionTransform(PartitionField partitionField) {
         // only iceberg table support partition transform
         if (!table.isIcebergTable()) {
             return false;
-        }
-        IcebergTable icebergTable = (IcebergTable) table;
-        if (icebergTable.getNativeTable().specs().size() > 1) {
-            LOG.warn("Do not supported analyze iceberg table {} with partition evolution", table.getName());
-            throw new StarRocksConnectorException("Do not supported analyze iceberg table " + table.getName() +
-                    " with partition evolution");
-        }
-
-        PartitionField partitionField = icebergTable.getPartitionField(partitionColumn);
-        if (partitionField == null) {
-            LOG.warn("Partition column {} not found in table {}", partitionColumn, table.getName());
-            throw new StarRocksConnectorException("Partition column " + partitionColumn + " not found in table " +
-                    table.getName());
         }
 
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
@@ -276,10 +322,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(catalogName));
             row.add(new StringLiteral(db.getOriginName()));
             row.add(new StringLiteral(table.getName()));
-            row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte

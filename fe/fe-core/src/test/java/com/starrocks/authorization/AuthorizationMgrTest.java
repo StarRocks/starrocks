@@ -20,6 +20,7 @@ import com.google.gson.stream.JsonReader;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -50,7 +51,6 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
-import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -59,8 +59,6 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1842,23 +1840,6 @@ public class AuthorizationMgrTest {
         desc = new DataDescription("tbl1", null, "tbl2", false, null, null, null);
         try {
             desc.analyze("db");
-            Assertions.fail();
-        } catch (ErrorReportException e) {
-            Assertions.assertTrue(e.getMessage().contains("Access denied"));
-        }
-    }
-
-    @Test
-    public void testShowGrants() throws Exception {
-        String sql = "create role r_show_grants";
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(stmt, ctx);
-        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
-        ShowGrantsStmt showGrantsStmt =
-                new ShowGrantsStmt("r_show_grants", GrantType.ROLE, NodePosition.ZERO);
-
-        try {
-            Authorizer.check(showGrantsStmt, ctx);
             Assertions.fail();
         } catch (ErrorReportException e) {
             Assertions.assertTrue(e.getMessage().contains("Access denied"));

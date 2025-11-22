@@ -46,6 +46,18 @@ public class QueryDetail implements Serializable {
         CANCELLED
     }
 
+    /**
+     * QuerySource distinguishes the origin of a query.
+     */
+    public enum QuerySource {
+        EXTERNAL,  // User-initiated queries
+        INTERNAL,  // System/internal queries
+        MV,        // Materialized view refresh
+        TASK       // Task-submitted queries
+    }
+
+    private QuerySource querySource = QuerySource.EXTERNAL;
+
     // When query received, FE will construct a QueryDetail
     // object. This object will set queryId, startTime, sql
     // fields. As well state is be set as RUNNING.
@@ -83,9 +95,13 @@ public class QueryDetail implements Serializable {
     private long cpuCostNs = -1;
     private long memCostBytes = -1;
     private long spillBytes = -1;
+    private float cacheMissRatio = 0;
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     private String digest;
     private String catalog;
+
+    private String command = "";
+    private String preparedStmtId;
 
     private long queryFeMemory = 0;
 
@@ -94,7 +110,8 @@ public class QueryDetail implements Serializable {
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
                        long startTime, long endTime, long latency, QueryMemState state,
-                       String database, String sql, String user, String resourceGroupName, String catalog) {
+                       String database, String sql, String user, String resourceGroupName, String catalog,
+                       String command, String preparedStmtId) {
         this.queryId = queryId;
         this.isQuery = isQuery;
         this.connId = connId;
@@ -116,14 +133,17 @@ public class QueryDetail implements Serializable {
         this.sql = sql;
         this.user = user;
         this.catalog = catalog;
+        this.command = command;
+        this.preparedStmtId = preparedStmtId;
     }
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
-                        long startTime, long endTime, long latency, QueryMemState state,
-                        String database, String sql, String user, String resourceGroupName,
-                        String warehouse, String catalog) {
+                       long startTime, long endTime, long latency, QueryMemState state,
+                       String database, String sql, String user, String resourceGroupName,
+                       String warehouse, String catalog,
+                       String command, String preparedStmtId) {
         this(queryId, isQuery, connId, remoteIP, startTime, endTime, latency,
-                state, database, sql, user, resourceGroupName, catalog);
+                state, database, sql, user, resourceGroupName, catalog, command, preparedStmtId);
         this.warehouse = warehouse;
     }
 
@@ -150,11 +170,15 @@ public class QueryDetail implements Serializable {
         queryDetail.cpuCostNs = this.cpuCostNs;
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
+        queryDetail.cacheMissRatio = this.cacheMissRatio;
         queryDetail.warehouse = this.warehouse;
         queryDetail.digest = this.digest;
         queryDetail.resourceGroupName = this.resourceGroupName;
         queryDetail.catalog = this.catalog;
         queryDetail.queryFeMemory = this.queryFeMemory;
+        queryDetail.querySource = this.querySource;
+        queryDetail.command = this.command;
+        queryDetail.preparedStmtId = this.preparedStmtId;
         return queryDetail;
     }
 
@@ -346,6 +370,19 @@ public class QueryDetail implements Serializable {
         this.spillBytes = spillBytes;
     }
 
+    public void calculateCacheMissRatio(long readLocalCnt, long readRemoteCnt) {
+        long readTotalCnt = readLocalCnt + readRemoteCnt;
+        if (readTotalCnt > 0) {
+            cacheMissRatio = ((float) readRemoteCnt * 100) / readTotalCnt;
+        } else {
+            cacheMissRatio = 0;
+        }
+    }
+
+    public float getCacheMissRatio() {
+        return cacheMissRatio;
+    }
+
     public void setWarehouse(String warehouse) {
         this.warehouse = warehouse;
     }
@@ -376,5 +413,13 @@ public class QueryDetail implements Serializable {
 
     public long getQueryFeMemory() {
         return queryFeMemory;
+    }
+
+    public QuerySource getQuerySource() {
+        return querySource;
+    }
+
+    public void setQuerySource(QuerySource querySource) {
+        this.querySource = querySource;
     }
 }

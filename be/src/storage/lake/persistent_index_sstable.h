@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
@@ -47,7 +48,8 @@ public:
     ~PersistentIndexSstable() = default;
 
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
-                bool need_filter = true);
+                bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
+                TabletManager* tablet_mgr = nullptr);
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz);
@@ -67,11 +69,16 @@ public:
 
     size_t memory_usage() const;
 
+    // `_delvec` should only be modified in `init()` via publish version thread
+    // which is thread-safe. And after that, it should be immutable.
+    DelVectorPtr delvec() const { return _delvec; }
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
     std::unique_ptr<RandomAccessFile> _rf{nullptr};
     PersistentIndexSstablePB _sstable_pb;
+    DelVectorPtr _delvec;
 };
 
 class PersistentIndexSstableStreamBuilder {
@@ -83,14 +90,12 @@ public:
 
     uint64_t num_entries() const;
     FileInfo file_info() const;
-    Status status() const;
     std::string file_path() const { return _wf->filename(); }
 
 private:
     std::unique_ptr<sstable::TableBuilder> _table_builder;
     std::unique_ptr<sstable::FilterPolicy> _filter_policy;
     std::unique_ptr<WritableFile> _wf;
-    Status _status;
     bool _finished;
     std::string _encryption_meta;
     uint32_t _sst_rowid = 0;

@@ -13,15 +13,18 @@
 // limitations under the License.
 package com.starrocks.mv.analyzer;
 
-import com.google.common.base.Preconditions;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.SRStringUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -43,7 +46,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -315,7 +317,8 @@ public class MVPartitionExprResolver {
                             if (item instanceof SlotRef) {
                                 SlotRef result = (SlotRef) item;
                                 TableName actTableName = result.getTblNameWithoutAnalyzed();
-                                if (result.getColumnName().equalsIgnoreCase(slot.getColumnName())
+                                if (result.getColumnName() != null
+                                        && result.getColumnName().equalsIgnoreCase(slot.getColumnName())
                                         && (expTableName == null || expTableName.equals(actTableName))) {
                                     return visitExpr(context.withExpr(result).withRelation(relation));
                                 }
@@ -329,7 +332,19 @@ public class MVPartitionExprResolver {
                             }
                         }
                     }
+                    clearSlotTableName(slot);
                     return visitRelation(context.withRelation(relation));
+                }
+
+                /**
+                 * Clear the table name in slot ref to avoid being affected by sub-query alias.
+                 * NOTE: Scope's output column names should be already unique, slot's table name is not necessary.
+                 * TODO: refactor this after we have a better way to handle table alias in sub-query.
+                 */
+                private void clearSlotTableName(SlotRef slot) {
+                    if (slot != null && slot.getTblNameWithoutAnalyzed() != null) {
+                        slot.setTblName(null);
+                    }
                 }
 
                 @Override
@@ -337,11 +352,10 @@ public class MVPartitionExprResolver {
                     SlotRef slot = context.getSlotRef();
                     if (slot.getTblNameWithoutAnalyzed() != null) {
                         String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
-                        if (!node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
+                        if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
                             return null;
                         }
-                        slot = (SlotRef) slot.clone();
-                        slot.setTblName(null); //clear table name here, not check it inside
+                        clearSlotTableName(slot);
                     }
                     Relation subRelation = node.getQueryStatement().getQueryRelation();
                     return visitRelation(context.withSlotRef(slot).withRelation(subRelation));
@@ -355,6 +369,11 @@ public class MVPartitionExprResolver {
                         return Exprs.of(slot);
                     }
                     if (tableName != null && !node.getResolveTableName().equals(tableName)) {
+                        return null;
+                    }
+                    // ensure column name matches
+                    List<Field> fields = node.getRelationFields().resolveFields(slot);
+                    if (fields.isEmpty()) {
                         return null;
                     }
                     slot = (SlotRef) slot.clone();
@@ -518,11 +537,10 @@ public class MVPartitionExprResolver {
                     if (slot.getTblNameWithoutAnalyzed() != null) {
                         String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
                         String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
-                        if (!cteName.equalsIgnoreCase(tableName)) {
+                        if (cteName != null && !cteName.equalsIgnoreCase(tableName)) {
                             return null;
                         }
-                        slot = (SlotRef) slot.clone();
-                        slot.setTblName(null); //clear table name here, not check it inside
+                        clearSlotTableName(slot);
                     }
                     Relation relation = node.getCteQueryStatement().getQueryRelation();
                     return visitRelation(context.withRelation(relation).withSlotRef(slot));
@@ -557,7 +575,7 @@ public class MVPartitionExprResolver {
         int refBaseTableCols = -1;
         for (Expr mvRefPartitionExpr : mvRefPartitionExprs) {
             List<MVPartitionExpr> partitionExprMaps = getMVPartitionExprs(mvRefPartitionExpr, stmt);
-            if (partitionExprMaps == null) {
+            if (partitionExprMaps == null || partitionExprMaps.isEmpty()) {
                 LOG.warn("The partition expr maps slot ref should be from the base table, eqExprs:{}",
                         partitionExprMaps);
                 throw new SemanticException("Failed to build mv partition expr from base table: " + stmt.getOrigStmt());
@@ -574,16 +592,29 @@ public class MVPartitionExprResolver {
         }
         if (baseTableInfos != null) {
             Set<List<MVPartitionExpr>> mvPartitionExprs = Sets.newHashSet();
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = MvUtils.getTableChecked(baseTableInfo);
                 List<MVPartitionExpr> refPartitionExprs = MvUtils.getMvPartitionExpr(mvPartitionExprMaps, table);
-                if (!refPartitionExprs.isEmpty()) {
+                if (refPartitionExprs != null && !refPartitionExprs.isEmpty()) {
+                    //  ensure the partition expr is valid
+                    TableName tableName = new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName());
+                    for (MVPartitionExpr refPartitionExpr : refPartitionExprs) {
+                        MaterializedView.analyzePartitionExpr(connectContext, table, tableName, refPartitionExpr.getExpr());
+                    }
                     mvPartitionExprs.add(refPartitionExprs);
                 }
             }
-            Preconditions.checkState(mvPartitionExprs.size() <= mvPartitionExprMaps.size(),
-                    String.format("The size of mv partition exprs %s should be less or equal to the size of " +
-                            "partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps));
+            if (mvPartitionExprs.size() > mvPartitionExprMaps.size()) {
+                String errorMessage = String.format("The size of mv partition exprs %s should be less or equal to the size " +
+                        "of partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps);
+                throw new SemanticException(errorMessage);
+            }
+        }
+        if (mvPartitionExprMaps.isEmpty()) {
+            throw new SemanticException("Failed to build mv partition expr from base table: "
+                    + Joiner.on(",").join(mvRefPartitionExprs));
         }
         return mvPartitionExprMaps;
     }

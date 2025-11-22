@@ -47,6 +47,7 @@ from lib import *
 #    - r: run sql and compare result with r
 record_mode = os.environ.get("record_mode", "false") == "true"
 arrow_mode = os.environ.get("arrow_mode", "false") == "true"
+case_time = int(os.environ.get("case_timeout", 600))
 
 case_list = choose_cases.choose_cases(record_mode).case_list
 
@@ -90,6 +91,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.create_starrocks_conn_pool()
         self.check_cluster_status()
         self._init_global_configs()
+        self._init_global_session_variables()
 
     def _init_global_configs(self):
         """
@@ -106,12 +108,35 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             sql = "ADMIN SET FRONTEND CONFIG (%s)" % config
             self.execute_sql(sql)
 
+    def _init_global_session_variables(self):
+        """
+        Session variables that are not ready for production but it can be used for testing.
+        """
+        session_variables = [
+            "new_planner_optimize_timeout = 10000",
+        ]
+        for session_variable in session_variables:
+            sql = "SET %s;" % session_variable
+            self.execute_sql(sql)
+
+
     @sql_annotation.ignore_timeout()
     def tearDown(self):
         """tear down"""
         super().tearDown()
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
+
+        # run custom cleanup (always)
+        try:
+            if hasattr(self.case_info, "cleanup"):
+                for stmt in self.case_info.cleanup:
+                    try:
+                        self.execute_single_statement(stmt, -1, False)
+                    except Exception as e:
+                        log.warning(f"cleanup stmt error: {e}")
+        except Exception as e:
+            log.warning(f"cleanup error: {e}")
 
         for each_db in self.db:
             self.drop_database(each_db)
@@ -177,6 +202,15 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         resource_name = self._get_resource_name(each_cmd)
                         if len(resource_name) > 0:
                             self.resource.append(resource_name)
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                for each_cmd in sql["cmd"]:
+                    db_name = self._get_db_name(each_cmd)
+                    if len(db_name) > 0:
+                        self.db.append(db_name)
+                    resource_name = self._get_resource_name(each_cmd)
+                    if len(resource_name) > 0:
+                        self.resource.append(resource_name)
             else:
                 tools.ok_(False, "Init data error!")
 
@@ -229,6 +263,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                             db_name = self._get_db_name(each_cmd)
                             if len(db_name) > 0:
                                 all_db_dict.setdefault(db_name, set()).add(case.name)
+                elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                    tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                    for each_cmd in sql["cmd"]:
+                        db_name = self._get_db_name(each_cmd)
+                        if len(db_name) > 0:
+                            all_db_dict.setdefault(db_name, set()).add(case.name)
                 else:
                     tools.ok_(False, "Check db uniqueness error!")
 
@@ -266,6 +306,13 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         for each_uuid in uuid_vars:
                             if each_uuid not in variable_dict:
                                 variable_dict[each_uuid] = uuid.uuid4().hex
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                tools.assert_in("cmd", sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                for each_cmd in sql["cmd"]:
+                    uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_cmd)
+                    for each_uuid in uuid_vars:
+                        if each_uuid not in variable_dict:
+                            variable_dict[each_uuid] = uuid.uuid4().hex
 
             else:
                 tools.ok_(False, "Replace uuid error!")
@@ -297,6 +344,16 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                     each_thread["cmd"] = tmp_cmd
 
                 ret.append(_sql)
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                _sql = copy.deepcopy(sql)
+                tools.assert_in("cmd", _sql, "CLEANUP STATEMENT FORMAT ERROR!")
+                tmp_cmd = []
+                for each_cmd in _sql["cmd"]:
+                    for each_var in variable_dict:
+                        each_cmd = each_cmd.replace("${%s}" % each_var, variable_dict[each_var])
+                    tmp_cmd.append(each_cmd)
+                _sql["cmd"] = tmp_cmd
+                ret.append(_sql)
 
         return ret
 
@@ -318,7 +375,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     #         [CASE]
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
-    @sql_annotation.timeout()
+    @sql_annotation.timeout(case_time)
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester
@@ -428,6 +485,18 @@ Start to run: %s
                 self_print(f"[LOOP] Finish!\n", color=ColorEnum.BLUE, logout=True, bold=True)
                 tools.ok_(loop_check_res, f"Loop checker fail: {''.join(sql['ori'])}!")
 
+            elif isinstance(sql, dict) and sql.get("type", "") == CLEANUP_FLAG:
+                # record mode: write cleanup block in-place to res_log to keep position
+                if record_mode:
+                    if isinstance(sql.get("ori"), list):
+                        self.res_log.append("".join(sql["ori"]))
+                    else:
+                        self.res_log.append("CLEANUP {")
+                        for stmt in sql.get("cmd", []):
+                            self.res_log.append(stmt)
+                        self.res_log.append("} END CLEANUP")
+                # do nothing during execution here; cleanup executes in tearDown
+                continue
             elif isinstance(sql, dict) and sql["type"] == sr_sql_lib.CONCURRENCY_FLAG:
                 # concurrency statement
                 self_print(f"[CONCURRENCY] Start...", color=ColorEnum.CYAN, logout=True)

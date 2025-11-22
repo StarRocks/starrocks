@@ -23,6 +23,7 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -45,7 +46,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -62,7 +62,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -79,7 +82,7 @@ import java.util.Map;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
-public class LakeMaterializedViewTest {
+public class LakeMaterializedViewTest extends StarRocksTestBase {
     private static final String DB = "db_for_lake_mv";
 
     private static ConnectContext connectContext;
@@ -134,10 +137,10 @@ public class LakeMaterializedViewTest {
 
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);
@@ -236,7 +239,7 @@ public class LakeMaterializedViewTest {
 
         // show create materialized view
         String ddlStmt = lakeMv.getMaterializedViewDdlStmt(true);
-        System.out.println(ddlStmt);
+        logSysInfo(ddlStmt);
         Assertions.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
         Assertions.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assertions.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
@@ -345,7 +348,7 @@ public class LakeMaterializedViewTest {
             starRocksAssert.dropTable("base_table4");
             Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
         } catch (Exception e) {
-            System.out.println(e);
+            logSysInfo(e);
             Assertions.fail();
         }
     }
@@ -377,7 +380,7 @@ public class LakeMaterializedViewTest {
             starRocksAssert.dropTable("base_table5");
             Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
         } catch (Exception e) {
-            System.out.println(e);
+            logSysInfo(e);
             Assertions.fail();
         }
     }
@@ -404,11 +407,11 @@ public class LakeMaterializedViewTest {
 
         // schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.DATE, true, null, "", "");
+        Column k1 = new Column("k1", DateType.DATE, true, null, "", "");
         columns.add(k1);
-        Column k2 = new Column("k2", Type.BIGINT, true, null, "", "");
+        Column k2 = new Column("k2", IntegerType.BIGINT, true, null, "", "");
         columns.add(k2);
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k2));
         RangePartitionInfo partitionInfo = new RangePartitionInfo(Lists.newArrayList(k1));
@@ -495,5 +498,32 @@ public class LakeMaterializedViewTest {
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, listPartitionInfo, null, null);
         recyclePartitionInfo = mv3.buildRecyclePartitionInfo(dbId, partition);
         Assertions.assertTrue(recyclePartitionInfo instanceof RecycleLakeListPartitionInfo);
+    }
+
+    @Test
+    public void testMaterializedViewColocation() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv6\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "PROPERTIES(\n" +
+                "   'colocate_with' = 'aaa'\n" +
+                ")\n" +
+                "refresh async\n" +
+                "as select k2, sum(k3) as total from base_table group by k2;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv6");
+        Assertions.assertTrue(mv.isCloudNativeMaterializedView());
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        Assertions.assertTrue(index.isLakeColocateTable(mv.getId()));
+
+        String alterMvSql = "alter materialized view mv6 set ('colocate_with'='');";
+        StatementBase statement = SqlParser.parseSingleStatement(alterMvSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertFalse(index.isLakeColocateTable(mv.getId()));
+
+        starRocksAssert.dropMaterializedView("mv6");
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv6"));
     }
 }

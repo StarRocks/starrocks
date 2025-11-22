@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
@@ -28,7 +27,6 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.hive.HiveStorageFormat;
@@ -38,10 +36,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -73,6 +75,8 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.thrift.TAccessPathType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -85,6 +89,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
@@ -103,6 +108,17 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
             FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN, FunctionSet.APPROX_COUNT_DISTINCT);
+
+    //TODO(by satanson): it seems that we can support more windows functions in future, at present, we only support
+    // LAG/LEAD/FIRST_VALUE/LAST_VALUE and the aggregations functions which can adopt low cardinality optimization
+    // and used as window function.
+    public static final Set<String> LOW_CARD_WINDOW_FUNCTIONS = Sets.newHashSet(FunctionSet.LAG, FunctionSet.LEAD,
+            FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
+
+    static {
+        LOW_CARD_WINDOW_FUNCTIONS.addAll(LOW_CARD_AGGREGATE_FUNCTIONS);
+    }
+
     public static final Set<String> LOW_CARD_LOCAL_AGG_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
             FunctionSet.MAX, FunctionSet.MIN);
 
@@ -149,7 +165,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private final List<Integer> scanStringColumns = Lists.newArrayList();
 
     // For these columns we need to disable the associated rewrites.
-    private ColumnRefSet disableRewriteStringColumns = new ColumnRefSet();
+    private final ColumnRefSet disableRewriteStringColumns = new ColumnRefSet();
+
+    private final Set<Integer> joinEqColumnGroupIds = Sets.newHashSet();
+    private final List<Pair<Integer, Integer>> joinEqColumnGroups = Lists.newArrayList();
 
     // operators which are the children of Match operator
     private final ColumnRefSet matchChildren = new ColumnRefSet();
@@ -253,7 +272,36 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
     }
 
+    private void mergeJoinEqColumnDicts() {
+        for (Pair<Integer, Integer> p : joinEqColumnGroups) {
+            final int colId1 = p.first;
+            final int colId2 = p.second;
+
+            if (disableRewriteStringColumns.contains(colId1)) {
+                disableRewriteStringColumns.union(colId2);
+                continue;
+            }
+            if (disableRewriteStringColumns.contains(colId2)) {
+                disableRewriteStringColumns.union(colId1);
+                continue;
+            }
+
+            final ColumnDict d1 = globalDicts.get(colId1);
+            final ColumnDict d2 = globalDicts.get(colId2);
+            final Pair<ColumnDict, ColumnDict> mergedDict = ColumnDict.merge(d1, d2);
+            if (mergedDict == null) {
+                disableRewriteStringColumns.union(colId1);
+                disableRewriteStringColumns.union(colId2);
+                continue;
+            }
+
+            globalDicts.put(colId1, mergedDict.first);
+            globalDicts.put(colId2, mergedDict.second);
+        }
+    }
+
     private void initContext(DecodeContext context) {
+        mergeJoinEqColumnDicts();
         fillDisableStringColumns();
 
         // choose the profitable string columns
@@ -484,6 +532,77 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return context.createDecodeInfo();
     }
 
+    private boolean tryHandleJoinEqPredicate(DecodeInfo decodeInfo,
+                                             ScalarOperator predicate) {
+
+        if (predicate.getOpType() != OperatorType.BINARY) {
+            return false;
+        }
+
+        BinaryPredicateOperator binary = (BinaryPredicateOperator) predicate;
+        if (!binary.getBinaryType().isEquivalence()) {
+            return false;
+        }
+
+        ScalarOperator left = binary.getChild(0);
+        ScalarOperator right = binary.getChild(1);
+        if (!left.isColumnRef() || !right.isColumnRef()) {
+            return false;
+        }
+
+        ColumnRefOperator leftRef = (ColumnRefOperator) left;
+        ColumnRefOperator rightRef = (ColumnRefOperator) right;
+        if (!decodeInfo.inputStringColumns.contains(leftRef) || !decodeInfo.inputStringColumns.contains(rightRef)) {
+            return false;
+        }
+
+        int colId1 = leftRef.getId();
+        int colId2 = rightRef.getId();
+        // Each low-cardinality column can participate in only one equality condition.
+        if (joinEqColumnGroupIds.contains(colId1) || joinEqColumnGroupIds.contains(colId2)) {
+            return false;
+        }
+        // Low-cardinality columns cannot be DefineExpr, because we need merge these two global dicts.
+        if (!globalDicts.containsKey(colId1) || !globalDicts.containsKey(colId2)) {
+            return false;
+        }
+
+        joinEqColumnGroupIds.add(colId1);
+        joinEqColumnGroupIds.add(colId2);
+        joinEqColumnGroups.add(new Pair<>(colId2, colId1));
+        return true;
+    }
+
+    /**
+     * Retain low-cardinality columns used in join ON equality conditions and add them to joinEqColumnGroups.
+     * All other columns used in join ON conditions are added to disableRewriteStringColumns.
+     *
+     * <p> Constraints:
+     * <ul>
+     * <li> Both left and right keys in the ON equality condition must be low-cardinality column refs.
+     * <li> Each low-cardinality column can participate in only one equality condition.
+     * <li> Low-cardinality columns cannot be DefineExpr.
+     * <li> Currently only supports broadcast join.
+     * </ul>
+     */
+    private void extractJoinEqGroups(DecodeInfo decodeInfo, ScalarOperator root) {
+        if (OperatorType.COMPOUND.equals(root.getOpType())) {
+            CompoundPredicateOperator compound = (CompoundPredicateOperator) root;
+            if (compound.isAnd()) {
+                for (ScalarOperator child : compound.getChildren()) {
+                    extractJoinEqGroups(decodeInfo, child);
+                }
+                return;
+            }
+        }
+
+        if (tryHandleJoinEqPredicate(decodeInfo, root)) {
+            return;
+        }
+
+        root.getUsedColumns().getStream().forEach(disableRewriteStringColumns::union);
+    }
+
     @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
@@ -498,10 +617,20 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (!result.inputStringColumns.containsAny(onColumns)) {
             return result;
         }
-        onColumns.getStream().forEach(c -> disableRewriteStringColumns.union(c));
+
+        DistributionProperty leftDistribution = optExpression.getRequiredProperties().get(0).getDistributionProperty();
+        DistributionProperty rightDistribution = optExpression.getRequiredProperties().get(1).getDistributionProperty();
+        // Currently only supports broadcast join.
+        if (!sessionVariable.isEnableLowCardinalityOptimizeForJoin() ||
+                (leftDistribution.isShuffle() && rightDistribution.isShuffle())) {
+            onColumns.getStream().forEach(disableRewriteStringColumns::union);
+        } else {
+            extractJoinEqGroups(result, join.getOnPredicate());
+        }
+
         result.outputStringColumns.clear();
         result.inputStringColumns.getStream().forEach(c -> {
-            if (!onColumns.contains(c)) {
+            if (!disableRewriteStringColumns.contains(c)) {
                 result.outputStringColumns.union(c);
             }
         });
@@ -560,6 +689,108 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         result.decodeStringColumns.except(disableRewriteStringColumns);
         result.inputStringColumns.except(disableRewriteStringColumns);
         return result;
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalAnalytic(OptExpression optExpression, DecodeInfo context) {
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        PhysicalWindowOperator windowOp = optExpression.getOp().cast();
+        DecodeInfo info = context.createOutputInfo();
+
+        ColumnRefSet disableColumns = new ColumnRefSet();
+        for (ColumnRefOperator key : windowOp.getAnalyticCall().keySet()) {
+            CallOperator windowCallOp = windowOp.getAnalyticCall().get(key);
+            String fnName = windowCallOp.getFnName();
+            if (!LOW_CARD_WINDOW_FUNCTIONS.contains(fnName)) {
+                disableColumns.union(windowCallOp.getUsedColumns());
+                disableColumns.union(key);
+                continue;
+            }
+
+            // LEAD/LAG with specified default value can not adopt low-cardinality optimization
+            if ((fnName.equals(FunctionSet.LEAD) || fnName.equals(FunctionSet.LAG))) {
+                ScalarOperator lastArg = windowCallOp.getArguments().get(windowCallOp.getArguments().size() - 1);
+                if (!lastArg.isConstantNull()) {
+                    disableColumns.union(windowCallOp.getUsedColumns());
+                    disableColumns.union(key);
+                    continue;
+                }
+            }
+
+            Map<Boolean, List<ScalarOperator>> argGroups = windowCallOp.getChildren().stream()
+                    .filter(Predicate.not(ScalarOperator::isConstant))
+                    .collect(Collectors.partitioningBy(ScalarOperator::isColumnRef));
+
+            List<ScalarOperator> columnRefArgs = argGroups.get(true);
+            List<ScalarOperator> exprArgs = argGroups.get(false);
+
+            // window function must have only one string-type column-ref argument.
+            if (!exprArgs.isEmpty() || columnRefArgs.size() != 1) {
+                disableColumns.union(windowCallOp.getUsedColumns());
+                disableColumns.union(key);
+            }
+        }
+
+        if (!disableColumns.isEmpty()) {
+            info.decodeStringColumns.union(info.inputStringColumns);
+            info.decodeStringColumns.intersect(disableColumns);
+            info.inputStringColumns.except(info.decodeStringColumns);
+        }
+
+        info.outputStringColumns.clear();
+        for (ColumnRefOperator key : windowOp.getAnalyticCall().keySet()) {
+            if (disableColumns.contains(key)) {
+                continue;
+            }
+            CallOperator value = windowOp.getAnalyticCall().get(key);
+            if (!info.inputStringColumns.containsAll(value.getUsedColumns())) {
+                continue;
+            }
+
+            stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
+            // if the function return type is not string or array<string>, then its output column can not be
+            // encoded, however the function evaluation can adopt encoded columns, for examples:
+            // 1. select v1, count(t.a1) over(partition by v1) select t0, unnest(t0.a1) t(a1);
+            // 2. select v1, count(distinct t.a1) over(partition by v1) select t0, unnest(t0.a1) t(a1);
+            // t0.a1 is array<string> column and low-cardinality encoded.
+            if (value.getType().isStringType() || value.getType().isStringArrayType()) {
+                info.outputStringColumns.union(key.getId());
+                stringRefToDefineExprMap.putIfAbsent(key.getId(), value);
+                expressionStringRefCounter.put(key.getId(), 1);
+            }
+        }
+
+        for (ScalarOperator partitionBy : windowOp.getPartitionExpressions()) {
+            Preconditions.checkArgument(partitionBy instanceof ColumnRefOperator);
+            ColumnRefOperator partitionByColumnRef = (ColumnRefOperator) partitionBy;
+            if (info.inputStringColumns.contains(partitionByColumnRef) &&
+                    !info.decodeStringColumns.contains(partitionByColumnRef)) {
+                info.outputStringColumns.union(partitionByColumnRef);
+            }
+        }
+
+        for (Ordering orderBy : windowOp.getOrderByElements()) {
+            ColumnRefOperator orderByColumnRef = orderBy.getColumnRef();
+            if (info.inputStringColumns.contains(orderByColumnRef) &&
+                    !info.decodeStringColumns.contains(orderByColumnRef)) {
+                info.outputStringColumns.union(orderByColumnRef);
+            }
+        }
+
+        // the columns which are not arguments of window functions can also use encoded column;
+        // for an example:
+        // select t.a1, t.a2, lead(t.a1) over(partition by t.a2) select t0, unnest(t0.a1, t0.a2) t(a1,a2);
+        // both t0.a1 and t0.a2 are array<string> and low-cardinality encoded, the output columns: t.a1, t.a2,
+        // lead(t.a1) and t.a2 in partition-by all can adopt encoded columns.
+        ColumnRefSet outerColumnSet = new ColumnRefSet();
+        outerColumnSet.union(context.outputStringColumns);
+        outerColumnSet.intersect(info.inputStringColumns);
+        outerColumnSet.except(info.decodeStringColumns);
+        outerColumnSet.except(disableColumns);
+        info.outputStringColumns.union(outerColumnSet);
+        return info;
     }
 
     @Override

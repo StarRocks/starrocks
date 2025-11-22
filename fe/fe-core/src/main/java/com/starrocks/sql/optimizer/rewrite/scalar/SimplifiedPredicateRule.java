@@ -21,9 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -31,12 +30,18 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
@@ -44,6 +49,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
@@ -111,7 +117,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
 
         if (fn == null) {
             return operator;
@@ -269,7 +275,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 } else if (constantChildren.size() == 2) {
                     if (constantChildren.stream().anyMatch(ConstantOperator::isNull)) {
                         // (true and null) or (null and null)
-                        return ConstantOperator.createNull(Type.BOOLEAN);
+                        return ConstantOperator.createNull(BooleanType.BOOLEAN);
                     }
                     // true and true
                     return ConstantOperator.createBoolean(true);
@@ -297,7 +303,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 } else if (constantChildren.size() == 2) {
                     if (constantChildren.stream().anyMatch(ConstantOperator::isNull)) {
                         // (false or null) or (null or null)
-                        return ConstantOperator.createNull(Type.BOOLEAN);
+                        return ConstantOperator.createNull(BooleanType.BOOLEAN);
                     }
                     // false or false
                     return ConstantOperator.createBoolean(false);
@@ -347,6 +353,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         } else {
             return new BinaryPredicateOperator(BinaryType.EQ, predicate.getChildren());
         }
+    }
+
+    @Override
+    public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        return predicate;
     }
 
     // Simplify the comparison result of the same column
@@ -415,7 +426,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         // make sure is string literal
-        if (rightOp.getType() != Type.VARCHAR && rightOp.getType() != Type.CHAR) {
+        if (rightOp.getType() != VarcharType.VARCHAR && rightOp.getType() != CharType.CHAR) {
             return predicate;
         }
 
@@ -432,7 +443,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     private ScalarOperator simplifiedTimeFns(CallOperator call) {
         String fn = TIME_FNS.keySet().stream().filter(s -> call.getFnName().contains(s))
                 .findFirst().orElse("impossible");
-        if (!call.getChild(1).isConstantRef() || !Type.INT.equals(call.getChild(1).getType())) {
+        if (!call.getChild(1).isConstantRef() || !IntegerType.INT.equals(call.getChild(1).getType())) {
             return call;
         }
         if (!(call.getChild(0) instanceof CallOperator)) {
@@ -443,7 +454,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (!child.getFnName().contains(fn) || !TIME_FN_NAMES.contains(child.getFnName())) {
             return call;
         }
-        if (!child.getChild(1).isConstantRef() || !Type.INT.equals(child.getChild(1).getType())) {
+        if (!child.getChild(1).isConstantRef() || !IntegerType.INT.equals(child.getChild(1).getType())) {
             return call;
         }
 
@@ -463,7 +474,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (result != 0) {
             String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
                     Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
-            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
+            Function newFn = ExprUtils.getBuiltinFunction(fnName, call.getFunction().getArgs(),
                     Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
         } else {
@@ -576,6 +587,19 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 ConstantOperator.createVarchar(mergePath)), child.getFunction());
     }
 
+    private static ScalarOperator lookupChild(ScalarOperator call, Predicate<ScalarOperator> predicate) {
+        if (predicate.test(call)) {
+            return call;
+        }
+        for (ScalarOperator child : call.getChildren()) {
+            ScalarOperator res = lookupChild(child, predicate);
+            if (res != null) {
+                return res;
+            }
+        }
+        return null;
+    }
+
     // Simplify hour(from_unixtime(ts)) to hour_from_unixtime(ts)
     // Also simplify hour(to_datetime(ts)) and hour(to_datetime(ts, 0)) to hour_from_unixtime(ts)
     private static ScalarOperator simplifiedHourFromUnixTime(CallOperator call) {
@@ -583,31 +607,28 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return call;
         }
 
-        ScalarOperator child = call.getChild(0);
-        if (!(child instanceof CallOperator)) {
-            return call;
-        }
-
-        CallOperator childCall = (CallOperator) child;
-        String childFnName = childCall.getFnName();
-
         // Case 1: hour(from_unixtime(ts)) -> hour_from_unixtime(ts)
-        if (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(childFnName)) {
+        ScalarOperator fromUnixTime = lookupChild(call,
+                x -> x instanceof CallOperator &&
+                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.FROM_UNIXTIME));
+        if (fromUnixTime != null) {
             // Keep original behavior: only succeeds when argument list matches hour_from_unixtime signature
-            Type[] argTypes = childCall.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
+            Type[] argTypes = fromUnixTime.getChildren().stream().map(ScalarOperator::getType).toArray(Type[]::new);
             Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
-
+                    ExprUtils.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes,
+                            Function.CompareMode.IS_IDENTICAL);
             if (fn == null) {
                 return call;
             }
-
-            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), childCall.getChildren(), fn);
+            return new CallOperator(FunctionSet.HOUR_FROM_UNIXTIME, call.getType(), fromUnixTime.getChildren(), fn);
         }
 
         // Case 2: hour(to_datetime(ts)) or hour(to_datetime(ts, 0)) -> hour_from_unixtime(ts)
-        if (FunctionSet.TO_DATETIME.equalsIgnoreCase(childFnName)) {
-            List<ScalarOperator> args = childCall.getChildren();
+        ScalarOperator toDatetime = lookupChild(call,
+                x -> x instanceof CallOperator &&
+                        ((CallOperator) x).getFnName().equalsIgnoreCase(FunctionSet.TO_DATETIME));
+        if (toDatetime != null) {
+            List<ScalarOperator> args = toDatetime.getChildren();
             ScalarOperator tsArg;
             ScalarOperator unixtimeArgForHour;
 
@@ -622,7 +643,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                     return call;
                 }
                 ConstantOperator scale = (ConstantOperator) scaleOp;
-                if (!Type.INT.equals(scale.getType()) || scale.isNull()) {
+                if (!IntegerType.INT.equals(scale.getType()) || scale.isNull()) {
                     return call;
                 }
                 int scaleVal = scale.getInt();
@@ -630,11 +651,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                     unixtimeArgForHour = tsArg;
                 } else if (scaleVal == 3) {
                     // milliseconds -> seconds
-                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, IntegerType.BIGINT,
                             Lists.newArrayList(tsArg, ConstantOperator.createInt(1000)), null);
                 } else if (scaleVal == 6) {
                     // microseconds -> seconds
-                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, Type.BIGINT,
+                    unixtimeArgForHour = new CallOperator(FunctionSet.DIVIDE, IntegerType.BIGINT,
                             Lists.newArrayList(tsArg, ConstantOperator.createInt(1_000_000)), null);
                 } else {
                     // Unsupported scale
@@ -647,7 +668,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             // Build hour_from_unixtime(...) with the converted unix time argument
             Type[] argTypes = new Type[] { unixtimeArgForHour.getType() };
             Function fn =
-                    Expr.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
+                    ExprUtils.getBuiltinFunction(FunctionSet.HOUR_FROM_UNIXTIME, argTypes, Function.CompareMode.IS_IDENTICAL);
 
             if (fn == null) {
                 return call;

@@ -31,6 +31,15 @@ public class DropComputeNodeClauseTest {
         Assertions.assertEquals("warehouse1", dropStmt.getWarehouse());
         Assertions.assertTrue(dropStmt.getCNGroupName().isEmpty());
     }
+    @Test
+    public void testDropComputeNodeWithoutWarehouse() {
+        String sqlText = "ALTER SYSTEM DROP COMPUTE NODE 'backend01:9010'";
+        AlterSystemStmt stmt =
+                (AlterSystemStmt) SqlParser.parseSingleStatement(sqlText, SqlModeHelper.MODE_DEFAULT);
+        DropComputeNodeClause dropStmt = (DropComputeNodeClause) stmt.getAlterClause();
+        Assertions.assertTrue(dropStmt.getWarehouse().isEmpty());
+        Assertions.assertTrue(dropStmt.getCNGroupName().isEmpty());
+    }
 
     @Test
     public void testDropComputeNodeIntoWarehouseCnGroup() {

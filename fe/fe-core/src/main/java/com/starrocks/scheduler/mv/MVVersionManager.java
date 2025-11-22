@@ -19,15 +19,19 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,11 +62,13 @@ public class MVVersionManager {
      * @param mvRefreshedPartitions mv refreshed partitions
      * @param refBaseTableIds  mv's ref base table ids
      * @param refTableAndPartitionNames mv's ref base table and partition names
+     * @param tempMvTvrVersionRangeMap temporary tvr version range map for each base table which is used for ivm refresh
      */
     public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
-                                    Set<String> mvRefreshedPartitions,
+                                    PCellSortedSet mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
-                                    Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
+                                    Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
+                                    Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
         MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
         MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
         // update materialized view partition to ref base table partition names meta
@@ -79,15 +85,27 @@ public class MVVersionManager {
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
         }
+        if (tempMvTvrVersionRangeMap != null) {
+            // update the tvr version range map in mv context
+            final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
+                mvTvrVersionRangeMap.put(entry.getKey(), entry.getValue());
+            }
+        }
 
-        Collection<Map<String, MaterializedView.BasePartitionInfo>> allChangedPartitionInfos =
-                snapshotBaseTables.values()
-                        .stream()
-                        .filter(snapshot -> snapshot instanceof PCTTableSnapshotInfo)
-                        .map(snapshot -> ((PCTTableSnapshotInfo) snapshot).getRefreshedPartitionInfos())
-                        .collect(Collectors.toList());
-        long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(allChangedPartitionInfos);
-        mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+        long maxChangedTableRefreshTime = 0L;
+        for (BaseTableSnapshotInfo snapshot : snapshotBaseTables.values()) {
+            if (snapshot instanceof PCTTableSnapshotInfo) {
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos =
+                        ((PCTTableSnapshotInfo) snapshot).getRefreshedPartitionInfos();
+                long refreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(partitionInfos);
+                if (refreshTime > maxChangedTableRefreshTime) {
+                    maxChangedTableRefreshTime = refreshTime;
+                }
+            }
+        }
+        mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
         updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
 
         // trigger timeless info event since mv version changed
@@ -135,9 +153,8 @@ public class MVVersionManager {
                 continue;
             }
             Long tableId = snapshotTable.getId();
-            currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
-                    currentVersionMap.get(tableId);
+                    currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
             logger.debug("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
                     mv.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
@@ -147,8 +164,15 @@ public class MVVersionManager {
             // remove partition info of not-exist partition for snapshot table from version map
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
-                currentTablePartitionInfo.keySet().removeIf(partitionName ->
-                        !snapshotOlapTable.getVisiblePartitionNames().contains(partitionName));
+                Set<String> visiblePartitionNames = snapshotOlapTable.getVisiblePartitionNames();
+                // Use iterator to avoid creating intermediate collections and for better performance
+                Iterator<String> keyIter = currentTablePartitionInfo.keySet().iterator();
+                while (keyIter.hasNext()) {
+                    String partitionName = keyIter.next();
+                    if (!visiblePartitionNames.contains(partitionName)) {
+                        keyIter.remove();
+                    }
+                }
             }
             isOlapTableRefreshed = true;
         }
@@ -194,8 +218,10 @@ public class MVVersionManager {
                         snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
-            currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
-            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(baseTableInfo);
+
+            // Use computeIfAbsent to avoid unnecessary map creation
+            Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
+                    currentVersionMap.computeIfAbsent(baseTableInfo, v -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = pctTableSnapshotInfo.getRefreshedPartitionInfos();
             logger.debug("Update materialized view {} meta for external base table {} with partitions info: {}, " +
                             "old partition infos:{}", mv.getName(), snapshotTable.getName(),
@@ -203,10 +229,23 @@ public class MVVersionManager {
             // overwrite old partition names
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
-            // FIXME: If base table's partition has been dropped, should drop the according version partition too?
-            // remove partition info of not-exist partition for snapshot table from version map
-            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(snapshotTable));
-            currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
+            // Remove partition info for partitions that no longer exist in the snapshot table
+            List<String> partitionNamesList = PartitionUtil.getPartitionNames(snapshotTable);
+            if (!partitionNamesList.isEmpty()) {
+                Set<String> partitionNames = Sets.newHashSetWithExpectedSize(partitionNamesList.size());
+                partitionNames.addAll(partitionNamesList);
+                // Remove using iterator for better performance on concurrent maps
+                Iterator<String> iter = currentTablePartitionInfo.keySet().iterator();
+                while (iter.hasNext()) {
+                    String partitionName = iter.next();
+                    if (!partitionNames.contains(partitionName)) {
+                        iter.remove();
+                    }
+                }
+            } else {
+                // If no partitions exist, clear all
+                currentTablePartitionInfo.clear();
+            }
         }
         return true;
     }
@@ -219,9 +258,9 @@ public class MVVersionManager {
      * partitions rather than the whole table.
      */
     private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
-                                               Set<String> mvRefreshedPartitions,
-                                               Map<BaseTableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvTaskRunContext.getMvRefBaseTableIntersectedPartitions();
+                                               PCellSortedSet mvRefreshedPartitions,
+                                               Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = mvTaskRunContext.getMvRefBaseTableIntersectedPartitions();
         if (Objects.isNull(mvToBaseNameRefs) || Objects.isNull(refTableAndPartitionNames) ||
                 refTableAndPartitionNames.isEmpty()) {
             return;
@@ -230,15 +269,17 @@ public class MVVersionManager {
         try {
             Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
                     refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
-            for (String mvRefreshedPartition : mvRefreshedPartitions) {
-                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
+            for (PCellWithName mvPCellWithName : mvRefreshedPartitions.getPartitions()) {
+                String mvRefreshedPartition = mvPCellWithName.name();
+                Map<Table, PCellSortedSet> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
                 for (BaseTableSnapshotInfo snapshotInfo : refTableAndPartitionNames.keySet()) {
                     Table refBaseTable = snapshotInfo.getBaseTable();
                     if (!mvToBaseNameRef.containsKey(refBaseTable)) {
                         continue;
                     }
                     Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
-                    for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(refBaseTable)) {
+                    for (PCellWithName basePCellWithName : mvToBaseNameRef.get(refBaseTable).getPartitions()) {
+                        String refBaseTableAssociatedPartition = basePCellWithName.name();
                         realBaseTableAssociatedPartitions.addAll(
                                 mvTaskRunContext.getExternalTableRealPartitionName(refBaseTable,
                                         refBaseTableAssociatedPartition));

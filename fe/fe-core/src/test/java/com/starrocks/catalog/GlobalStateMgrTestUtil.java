@@ -49,6 +49,9 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -92,6 +95,7 @@ public class GlobalStateMgrTestUtil {
     public static String testTxnLable10 = "testTxnLable10";
     public static String testTxnLableCompaction1 = "testTxnLableCompaction1";
     public static String testTxnLableCompaction2 = "testTxnLableCompaction2";
+    public static String testTxnLableReplication1 = "testTxnLableReplication1";
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
@@ -202,19 +206,19 @@ public class GlobalStateMgrTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -244,10 +248,10 @@ public class GlobalStateMgrTestUtil {
     public static void createEsTable(Database db) throws DdlException {
         // columns
         List<Column> columns = new ArrayList<>();
-        Column userId = new Column("userId", Type.VARCHAR);
+        Column userId = new Column("userId", VarcharType.VARCHAR);
         columns.add(userId);
-        columns.add(new Column("time", Type.BIGINT));
-        columns.add(new Column("type", Type.VARCHAR));
+        columns.add(new Column("time", IntegerType.BIGINT));
+        columns.add(new Column("type", VarcharType.VARCHAR));
 
         // table
         List<Column> partitionColumns = Lists.newArrayList();
