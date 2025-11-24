@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 class PCTTableSnapshotInfoTest {
@@ -42,7 +43,7 @@ class PCTTableSnapshotInfoTest {
         // Mock partition without sub-partitions
         Partition partition = mock(Partition.class);
         PhysicalPartition mockDefault = mock(PhysicalPartition.class);
-        when(partition.getDefaultPhysicalPartition()).thenReturn(mockDefault);
+        when(partition.getLatestPhysicalPartition()).thenReturn(mockDefault);
         when(partition.getSubPartitions()).thenReturn(Collections.emptyList());
         when(partition.getName()).thenReturn("p1");
         when(partition.getId()).thenReturn(1L);
@@ -68,22 +69,22 @@ class PCTTableSnapshotInfoTest {
         BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
         OlapTable baseTable = mock(OlapTable.class);
         when(baseTable.isNativeTableOrMaterializedView()).thenReturn(true);
-        // Mock partition with sub-partitions
-        Partition partition = mock(Partition.class);
+
+        Partition partition = spy(new Partition(1L, "p1", null));
+        // Mock the default physical partition and two sub-partitions
         PhysicalPartition mockDefault = mock(PhysicalPartition.class);
         PhysicalPartition sub1 = mock(PhysicalPartition.class);
         PhysicalPartition sub2 = mock(PhysicalPartition.class);
-        List<PhysicalPartition> subs = Arrays.asList(sub1, sub2);
-
-        when(partition.getDefaultPhysicalPartition()).thenReturn(mockDefault);
-        when(partition.getSubPartitions()).thenReturn(subs);
-        when(partition.getName()).thenReturn("p1");
-        when(partition.getId()).thenReturn(1L);
-
         when(sub1.getVisibleVersionTime()).thenReturn(2000L);
         when(sub1.getVisibleVersion()).thenReturn(20L);
         when(sub2.getVisibleVersionTime()).thenReturn(3000L);
         when(sub2.getVisibleVersion()).thenReturn(30L);
+
+        List<PhysicalPartition> subs = Arrays.asList(sub1, sub2);
+        when(partition.getDefaultPhysicalPartition()).thenReturn(mockDefault);
+        when(partition.getSubPartitions()).thenReturn(subs);
+        when(partition.getName()).thenReturn("p1");
+        when(partition.getId()).thenReturn(1L);
 
         when(baseTable.getPartition("p1")).thenReturn(partition);
 

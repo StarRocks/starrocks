@@ -38,7 +38,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -160,13 +159,7 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
     }
 
     private static MaterializedView.BasePartitionInfo toBasePartitionInfo(Partition partition) {
-        PhysicalPartition defaultPartition = partition.getDefaultPhysicalPartition();
-        if (!partition.getSubPartitions().isEmpty()) {
-            defaultPartition = partition.getSubPartitions()
-                    .stream()
-                    .max(Comparator.comparing(PhysicalPartition::getVisibleVersionTime))
-                    .orElse(defaultPartition);
-        }
+        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
         return new MaterializedView.BasePartitionInfo(
                 partition.getId(),
                 defaultPartition.getVisibleVersion(),

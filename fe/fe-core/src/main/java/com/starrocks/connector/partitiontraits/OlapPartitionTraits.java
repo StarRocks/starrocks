@@ -29,7 +29,6 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -136,20 +135,9 @@ public class OlapPartitionTraits extends DefaultTraits {
         if (mvRefreshedPartitionInfo.getId() != partition.getId()) {
             return true;
         }
-        long lastRefreshTime = mvRefreshedPartitionInfo.getLastRefreshTime();
-        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
-        if (!subPartitions.isEmpty()) {
-            for (PhysicalPartition subPartition : subPartitions) {
-                if (subPartition.getVisibleVersionTime() > lastRefreshTime) {
-                    return true;
-                }
-            }
-            return false;
-        } else {
-            PhysicalPartition defaultPartition = partition.getDefaultPhysicalPartition();
-            return defaultPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                    || defaultPartition.getVisibleVersionTime() > lastRefreshTime;
-        }
+        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
+        return defaultPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || defaultPartition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {
