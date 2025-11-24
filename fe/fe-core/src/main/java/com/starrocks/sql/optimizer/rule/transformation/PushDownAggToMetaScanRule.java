@@ -111,7 +111,10 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             ColumnRefOperator usedColumn;
 
             String metaColumnName;
-            if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getChildren().isEmpty()) {
+            // For count(*) and count(constant), use rows_<column> meta column
+            // getUsedColumns().isEmpty() returns true for both count(*) and count(constant)
+            // because constants don't produce column references
+            if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getUsedColumns().isEmpty()) {
                 usedColumn = metaScan.getOutputColumns().get(0);
                 metaColumnName = "rows_" + usedColumn.getName();
             } else if (MapUtils.isNotEmpty(project.getColumnRefMap())) {
