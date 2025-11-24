@@ -401,8 +401,26 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        // TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        LOG(ERROR) << "[TRACE] VerticalColumnSorter::do_visit(StructColumn) - num_chunks=" << _vertical_columns.size() 
+                   << ", num_rows=" << _permutation.size() << ", limit=" << _limit 
+                   << ", fields=" << column.fields().size();
+        LOG(INFO) << "[VERTICAL_SORTER_STRUCT] Sorting vertical columns: num_chunks=" << _vertical_columns.size() 
+                  << ", num_rows=" << _permutation.size() << ", limit=" << _limit 
+                  << ", fields=" << column.fields().size();
+        
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+        };
+
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                            _build_tie, _limit, &_pruned_limit));
+        _prune_limit();
+        
+        LOG(ERROR) << "[TRACE] VerticalColumnSorter::do_visit(StructColumn) - completed, pruned_limit=" << _pruned_limit;
+        LOG(INFO) << "[VERTICAL_SORTER_STRUCT] Sorting completed: pruned_limit=" << _pruned_limit;
+        return Status::OK();
     }
 
     template <typename T>

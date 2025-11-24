@@ -276,6 +276,13 @@ bool TypeDescriptor::support_orderby() const {
     if (type == TYPE_ARRAY) {
         return children[0].support_orderby();
     }
+    if (type == TYPE_STRUCT) {
+        bool all_support = std::all_of(children.begin(), children.end(),
+                           [](const TypeDescriptor& t) { return t.support_orderby(); });
+        LOG(ERROR) << "[TRACE] TypeDescriptor::support_orderby() - TYPE_STRUCT with " << children.size() 
+                   << " children, all_support=" << all_support;
+        return all_support;
+    }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
            type != TYPE_MAP && type != TYPE_VARIANT;
 }

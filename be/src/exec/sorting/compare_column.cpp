@@ -178,8 +178,22 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        //TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        LOG(ERROR) << "[TRACE] CompareColumn::do_visit(StructColumn) - num_rows=" << column.size()
+                   << ", num_fields=" << column.fields().size();
+        LOG(INFO) << "[COLUMN_COMPARE_STRUCT] Comparing column with constant, num_rows=" << column.size()
+                  << ", num_fields=" << column.fields().size();
+        
+        // Convert the datum to a struct column
+        auto rhs_column = column.clone_empty();
+        rhs_column->append_datum(_rhs_value);
+        auto cmp = [&](int lhs_index) {
+            return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
+        };
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        
+        LOG(ERROR) << "[TRACE] CompareColumn::do_visit(StructColumn) - equal_count=" << _equal_count;
+        LOG(INFO) << "[COLUMN_COMPARE_STRUCT] Comparison completed, equal_count=" << _equal_count;
+        return Status::OK();
     }
 
     template <typename T>
@@ -305,7 +319,31 @@ public:
     Status do_visit(const ConstColumn& column) { return Status::NotSupported("Not support"); }
     Status do_visit(const ArrayColumn& column) { return Status::NotSupported("Not support"); }
     Status do_visit(const MapColumn& column) { return Status::NotSupported("Not support"); }
-    Status do_visit(const StructColumn& column) { return Status::NotSupported("Not support"); }
+    
+    Status do_visit(const StructColumn& column) {
+        LOG(ERROR) << "[TRACE] TieColumn::do_visit(StructColumn) - size=" << column.size() 
+                   << ", num_fields=" << column.fields().size();
+        // For struct columns, we need to compare all fields
+        // Two structs are equal if all their fields are equal
+        ImmutableNullData null_data;
+        if (_nullable_column != nullptr) {
+            null_data = _nullable_column->immutable_data();
+            LOG(ERROR) << "[TRACE] TieColumn - has nullable_column, null_data size=" << null_data.size();
+        }
+        
+        size_t tie_count = 0;
+        for (size_t i = 1; i < column.size(); i++) {
+            if ((null_data.empty()) || (null_data[i - 1] != 1 && null_data[i] != 1)) {
+                // Use StructColumn's compare_at method to check equality
+                int cmp = column.compare_at(i - 1, i, column, 1);
+                (*_tie)[i] &= (cmp == 0);
+                if ((*_tie)[i]) tie_count++;
+            }
+        }
+        LOG(ERROR) << "[TRACE] TieColumn::do_visit(StructColumn) - tie_count=" << tie_count;
+        return Status::OK();
+    }
+    
     template <typename T>
     Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("not support");

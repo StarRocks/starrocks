@@ -154,7 +154,35 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        LOG(ERROR) << "[TRACE] CompareWithFirstRow::do_visit(StructColumn) - num_rows=" << column.size();
+        size_t num_rows = column.size();
+        if (!_first_column->empty()) {
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
+            LOG(ERROR) << "[TRACE] CompareWithFirstRow - first_column not empty, cmp_vector[0]=" << (int)_cmp_vector[0];
+        } else {
+            _cmp_vector[0] |= 1;
+            LOG(ERROR) << "[TRACE] CompareWithFirstRow - first_column empty, set cmp_vector[0]=1";
+        }
+
+        if (!_null_masks.empty()) {
+            LOG(ERROR) << "[TRACE] CompareWithFirstRow - handling with null_masks, size=" << _null_masks.size();
+            DCHECK_EQ(_null_masks.size(), num_rows);
+            for (size_t i = 1; i < num_rows; ++i) {
+                if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
+                    _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+                } else {
+                    _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
+                }
+            }
+        } else {
+            LOG(ERROR) << "[TRACE] CompareWithFirstRow - no null_masks, comparing directly";
+            for (size_t i = 1; i < num_rows; ++i) {
+                _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+            }
+        }
+
+        LOG(ERROR) << "[TRACE] CompareWithFirstRow::do_visit(StructColumn) - completed successfully";
+        return Status::OK();
     }
 
 private:
@@ -251,7 +279,19 @@ public:
     }
 
     Status do_visit(StructColumn* column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        LOG(ERROR) << "[TRACE] AppendWithMask::do_visit(StructColumn) - sel_mask size=" << _sel_mask.size();
+        auto col = down_cast<StructColumn*>(_column);
+
+        size_t append_count = 0;
+        for (size_t i = 0; i < _sel_mask.size(); ++i) {
+            if (_sel_mask[i] == 0) {
+                column->append(*col, i, 1);
+                append_count++;
+            }
+        }
+
+        LOG(ERROR) << "[TRACE] AppendWithMask::do_visit(StructColumn) - appended " << append_count << " rows";
+        return Status::OK();
     }
 
 private:

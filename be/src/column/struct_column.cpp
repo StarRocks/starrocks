@@ -342,13 +342,21 @@ int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int n
     auto rsize = rhs_struct._fields.size();
     auto size = std::min(lsize, rsize);
 
+    LOG(INFO) << "[STRUCT_COMPARE_AT] Comparing structs: left_row=" << left 
+              << ", right_row=" << right << ", fields=" << size 
+              << ", lsize=" << lsize << ", rsize=" << rsize;
+
     for (int i = 0; i < size; ++i) {
         auto cmp = _fields[i]->compare_at(left, right, *rhs_struct._fields[i].get(), nan_direction_hint);
         if (cmp != 0) {
+            LOG(INFO) << "[STRUCT_COMPARE_AT] Difference found at field " << i << ": cmp=" << cmp;
             return cmp;
         }
     }
-    return lsize < rsize ? -1 : (lsize == rsize ? 0 : 1);
+    
+    int result = lsize < rsize ? -1 : (lsize == rsize ? 0 : 1);
+    LOG(INFO) << "[STRUCT_COMPARE_AT] All fields equal, result=" << result;
+    return result;
 }
 
 int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
