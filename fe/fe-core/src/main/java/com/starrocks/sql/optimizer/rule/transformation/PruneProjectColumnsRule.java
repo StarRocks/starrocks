@@ -17,14 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -69,13 +66,9 @@ public class PruneProjectColumnsRule extends TransformationRule {
         }));
 
         if (newMap.isEmpty()) {
-            if (child instanceof LogicalMetaScanOperator) {
-                throw new StarRocksPlannerException(ErrorType.UNSUPPORTED, "META_SCAN must explicitly specify column");
-            } else {
-                ColumnRefOperator constCol = context.getColumnRefFactory()
-                        .create("auto_fill_col", IntegerType.TINYINT, false);
-                newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
-            }
+            ColumnRefOperator constCol = context.getColumnRefFactory()
+                    .create("auto_fill_col", IntegerType.TINYINT, false);
+            newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
         } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.getOptimizerOptions().isShortCircuit()) {
             // Change the requiredOutputColumns in context
             requiredOutputColumns.union(requiredInputColumns);

@@ -22,7 +22,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -531,15 +530,27 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMetaScanWithCount1() throws Exception {
+        String sql = "select count(1) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(rows_v1)");
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id");
+    }
+
+    @Test
     public void testMetaScanCountStarWithPartition() throws Exception {
         {
-            String sql = "select cast(count(*) as bigint) from lineitem_partition partitions(p1993)[_META_]";
-            Assertions.assertThrows(StarRocksPlannerException.class, () -> getCostExplain(sql));
+            String sql = "select cast(count(1) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
         }
 
         {
-            String sql = "select cast(count(L_ORDERKEY) as bigint) from lineitem_partition partitions(p1993)[_META_]";
-            getCostExplain(sql);
+            String sql = "select cast(count(*) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
         }
     }
 
