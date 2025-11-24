@@ -84,7 +84,6 @@ The purpose of `fe.profile.log` is to record detailed query execution informatio
 - `profile_log_roll_num`: Controls the number of retained profile log files to prevent unlimited growth and excessive disk usage. Default is 5
 - `profile_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 5 files are retained, and older files are deleted
 - `profile_log_delete_age`: Controls how long old files are kept before deletion. Default is 1 day
-- `enable_profile_log_compress`: Controls whether profile log compression is enabled. Default is false, meaning compression is disabled
 
 ### `fe.internal.log`
 
