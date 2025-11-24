@@ -355,7 +355,7 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: thirdparty-info
-    timeout-minutes: 90
+    timeout-minutes: 150
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -366,7 +366,6 @@ jobs:
       - name: INIT ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
