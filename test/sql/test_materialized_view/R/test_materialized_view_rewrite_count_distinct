@@ -63,11 +63,11 @@ set enable_count_distinct_rewrite_by_hll_bitmap=true;
 -- !result
 function: print_hit_materialized_views("select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;")
 -- result:
-test_mv1
+
 -- !result
 function: print_hit_materialized_views("select count(distinct tag_id), count(distinct user_name) from user_tags;")
 -- result:
-test_mv1
+
 -- !result
 select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
 -- result:
@@ -114,11 +114,11 @@ set enable_count_distinct_rewrite_by_hll_bitmap=true;
 -- !result
 function: print_hit_materialized_views("select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;")
 -- result:
-test_mv1
+
 -- !result
 function: print_hit_materialized_views("select count(distinct tag_id), count(distinct user_name) from user_tags;")
 -- result:
-test_mv1
+
 -- !result
 select user_id, count(distinct tag_id), count(distinct user_name) from user_tags group by user_id order by user_id;
 -- result:

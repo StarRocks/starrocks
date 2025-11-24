@@ -56,10 +56,10 @@ PROPERTIES (
 as select id, dt, province, age from t3 where id > 1;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
-function: check_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
+function: print_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
 select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
+function: print_hit_materialized_view("select id, dt, province, age from t3 where id > 1;", "test_mv1")
 select id, dt, province, age from t3 where id > 1 order by 1, 2, 3, 4;
 
 drop materialized view test_mv1;
@@ -78,10 +78,10 @@ PROPERTIES (
 as select dt, province, sum(age) from t3 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
 INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t3 group by dt, province order by 1, 2;
 
 drop materialized view test_mv1;
@@ -100,10 +100,10 @@ PROPERTIES (
 as select dt, province, sum(age) from t4 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
 INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
-function: check_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 group by dt, province order by 1, 2;", "test_mv1")
 select dt, province, sum(age) from t4 group by dt, province order by 1, 2;
 drop materialized view test_mv1;
 

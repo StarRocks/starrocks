@@ -59,6 +59,10 @@ skip_res_cmd = [
     "select current_date\\(\\)",
     "refresh materialized view.*",
     "REFRESH MATERIALIZED VIEW.*"
+    "analyze full table.*"
+    "ANALYZE FULL TABLE.*"
+    "analyze table.*"
+    "ANALYZE TABLE.*"
 ]
 
 skip_files = set([

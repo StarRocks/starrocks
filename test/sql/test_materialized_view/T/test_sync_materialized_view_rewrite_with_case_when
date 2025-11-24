@@ -37,12 +37,12 @@ CREATE MATERIALIZED VIEW test_mv1
 AS SELECT k1, k6, SUM(k7) as sum1, SUM(k9) as sum2, SUM(k8) as sum3 FROM t1 GROUP BY k1, k6;
 function: wait_materialized_view_finish()
 
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(k9), sum(if(k6=0, k9, 0)) as cnt0, sum(if(k6=1, k9, 0)) as cnt1,  sum(if(k6=2, k9, 0)) as cnt2 from t1 group by k1 order by k1;", "test_mv1")
-function: check_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k9, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(k9), sum(if(k6=0, k9, 0)) as cnt0, sum(if(k6=1, k9, 0)) as cnt1,  sum(if(k6=2, k9, 0)) as cnt2 from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k9, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
 
 SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;
 SELECT k1, sum(case when k6 > 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;
@@ -57,12 +57,12 @@ CREATE MATERIALIZED VIEW test_mv1
 AS SELECT k1, k6, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) as sum2 FROM t1 GROUP BY k1, k6;
 
 function: wait_materialized_view_finish()
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(k9), sum(if(k6=0, k9, 0)) as cnt0, sum(if(k6=1, k9, 0)) as cnt1,  sum(if(k6=2, k9, 0)) as cnt2 from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k9, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(k9), sum(if(k6=0, k9, 0)) as cnt0, sum(if(k6=1, k9, 0)) as cnt1,  sum(if(k6=2, k9, 0)) as cnt2 from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k9, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
 
 SELECT k1, sum(case when k6 > 1 then k9 else 0 end) from t1 group by k1 order by k1;
 SELECT k1, sum(case when k6 > 1 then k9 + 1 else 0 end) from t1 group by k1 order by k1;
@@ -79,14 +79,14 @@ AS SELECT k1, k6, SUM(k7) as sum1, SUM(k9) as sum2, SUM(k8) as sum3 FROM t1 GROU
 
 refresh materialized view test_mv1 with sync mode;
 
-function: check_no_hit_materialized_view("SELECT count(1) from t1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT count(*) from t1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT count(k6) from t1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k6, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT count(1) from t1;", "test_mv1")
+function: print_hit_materialized_view("SELECT count(*) from t1;", "test_mv1")
+function: print_hit_materialized_view("SELECT count(k6) from t1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 > 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(case when k6 = 1 then k6 + 1 else 0 end) from t1 group by k1 order by k1;", "test_mv1")
+function: print_hit_materialized_view("SELECT k1, sum(if(k6 > 1, k6, 0)) as cnt0 from t1 group by k1 order by k1;", "test_mv1")
 
 SELECT count(1) from t1;
 SELECT count(*) from t1;

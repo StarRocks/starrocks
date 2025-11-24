@@ -2179,7 +2179,7 @@ class StarrocksSQLApiLib(object):
             if orig_value is not None:
                 self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
 
-    def print_hit_materialized_view(self, query, *expects) -> bool:
+    def print_hit_materialized_view(self, query, *expects) -> str:
         """
         assert mv_name is hit in query
         """
@@ -2191,10 +2191,21 @@ class StarrocksSQLApiLib(object):
                 print(res)
                 return False
             plan = str(res["result"])
-            for expect in expects:
-                if plan.find(expect) > 0:
-                    return True
-            return False
+            if expects is not None or len(expects) > 0:
+                for expect in expects:
+                    if plan.find(expect) > 0:
+                        return True
+                return False
+            else:
+                mvs = []
+                for line in plan.split('\n'):
+                    if 'MaterializedView: true' in line:
+                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
+                        if mv_name:
+                            mvs.append(mv_name)
+                mvs.sort()
+                print("Hit materialized views:", ", ".join(mvs))
+                return mvs
         return self._with_materialized_view_rewrite(check_mv)
 
     def print_hit_materialized_views(self, query) -> str:

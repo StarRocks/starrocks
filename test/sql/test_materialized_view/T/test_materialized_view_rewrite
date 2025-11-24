@@ -106,18 +106,18 @@ group by user_id, time;
 
 refresh materialized view agg_mv1 with sync mode;
 
-function: check_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
 select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
 
-function: check_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+function: print_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
 select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 
 set enable_materialized_view_rewrite = off;
 
-function: check_no_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
 select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
 
-function: check_no_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+function: print_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
 select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 
 -- name: test_all_join_type_rewrite
