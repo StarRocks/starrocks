@@ -78,10 +78,6 @@ Whether to allow StarRocks to create the default storage volume by using the obj
 
 Supported from v3.1.0.
 
-> **CAUTION**
->
-> We strongly recommend you leave this item as `true` while you are upgrading an existing shared-data cluster from v3.0. If you specify this item as `false`, the databases and tables you created before the upgrade become read-only, and you cannot load data into them.
-
 #### cloud_native_storage_type
 
 The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value:
