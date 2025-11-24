@@ -57,6 +57,8 @@ public class SimpleExecutor {
 
     private final TResultSinkType queryResultProtocol;
 
+    private int dop = 0;
+
     public SimpleExecutor(String name, TResultSinkType queryResultProtocol) {
         this.name = name;
         this.queryResultProtocol = queryResultProtocol;
@@ -73,6 +75,15 @@ public class SimpleExecutor {
         return sql;
     }
 
+    /**
+     * Set the execution DOP of this executor
+     *
+     * @param dop
+     */
+    public void setDop(int dop) {
+        this.dop = dop;
+    }
+
     public void executeDML(String sql) {
         ConnectContext prev = ConnectContext.get();
         try {
@@ -83,6 +94,7 @@ public class SimpleExecutor {
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()
                     .info("{} execute SQL | Query_id {} | DML {}", name, DebugUtil.printId(context.getQueryId()), sql);
             executor.execute();
@@ -118,6 +130,7 @@ public class SimpleExecutor {
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()
                     .info("{} execute SQL | Query_id {} | DQL {}", name, DebugUtil.printId(context.getQueryId()), sql);
             Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);

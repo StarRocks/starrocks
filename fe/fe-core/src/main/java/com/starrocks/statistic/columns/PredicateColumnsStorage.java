@@ -35,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
@@ -135,7 +136,9 @@ public class PredicateColumnsStorage {
     }
 
     public PredicateColumnsStorage() {
-        this.executor = SimpleExecutor.getRepoExecutor();
+        this.executor = new SimpleExecutor("predicate_column", TResultSinkType.HTTP_PROTOCAL);
+        // Set the DOP to 1 to reduce impact on normal queries
+        this.executor.setDop(1);
     }
 
     public PredicateColumnsStorage(SimpleExecutor executor) {
