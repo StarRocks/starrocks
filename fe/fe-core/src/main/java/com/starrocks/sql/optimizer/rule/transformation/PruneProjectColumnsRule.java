@@ -20,7 +20,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -45,7 +44,6 @@ public class PruneProjectColumnsRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
-        Operator child = input.getInputs().get(0).getOp();
 
         ColumnRefSet requiredInputColumns = new ColumnRefSet();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();

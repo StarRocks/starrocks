@@ -32,7 +32,7 @@ public class CollectionTypeColumnStats extends BaseColumnStats {
     public String getFullDataSize() {
         long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                 ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
-        return "COUNT(" + getQuotedColumnName() + ") * " + elementTypeSize + " * " + getCollectionSize();
+        return "COUNT(*) * " + elementTypeSize + " * " + getCollectionSize();
     }
 
     @Override
