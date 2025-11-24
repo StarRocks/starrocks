@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.common.util;
+package com.starrocks.sql.ast;
 
 public class OrderByPair {
-    private int index;
-    private boolean isDesc;
+    private final int index;
+    private final boolean isDesc;
 
     public OrderByPair(int index) {
         this(index, false);

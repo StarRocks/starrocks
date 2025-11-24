@@ -12,37 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowStorageVolumesStmt extends ShowStmt {
-    private final String pattern;
+/**
+ * Show charset statement
+ * Acceptable syntax:
+ * SHOW {CHAR SET | CHARSET}
+ * [LIKE 'pattern' | WHERE expr]
+ */
+public class ShowCharsetStmt extends ShowStmt {
+    private String pattern;
+    private Expr where;
 
-
-    public ShowStorageVolumesStmt(String pattern, NodePosition pos) {
-        super(pos);
-        this.pattern = Strings.nullToEmpty(pattern);
+    public ShowCharsetStmt() {
+        super(NodePosition.ZERO);
     }
 
+    public ShowCharsetStmt(String pattern, Expr where, NodePosition pos) {
+        super(pos);
+        this.pattern = pattern;
+        this.where = where;
+    }
 
     public String getPattern() {
         return pattern;
     }
 
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStorageVolumesStatement(this, context);
+    public Expr getWhere() {
+        return where;
     }
 
     @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW STORAGE VOLUMES");
-        if (!pattern.isEmpty()) {
-            sb.append(" LIKE '").append(pattern).append("'");
-        }
-        return sb.toString();
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowCharsetStatement(this, context);
     }
 }

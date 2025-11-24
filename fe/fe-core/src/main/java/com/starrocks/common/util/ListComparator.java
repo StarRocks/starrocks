@@ -18,6 +18,7 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.sql.ast.OrderByPair;
 
 import java.util.Comparator;
 import java.util.List;

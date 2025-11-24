@@ -21,9 +21,8 @@ import static com.starrocks.common.util.Util.normalizeName;
 
 public class ShowRestoreStmt extends ShowStmt {
 
-    private String dbName;
-    private Expr where;
-    private String label;
+    private final String dbName;
+    private final Expr where;
 
     public ShowRestoreStmt(String dbName, Expr where) {
         this(dbName, where, NodePosition.ZERO);
@@ -37,14 +36,6 @@ public class ShowRestoreStmt extends ShowStmt {
 
     public String getDbName() {
         return dbName;
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
     }
 
     @Override

@@ -12,48 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
-// SHOW TABLE STATUS
-public class ShowTableStatusStmt extends ShowStmt {
-    private String db;
-    private final String wild;
+/**
+ * Show collation statement:
+ * Acceptable syntax:
+ * SHOW COLLATION
+ * [LIKE 'pattern' | WHERE expr]
+ */
+public class ShowCollationStmt extends ShowStmt {
+    private String pattern;
     private Expr where;
 
-    public ShowTableStatusStmt(String db, String wild, Expr where) {
-        this(db, wild, where, NodePosition.ZERO);
+    public ShowCollationStmt() {
+        super(NodePosition.ZERO);
     }
 
-    public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
+    public ShowCollationStmt(String pattern, Expr where, NodePosition pos) {
         super(pos);
-        this.db = normalizeName(db);
-        this.wild = wild;
+        this.pattern = pattern;
         this.where = where;
     }
 
-    public void setDb(String db) {
-        this.db = normalizeName(db);
-    }
-
-    public String getDb() {
-        return db;
-    }
-
     public String getPattern() {
-        return wild;
+        return pattern;
     }
 
-    public Expr getWhereClause() {
+    public Expr getWhere() {
         return where;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatusStatement(this, context);
+        return visitor.visitShowCollationStatement(this, context);
     }
 }

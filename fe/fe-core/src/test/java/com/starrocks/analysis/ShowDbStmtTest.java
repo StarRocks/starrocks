@@ -27,6 +27,8 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ShowStmtToSelectStmtConverter;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -88,7 +90,8 @@ public class ShowDbStmtTest {
 
         String sql = "show databases where `database` = 't1'";
         stmt = (ShowDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
+        QueryStatement queryStatement = ShowStmtToSelectStmtConverter.toSelectStmt(stmt);
+        Preconditions.notNull(queryStatement.getOrigStmt(), "stmt's original stmt should not be null");
 
     }
 

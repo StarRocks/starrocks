@@ -170,6 +170,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowDataStatement(ShowDataStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -198,6 +202,34 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowCharsetStatement(ShowCharsetStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCollationStatement(ShowCollationStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowProcedureStatement(ShowProcedureStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowStatusStatement(ShowStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -211,6 +243,14 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowProcesslistStatement(ShowProcesslistStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowVariablesStatement(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

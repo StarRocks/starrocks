@@ -36,7 +36,6 @@ import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
@@ -46,8 +45,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -565,11 +564,7 @@ public class ShowStmtAnalyzer {
         }
 
         private void analyzeShowPredicate(ShowStmt showStmt) {
-            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
-                return;
-            }
-
-            Predicate predicate = sortedShowStmt.getPredicate();
+            Predicate predicate = showStmt.getPredicate();
             if (predicate == null) {
                 return;
             }
@@ -808,7 +803,7 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
-        public void analyzeOrderByItems(EnhancedShowStmt node) {
+        public void analyzeOrderByItems(ShowStmt node) {
             ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(node);
             List<OrderByElement> orderByElements = node.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {

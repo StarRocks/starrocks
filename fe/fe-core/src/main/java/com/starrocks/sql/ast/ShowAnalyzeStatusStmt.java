@@ -34,7 +34,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowAnalyzeStatusStmt extends EnhancedShowStmt {
+public class ShowAnalyzeStatusStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
 
     public ShowAnalyzeStatusStmt(Predicate predicate, List<OrderByElement> orderByElements,

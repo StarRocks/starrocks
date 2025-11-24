@@ -12,42 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-/**
- * Show collation statement:
- * Acceptable syntax:
- * SHOW COLLATION
- * [LIKE 'pattern' | WHERE expr]
- */
-public class ShowCollationStmt extends ShowStmt {
-    private String pattern;
-    private Expr where;
+// ADMIN SHOW REPLICA STATUS FROM example_db.example_table;
+public class AdminShowReplicaStatusStmt extends ShowStmt {
+    private final TableRef tblRef;
+    private final Expr where;
 
-    public ShowCollationStmt() {
-        super(NodePosition.ZERO);
+    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
+        this(tblRef, where, NodePosition.ZERO);
     }
 
-    public ShowCollationStmt(String pattern, Expr where, NodePosition pos) {
+    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
         super(pos);
-        this.pattern = pattern;
+        this.tblRef = tblRef;
         this.where = where;
     }
 
-    public String getPattern() {
-        return pattern;
+    public String getDbName() {
+        return tblRef.getDbName();
+    }
+
+    public String getTblName() {
+        return tblRef.getTableName();
     }
 
     public Expr getWhere() {
         return where;
     }
 
+    public PartitionRef getPartitionRef() {
+        return tblRef.getPartitionDef();
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCollationStatement(this, context);
+        return visitor.visitAdminShowReplicaStatusStatement(this, context);
     }
 }
