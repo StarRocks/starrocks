@@ -185,17 +185,11 @@ TEST_F(FileScannerTest, select_sample_files) {
         ASSERT_TRUE(sample_file_indexes.empty());
     }
 
+    // total file count >= sample file count
     {
         std::vector<size_t> sample_file_indexes;
         FileScanner::sample_files(10, 1, &sample_file_indexes);
         std::vector<size_t> expect = {9};
-        ASSERT_EQ(expect, sample_file_indexes);
-    }
-
-    {
-        std::vector<size_t> sample_file_indexes;
-        FileScanner::sample_files(1, 10, &sample_file_indexes);
-        std::vector<size_t> expect = {0};
         ASSERT_EQ(expect, sample_file_indexes);
     }
 
@@ -241,7 +235,14 @@ TEST_F(FileScannerTest, select_sample_files) {
         ASSERT_EQ(expect, sample_file_indexes);
     }
 
-    // sample file count > total file count
+    // total file count < sample file count
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(1, 10, &sample_file_indexes);
+        std::vector<size_t> expect = {0};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
     {
         std::vector<size_t> sample_file_indexes;
         FileScanner::sample_files(2, 8, &sample_file_indexes);
