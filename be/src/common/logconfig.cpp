@@ -25,6 +25,7 @@
 #include <pthread.h>
 #endif
 
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -32,6 +33,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 
 #include "cache/datacache.h"
@@ -209,13 +211,25 @@ static void failure_function() {
     std::abort();
 }
 
-// Calculate timezone offset string dynamically
+// Calculate timezone offset string dynamically with caching (thread-safe)
 static std::string get_timezone_offset_string(const google::LogMessageTime& time) {
-    char tz_str[7] = "+0000";
+    // Cache the last offset and its string representation
+    static std::mutex cache_mutex;
+    static std::atomic<long> cached_offset_seconds(0);
+    static std::shared_ptr<std::string> cached_tz_str_ptr(std::make_shared<std::string>("+0000"));
 
     // Get timezone offset from LogMessageTime
     long offset_seconds = time.gmtoffset().count();
 
+    // Fast path: check atomic variables without lock
+    long cached_offset = cached_offset_seconds.load(std::memory_order_acquire);
+    if (offset_seconds == cached_offset) {
+        std::shared_ptr<std::string> tz_ptr = std::atomic_load_explicit(&cached_tz_str_ptr, std::memory_order_acquire);
+        return *tz_ptr;
+    }
+
+    // Slow path: recalculate and update cache
+    char tz_str[7] = "+0000";
     int offset_hours = static_cast<int>(offset_seconds / 3600);
     int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
     if (offset_mins < 0) offset_mins = -offset_mins;
@@ -226,7 +240,24 @@ static std::string get_timezone_offset_string(const google::LogMessageTime& time
         snprintf(tz_str, sizeof(tz_str), "+%02d%02d", offset_hours, offset_mins);
     }
 
-    return std::string(tz_str);
+    std::string result(tz_str);
+    auto new_tz_ptr = std::make_shared<std::string>(result);
+
+    // Update cache with lock
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    long expected_offset = cached_offset_seconds.load(std::memory_order_relaxed);
+    if (offset_seconds != expected_offset) {
+        // Publish the cached_str before updating the offset
+        std::atomic_store_explicit(&cached_tz_str_ptr, new_tz_ptr, std::memory_order_release);
+        cached_offset_seconds.store(offset_seconds, std::memory_order_release);
+    } else {
+        // Another thread already updated, use the cached string
+        std::shared_ptr<std::string> current_ptr =
+                std::atomic_load_explicit(&cached_tz_str_ptr, std::memory_order_acquire);
+        result = *current_ptr;
+    }
+
+    return result;
 }
 
 // Custom prefix formatter that includes timezone information
