@@ -295,7 +295,7 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
-    return new_shared_filesystem(info.id, *scheme, *localconf, existing_fs_cache_key);
+    return new_shared_filesystem(info.id, *scheme, *localconf, std::move(existing_fs_cache_key));
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
@@ -384,7 +384,7 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
 
 std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& key,
                                                            const std::shared_ptr<FileSystem>& fs,
-                                                           std::shared_ptr<std::string> existing_fs_cache_key) {
+                                                           const std::shared_ptr<std::string>& existing_fs_cache_key) {
     std::shared_ptr<std::string> fs_cache_key;
 
     // Reuse existing fs_cache_key if it matches the current key

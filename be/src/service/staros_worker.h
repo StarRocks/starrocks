@@ -131,7 +131,7 @@ private:
     absl::Status invalidate_fs(const ShardInfo& shard);
 
     std::shared_ptr<std::string> insert_fs_cache(const std::string& key, const std::shared_ptr<FileSystem>& fs,
-                                                 std::shared_ptr<std::string> existing_fs_cache_key = nullptr);
+                                                 const std::shared_ptr<std::string>& existing_fs_cache_key = nullptr);
     void erase_fs_cache(const std::string& key);
     std::shared_ptr<FileSystem> lookup_fs_cache(const std::string& key);
     std::shared_ptr<FileSystem> lookup_fs_cache(const std::shared_ptr<std::string>& key);
