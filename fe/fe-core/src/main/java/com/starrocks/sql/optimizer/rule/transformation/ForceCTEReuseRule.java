@@ -48,7 +48,7 @@ public class ForceCTEReuseRule extends TransformationRule {
         }
 
         // Force reuse for LIMIT without ORDER BY if enabled by session variable
-        if (hasLimitWithoutOrderBy(input) && context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy()) {
+        if (context.getSessionVariable().isCboCTEForceReuseLimitWithoutOrderBy() && hasLimitWithoutOrderBy(input)) {
             shouldForceReuse = true;
         }
 
