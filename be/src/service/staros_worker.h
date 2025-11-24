@@ -126,7 +126,7 @@ private:
     build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf,
                                      const std::shared_ptr<std::string>& existing_fs_cache_key = nullptr);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
-            ShardId shard_id, std::string_view scheme, const Configuration& conf,
+            std::string_view scheme, const Configuration& conf,
             const std::shared_ptr<std::string>& existing_fs_cache_key = nullptr);
     absl::Status invalidate_fs(const ShardInfo& shard);
 
