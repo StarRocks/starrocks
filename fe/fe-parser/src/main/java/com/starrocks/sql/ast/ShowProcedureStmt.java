@@ -12,30 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
-// Show Warning stmt
-public class ShowWarningStmt extends ShowStmt {
-    private LimitElement limitElement;
+public class ShowProcedureStmt extends ShowStmt {
 
-    public ShowWarningStmt(LimitElement limitElement, NodePosition pos) {
+    private String pattern;
+    private Expr where;
+
+    public ShowProcedureStmt(String pattern, Expr where) {
+        this(pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowProcedureStmt(String pattern, Expr where, NodePosition pos) {
         super(pos);
-        this.limitElement = limitElement;
+        this.pattern = pattern;
+        this.predicate = (Predicate) where;
     }
 
-    public long getLimitNum() {
-        if (limitElement != null && limitElement.hasLimit()) {
-            return limitElement.getLimit();
-        }
-        return -1L;
+    public ShowProcedureStmt() {
+        super(NodePosition.ZERO);
     }
 
+    public String getPattern() {
+        return pattern;
+    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowWarningStatement(this, context);
+        return visitor.visitShowProcedureStatement(this, context);
     }
 }

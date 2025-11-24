@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
@@ -47,11 +46,8 @@ public class ShowPartitionsStmt extends ShowStmt {
     private String dbName;
     private final String tableName;
     private final Expr whereClause;
-    private final List<OrderByElement> orderByElements;
-    private final LimitElement limitElement;
     private boolean isTempPartition;
 
-    private List<OrderByPair> orderByPairs;
     private Map<String, Expr> filterMap;
 
     private ProcNodeInterface node;
