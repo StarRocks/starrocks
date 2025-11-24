@@ -111,13 +111,24 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
                 metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             } else {
-                usedColumn = scanOperator.getOutputColumns().get(0);
                 // for count, distinguish between count(*) and count(column)
                 if (aggCall.getUsedColumns().isEmpty()) {
                     // count(*) - should count all rows including NULLs, use "rows" as field name
+                    // We need to select a column from ColRefToColumnMetaMap, not from getOutputColumns(),
+                    // because getOutputColumns() may contain columns that are not in ColRefToColumnMetaMap
+                    // after column pruning. Use findSmallestColumnRefFromTable to get a valid column.
+                    usedColumn = Utils.findSmallestColumnRefFromTable(
+                            scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable());
+                    if (usedColumn == null) {
+                        // Fallback: use the first column from ColRefToColumnMetaMap if findSmallestColumnRefFromTable returns null
+                        usedColumn = scanOperator.getColRefToColumnMetaMap().keySet().iterator().next();
+                    }
                     metaColumnName = "rows_" + usedColumn.getName();
                 } else {
                     // count(column) - should count non-NULL values, use "count" as field name
+                    ColumnRefSet usedColumns = aggCall.getUsedColumns();
+                    Preconditions.checkArgument(usedColumns.cardinality() == 1);
+                    usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
                     metaColumnName = "count_" + usedColumn.getName();
                 }
             }

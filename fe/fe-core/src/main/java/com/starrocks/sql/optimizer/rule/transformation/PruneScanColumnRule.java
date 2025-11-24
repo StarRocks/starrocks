@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
@@ -47,7 +48,8 @@ public class PruneScanColumnRule extends TransformationRule {
             OperatorType.LOGICAL_ES_SCAN,
             OperatorType.LOGICAL_JDBC_SCAN,
             OperatorType.LOGICAL_BINLOG_SCAN,
-            OperatorType.LOGICAL_KUDU_SCAN
+            OperatorType.LOGICAL_KUDU_SCAN,
+            OperatorType.LOGICAL_META_SCAN
     );
 
     public PruneScanColumnRule() {
@@ -68,8 +70,19 @@ public class PruneScanColumnRule extends TransformationRule {
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
         boolean canUseAnyColumn = false;
         if (outputColumns.isEmpty()) {
-            outputColumns.add(
-                    Utils.findSmallestColumnRefFromTable(scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable()));
+            // For META_SCAN, columns are metadata columns (like rows_*, count_*, min_*, max_*),
+            // not physical table columns. We should not use findSmallestColumnRefFromTable
+            // which looks for columns in table's baseSchema.
+            if (scanOperator instanceof LogicalMetaScanOperator) {
+                // For META_SCAN, all columns in colRefToColumnMetaMap are required,
+                // so we should keep all of them
+                outputColumns.addAll(scanOperator.getColRefToColumnMetaMap().keySet());
+            } else {
+                outputColumns.add(
+                        Utils.findSmallestColumnRefFromTable(scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable()));
+                canUseAnyColumn = true;
+            }
+        } else if (!(scanOperator instanceof LogicalMetaScanOperator)) {
             canUseAnyColumn = true;
         }
 
@@ -90,6 +103,12 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
                         .setColRefToColumnMetaMap(newColumnRefMap).build();
                 newScanOperator.getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
+                return Lists.newArrayList(new OptExpression(newScanOperator));
+            } else if (scanOperator instanceof LogicalMetaScanOperator) {
+                LogicalMetaScanOperator metaScanOperator = (LogicalMetaScanOperator) scanOperator;
+                LogicalMetaScanOperator.Builder builder = LogicalMetaScanOperator.builder();
+                LogicalMetaScanOperator newScanOperator = builder.withOperator(metaScanOperator)
+                        .setColRefToColumnMetaMap(newColumnRefMap).build();
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);

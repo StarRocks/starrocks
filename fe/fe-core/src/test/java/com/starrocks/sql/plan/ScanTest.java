@@ -528,4 +528,30 @@ public class ScanTest extends PlanTestBase {
                 "     <id 10> : count_v3\n" +
                 "     <id 11> : rows_v1");
     }
+
+    @Test
+    public void testMetaScanCountStarWithPartition() throws Exception {
+        // Test count(*) with META_SCAN and partition, which was fixed in issue #65886
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        String sql = "select cast(count(*) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+        String plan = getFragmentPlan(sql);
+        // Verify that MetaScan is used and rows_* column is generated correctly
+        assertContains(plan, "0:MetaScan");
+        assertContains(plan, "rows_");
+        // Verify the aggregate function is sum(rows_*)
+        assertContains(plan, "sum(rows_");
+    }
+
+    @Test
+    public void testMetaScanCountStarColumnSelection() throws Exception {
+        // Test that count(*) correctly selects a column from ColRefToColumnMetaMap
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        String sql = "select count(*) from test_all_type[_META_]";
+        String plan = getFragmentPlan(sql);
+        // Verify that MetaScan is used with rows_* column
+        assertContains(plan, "0:MetaScan");
+        assertContains(plan, "rows_");
+        // Verify the aggregate function is sum(rows_*)
+        assertContains(plan, "sum(rows_");
+    }
 }
