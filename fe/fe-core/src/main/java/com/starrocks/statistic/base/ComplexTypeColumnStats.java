@@ -25,7 +25,7 @@ public class ComplexTypeColumnStats extends BaseColumnStats {
 
     @Override
     public String getFullDataSize() {
-        return "COUNT(*) * " + columnType.getTypeSize();
+        return "COUNT(" + getQuotedColumnName() + ") * " + columnType.getTypeSize();
     }
 
     @Override

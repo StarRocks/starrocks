@@ -75,7 +75,7 @@ public class HyperStatisticSQLs {
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
             ", '$columnNameStr'" + // VARCHAR, column_name
-            ", cast(COUNT(*) as BIGINT)" + // BIGINT, row_count
+            ", cast(COUNT($columnNameStr) as BIGINT)" + // BIGINT, row_count
             ", cast(0 as BIGINT)" + // BIGINT, data_size
             ", '00'" + // VARBINARY, ndv
             ", cast(0 as BIGINT)" + // BIGINT, null_count
