@@ -17,8 +17,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.parser.NodePosition;
 
 // Column position used when add column
@@ -44,15 +42,6 @@ public class ColumnPosition implements ParseNode {
     public ColumnPosition(String col, NodePosition pos) {
         this.pos = pos;
         this.lastCol = col;
-    }
-
-    public void analyze() throws AnalysisException {
-        if (this == FIRST) {
-            return;
-        }
-        if (Strings.isNullOrEmpty(lastCol)) {
-            throw new AnalysisException("Column is empty.");
-        }
     }
 
     public boolean isFirst() {

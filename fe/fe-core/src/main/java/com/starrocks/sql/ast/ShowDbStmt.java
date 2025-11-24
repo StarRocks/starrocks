@@ -15,20 +15,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 // Show database statement.
-public class ShowDbStmt extends EnhancedShowStmt {
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "schemata");
-    private static final String DB_COL = "Database";
+public class ShowDbStmt extends ShowStmt {
     private final String pattern;
     private Expr where;
 
@@ -65,20 +58,8 @@ public class ShowDbStmt extends EnhancedShowStmt {
         return catalogName;
     }
 
-    @Override
-    public QueryStatement toSelectStmt() {
-        if (where == null) {
-            return null;
-        }
-        // Columns
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "SCHEMA_NAME"), DB_COL);
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, DB_COL), item.getExpr().clone());
-        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null), this.origStmt);
+    public Expr getWhereClause() {
+        return where;
     }
 
     @Override

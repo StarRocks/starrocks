@@ -12,38 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowProcedureStmt extends EnhancedShowStmt {
+public class ShowCreateRoutineLoadStmt extends ShowStmt {
 
-    private String pattern;
-    private Expr where;
+    private LabelName labelName;
 
-    public ShowProcedureStmt(String pattern, Expr where) {
-        this(pattern, where, NodePosition.ZERO);
+    public ShowCreateRoutineLoadStmt(LabelName labelName) {
+        this(labelName, NodePosition.ZERO);
     }
 
-    public ShowProcedureStmt(String pattern, Expr where, NodePosition pos) {
+    public ShowCreateRoutineLoadStmt(LabelName labelName, NodePosition pos) {
         super(pos);
-        this.pattern = pattern;
-        this.predicate = (Predicate) where;
+        this.labelName = labelName;
     }
 
-    public ShowProcedureStmt() {
-        super(NodePosition.ZERO);
+    public String getName() {
+        return labelName.getLabelName();
     }
 
-    public String getPattern() {
-        return pattern;
+    public String getDbFullName() {
+        return labelName.getDbName();
+    }
+
+    public void setDb(String db) {
+        labelName.setDbName(db);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowProcedureStatement(this, context);
+        return visitor.visitShowCreateRoutineLoadStatement(this, context);
     }
 }

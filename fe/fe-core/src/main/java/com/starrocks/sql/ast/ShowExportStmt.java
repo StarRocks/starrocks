@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -25,7 +24,6 @@ import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,16 +38,12 @@ public class ShowExportStmt extends ShowStmt {
 
     private String dbName;
     private Expr whereClause;
-    private LimitElement limitElement;
-    private List<OrderByElement> orderByElements;
 
     private long jobId = 0;
     private String stateValue = null;
     private UUID queryId = null;
 
     private JobState jobState;
-
-    private ArrayList<OrderByPair> orderByPairs;
 
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
                           LimitElement limitElement) {
@@ -85,24 +79,12 @@ public class ShowExportStmt extends ShowStmt {
         this.dbName = normalizeName(dbName);
     }
 
-    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
-        this.orderByPairs = orderByPairs;
-    }
-
     public String getDbName() {
         return dbName;
     }
 
     public Expr getWhereClause() {
         return whereClause;
-    }
-
-    public List<OrderByElement> getOrderByElements() {
-        return orderByElements;
-    }
-
-    public ArrayList<OrderByPair> getOrderByPairs() {
-        return this.orderByPairs;
     }
 
     public long getLimit() {

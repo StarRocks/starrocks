@@ -55,6 +55,6 @@ public class ShowStatusStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowStatusStatement(this, context);
+        return visitor.visitShowStatusStatement(this, context);
     }
 }

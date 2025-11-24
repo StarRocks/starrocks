@@ -17,39 +17,45 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-// ADMIN SHOW REPLICA STATUS FROM example_db.example_table;
-public class AdminShowReplicaStatusStmt extends ShowStmt {
-    private final TableRef tblRef;
-    private final Expr where;
+// Show variables statement.
+public class ShowVariablesStmt extends ShowStmt {
+    private SetType type;
+    private final String pattern;
+    private Expr where;
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
-        this(tblRef, where, NodePosition.ZERO);
+    public ShowVariablesStmt(SetType type, String pattern) {
+        this(type, pattern, null, NodePosition.ZERO);
     }
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
+    public ShowVariablesStmt(SetType type, String pattern, Expr where) {
+        this(type, pattern, where, NodePosition.ZERO);
+    }
+
+    public ShowVariablesStmt(SetType type, String pattern, Expr where, NodePosition pos) {
         super(pos);
-        this.tblRef = tblRef;
+        this.type = type;
+        this.pattern = pattern;
         this.where = where;
     }
 
-    public String getDbName() {
-        return tblRef.getDbName();
+    public SetType getType() {
+        return type;
     }
 
-    public String getTblName() {
-        return tblRef.getTableName();
+    public void setType(SetType type) {
+        this.type = type;
     }
 
-    public Expr getWhere() {
+    public String getPattern() {
+        return pattern;
+    }
+
+    public Expr getWhereClause() {
         return where;
-    }
-
-    public PartitionRef getPartitionRef() {
-        return tblRef.getPartitionDef();
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAdminShowReplicaStatusStatement(this, context);
+        return visitor.visitShowVariablesStatement(this, context);
     }
 }

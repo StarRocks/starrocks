@@ -15,25 +15,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLES
-public class ShowTableStmt extends EnhancedShowStmt {
-    private static final String NAME_COL_PREFIX = "Tables_in_";
-    private static final String TYPE_COL = "Table_type";
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
+public class ShowTableStmt extends ShowStmt {
     private String db;
     private final boolean isVerbose;
     private final String pattern;
@@ -78,41 +66,12 @@ public class ShowTableStmt extends EnhancedShowStmt {
         return catalogName;
     }
 
-    @Override
-    public QueryStatement toSelectStmt() {
-        if (where == null) {
-            return null;
-        }
-        // Columns
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"),
-                NAME_COL_PREFIX + db);
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, NAME_COL_PREFIX + db),
-                item.getExpr().clone());
-        if (isVerbose) {
-            item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_TYPE"), TYPE_COL);
-            selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone());
-        }
-        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
-        // where databases_name = currentdb
-        Expr whereDbEQ = new BinaryPredicate(
-                BinaryType.EQ,
-                new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
-                new StringLiteral(db));
-        // old where + and + db where
-        Expr finalWhere = new CompoundPredicate(
-                CompoundPredicate.Operator.AND,
-                whereDbEQ,
-                where);
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                finalWhere, null, null), this.origStmt);
-    }
-
     public void setDb(String db) {
         this.db = normalizeName(db);
+    }
+
+    public Expr getWhereClause() {
+        return where;
     }
 
     @Override

@@ -21,7 +21,6 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra;
-import com.starrocks.connector.iceberg.IcebergRewriteData;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;

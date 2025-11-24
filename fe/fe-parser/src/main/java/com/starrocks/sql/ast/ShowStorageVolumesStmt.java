@@ -14,35 +14,35 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Strings;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowCreateRoutineLoadStmt extends ShowStmt {
+public class ShowStorageVolumesStmt extends ShowStmt {
+    private final String pattern;
 
-    private LabelName labelName;
 
-    public ShowCreateRoutineLoadStmt(LabelName labelName) {
-        this(labelName, NodePosition.ZERO);
-    }
-
-    public ShowCreateRoutineLoadStmt(LabelName labelName, NodePosition pos) {
+    public ShowStorageVolumesStmt(String pattern, NodePosition pos) {
         super(pos);
-        this.labelName = labelName;
+        this.pattern = Strings.nullToEmpty(pattern);
     }
 
-    public String getName() {
-        return labelName.getLabelName();
-    }
 
-    public String getDbFullName() {
-        return labelName.getDbName();
-    }
-
-    public void setDb(String db) {
-        labelName.setDbName(db);
+    public String getPattern() {
+        return pattern;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCreateRoutineLoadStatement(this, context);
+        return visitor.visitShowStorageVolumesStatement(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SHOW STORAGE VOLUMES");
+        if (!pattern.isEmpty()) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
+        return sb.toString();
     }
 }

@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BooleanType;
@@ -39,7 +40,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import java.math.BigInteger;
 import java.util.TimeZone;
 

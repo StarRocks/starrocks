@@ -104,7 +104,6 @@ import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
@@ -153,9 +152,9 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -2962,11 +2961,7 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
-                return rows;
-            }
-
-            Predicate predicate = sortedShowStmt.getPredicate();
+            Predicate predicate = showStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }

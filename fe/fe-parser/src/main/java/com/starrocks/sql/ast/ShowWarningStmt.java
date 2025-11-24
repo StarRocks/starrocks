@@ -12,42 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
-/**
- * Show charset statement
- * Acceptable syntax:
- * SHOW {CHAR SET | CHARSET}
- * [LIKE 'pattern' | WHERE expr]
- */
-public class ShowCharsetStmt extends ShowStmt {
-    private String pattern;
-    private Expr where;
+// Show Warning stmt
+public class ShowWarningStmt extends ShowStmt {
+    private LimitElement limitElement;
 
-    public ShowCharsetStmt() {
-        super(NodePosition.ZERO);
-    }
-
-    public ShowCharsetStmt(String pattern, Expr where, NodePosition pos) {
+    public ShowWarningStmt(LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.pattern = pattern;
-        this.where = where;
+        this.limitElement = limitElement;
     }
 
-    public String getPattern() {
-        return pattern;
+    public long getLimitNum() {
+        if (limitElement != null && limitElement.hasLimit()) {
+            return limitElement.getLimit();
+        }
+        return -1L;
     }
 
-    public Expr getWhere() {
-        return where;
-    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowCharsetStatement(this, context);
+        return visitor.visitShowWarningStatement(this, context);
     }
 }

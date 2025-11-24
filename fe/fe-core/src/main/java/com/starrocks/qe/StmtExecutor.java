@@ -144,6 +144,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.analyzer.ShowStmtToSelectStmtConverter;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -165,7 +166,6 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -601,11 +601,12 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     context.getDumpInfo().setStatement(parsedStmt);
                 }
-                if (parsedStmt instanceof EnhancedShowStmt) {
+                if (parsedStmt instanceof ShowStmt) {
                     com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     Authorizer.check(parsedStmt, context);
 
-                    QueryStatement selectStmt = ((EnhancedShowStmt) parsedStmt).toSelectStmt();
+                    QueryStatement selectStmt =
+                            ShowStmtToSelectStmtConverter.toSelectStmt((ShowStmt) parsedStmt);
                     if (selectStmt != null) {
                         parsedStmt = selectStmt;
                         execPlan = StatementPlanner.plan(parsedStmt, context);
