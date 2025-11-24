@@ -39,12 +39,12 @@ function: print_hit_materialized_view("select min(id), max(id), sum(id), bitmap_
 function: print_hit_materialized_view("select ds_hll_count_distinct(id), avg(id), array_agg(id), min_by(province, id) from t1 where dt >= '2024-01-01';", "test_mv1")
 function: print_hit_materialized_view("select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), array_agg(id), min_by(province, id) from t1 where dt >= '2024-01-01';", "test_mv1")
 
-select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt;
-select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01' group by dt;
-select dt, ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt;
-select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01';
-select ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01';
-select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01';
+select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt order by dt;
+select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01' group by dt order by dt;
+select dt, ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt order by dt;
+select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01' order by dt;
+select ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' order by dt;
+select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' order by dt;
 
 drop materialized view test_mv1;
 
@@ -77,11 +77,11 @@ function: print_hit_materialized_view("select min(id), max(id), sum(id), bitmap_
 function: print_hit_materialized_view("select ds_hll_count_distinct(id), avg(id), array_agg(id), min_by(province, id) from t1 where dt >= '2024-01-01';", "test_mv2")
 function: print_hit_materialized_view("select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), array_agg(id), min_by(province, id) from t1 where dt >= '2024-01-01';", "test_mv2")
 
-select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt;
-select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01' group by dt;
-select dt, ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt;
-select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01';
-select ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01';
-select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01';
+select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt order by dt;
+select dt, min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01' group by dt order by dt;
+select dt, ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' group by dt order by dt;
+select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5) from t1 where dt >= '2024-01-01' order by dt;
+select ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' order by dt;
+select min(id), max(id), sum(id), bitmap_union_count(to_bitmap(id)), hll_union_agg(hll_hash(id)), percentile_approx(id, 0.5), ds_hll_count_distinct(id), avg(id), min_by(province, id) from t1 where dt >= '2024-01-01' order by dt;
 
 drop materialized view test_mv2;

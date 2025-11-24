@@ -174,9 +174,9 @@ select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, provinc
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
 select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
@@ -222,9 +222,9 @@ select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, provin
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
 -- result:
 -- !result
-function: check_no_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
-None
+False
 -- !result
 select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:

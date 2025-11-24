@@ -7,25 +7,25 @@ set enable_materialized_view_text_match_rewrite=true;
 CREATE MATERIALIZED VIEW mv1 REFRESH DEFERRED MANUAL AS
 select user_id, time, sum(tag_id) from user_tags group by user_id, time order by user_id, time;
 REFRESH MATERIALIZED VIEW mv1 with sync mode;
-function: check_hit_materialized_view("select user_id, time, sum(tag_id) from user_tags group by user_id, time order by user_id, time", "mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) from user_tags group by user_id, time order by user_id, time", "mv1")
 select user_id, time, sum(tag_id) from user_tags group by user_id, time order by user_id, time;
 drop materialized view mv1;
 
 CREATE MATERIALIZED VIEW mv1 REFRESH DEFERRED MANUAL AS
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time;
 REFRESH MATERIALIZED VIEW mv1 with sync mode;
-function: check_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time", "mv1")
+function: print_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time", "mv1")
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time;
 drop materialized view mv1;
 
 CREATE MATERIALIZED VIEW mv1 REFRESH DEFERRED MANUAL AS
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time;
 REFRESH MATERIALIZED VIEW mv1 with sync mode;
-function: check_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time", "mv1")
-function: check_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t", "mv1")
-function: check_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time", "mv1")
-function: check_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t where time='2023-4-13'", "mv1")
-function: check_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t where time>='2023-4-13' order by time", "mv1")
+function: print_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time", "mv1")
+function: print_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t", "mv1")
+function: print_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time", "mv1")
+function: print_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t where time='2023-4-13'", "mv1")
+function: print_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t where time>='2023-4-13' order by time", "mv1")
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time;
 select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time;
 select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t where time='2023-4-13';
@@ -35,7 +35,7 @@ drop materialized view mv1;
 CREATE MATERIALIZED VIEW mv1 REFRESH DEFERRED MANUAL AS
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time limit 3;
 REFRESH MATERIALIZED VIEW mv1 with sync mode;
-function: check_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time limit 3", "mv1")
+function: print_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time limit 3", "mv1")
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time order by user_id + 1, time limit 3;
 drop materialized view mv1;
 
@@ -44,8 +44,8 @@ select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time
 union all
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time;
 REFRESH MATERIALIZED VIEW mv1 with sync mode;
-function: check_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time", "mv1")
-function: check_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time", "mv1")
+function: print_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time", "mv1")
+function: print_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time", "mv1")
 select * from (
     select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time 
     union all
@@ -56,8 +56,8 @@ drop materialized view mv1;
 CREATE MATERIALIZED VIEW mv1 REFRESH DEFERRED MANUAL AS
 select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time;
 REFRESH MATERIALIZED VIEW mv1 with sync mode;
-function: check_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time", "mv1")
-function: check_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time", "mv1")
+function: print_hit_materialized_view("select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time", "mv1")
+function: print_hit_materialized_view("select * from (select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time union all select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time) as t order by time", "mv1")
 select * from (
     select user_id + 1, time, sum(tag_id) from user_tags group by user_id + 1, time 
     union all
