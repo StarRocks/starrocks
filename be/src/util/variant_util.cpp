@@ -18,6 +18,8 @@
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <charconv>
+#include <iomanip>
 
 #include "exprs/cast_expr.h"
 #include "formats/parquet/variant.h"
@@ -104,8 +106,88 @@ std::string VariantUtil::decimal16_to_string(DecimalValue<int128_t> decimal) {
     return DecimalV3Cast::to_string<int128_t>(decimal.value, decimal_precision_limit<int128_t>, decimal.scale);
 }
 
+// Escape a string according to JSON specification (RFC 8259)
+std::string escape_json_string(std::string_view str) {
+    std::stringstream ss;
+    for (unsigned char c : str) {
+        switch (c) {
+        case '"':
+            ss << "\\\"";
+            break;
+        case '\\':
+            ss << "\\\\";
+            break;
+        case '\b':
+            ss << "\\b";
+            break;
+        case '\f':
+            ss << "\\f";
+            break;
+        case '\n':
+            ss << "\\n";
+            break;
+        case '\r':
+            ss << "\\r";
+            break;
+        case '\t':
+            ss << "\\t";
+            break;
+        default:
+            // Control characters (U+0000 through U+001F) must be escaped
+            if (c < 0x20) {
+                ss << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(c);
+            } else {
+                ss << c;
+            }
+            break;
+        }
+    }
+    return ss.str();
+}
+
 void append_quoted_string(std::stringstream& ss, const std::string& str) {
-    ss << '"' << str << '"';
+    ss << '"' << escape_json_string(str) << '"';
+}
+
+std::string remove_trailing_zeros(const std::string& str) {
+    const size_t dot_pos = str.find('.');
+    if (dot_pos == std::string::npos) {
+        return str;
+    }
+
+    const size_t last_nonzero = str.find_last_not_of('0');
+    if (last_nonzero == dot_pos) {
+        return str.substr(0, dot_pos + 2); // Keep ".0"
+    }
+    if (last_nonzero != std::string::npos && last_nonzero > dot_pos) {
+        return str.substr(0, last_nonzero + 1);
+    }
+
+    return str;
+}
+
+template <typename FloatType>
+static std::string float_to_json_string_impl(FloatType value) {
+    if (!std::isfinite(value)) {
+        return "null";
+    }
+
+    char buffer[32];
+    int precision = std::is_same_v<FloatType, float> ? std::numeric_limits<float>::max_digits10
+                                                     : std::numeric_limits<double>::max_digits10;
+
+    auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::general, precision);
+    if (ec != std::errc()) {
+        return "null";
+    }
+
+    std::string result(buffer, ptr - buffer);
+    if (result.find('.') == std::string::npos && result.find('e') == std::string::npos &&
+        result.find('E') == std::string::npos) {
+        result += ".0";
+    }
+
+    return result;
 }
 
 Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view value, std::stringstream& json_str,
@@ -134,39 +216,33 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
         break;
     case VariantType::FLOAT: {
         const float f = *variant.get_float();
-        if (std::isfinite(f)) {
-            json_str << std::to_string(f);
-        } else {
-            append_quoted_string(json_str, std::to_string(f));
-        }
+        json_str << float_to_json_string_impl(f);
         break;
     }
     case VariantType::DOUBLE: {
         const double d = *variant.get_double();
-        if (std::isfinite(d)) {
-            json_str << std::to_string(d);
-        } else {
-            append_quoted_string(json_str, std::to_string(d));
-        }
+        json_str << float_to_json_string_impl(d);
         break;
     }
     case VariantType::DECIMAL4: {
         DecimalValue<int32_t> decimal = *variant.get_decimal4();
-        json_str << decimal4_to_string(decimal);
+        json_str << remove_trailing_zeros(decimal4_to_string(decimal));
         break;
     }
     case VariantType::DECIMAL8: {
         DecimalValue<int64_t> decimal = *variant.get_decimal8();
-        json_str << decimal8_to_string(decimal);
+        json_str << remove_trailing_zeros(decimal8_to_string(decimal));
         break;
     }
     case VariantType::DECIMAL16: {
         DecimalValue<int128_t> decimal = *variant.get_decimal16();
-        json_str << decimal16_to_string(decimal);
+        json_str << remove_trailing_zeros(decimal16_to_string(decimal));
         break;
     }
     case VariantType::STRING: {
-        json_str << *variant.get_string();
+        const std::string_view str_view = *variant.get_string();
+        const std::string str(str_view.data(), str_view.size());
+        append_quoted_string(json_str, str);
         break;
     }
     case VariantType::BINARY: {
@@ -229,7 +305,7 @@ Status VariantUtil::variant_to_json(std::string_view metadata, std::string_view 
                 return key.status();
             }
 
-            json_str << *key << ":";
+            json_str << "\"" << escape_json_string(*key) << "\":";
 
             if (uint32_t next_pos = data_start_offset + offset; next_pos < value.size()) {
                 std::string_view next_value = value.substr(next_pos, value.size() - next_pos);
