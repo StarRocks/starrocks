@@ -476,7 +476,10 @@ build_llvm() {
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
 
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
+    BASE_DY_LIB_BASE=$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH
+
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
@@ -493,13 +496,12 @@ build_llvm() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
-    # TODO(yueyang): Add more targets.
-    # This is a little bit hack, we need to minimize the build time and binary size.
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
     ${BUILD_SYSTEM} install-LLVM
 
+    export LD_LIBRARY_PATH="${BASE_DY_LIB_BASE}"
     restore_compile_flags
 }
 # protobuf
@@ -1364,7 +1366,7 @@ build_avro_c() {
     mkdir -p build
     cd build
     
-    LDFLAGS="-L${TP_LIB_DIR}" \
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1378,7 +1380,7 @@ build_avro_cpp() {
     mkdir -p build
     cd build
 
-    LDFLAGS="-L${TP_LIB_DIR}" \
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
