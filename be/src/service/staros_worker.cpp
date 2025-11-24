@@ -285,7 +285,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
 StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf,
-                                               std::shared_ptr<std::string> existing_fs_cache_key) {
+                                               const std::shared_ptr<std::string>& existing_fs_cache_key) {
     auto localconf = build_conf_from_shard_info(info);
     if (!localconf.ok()) {
         return localconf.status();
@@ -295,7 +295,7 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
-    return new_shared_filesystem(info.id, *scheme, *localconf, std::move(existing_fs_cache_key));
+    return new_shared_filesystem(info.id, *scheme, *localconf, existing_fs_cache_key);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
@@ -338,7 +338,7 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
 StarOSWorker::new_shared_filesystem(ShardId shard_id, std::string_view scheme, const Configuration& conf,
-                                    std::shared_ptr<std::string> existing_fs_cache_key) {
+                                    const std::shared_ptr<std::string>& existing_fs_cache_key) {
     std::string cache_key = get_cache_key(scheme, conf);
 
     // Lookup LRU cache
