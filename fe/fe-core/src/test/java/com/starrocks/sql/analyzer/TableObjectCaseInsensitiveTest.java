@@ -19,7 +19,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.InvalidConfException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -60,8 +59,8 @@ import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
-import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -140,7 +139,8 @@ public class TableObjectCaseInsensitiveTest {
         analyzeSuccess("with X0 as (select 111 v1) select L.* from X0 l join X0 r on L.v1 = R.V1");
         analyzeSuccess("with cte as (select 222 c2) select C2 from CTE");
 
-        ShowTableStmt stmt = new ShowTableStmt("test_DB", false, null);
+        ShowTableStmt stmt = (ShowTableStmt) SqlParser.parseSingleStatement(
+                "show tables from test_DB", SqlModeHelper.MODE_DEFAULT);
         ShowResultSet res = ShowExecutor.execute(stmt, connectContext);
         Assertions.assertEquals("t0", res.getResultRows().get(0).get(0));
     }
@@ -156,7 +156,8 @@ public class TableObjectCaseInsensitiveTest {
 
         analyzeSuccess("select * from test_db.VIEW1");
 
-        ShowTableStmt stmt = new ShowTableStmt("test_DB", false, null);
+        ShowTableStmt stmt = (ShowTableStmt) SqlParser.parseSingleStatement(
+                "show tables from test_DB", SqlModeHelper.MODE_DEFAULT);
         ShowResultSet res = ShowExecutor.execute(stmt, connectContext);
         Assertions.assertEquals("view1", res.getResultRows().get(1).get(0));
     }

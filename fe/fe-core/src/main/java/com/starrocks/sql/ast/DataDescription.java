@@ -57,7 +57,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.util.Util.normalizeName;
 // used to describe data info which is needed to import.
 //
 //      data_desc:
@@ -183,7 +182,7 @@ public class DataDescription implements ParseNode {
                            Expr whereExpr,
                            CsvFormat csvFormat, NodePosition pos) {
         this.pos = pos;
-        this.tableName = normalizeName(tableName);
+        this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
         this.fileFieldNames = columns;
@@ -215,7 +214,7 @@ public class DataDescription implements ParseNode {
                            List<Expr> columnMappingList,
                            Expr whereExpr, NodePosition pos) {
         this.pos = pos;
-        this.tableName = normalizeName(tableName);
+        this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = null;
         this.fileFieldNames = null;
@@ -226,7 +225,7 @@ public class DataDescription implements ParseNode {
         this.isNegative = isNegative;
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
-        this.srcTableName = normalizeName(srcTableName);
+        this.srcTableName = srcTableName;
     }
 
     public String getTableName() {

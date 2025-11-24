@@ -36,11 +36,14 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -267,7 +270,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                  NodePosition pos) {
         super(pos);
         this.labelName = labelName;
-        this.tableName = normalizeName(tableName);
+        this.tableName = tableName;
         this.loadPropertyList = loadPropertyList;
         this.jobProperties = jobProperties == null ? Maps.newHashMap() : jobProperties;
         this.typeName = typeName.toUpperCase();
@@ -514,7 +517,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of where predicate");
                 }
                 importWhereStmt = (ImportWhereStmt) parseNode;
-                if (importWhereStmt.isContainSubquery()) {
+
+                ArrayList<Expr> matched = new ArrayList<>();
+                importWhereStmt.getExpr().collect(Subquery.class, matched);
+                if (matched.size() != 0) {
                     throw new AnalysisException("the predicate cannot contain subqueries");
                 }
             } else if (parseNode instanceof PartitionNames) {

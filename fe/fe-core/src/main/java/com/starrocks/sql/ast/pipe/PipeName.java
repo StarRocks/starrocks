@@ -36,13 +36,13 @@ public class PipeName extends StatementBase {
 
     public PipeName(String dbName, String pipeName) {
         super(NodePosition.ZERO);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.pipeName = pipeName;
     }
 
     public PipeName(NodePosition pos, String dbName, String pipeName) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.pipeName = pipeName;
     }
 

@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -27,10 +26,8 @@ public class OptimizeClause extends AlterTableClause {
     private PartitionNames partitionNames;
     private OptimizeRange range;
 
-    @SerializedName(value = "sourcePartitionIds")
     private List<Long> sourcePartitionIds = Lists.newArrayList();
 
-    @SerializedName(value = "isTableOptimize")
     private boolean isTableOptimize = false;
 
     // It saves the original sort order elements parsing from the order by clause.
