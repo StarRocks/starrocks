@@ -320,9 +320,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
-    @ConfField
-    public static boolean enable_profile_log_compress = false;
-
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
