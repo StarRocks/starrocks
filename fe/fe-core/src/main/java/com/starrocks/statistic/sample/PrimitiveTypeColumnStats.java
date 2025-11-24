@@ -34,7 +34,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getDateSize() {
+    public String getDataSize() {
         String typeSize;
         if (columnType.getPrimitiveType().isCharFamily()) {
             typeSize = "IFNULL(SUM(CHAR_LENGTH(column_key)) / COUNT(1), 0)";

@@ -145,7 +145,7 @@ public class SampleInfo {
                     .append(StringEscapeUtils.escapeSql(tableName)).append("'").append(sep);
             builder.append(addSingleQuote(dbName)).append(sep);
             builder.append(columnStats.getRowCount()).append(sep);
-            builder.append(columnStats.getDateSize()).append(sep);
+            builder.append(columnStats.getDataSize()).append(sep);
             builder.append(columnStats.getDistinctCount(0L)).append(sep);
             builder.append(columnStats.getNullCount()).append(sep);
             builder.append(columnStats.getMax()).append(sep);
@@ -277,7 +277,7 @@ public class SampleInfo {
                 .append(StringEscapeUtils.escapeSql(tableName)).append("'").append(sep);
         builder.append(addSingleQuote(dbName)).append(sep);
         builder.append(columnStats.getRowCount()).append(sep);
-        builder.append(columnStats.getDateSize()).append(sep);
+        builder.append(columnStats.getDataSize()).append(sep);
         builder.append(columnStats.getDistinctCount(rowSampleRatio)).append(sep);
         builder.append(columnStats.getNullCount()).append(sep);
         builder.append(columnStats.getMax()).append(sep);
