@@ -27,6 +27,7 @@ import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAM
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class SampleInfo {
+    
     private final double tabletSampleRatio;
 
     private final long sampleRowCount;
@@ -103,10 +104,23 @@ public class SampleInfo {
     }
 
     public int getMaxSampleTabletNum() {
-        int max = getHighWeightTablets().size();
-        max = Math.max(max, getMediumHighWeightTablets().size());
-        max = Math.max(max, getMediumLowWeightTablets().size());
-        max = Math.max(max, getLowWeightTablets().size());
+        int max = 0;
+        if (highWeightTablets != null && !highWeightTablets.isEmpty()) {
+            max = Math.max(max, highWeightTablets.size());
+        }
+        if (mediumHighWeightTablets != null && !mediumHighWeightTablets.isEmpty()) {
+            max = Math.max(max, mediumHighWeightTablets.size());
+        }
+        if (mediumLowWeightTablets != null && !mediumLowWeightTablets.isEmpty()) {
+            max = Math.max(max, mediumLowWeightTablets.size());
+        }
+        if (lowWeightTablets != null && !lowWeightTablets.isEmpty()) {
+            max = Math.max(max, lowWeightTablets.size());
+        }
+        // If all lists are empty, we should still proceed to allow statistics collection
+        if (max == 0) {
+            max = 1;
+        }
         return max;
     }
 
