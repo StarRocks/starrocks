@@ -4324,4 +4324,86 @@ TEST_F(FileReaderTest, test_data_page_v2) {
     EXPECT_EQ(4, total_row_nums);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(FileReaderTest, test_read_variant) {
+    const std::string variant_file_path = "./be/test/exec/test_data/parquet_data/variant.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    // --------------init context---------------
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {
+            {"name", TYPE_VARCHAR_DESC}, {"col_variant", variant_type}, {"json_col", TYPE_VARCHAR_DESC}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
+
+    EXPECT_EQ(file_reader->row_group_size(), 1);
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // Should have 4 IO ranges: name, col_variant.metadata, col_variant.value, json_col
+    EXPECT_EQ(ranges.size(), 4);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << "Failed to read variant data: " << status.message();
+
+    chunk->check_or_die();
+
+    std::vector<std::string> expected_rows = {
+            R"(['object_primitive', {"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}, '{"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}'])",
+            R"(['primitive_string', "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!", '"This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!"'])",
+            R"(['object_nested', {"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}, '{"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}'])",
+            R"(['array_nested', [{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}], '[{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}]'])",
+            R"==(['short_string', "Less than 64 bytes (❤️ with utf8)", '"Less than 64 bytes (❤️ with utf8)"'])==",
+            R"(['primitive_decimal16', 12345678912345678.9, '12345678912345678.9'])",
+            R"(['primitive_timestampntz', "2025-04-16 12:34:56.780000", '"2025-04-16 12:34:56.78"'])",
+            R"(['primitive_timestamp', "2025-04-16 04:34:56.78+00:00", '"2025-04-16 12:34:56.78+08:00"'])",
+            R"(['array_primitive', [2,1,5,9], '[2,1,5,9]'])",
+            R"(['primitive_binary', "AxM33q2+78r+", '"AxM33q2+78r+"'])",
+            R"(['primitive_decimal8', 12345678.9, '12345678.9'])",
+            R"(['primitive_double', 1234567890.1234, '1.2345678901234E9'])",
+            R"(['primitive_int64', 1234567890123456789, '1234567890123456789'])",
+            R"(['primitive_boolean_true', true, 'true'])",
+            R"(['primitive_decimal4', 12.34, '12.34'])",
+            R"(['primitive_boolean_false', false, 'false'])",
+            R"(['primitive_date', "2025-04-16", '"2025-04-16"'])",
+            R"(['primitive_int32', 123456, '123456'])",
+            R"(['primitive_float', 1.23456794e+09, '1.23456794E9'])",
+            R"(['primitive_int16', 1234, '1234'])",
+            R"(['primitive_int8', 42, '42'])",
+            R"(['object_empty', {}, '{}'])",
+            R"(['array_empty', [], '[]'])",
+            R"(['primitive_null', NULL, NULL])"};
+
+    for (size_t i = 0; i < chunk->num_rows(); ++i) {
+        ASSERT_EQ(chunk->debug_row(i), expected_rows[i]) << "Row " << i << " does not match";
+    }
+
+    ColumnPtr variant_column = chunk->get_column_by_index(1);
+    ASSERT_TRUE(variant_column->is_variant()) << "Column should be variant type";
+
+    size_t total_rows = chunk->num_rows();
+    while (true) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (status.is_end_of_file()) {
+            break;
+        }
+        ASSERT_TRUE(status.ok()) << "Error reading subsequent chunks: " << status.message();
+        total_rows += chunk->num_rows();
+    }
+
+    ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+>>>>>>> 9167948fa4 ([Enhancement] Improve Variant to JSON string output formatting (#65581))
 } // namespace starrocks::parquet
