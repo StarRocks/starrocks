@@ -195,7 +195,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                     // if success, try to generate next task run
                     mvRefreshProcessor.generateNextTaskRunIfNeeded();
                 } else {
-                    logger.warn("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
+                    logger.info("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
                 }
                 // update metrics
                 mvMetricsEntity.increaseRefreshJobStatus(taskRunState);
