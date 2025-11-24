@@ -46,6 +46,7 @@ Usage: $0 <options>
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
+     --retry [N]                    retry failed tests N times, default is 1
      -j                             build parallel
 
   Eg.
@@ -55,6 +56,7 @@ Usage: $0 <options>
     $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
     $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
+    $0 --retry 2                                                retry failed tests up to 2 times
   "
   exit 1
 }
@@ -95,6 +97,7 @@ OPTS=$(getopt \
   -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
+  -l 'retry:' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -120,6 +123,7 @@ WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
+RETRY_COUNT=1
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -137,6 +141,7 @@ while true; do
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+        --retry) RETRY_COUNT=$2; shift 2;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -333,6 +338,16 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
     | grep -e "$TEST_MODULE" `
 
 echo "[INFO] gtest_filter: $TEST_NAME"
+
+# Set retry count in GTEST_PARALLEL_OPTIONS if retry is enabled
+if [ ${RETRY_COUNT} -gt 0 ]; then
+    echo "[INFO] Failed tests will be retried up to $RETRY_COUNT times"
+    if [ -n "${GTEST_PARALLEL_OPTIONS}" ]; then
+        export GTEST_PARALLEL_OPTIONS="${GTEST_PARALLEL_OPTIONS} --retry_failed=${RETRY_COUNT}"
+    else
+        export GTEST_PARALLEL_OPTIONS="--retry_failed=${RETRY_COUNT}"
+    fi
+fi
 
 run_test_module() {
     TARGET=$1

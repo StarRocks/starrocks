@@ -1072,6 +1072,8 @@ under the License.
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
+                    <!-- Retry failed tests, can be overridden by -Dsurefire.rerunFailingTestsCount system property -->
+                    <rerunFailingTestsCount>${surefire.rerunFailingTestsCount}</rerunFailingTestsCount>
                     <excludes>
                         <exclude>**/QueryDumpRegressionTest.java</exclude>
                     </excludes>
