@@ -110,16 +110,17 @@ class StarRocksInspector(Inspector):
         """
         Override to set VIEW/MV specific attributes.
         """
-        # 1. Get table_kind and parsed_state, which will trigger _setup_parser)
-        parsed_state = self.dialect._parsed_state_or_create(self.bind, table.name, table.schema, info_cache=self.info_cache)
-        table_kind = parsed_state.table_kind
-        logger.debug("reflect %s: %s, parsed_state: %s.", table_kind.lower(), table.name, parsed_state)
 
-        # 2. Call parent class (will call get_pk_constraints, etc., which will use cached parsed_state)
+        # 1. Call parent class (will call get_pk_constraints, etc., which will trigger _setup_parser)
         #    And, it will set all dialect options from parsed_state, including for a View or a Mv or a Table.
         super().reflect_table(table, include_columns, exclude_columns, resolve_fks, _extend_on, _reflect_info)
         # comment is already set to Table.comment, the starrocks_comment is not used again.
         self._delete_comment_from_dialect_options(table)
+
+        # 1. Get table_kind and parsed_state, which will use the cached parsed_state)
+        parsed_state = self.dialect._parsed_state_or_create(self.bind, table.name, table.schema, info_cache=self.info_cache)
+        table_kind = parsed_state.table_kind
+        logger.debug("reflect %s: %s, parsed_state: %s.", table_kind.lower(), table.name, parsed_state)
 
         # 3. Set info['table_kind']
         table.info[TableObjectInfoKey.TABLE_KIND] = table_kind

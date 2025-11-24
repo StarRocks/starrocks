@@ -18,6 +18,7 @@ import logging
 from sqlalchemy import (
     Integer,
     MetaData,
+    String,
     Table,
     and_,
     cast,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     select,
     table,
     testing,
+    text,
     type_coerce,
     union,
 )
@@ -39,8 +41,11 @@ from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
     ComponentReflectionTest as _ComponentReflectionTest,
     CTETest as _CTETest,
+    CompositeKeyReflectionTest,
+    EnumTest,
     FetchLimitOffsetTest as _FetchLimitOffsetTest,
     JSONTest as _JSONTest,
+    LongNameBlowoutTest,
     NumericTest as _NumericTest,
     ServerSideCursorsTest as _ServerSideCursorsTest,
     StringTest as _StringTest,
@@ -146,6 +151,14 @@ class StarrocksMogrifyTest(fixtures.TablesTest, AssertsCompiledSQL):
     #     eq_(result.fetchall(), [("d4",)])
 
 class ComponentReflectionTest(_ComponentReflectionTest):
+    # Updated to allow tests to run when Starrocks does not support default autoincrement on single primary key columns
+    @classmethod
+    def define_tables(cls, metadata):
+        super().define_tables(metadata)
+        for t_name, t in metadata.tables.items():
+            if t.autoincrement_column is not None:
+                t.autoincrement_column.autoincrement = True
+
     # Updated because Starrocks does not currently support column comments
     def exp_columns(
             self,
@@ -429,6 +442,18 @@ class CTETest(_CTETest):
         pass
 
 class JSONTest(_JSONTest):
+    # Override define_tables to specify autoincrement=True explicitly for test on Starrocks
+    @classmethod
+    def define_tables(cls, metadata):
+        Table(
+            "data_table",
+            metadata,
+            Column("id", Integer, primary_key=True, autoincrement=True),
+            Column("name", String(30), nullable=False),
+            Column("data", cls.datatype, nullable=False),
+            Column("nulldata", cls.datatype(none_as_null=True)),
+        )
+
     @testing.skip('starrocks', 'Seems to return "null", not sure why')
     def test_round_trip_json_null_as_json_null(self, connection):
         pass
