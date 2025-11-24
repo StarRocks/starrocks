@@ -283,10 +283,8 @@ static void custom_prefix_formatter(std::ostream& s, const google::LogMessage& m
     // Timezone offset (calculated dynamically)
     s << ' ' << get_timezone_offset_string(time);
 
-    // Thread ID (simplified, use hash to get a shorter ID)
-    std::hash<std::thread::id> hasher;
-    size_t thread_hash = hasher(message.thread_id());
-    s << ' ' << std::setfill(' ') << std::setw(5) << (thread_hash % 100000) << ' ';
+    // Thread ID
+    s << ' ' << message.thread_id() << ' ';
 
     // File and line
     s << message.basename() << ':' << message.line() << "] ";
