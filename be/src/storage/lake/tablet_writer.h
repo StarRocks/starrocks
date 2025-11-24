@@ -67,6 +67,8 @@ public:
 
     std::vector<FileInfo> ssts() const { return _ssts; }
 
+    const std::vector<PersistentIndexSstableRangePB>& sst_ranges() const { return _sst_ranges; }
+
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
 
@@ -160,6 +162,7 @@ protected:
     ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
     std::vector<FileInfo> _ssts;
+    std::vector<PersistentIndexSstableRangePB> _sst_ranges;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;

@@ -49,7 +49,7 @@ public:
     Status append_sst_record(const Chunk& data) override;
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                             const std::shared_ptr<FileSystem>& fs) override;
-    StatusOr<FileInfo> flush_sst_writer() override;
+    StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() override;
     bool has_file_info() const override { return _pk_sst_builder != nullptr; }
 
 private:

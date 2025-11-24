@@ -37,6 +37,7 @@ struct TableBuilder::Rep {
     Status status;
     BlockBuilder data_block;
     BlockBuilder index_block;
+    std::string first_key;
     std::string last_key;
     int64_t num_entries{0};
     bool closed{false}; // Either Finish() or Abandon() has been called.
@@ -91,6 +92,9 @@ Status TableBuilder::Add(const Slice& key, const Slice& value) {
     if (r->num_entries > 0) {
         RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
                               "Key must be greater than the previously added key according to comparator");
+    } else {
+        // record first key
+        r->first_key.assign(key.get_data(), key.get_size());
     }
 
     if (r->pending_index_entry) {
@@ -274,6 +278,10 @@ uint64_t TableBuilder::NumEntries() const {
 
 uint64_t TableBuilder::FileSize() const {
     return rep_->offset;
+}
+
+std::pair<Slice, Slice> TableBuilder::KeyRange() const {
+    return {rep_->first_key, rep_->last_key};
 }
 
 } // namespace starrocks::sstable

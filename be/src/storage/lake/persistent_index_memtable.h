@@ -64,7 +64,7 @@ public:
 
     size_t memory_usage() const;
 
-    Status flush(WritableFile* wf, uint64_t* filesize);
+    Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
 
     void clear();
 

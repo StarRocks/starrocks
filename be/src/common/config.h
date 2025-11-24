@@ -426,6 +426,15 @@ CONF_mBool(enable_pk_parallel_execution, "true");
 // The minimum threshold of data size for enabling pk parallel execution.
 // Default is 300MB.
 CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
+// Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
+// Default is 4.
+CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
+// The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
+// smaller than this threshold, the task will not be split.
+// Default is 100MB.
+CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "104857600");
+// Whether enable parallel compaction for primary key index in shared-data mode.
+CONF_mBool(enable_pk_index_parallel_compaction, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.

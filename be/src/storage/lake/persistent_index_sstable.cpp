@@ -63,7 +63,8 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
 }
 
 Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                             WritableFile* wf, uint64_t* filesz) {
+                                             WritableFile* wf, uint64_t* filesz,
+                                             PersistentIndexSstableRangePB* range_pb) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -79,6 +80,11 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
+    if (range_pb != nullptr) {
+        auto [key_start, key_end] = builder.KeyRange();
+        range_pb->set_start_key(key_start.to_string());
+        range_pb->set_end_key(key_end.to_string());
+    }
     return Status::OK();
 }
 
@@ -194,6 +200,10 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
+}
+
+std::pair<Slice, Slice> PersistentIndexSstableStreamBuilder::key_range() const {
+    return _table_builder->KeyRange();
 }
 
 } // namespace starrocks::lake

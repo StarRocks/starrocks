@@ -254,6 +254,9 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+    lake/lake_persistent_index_parallel_compact_mgr.cpp
+    lake/lake_persistent_index_size_tiered_compaction_strategy.cpp
+    lake/persistent_index_sstable_fileset.cpp
     sstable/sstable_predicate.cpp
     sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp

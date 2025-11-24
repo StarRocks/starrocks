@@ -36,6 +36,7 @@ class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
+class PersistentIndexSstableFileset;
 
 class KeyValueMerger {
 public:
@@ -137,10 +138,15 @@ public:
 
     Status minor_compact();
 
-    Status ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
-                      DelVectorPtr delvec);
+    Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint64_t fileset_id,
+                      uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
     static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
+
+#ifdef USE_STAROS
+    static Status parallel_major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                         TxnLogPB* txn_log);
+#endif
 
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
 
@@ -197,10 +203,8 @@ private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     size_t _need_rebuild_file_cnt{0};
-    // The size of sstables is not expected to be too large.
-    // In major compaction, some sstables will be picked to be merged into one.
-    // sstables are ordered with the smaller version on the left.
-    std::vector<std::unique_ptr<PersistentIndexSstable>> _sstables;
+    // Collection of sstable fileset, from old to new.
+    std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
 };
 
 } // namespace lake

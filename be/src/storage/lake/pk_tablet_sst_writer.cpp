@@ -78,14 +78,15 @@ Status PkTabletSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvide
     return Status::OK();
 }
 
-StatusOr<FileInfo> PkTabletSSTWriter::flush_sst_writer() {
+StatusOr<FileInfo, PersistentIndexSstableRangePB> PkTabletSSTWriter::flush_sst_writer() {
     if (_pk_sst_builder == nullptr) {
         return Status::InternalError("pk sst writer not initialized");
     }
     RETURN_IF_ERROR(_pk_sst_builder->finish());
     auto sst_file_info = _pk_sst_builder->file_info();
+    auto sst_range = _pk_sst_builder->key_range();
     _pk_sst_builder.reset();
-    return sst_file_info;
+    return std::make_pair(sst_file_info, sst_range);
 }
 
 } // namespace starrocks::lake

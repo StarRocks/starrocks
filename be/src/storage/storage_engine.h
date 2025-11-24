@@ -71,6 +71,7 @@ class Executor;
 
 namespace starrocks::lake {
 class LocalPkIndexManager;
+class LakePersistentIndexParallelCompactMgr;
 } // namespace starrocks::lake
 
 namespace starrocks {
@@ -249,23 +250,36 @@ public:
     UpdateManager* update_manager() { return _update_manager.get(); }
 
 #ifdef USE_STAROS
-    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
+    lake::LocalPkIndexManager* local_pk_index_manager() {
+        return _local_pk_index_manager.get();
+    }
+    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() {
+        return _parallel_compact_mgr.get();
+    }
 #endif
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
-    RowsetId next_rowset_id() { return _rowset_id_generator->next_id(); };
+    RowsetId next_rowset_id() {
+        return _rowset_id_generator->next_id();
+    };
 
-    bool rowset_id_in_use(const RowsetId& rowset_id) { return _rowset_id_generator->id_in_use(rowset_id); }
+    bool rowset_id_in_use(const RowsetId& rowset_id) {
+        return _rowset_id_generator->id_in_use(rowset_id);
+    }
 
-    void release_rowset_id(const RowsetId& rowset_id) { return _rowset_id_generator->release_id(rowset_id); }
+    void release_rowset_id(const RowsetId& rowset_id) {
+        return _rowset_id_generator->release_id(rowset_id);
+    }
 
     // start all backgroud threads. This should be call after env is ready.
     virtual Status start_bg_threads();
 
     void stop();
 
-    bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
+    bool bg_worker_stopped() {
+        return _bg_worker_stopped.load(std::memory_order_consume);
+    }
 
     void compaction_check();
 
@@ -285,7 +299,9 @@ public:
 
     void remove_increment_map_by_table_id(int64_t table_id);
 
-    bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+    bool get_need_write_cluster_id() {
+        return _need_write_cluster_id;
+    }
 
     size_t delta_column_group_list_memory_usage(const DeltaColumnGroupList& dcgs);
 
@@ -317,7 +333,9 @@ public:
 
     void start_schedule_apply_thread();
 
-    bool is_as_cn() { return !_options.need_write_cluster_id; }
+    bool is_as_cn() {
+        return !_options.need_write_cluster_id;
+    }
 
     bool enable_light_pk_compaction_publish();
 
@@ -533,6 +551,7 @@ private:
 
 #ifdef USE_STAROS
     std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
+    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
 #endif
 };
 

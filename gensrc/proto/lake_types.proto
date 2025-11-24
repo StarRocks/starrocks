@@ -36,6 +36,12 @@ message DelvecPagePB {
     optional uint32 crc32c = 4;
 }
 
+message PersistentIndexSstableRangePB {
+    // key range is [start_key, end_key].
+    optional string start_key = 1;
+    optional string end_key = 2;
+}
+
 message PersistentIndexSstablePB {
     optional int64 version = 1; // Deprecated
     optional string filename = 2;
@@ -53,6 +59,9 @@ message PersistentIndexSstablePB {
     optional int64 shared_version = 9;
     // For sstable generated during compaction process.
     optional DelvecPagePB delvec = 10;
+    optional PersistentIndexSstableRangePB range = 11;
+    // This file's fileset id. All files under same fileset should be non-overlapped.
+    optional uint64 fileset_id = 12;
 }
 
 message PersistentIndexSstableMetaPB {
@@ -229,6 +238,7 @@ message TxnLogPB {
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
         repeated FileMetaPB ssts = 6;
+        repeated PersistentIndexSstableRangePB sst_ranges = 7;
     }
 
     message OpCompaction {
@@ -247,6 +257,9 @@ message TxnLogPB {
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
         repeated FileMetaPB ssts = 8;
+        repeated PersistentIndexSstableRangePB sst_ranges = 9;
+        // Pk index compaction may generate multi sstables in latest impl.
+        repeated PersistentIndexSstablePB output_sstables = 10;
     }
 
     message OpSchemaChange {
