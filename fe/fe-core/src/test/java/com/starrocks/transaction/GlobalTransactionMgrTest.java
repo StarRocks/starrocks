@@ -127,6 +127,7 @@ public class GlobalTransactionMgrTest {
     @BeforeEach
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException {
+        UtFrameUtils.mockInitWarehouseEnv();
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
@@ -135,6 +136,7 @@ public class GlobalTransactionMgrTest {
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
         MetricRepo.init();
+
 
         UtFrameUtils.setUpForPersistTest();
     }

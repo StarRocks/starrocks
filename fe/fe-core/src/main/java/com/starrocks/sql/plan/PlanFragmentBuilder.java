@@ -1486,7 +1486,7 @@ public class PlanFragmentBuilder {
 
             FlussScanNode flussScanNode =
                     new FlussScanNode(context.getNextNodeId(), tupleDescriptor, "FlussScanNode");
-            flussScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            flussScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             flussScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(flussScanNode, true);
             try {

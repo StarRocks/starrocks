@@ -286,6 +286,7 @@ public class PrivilegeCheckerTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(testUser)
         );
         starRocksAssert.getCtx().setQualifiedUser(testUser.getUser());
+        starRocksAssert.getCtx().setThreadLocalInfo();
     }
 
     private static void ctxToRoot() throws PrivilegeException {
@@ -295,6 +296,7 @@ public class PrivilegeCheckerTest {
         );
 
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getUser());
+        starRocksAssert.getCtx().setThreadLocalInfo();
     }
 
     private static void grantOrRevoke(String sql) throws Exception {

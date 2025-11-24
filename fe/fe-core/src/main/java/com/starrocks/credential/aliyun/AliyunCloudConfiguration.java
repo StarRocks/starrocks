@@ -16,6 +16,7 @@ package com.starrocks.credential.aliyun;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -42,6 +43,7 @@ public class AliyunCloudConfiguration extends CloudConfiguration {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.ALIYUN);
         Map<String, String> properties = tCloudConfiguration.getCloud_properties();
+        properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         aliyunCloudCredential.toThrift(properties);
     }
 

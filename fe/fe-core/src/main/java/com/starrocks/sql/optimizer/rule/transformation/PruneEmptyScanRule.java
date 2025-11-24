@@ -40,7 +40,6 @@ public class PruneEmptyScanRule extends TransformationRule {
             OperatorType.LOGICAL_ODPS_SCAN,
             OperatorType.LOGICAL_KUDU_SCAN,
             OperatorType.LOGICAL_FLUSS_SCAN
-        }
     );
 
     public PruneEmptyScanRule() {

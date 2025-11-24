@@ -115,32 +115,32 @@ public class ScalarOperatorFunctionsTest {
     public void firstDay() {
         assertEquals("2022-05-16",
                 ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
-                        ConstantOperator.createInt(2), ConstantOperator.createInt(1)));
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(1)).getVarchar());
         assertEquals("2022-05-11",
                 ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
-                        ConstantOperator.createInt(2), ConstantOperator.createInt(3)));
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(3)).getVarchar());
         assertEquals("2022-05-17",
                 ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
-                        ConstantOperator.createInt(2), ConstantOperator.createInt(2)));
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(2)).getVarchar());
         assertEquals("2022-05-17",
                 ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
-                        ConstantOperator.createInt(1), ConstantOperator.createInt(2)));
+                        ConstantOperator.createInt(1), ConstantOperator.createInt(2)).getVarchar());
         assertEquals("2022-05-01",
                 ScalarOperatorFunctions.firstDay(ConstantOperator.createVarchar("2022-05-17"),
-                        ConstantOperator.createInt(3), ConstantOperator.createInt(2)));
+                        ConstantOperator.createInt(3), ConstantOperator.createInt(2)).getVarchar());
     }
     
     @Test
     public void lastDay() {
         assertEquals("2022-04-08",
                 ScalarOperatorFunctions.lastDay(ConstantOperator.createVarchar("2022-04-08"),
-                        ConstantOperator.createInt(1), ConstantOperator.createInt(1)));
+                        ConstantOperator.createInt(1), ConstantOperator.createInt(1)).getVarchar());
         assertEquals("2022-04-10",
                 ScalarOperatorFunctions.lastDay(ConstantOperator.createVarchar("2022-04-08"),
-                        ConstantOperator.createInt(2), ConstantOperator.createInt(1)));
+                        ConstantOperator.createInt(2), ConstantOperator.createInt(1)).getVarchar());
         assertEquals("2022-04-30",
                 ScalarOperatorFunctions.lastDay(ConstantOperator.createVarchar("2022-04-08"),
-                        ConstantOperator.createInt(3), ConstantOperator.createInt(7)));
+                        ConstantOperator.createInt(3), ConstantOperator.createInt(7)).getVarchar());
     }
 
     @Test

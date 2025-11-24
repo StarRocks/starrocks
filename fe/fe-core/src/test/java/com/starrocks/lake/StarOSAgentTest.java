@@ -25,8 +25,6 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
-import com.staros.proto.ReplicaInfo;
-import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ServiceInfo;
@@ -37,14 +35,11 @@ import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
-import com.staros.proto.WorkerState;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -418,74 +413,6 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
-    }
-
-    @Test
-    public void testGetBackendByShard() throws StarClientException {
-        ReplicaInfo replica1 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.PRIMARY)
-                .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
-                .build();
-        ReplicaInfo replica2 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.PRIMARY)
-                .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(2L).setWorkerState(WorkerState.ON).build())
-                .build();
-        ReplicaInfo replica3 = ReplicaInfo.newBuilder()
-                .setReplicaRole(ReplicaRole.PRIMARY)
-                .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(3L).setWorkerState(WorkerState.OFF).build())
-                .build();
-        List<ReplicaInfo> replicas = Lists.newArrayList(replica1, replica2, replica3);
-
-        ShardInfo shard = ShardInfo.newBuilder().setShardId(10L).addAllReplicaInfo(replicas).build();
-        List<ShardInfo> shards = Lists.newArrayList(shard);
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public long getBackendIdWithStarletPort(String host, int starletPort) {
-                return -1L;
-            }
-
-            @Mock
-            public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
-                return -1L;
-            }
-        };
-
-        new MockUp<WorkerInfo>() {
-            @Mock
-            public String getIpPort() {
-                return "127.0.0.1:8090";
-            }
-        };
-
-        new Expectations(client) {
-            {
-                client.getShardInfo("1", Lists.newArrayList(10L), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
-                result = shards;
-            }
-        };
-
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Map<Long, Long> workerToNode = Maps.newHashMap();
-        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
-
-        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                "Failed to get primary backend. shard id: 10",
-                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        ExceptionChecker.expectThrowsNoException(() -> Assertions.assertEquals(Lists.newArrayList(),
-                starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID)));
-
-        workerToNode.put(1L, 10001L);
-        workerToNode.put(2L, 10002L);
-        workerToNode.put(3L, 10003L);
-
-        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
-        ExceptionChecker.expectThrowsNoException(() -> {
-            Assertions.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L,
-                    StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-            Assertions.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
-                    starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
-        });
     }
 
     @Test

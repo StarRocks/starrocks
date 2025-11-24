@@ -547,7 +547,7 @@ public class CatalogRecycleBinLakeTableTest {
                         "  k1 DATE NOT NULL," +
                         "  v1 varchar(10)" +
                         ")" +
-                        "DUPLICATE KEY(k1)\n" +
+                         "DUPLICATE KEY(k1)\n" +
                         "PARTITION BY LIST(k1) (" +
                         "  PARTITION p1 VALUES IN ('2024-01-01')," +
                         "  PARTITION p2 VALUES IN ('2024-02-01')" +

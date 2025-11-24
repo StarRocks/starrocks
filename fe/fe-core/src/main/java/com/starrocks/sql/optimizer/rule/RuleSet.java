@@ -405,7 +405,7 @@ public class RuleSet {
 
     public static final Rule FINE_GRAINED_RANGE_PREDICATE_RULES =
             new CombinationRule(RuleType.GP_FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
-                    FineGrainedRangePredicateRule.INSTANCE,
+                    FineGrainedRangePredicateRule.INSTANCE));
 
     public static final Rule ELIMINATE_OP_WITH_CONSTANT_RULES =
             new CombinationRule(RuleType.GP_ELIMINATE_OP_WITH_CONSTANT, ImmutableList.of(

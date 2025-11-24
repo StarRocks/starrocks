@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.fluss.FlussRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
@@ -114,8 +115,9 @@ public class FlussScanNode extends ScanNode {
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, flussTable.getTableName() + ".getFlussRemoteFileInfos")) {
-            fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                    flussTable.getCatalogName(), flussTable, null, -1, predicate, fieldNames, limit);
+            GetRemoteFilesParams params =
+                    GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+            fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(flussTable, params);
         }
 
         FlussRemoteFileDesc remoteFileDesc = (FlussRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
@@ -220,19 +222,14 @@ public class FlussScanNode extends ScanNode {
             }
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    flussTable.getCatalogName(), flussTable.getDbName(), flussTable.getTableName());
+                    flussTable.getCatalogName(), flussTable.getDbName(), flussTable.getTableName(), null);
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+                            partitionNames.isEmpty() ? 1 : partitionNames.size()));
             output.append("\n");
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
     }
 
     @Override

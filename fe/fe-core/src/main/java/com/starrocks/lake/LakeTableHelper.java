@@ -227,6 +227,10 @@ public class LakeTableHelper {
         for (Future<DeleteTabletCacheResponse> responseFuture : responseFutures) {
             try {
                 DeleteTabletCacheResponse response = responseFuture.get();
+                if (response == null) {
+                    LOG.warn("Response is null when removing tablet cache");
+                    continue;
+                }
                 if (response.status.statusCode != 0) {
                     LOG.warn("remove partition cache {} with error: {}", partitionId,
                             response.status.errorMsgs.get(0));

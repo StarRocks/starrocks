@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +41,8 @@ public class PartitionStatisticsTest {
 
     @Test
     public void testPunishFactor() {
+        boolean oldValue = Config.lake_compaction_enable_punish_factor;
+        Config.lake_compaction_enable_punish_factor = true;
         PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
         // test compaction
         Quantiles q1 = new Quantiles(1.0, 2.0, 3.0);
@@ -61,6 +64,14 @@ public class PartitionStatisticsTest {
         Quantiles q5 = new Quantiles(1.0, 1.0, 2.0);
         statistics.setCompactionScoreAndAdjustPunishFactor(q5, false /* isPartialSuccess */);
         assertEquals(1, statistics.getPunishFactor());
+
+        // test disable punish factor
+        Config.lake_compaction_enable_punish_factor = false;
+        Quantiles q6 = new Quantiles(1.0, 2.0, 3.0);
+        statistics.setCompactionScoreAndAdjustPunishFactor(q6, true /* isPartialSuccess */);
+        assertEquals(1, statistics.getPunishFactor());
+
+        Config.lake_compaction_enable_punish_factor = oldValue;
     }
 
     @Test

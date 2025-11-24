@@ -324,7 +324,7 @@ public class CompactionSchedulerTest {
             index1.addTablet(tablet2, null, false);
 
             Partition partition1 = new Partition(partitionId, partitionId + 100, "p1", index1, null);
-            PhysicalPartition p10 = new PhysicalPartition(physicalPartitionId, "p10", partitionId, null);
+            PhysicalPartition p10 = new PhysicalPartition(physicalPartitionId, "p10", partitionId, index1);
             partition1.addSubPartition(p10);
 
             Map<Long, List<Long>> resultMap = compactionScheduler.collectPartitionTablets(p10, warehouseId);

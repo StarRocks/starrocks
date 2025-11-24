@@ -23,13 +23,17 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -99,7 +103,7 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         try {
             return this.admin.listDatabases().get();
         } catch (Exception e) {
@@ -109,7 +113,7 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         try {
             return admin.listTables(dbName).get();
         } catch (Exception e) {
@@ -148,7 +152,8 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
         TablePath identifier = TablePath.of(databaseName, tableName);
         updatePartitionInfo(databaseName, tableName);
         if (this.partitionInfos.get(identifier) == null) {
@@ -158,7 +163,7 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String dbName) {
+    public Database getDb(ConnectContext context, String dbName) {
         if (this.databases.containsKey(dbName)) {
             return this.databases.get(dbName);
         }
@@ -174,7 +179,7 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         TablePath identifier = TablePath.of(dbName, tblName);
         if (tables.containsKey(identifier)) {
             return tables.get(identifier);
@@ -219,7 +224,7 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public boolean tableExists(String dbName, String tableName) {
+    public boolean tableExists(ConnectContext context, String dbName, String tableName) {
         try {
             TablePath identifier = TablePath.of(dbName, tableName);
             return admin.tableExists(identifier).get();
@@ -240,16 +245,14 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
-                                                   long snapshotId, ScalarOperator predicate,
-                                                   List<String> fieldNames, long limit) {
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         FlussTable flussTable = (FlussTable) table;
         TablePath identifier = TablePath.of(flussTable.getDbName(), flussTable.getTableName());
         TableInfo tableInfo = flussTable.getTableInfo();
         OffsetsInitializer.BucketOffsetsRetriever bucketOffsetsRetriever = new BucketOffsetsRetrieverImpl(admin, identifier);
         PredicateSearchKey filter = PredicateSearchKey.of(flussTable.getDbName(), flussTable.getTableName(),
-                -1, predicate);
+                -1, params.getPredicate());
 
         if (!flussSplits.containsKey(filter)) {
             Map<String, String> properties = new HashMap<>(flussTable.getTableInfo().getProperties().toMap());
@@ -299,7 +302,8 @@ public class FlussMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
-                                         long limit) {
+                                         long limit,
+                                         TableVersionRange tableVersionRange) {
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());

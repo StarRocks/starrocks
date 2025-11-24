@@ -185,8 +185,8 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
-                "     TABLE: test_table\n" +
-                "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10) AND (b < 'abc')\n" +
+                "     TABLE: `test_table`\n" +
+                "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10) AND (`b` < 'abc')\n" +
                 "     limit: 10"), plan);
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
@@ -196,8 +196,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  limit: 10\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
-                        "     TABLE: test_table\n" +
-                        "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10)"), plan);
+                        "     TABLE: `test_table`\n" +
+                        "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10)"), plan);
 
     }
 
