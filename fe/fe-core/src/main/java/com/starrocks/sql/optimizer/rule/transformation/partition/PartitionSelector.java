@@ -264,7 +264,7 @@ public class PartitionSelector {
         try {
             scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory);
         } catch (Exception e) {
-            LOG.warn("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
+            LOG.debug("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
         }
 
         LOG.debug("Get partition ids by where expression after deduce: {}", scalarOperator.toString());
