@@ -240,6 +240,21 @@ TEST_F(FileScannerTest, select_sample_files) {
         std::vector<size_t> expect = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
         ASSERT_EQ(expect, sample_file_indexes);
     }
+
+    // sample file count > total file count
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(2, 8, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 1};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
+
+    {
+        std::vector<size_t> sample_file_indexes;
+        FileScanner::sample_files(10, 100, &sample_file_indexes);
+        std::vector<size_t> expect = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+        ASSERT_EQ(expect, sample_file_indexes);
+    }
 }
 
 } // namespace starrocks
