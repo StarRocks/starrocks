@@ -291,11 +291,12 @@ public class TaskRun implements Comparable<TaskRun> {
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
         context.resetSessionVariable();
-        switchUser(context);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
+        // NOTE: The switchUser might depend on the thread-local context if it's LDAP user
+        switchUser(context);
         return context;
     }
 
