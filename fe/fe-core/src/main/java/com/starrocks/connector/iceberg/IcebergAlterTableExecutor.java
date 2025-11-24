@@ -13,6 +13,7 @@
 // limitations under the License.
 
 package com.starrocks.connector.iceberg;
+
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.HdfsEnvironment;
@@ -23,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -76,10 +78,10 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private ConnectContext context;
 
     public IcebergAlterTableExecutor(AlterTableStmt stmt,
-            Table table,
-            IcebergCatalog icebergCatalog,
-            ConnectContext context,
-            HdfsEnvironment hdfsEnvironment) {
+                                     Table table,
+                                     IcebergCatalog icebergCatalog,
+                                     ConnectContext context,
+                                     HdfsEnvironment hdfsEnvironment) {
         super(stmt);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
@@ -398,6 +400,11 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             }
         });
 
+        return null;
+    }
+
+    @Override
+    public Void visitAddPartitionClause(AddPartitionClause clause, ConnectContext context) {
         return null;
     }
 
