@@ -27,6 +27,7 @@ class RecordPredicate;
 using RecordPredicateSPtr = std::shared_ptr<RecordPredicate>;
 using RecordPredicateUPtr = std::unique_ptr<RecordPredicate>;
 
+// Record Predicate is non-thread safe
 class RecordPredicate {
 public:
     RecordPredicate(const RecordPredicatePB& record_predicate_pb)

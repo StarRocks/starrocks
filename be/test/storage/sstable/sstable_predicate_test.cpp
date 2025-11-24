@@ -155,5 +155,102 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
     }
 }
 
+TEST_F(SstablePredicateTest, basicColumnRangeTest) {
+    PersistentIndexSstablePredicatePB sstable_predicate_pb;
+    auto record_predicate_pb = sstable_predicate_pb.mutable_record_predicate();
+    record_predicate_pb->set_type(RecordPredicatePB::COLUMN_RANGE);
+    auto column_range_pb = record_predicate_pb->mutable_column_range();
+    column_range_pb->add_column_names("col1");
+    auto* range = column_range_pb->mutable_range();
+    range->mutable_upper_bound()->add_values()->set_int_value(10); // < 10
+    range->set_upper_bound_included(false);
+
+    ASSIGN_OR_ABORT(auto sstable_predicate, SstablePredicate::create(_schema_pb_1, sstable_predicate_pb));
+
+    // Test row: col1 = 5 (Should match)
+    {
+        auto pkey_schema = ChunkHelper::convert_schema(std::make_shared<TabletSchema>(_schema_pb_1), {0});
+        auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
+        pk_chunk->get_column_by_name("col1")->append_datum(Datum((int32_t)5));
+
+        MutableColumnPtr encoded_columns;
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
+        auto key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+        Slice key(encoded_columns->continuous_data(), key_size);
+        std::string row = key.to_string();
+
+        uint8_t selection;
+        ASSERT_OK(sstable_predicate->evaluate(row, &selection));
+        ASSERT_EQ(selection, 1);
+    }
+
+    // Test row: col1 = 15 (Should not match)
+    {
+        auto pkey_schema = ChunkHelper::convert_schema(std::make_shared<TabletSchema>(_schema_pb_1), {0});
+        auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
+        pk_chunk->get_column_by_name("col1")->append_datum(Datum((int32_t)15));
+
+        MutableColumnPtr encoded_columns;
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
+        auto key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+        Slice key(encoded_columns->continuous_data(), key_size);
+        std::string row = key.to_string();
+
+        uint8_t selection;
+        ASSERT_OK(sstable_predicate->evaluate(row, &selection));
+        ASSERT_EQ(selection, 0);
+    }
+}
+
+TEST_F(SstablePredicateTest, multiColumnRangeTest) {
+    PersistentIndexSstablePredicatePB sstable_predicate_pb;
+    auto record_predicate_pb = sstable_predicate_pb.mutable_record_predicate();
+    record_predicate_pb->set_type(RecordPredicatePB::COLUMN_RANGE);
+    auto column_range_pb = record_predicate_pb->mutable_column_range();
+    column_range_pb->add_column_names("col1");
+    column_range_pb->add_column_names("col2");
+    auto* range = column_range_pb->mutable_range();
+    // Range: < (10, 20)
+    range->mutable_upper_bound()->add_values()->set_int_value(10);
+    range->mutable_upper_bound()->add_values()->set_int_value(20);
+    range->set_upper_bound_included(false);
+
+    ASSIGN_OR_ABORT(auto sstable_predicate, SstablePredicate::create(_schema_pb_2, sstable_predicate_pb));
+
+    auto pkey_schema = ChunkHelper::convert_schema(std::make_shared<TabletSchema>(_schema_pb_2), {0, 1});
+
+    auto test_row = [&](int32_t v1, int32_t v2, bool expected) {
+        auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
+        pk_chunk->get_column_by_name("col1")->append_datum(Datum(v1));
+        pk_chunk->get_column_by_name("col2")->append_datum(Datum(v2));
+
+        MutableColumnPtr encoded_columns;
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
+        std::string row = reinterpret_cast<const Slice*>(encoded_columns->raw_data())->to_string();
+
+        uint8_t selection;
+        ASSERT_OK(sstable_predicate->evaluate(row, &selection));
+        ASSERT_EQ(selection, expected ? 1 : 0) << "Row: (" << v1 << "," << v2 << ")";
+    };
+
+    // (5, 100) -> 5 < 10 -> Match
+    test_row(5, 100, true);
+
+    // (10, 10) -> 10 == 10, 10 < 20 -> Match
+    test_row(10, 10, true);
+
+    // (10, 20) -> 10 == 10, 20 < 20 (False) -> No Match
+    test_row(10, 20, false);
+
+    // (10, 30) -> 10 == 10, 30 < 20 (False) -> No Match
+    test_row(10, 30, false);
+
+    // (11, 0) -> 11 > 10 -> No Match
+    test_row(11, 0, false);
+}
+
 } // namespace sstable
 } // namespace starrocks

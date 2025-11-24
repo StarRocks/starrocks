@@ -186,6 +186,7 @@ message RecordPredicatePB {
     enum RecordPredicateTypePB {
         UNKNOWN = 0;
         COLUMN_HASH_IS_CONGRUENT = 1;
+        COLUMN_RANGE = 2;
     }
 
     message ColumnHashIsCongruentPB {
@@ -194,11 +195,17 @@ message RecordPredicatePB {
         repeated string column_names = 3;
     }
 
+    message ColumnRangePB {
+        optional TabletRangePB range = 1;
+        repeated string column_names = 2;
+    }
+
     optional RecordPredicateTypePB type = 1;
     // set by some type of predicate (RecordPredicateTypePB is AND/OR/NOT...) which will be implemented in the future
     repeated RecordPredicatePB children = 2;
     // The following member should be set one of them by predicate type
     optional ColumnHashIsCongruentPB column_hash_is_congruent = 3;
+    optional ColumnRangePB column_range = 4;
 }
 
 message PersistentIndexSstablePredicatePB {
@@ -230,4 +237,21 @@ message TransactionStatePB {
     optional int64 txn_id = 1;
     optional TransactionStatusPB status = 2;
     optional string reason = 3;
+}
+
+message VariantPB {
+    optional PTypeDesc type = 1;
+    optional int64 int_value = 2;
+    optional string string_value = 3;
+}
+
+message TuplePB {
+    repeated VariantPB values = 1;
+}
+
+message TabletRangePB {
+    optional TuplePB lower_bound = 1;
+    optional TuplePB upper_bound = 2;
+    optional bool lower_bound_included = 3;
+    optional bool upper_bound_included = 4;
 }

@@ -868,4 +868,88 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
     }
 }
 
+TEST_F(SegmentIteratorTest, testBasicColumnRangeFilter) {
+    const int slice_num = 6;
+    std::vector<std::string> values;
+    const int overflow_sz = 32;
+    for (int i = 0; i < slice_num; ++i) {
+        std::string bigstr;
+        bigstr.reserve(overflow_sz);
+        for (int j = 0; j < overflow_sz; ++j) {
+            bigstr.push_back(j);
+        }
+        bigstr.push_back(i);
+        values.emplace_back(std::move(bigstr));
+    }
+
+    std::sort(values.begin(), values.end());
+
+    std::vector<Slice> data_strs;
+    for (const auto& data : values) {
+        data_strs.emplace_back(data);
+    }
+
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/basic_column_range_filter";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema = builder.create(1, false, TYPE_VARCHAR, true)
+                                                          .set_length(2048)
+                                                          .create(2, false, TYPE_VARCHAR, false)
+                                                          .set_length(2048)
+                                                          .build();
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 1024;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    int32_t chunk_size = config::vector_chunk_size;
+    size_t num_rows = slice_num;
+
+    auto slice_provider = [&data_strs](int32_t i) { return data_strs[i % data_strs.size()]; };
+
+    // tablet data builder
+    TabletDataBuilder segment_data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(segment_data_builder.append(0, slice_provider));
+    ASSERT_OK(segment_data_builder.append(1, slice_provider));
+    ASSERT_OK(segment_data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    SegmentReadOptions seg_options;
+    OlapReaderStatistics stats;
+    seg_options.fs = _fs;
+    seg_options.stats = &stats;
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR).add(1, "c1", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    {
+        // test range: < values[3]
+        RecordPredicatePB record_predicate_pb;
+        record_predicate_pb.set_type(RecordPredicatePB::COLUMN_RANGE);
+        auto column_range_pb = record_predicate_pb.mutable_column_range();
+        column_range_pb->add_column_names("c0");
+        auto* range = column_range_pb->mutable_range();
+        range->mutable_upper_bound()->add_values()->set_string_value(values[3]);
+        range->set_upper_bound_included(false);
+
+        seg_options.record_predicate = std::move(RecordPredicateHelper::create(record_predicate_pb).value());
+        auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_options);
+        ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+        auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
+        ASSERT_OK(chunk_iter->get_next(res_chunk.get()));
+
+        // Expect rows 0, 1, 2
+        ASSERT_EQ(res_chunk->num_rows(), 3);
+        auto binary_0 = down_cast<BinaryColumn*>(res_chunk->get_column_by_index(0).get());
+        for (int i = 0; i < 3; ++i) {
+            ASSERT_EQ(binary_0->get_slice(i), Slice(values[i]));
+        }
+    }
+}
+
 } // namespace starrocks

@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/record_predicate/column_hash_is_congruent.h"
+#include "storage/record_predicate/column_range.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -28,6 +29,11 @@ StatusOr<RecordPredicateUPtr> RecordPredicateHelper::create(const RecordPredicat
     switch (record_predicate_pb.type()) {
     case RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT: {
         predicate = std::make_unique<ColumnHashIsCongruent>(record_predicate_pb);
+        RETURN_IF_ERROR(predicate->init(record_predicate_pb));
+        break;
+    }
+    case RecordPredicatePB::COLUMN_RANGE: {
+        predicate = std::make_unique<ColumnRange>(record_predicate_pb);
         RETURN_IF_ERROR(predicate->init(record_predicate_pb));
         break;
     }
@@ -76,6 +82,8 @@ std::string RecordPredicateHelper::from_type_to_string(RecordPredicatePB::Record
     switch (pred_type) {
     case RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT:
         return "COLUMN_HASH_IS_CONGRUENT";
+    case RecordPredicatePB::COLUMN_RANGE:
+        return "COLUMN_RANGE";
     default:
         break;
     }
@@ -88,6 +96,13 @@ Status RecordPredicateHelper::_check_valid_pb(const RecordPredicatePB& record_pr
         if (!record_predicate_pb.has_column_hash_is_congruent()) {
             return Status::InternalError(
                     "record predicate type is COLUMN_HASH_IS_CONGRUENT but no corresponding PredicatePB was defined");
+        }
+        break;
+    }
+    case RecordPredicatePB::COLUMN_RANGE: {
+        if (!record_predicate_pb.has_column_range()) {
+            return Status::InternalError(
+                    "record predicate type is COLUMN_RANGE but no corresponding PredicatePB was defined");
         }
         break;
     }

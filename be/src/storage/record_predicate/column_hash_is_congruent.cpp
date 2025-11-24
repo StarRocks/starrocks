@@ -42,12 +42,12 @@ Status ColumnHashIsCongruent::evaluate(Chunk* chunk, uint8_t* selection, uint16_
 }
 
 Status ColumnHashIsCongruent::init(const RecordPredicatePB& record_predicate_pb) {
-    const auto& column_hash_is_congruent_pb = record_predicate_pb.column_hash_is_congruent();
-    RETURN_IF_ERROR(_check_valid_pb(column_hash_is_congruent_pb));
-    _modulus = column_hash_is_congruent_pb.modulus();
-    _remainder = column_hash_is_congruent_pb.remainder();
-    _column_names.insert(_column_names.end(), column_hash_is_congruent_pb.column_names().begin(),
-                         column_hash_is_congruent_pb.column_names().end());
+    const auto& column_hash_is_congruent_meta = record_predicate_pb.column_hash_is_congruent();
+    RETURN_IF_ERROR(_check_valid_pb(column_hash_is_congruent_meta));
+    _modulus = column_hash_is_congruent_meta.modulus();
+    _remainder = column_hash_is_congruent_meta.remainder();
+    _column_names.insert(_column_names.end(), column_hash_is_congruent_meta.column_names().begin(),
+                         column_hash_is_congruent_meta.column_names().end());
     return Status::OK();
 }
 

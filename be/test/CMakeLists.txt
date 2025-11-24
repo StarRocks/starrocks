@@ -540,6 +540,7 @@ SET(DW_TEST_FILES
     ./storage/range_test.cpp
     ./storage/record_predicate/column_hash_is_congruent_test.cpp
     ./storage/record_predicate/record_predicate_helper_test.cpp
+    ./storage/record_predicate/column_range_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/roaring2range_test.cpp
