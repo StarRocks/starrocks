@@ -168,7 +168,6 @@ private:
     // key -> tablets channel
     std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
     std::atomic<bool> _cancelled{false};
-    std::string _cancel_reason;
     std::atomic<bool> _closed{false};
 
     Span _span;
