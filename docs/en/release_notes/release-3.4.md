@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 3.4.9
 
-Release Date: November 21, 2025
+Release Date: November 24, 2025
 
 ### Behavior Changes
 
