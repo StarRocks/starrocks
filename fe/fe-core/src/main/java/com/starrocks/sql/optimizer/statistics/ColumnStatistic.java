@@ -173,11 +173,11 @@ public class ColumnStatistic {
     @Override
     public String toString() {
         String separator = ", ";
-        return "[" + minValue + separator
-                + maxValue + separator
-                + nullsFraction + separator
-                + averageRowSize + separator
-                + distinctValuesCount + "] "
+        return "[MIN: " + minValue + separator
+                + "MAX: " + maxValue + separator
+                + "NULLS: " + nullsFraction + separator
+                + "ROS: " + averageRowSize + separator
+                + "NDV: " + distinctValuesCount + "] "
                 + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
                 + (histogram == null ? "" : histogram.getMcvString() + " ")
                 + type;
