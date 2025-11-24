@@ -476,12 +476,6 @@ FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
 FLAMEGRAPH_SOURCE="FlameGraph"
 FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
 
-# pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251111/pprof-linux-amd64.zip"
-PPROF_NAME="pprof.zip"
-PPROF_SOURCE="pprof"
-PPROF_MD5SUM="577dd8a01845a13b3ba76719cc2edb28"
-
 HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.2/hadoop-3.4.2-src.tar.gz"
 HADOOPSRC_NAME="hadoop-3.4.2-src.tar.gz"
 HADOOPSRC_SOURCE="hadoop-3.4.2-src"
