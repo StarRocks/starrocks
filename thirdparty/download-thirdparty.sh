@@ -632,6 +632,7 @@ if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
     if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.2-src" ]] ; then
         patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src.patch"
+        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src-jni-crash.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
