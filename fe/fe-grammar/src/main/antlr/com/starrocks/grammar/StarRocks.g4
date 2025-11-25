@@ -1098,7 +1098,7 @@ addColumnClause
     ;
 
 addPartitionColumnClause
-    : ADD PARTITION COLUMN expression
+    : ADD PARTITION COLUMN expressionList
     ;
 
 addColumnsClause
@@ -1110,7 +1110,7 @@ dropColumnClause
     ;
 
 dropPartitionColumnClause
-    : DROP PARTITION COLUMN expression
+    : DROP PARTITION COLUMN expressionList
     ;
 
 modifyColumnClause

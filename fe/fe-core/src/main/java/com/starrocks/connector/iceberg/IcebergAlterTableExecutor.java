@@ -493,12 +493,15 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     public Void visitAddPartitionColumnClause(AddPartitionColumnClause clause, ConnectContext context) {
         actions.add(() -> {
             UpdatePartitionSpec spec = this.table.updateSpec();
-            Term term = transformExprToIcebergTerm(clause.getPartitionExpr());
+            List<Term> terms = clause.getPartitionExprList().stream()
+                    .map(this::transformExprToIcebergTerm).toList();
             try {
-                spec.addField(term);
+                for (Term term : terms) {
+                    spec.addField(term);
+                }
                 spec.commit();
             } catch (Exception e) {
-                throw new StarRocksConnectorException("Failed to add partition column: " + clause.getPartitionExpr(), e);
+                throw new StarRocksConnectorException("Failed to execute: " + clause, e);
             }
         });
         return null;
@@ -508,12 +511,15 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     public Void visitDropPartitionColumnClause(DropPartitionColumnClause clause, ConnectContext context) {
         actions.add(() -> {
             UpdatePartitionSpec spec = this.table.updateSpec();
-            Term term = transformExprToIcebergTerm(clause.getPartitionExpr());
+            List<Term> terms = clause.getPartitionExprList().stream()
+                    .map(this::transformExprToIcebergTerm).toList();
             try {
-                spec.removeField(term);
+                for (Term term : terms) {
+                    spec.removeField(term);
+                }
                 spec.commit();
             } catch (Exception e) {
-                throw new StarRocksConnectorException("Failed to drop partition column: " + clause.getPartitionExpr(), e);
+                throw new StarRocksConnectorException("Failed to execute： " + clause, e);
             }
         });
         return null;

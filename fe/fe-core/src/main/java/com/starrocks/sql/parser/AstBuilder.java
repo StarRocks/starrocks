@@ -5110,15 +5110,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitAddPartitionColumnClause(
             com.starrocks.sql.parser.StarRocksParser.AddPartitionColumnClauseContext context) {
-        Expr partitionExpr = (Expr) visit(context.expression());
-        return new AddPartitionColumnClause(partitionExpr, createPos(context));
+        List<Expr> partitionExprList = visit(context.expressionList().expression(), Expr.class);
+        return new AddPartitionColumnClause(partitionExprList, createPos(context));
     }
 
     @Override
     public ParseNode visitDropPartitionColumnClause(
             com.starrocks.sql.parser.StarRocksParser.DropPartitionColumnClauseContext context) {
-        Expr partitionExpr = (Expr) visit(context.expression());
-        return new DropPartitionColumnClause(partitionExpr, createPos(context));
+        List<Expr> partitionExprList = visit(context.expressionList().expression(), Expr.class);
+        return new DropPartitionColumnClause(partitionExprList, createPos(context));
     }
 
 

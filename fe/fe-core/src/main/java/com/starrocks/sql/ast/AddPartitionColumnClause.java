@@ -17,17 +17,33 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
+
 // clause which is used to add one column to
 public class AddPartitionColumnClause extends AlterTableClause {
-    private final Expr partitionExpr;
+    private final List<Expr> partitionExprList;
 
-    public Expr getPartitionExpr() {
-        return partitionExpr;
+    public List<Expr> getPartitionExprList() {
+        return partitionExprList;
     }
 
-    public AddPartitionColumnClause(Expr partitionExpr, NodePosition pos) {
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("ADD PARTITION COLUMN (");
+        for (int i = 0; i < partitionExprList.size(); i++) {
+            sb.append(partitionExprList.get(i));
+            if (i != partitionExprList.size() - 1) {
+                sb.append(", ");
+            }
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
+    public AddPartitionColumnClause(List<Expr> partitionExprList, NodePosition pos) {
         super(pos);
-        this.partitionExpr = partitionExpr;
+        this.partitionExprList = partitionExprList;
     }
 
     @Override

@@ -56,14 +56,10 @@ create table test_part_evo (
   value bigint  
 );
 
-alter table test_part_evo add partition column dt;
+alter table test_part_evo add partition column dt, truncate(value, 10), bucket(id, 10);
 insert into test_part_evo values (1, 'data1', '2023-01-01', 100);
 insert into test_part_evo values (2, 'data2', '2023-01-02', 200);
-
-alter table test_part_evo add partition column truncate(value, 10);
 insert into test_part_evo values (3, 'data3', '2023-01-03', 300);
-
-alter table test_part_evo add partition column bucket(id, 10);
 insert into test_part_evo values (4, 'data4', '2023-01-04', 400);
 
 function: assert_query_contains("show create table test_part_evo", "PARTITION BY (`dt`, truncate(`value`, 10), bucket(`id`, 10))")
@@ -76,12 +72,17 @@ function: assert_query_contains("show create table test_part_evo", "PARTITION BY
 
 select * from test_part_evo order by id;
 
-alter table test_part_evo drop partition column truncate(value, 10);
-alter table test_part_evo drop partition column bucket(id, 10);
+alter table test_part_evo drop partition column truncate(value, 10), bucket(id, 10);
 
 function: assert_query_contains("show create table test_part_evo", "PARTITION BY (month(`dt`))")
 
 select * from test_part_evo order by id;
+
+function: assert_query_error_contains("alter table test_part_evo add partition column fn(dt)", "Unsupported partition transform")
+
+function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to execute")
+
+function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to execute")
 
 drop table test_part_evo force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};

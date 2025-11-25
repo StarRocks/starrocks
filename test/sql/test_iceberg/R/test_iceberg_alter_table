@@ -71,7 +71,7 @@ create table test_part_evo (
 );
 -- result:
 -- !result
-alter table test_part_evo add partition column dt;
+alter table test_part_evo add partition column dt, truncate(value, 10), bucket(id, 10);
 -- result:
 -- !result
 insert into test_part_evo values (1, 'data1', '2023-01-01', 100);
@@ -80,13 +80,7 @@ insert into test_part_evo values (1, 'data1', '2023-01-01', 100);
 insert into test_part_evo values (2, 'data2', '2023-01-02', 200);
 -- result:
 -- !result
-alter table test_part_evo add partition column truncate(value, 10);
--- result:
--- !result
 insert into test_part_evo values (3, 'data3', '2023-01-03', 300);
--- result:
--- !result
-alter table test_part_evo add partition column bucket(id, 10);
 -- result:
 -- !result
 insert into test_part_evo values (4, 'data4', '2023-01-04', 400);
@@ -117,10 +111,7 @@ select * from test_part_evo order by id;
 4	data4	2023-01-04	400
 5	data5	2023-01-05	500
 -- !result
-alter table test_part_evo drop partition column truncate(value, 10);
--- result:
--- !result
-alter table test_part_evo drop partition column bucket(id, 10);
+alter table test_part_evo drop partition column truncate(value, 10), bucket(id, 10);
 -- result:
 -- !result
 function: assert_query_contains("show create table test_part_evo", "PARTITION BY (month(`dt`))")
@@ -134,6 +125,18 @@ select * from test_part_evo order by id;
 3	data3	2023-01-03	300
 4	data4	2023-01-04	400
 5	data5	2023-01-05	500
+-- !result
+function: assert_query_error_contains("alter table test_part_evo add partition column fn(dt)", "Unsupported partition transform")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to execute")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to execute")
+-- result:
+None
 -- !result
 drop table test_part_evo force;
 -- result:
