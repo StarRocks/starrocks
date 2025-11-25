@@ -27,6 +27,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.generator.QueryGenerateContext;
@@ -116,7 +117,9 @@ public class PlanPieceInfo {
         OlapTable table = new OlapTable(0xdeadbeef, fqTableName, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, "true");
+        if (RunMode.isSharedNothingMode()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, "true");
+        }
         properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "" + replicationNum);
         properties.put(DynamicPartitionProperty.TIME_UNIT, "DAY");
@@ -127,7 +130,9 @@ public class PlanPieceInfo {
         properties.put(DynamicPartitionProperty.PREFIX, "p");
 
         TableProperty tableProperty = new TableProperty(properties);
-        tableProperty.buildReplicatedStorage();
+        if (RunMode.isSharedNothingMode()) {
+            tableProperty.buildReplicatedStorage();
+        }
         tableProperty.buildEnablePersistentIndex();
         tableProperty.buildReplicationNum();
         tableProperty.buildDynamicProperty();
