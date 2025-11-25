@@ -96,3 +96,4 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
         return DEFAULT_EMPTY_STRING;
 
     }
+}
