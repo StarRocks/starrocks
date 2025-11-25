@@ -17,6 +17,7 @@
 #include "column/column.h"
 #include "exec/join/join_hash_map.h"
 #include "exec/join/join_hash_table_descriptor.h"
+#include "exec/join/join_key_constructor.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
