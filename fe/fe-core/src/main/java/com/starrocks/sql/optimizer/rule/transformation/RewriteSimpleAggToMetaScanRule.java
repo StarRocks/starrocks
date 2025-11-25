@@ -22,10 +22,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -221,6 +223,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
+        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
                 aggregator -> {
@@ -231,12 +235,22 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         if (usedColumns.size() != 1) {
                             return false;
                         }
+                        // fast schema evolution won't rewrite data when processing DDL,
+                        // in this case, if column's type has been changed, zonemap index can't be used.
+                        // But we can't distinguish which type of schema change happened from metadata,
+                        // so we choose to disable min/max rewrite to make sure correctness
+                        // fast schema evolution don't support changing column type in shared-nothing mode,
+                        // we only need to disable it in shared-data mode
+                        if (RunMode.isSharedDataMode() && hasSchemaChange) {
+                            return false;
+                        }
                         ColumnRefOperator usedColumn =
                                 context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
                         Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
                         if (column == null) {
                             return false;
                         }
+
                         // min/max column should have zonemap index
                         Type type = aggregator.getType();
                         return !(type.isStringType() || type.isComplexType());
