@@ -138,7 +138,7 @@ Enables Merge Commit for multiple concurrent Stream Load requests within a speci
 
 :::warning
 
-Note that the Merge Commit optimization is suitable for the scenario with **concurrent** Stream Load jobs on a single table. It is not recommended if the concurrency is one. Meanwhile, think twice before setting `merge_commit_async` to `true` and `merge_commit_interval_ms` to a large value because they may cause load performance degradation.
+Note that the Merge Commit optimization is suitable for the scenario with **concurrent** Stream Load jobs on a single table. It is not recommended if the concurrency is one. Meanwhile, think twice before setting `merge_commit_async` to `false` and `merge_commit_interval_ms` to a large value because they may cause load performance degradation.
 
 :::
 
