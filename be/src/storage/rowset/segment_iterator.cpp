@@ -193,7 +193,7 @@ private:
         bool _support_push_down_predicate = false;
         std::vector<ColumnId> _predicate_order;
         ColumnPredicateMap _column_predicate_map;
-        bool _is_filtered = false;
+        bool _is_filtered = false; // true if push down predicate into page level
 
         // Selectivity tracking for predicate column late materialization
         // Maps (score) to column_id, where score = read_time_ns * selectivity
@@ -488,6 +488,8 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
             predicate_col_late_materialize_read
                     ? column_iterators[0]->support_push_down_predicate(_column_predicate_map[_predicate_order[0]])
                     : false;
+    // reset _is_filtered every time
+    _is_filtered = false;
 
     bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
     std::vector<ColumnId> pruned_cols;
@@ -513,26 +515,23 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
         } else {
             size_t processed_rows = 0;
             if (i == 0) {
-                // reset _is_filtered every time
-                _is_filtered = false;
                 size_t original_row_num = col->size();
 
                 // for first predicate column, if can filter data in page level
                 // _is_filtered is set to true
                 // and selection is record for filter rowId column
                 // and only append filtered data in col
-                RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(
-                        range, col.get(), _column_predicate_map[_predicate_order[0]], selection, selected_idx,
-                        &_is_filtered, &processed_rows));
-                if (_is_filtered) {
-                    _first_column_total_rows_read += processed_rows;
-                    _first_column_total_rows_passed += (col->size() - original_row_num);
-                }
+                RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(range, col.get(),
+                                                                            _column_predicate_map[_predicate_order[0]],
+                                                                            selection, selected_idx, &processed_rows));
+                _first_column_total_rows_read += processed_rows;
+                _first_column_total_rows_passed += (col->size() - original_row_num);
+                _is_filtered = true;
             } else {
                 // for rowId column iterator, apply selection if _is_filtered is true
                 DCHECK(i == 1);
-                RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(
-                        range, col.get(), ColumnPredicates(), selection, selected_idx, &_is_filtered, &processed_rows));
+                RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(range, col.get(), ColumnPredicates(),
+                                                                            selection, selected_idx, &processed_rows));
             }
         }
 
@@ -2014,7 +2013,6 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
             ASSIGN_OR_RETURN(next_start, _filter_by_compound_and_predicates(
                                                  chunk, rowid, chunk_start, next_start, first_column_id,
                                                  non_expr_column_predicate_map.at(first_column_id), current_columns));
-            // chunk->check_or_die();
         }
 
         chunk_start = next_start;
@@ -2079,6 +2077,7 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize(vector<ro
     DCHECK(current_columns.size() == chunk->num_columns())
             << "current column size:" << current_columns.size() << ", chunk column size:" << chunk->num_columns();
 
+    // check chunk until every predicate column is read
     chunk->check_or_die();
 
     chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);

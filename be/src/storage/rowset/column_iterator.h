@@ -255,7 +255,7 @@ public:
     virtual Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                           Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
-                                          bool* data_filtered, size_t* processed_rows) {
+                                          size_t* processed_rows) {
         return Status::NotSupported("ColumnIterator Doesn't Support next_batch_with_filter");
     }
 

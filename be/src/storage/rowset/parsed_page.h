@@ -132,7 +132,7 @@ public:
 
     virtual Status read_with_filter(Column* column, const SparseRange<>& range,
                                     const std::vector<const ColumnPredicate*>& compound_and_predicates,
-                                    uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) = 0;
+                                    uint8_t* selection, uint16_t* selected_idx) = 0;
     void reserve_col(size_t n, Column* column) {
         if (_data_decoder != nullptr) {
             _data_decoder->reserve_col(n, column);

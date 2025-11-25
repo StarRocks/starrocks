@@ -98,8 +98,7 @@ public:
     // callee is responsible to handle null column and append null data into dst column if selected
     virtual Status next_batch_with_filter(Column* column, const SparseRange<>& range,
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
-                                          const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx,
-                                          bool* data_filtered) {
+                                          const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
         return Status::NotSupported("PageDecoder Not Support next_batch_with_filter");
     }
 
