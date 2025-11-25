@@ -490,6 +490,18 @@ public class AstToStringBuilder {
         sb.append(Joiner.on(", ").join(colDef));
         sb.append(")");
 
+        // Properties
+        Map<String, String> properties = new HashMap<>();
+        try {
+            properties = new HashMap<>(view.getProperties());
+        } catch (NotImplementedException e) {
+        }
+        if (!properties.isEmpty()) {
+            sb.append("\nPROPERTIES (");
+            sb.append(new PrintableMap<>(properties, "=", true, false, true).toString());
+            sb.append(")\n");
+        }
+
         sb.append(" AS ").append(view.getInlineViewDef()).append(";");
         return sb.toString();
     }

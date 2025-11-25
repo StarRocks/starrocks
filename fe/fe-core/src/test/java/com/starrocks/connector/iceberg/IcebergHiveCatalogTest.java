@@ -180,6 +180,66 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
+    public void testCreateViewWithProperties(@Mocked HiveCatalog hiveCatalog,
+                                             @Mocked BaseView baseView,
+                                             @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
+        IcebergMetadata metadata = buildIcebergMetadata(hiveCatalog);
+
+        new Expectations() {
+            {
+                hiveCatalog.loadNamespaceMetadata(Namespace.of("db"));
+                result = ImmutableMap.of("location", "xxxxx");
+                minTimes = 1;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null,
+                NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
+        metadata.createView(connectContext, stmt);
+
+        new Expectations() {
+            {
+                representation.sql();
+                result = "select * from table";
+                minTimes = 1;
+
+                baseView.sqlFor("starrocks");
+                result = representation;
+                minTimes = 1;
+
+                baseView.properties();
+                result = ImmutableMap.of("owner", "alex");
+                minTimes = 1;
+
+                baseView.schema();
+                result = new Schema(Types.NestedField.optional(1, "k1", Types.IntegerType.get()));
+                minTimes = 1;
+
+                baseView.name();
+                result = "view";
+                minTimes = 1;
+
+                baseView.location();
+                result = "xxx";
+                minTimes = 1;
+
+                hiveCatalog.loadView(TableIdentifier.of("db", "view"));
+                result = baseView;
+                minTimes = 1;
+            }
+        };
+
+        Table table = metadata.getView(connectContext, "db", "view");
+        Assertions.assertEquals(ICEBERG_VIEW, table.getType());
+        Assertions.assertEquals("view", table.getName());
+        IcebergView icebergView = (IcebergView) table;
+        Assertions.assertEquals("alex", icebergView.getProperties().get("owner"));
+    }
+
+
+    @Test
     public void testAlterViewProperties(@Mocked HiveCatalog hiveCatalog, @Mocked BaseView baseView,
                                         @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(hiveCatalog);

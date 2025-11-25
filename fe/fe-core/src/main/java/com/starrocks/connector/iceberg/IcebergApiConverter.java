@@ -510,7 +510,7 @@ public class IcebergApiConverter {
         String viewName = icebergView.name();
         String location = icebergView.location();
         IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
-                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location);
+                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location, icebergView.properties());
         view.setComment(comment);
         return view;
     }
@@ -641,13 +641,17 @@ public class IcebergApiConverter {
 
         String queryId = connectContext.getQueryId().toString();
 
-        Map<String, String> properties = com.google.common.collect.ImmutableMap.of(
-                "queryId", queryId,
-                "starrocksCatalog", catalogName,
-                "starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
+        Map<String, String> properties = new HashMap<>();
+        properties.put("queryId", queryId);
+        properties.put("starrocksCatalog", catalogName);
+        properties.put("starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         if (!Strings.isNullOrEmpty(definition.getComment())) {
             properties.put(IcebergMetadata.COMMENT, definition.getComment());
+        }
+
+        if (definition.getProperties() != null && !definition.getProperties().isEmpty()) {
+            properties.putAll(definition.getProperties());
         }
 
         return properties;

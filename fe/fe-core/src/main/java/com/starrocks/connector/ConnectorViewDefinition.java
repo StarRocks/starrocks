@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -60,7 +59,7 @@ public class ConnectorViewDefinition {
                 stmt.getColumns(),
                 stmt.getInlineViewDef(),
                 AlterViewStmt.AlterDialectType.NONE,
-                Maps.newHashMap());
+                stmt.getProperties());
     }
 
     public static ConnectorViewDefinition fromAlterViewStmt(AlterViewStmt stmt) {
