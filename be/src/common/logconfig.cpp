@@ -215,8 +215,8 @@ static void failure_function() {
 static std::string get_timezone_offset_string(const google::LogMessageTime& time) {
     // Cache the last offset and its string representation
     static std::mutex cache_mutex;
-    static std::atomic<long> cached_offset_seconds(0);
-    static std::shared_ptr<std::string> cached_tz_str_ptr(std::make_shared<std::string>("+0000"));
+    static std::atomic<long> cached_offset_seconds(-1);
+    static std::shared_ptr<std::string> cached_tz_str_ptr(std::make_shared<std::string>(""));
 
     // Get timezone offset from LogMessageTime
     long offset_seconds = time.gmtoffset().count();
