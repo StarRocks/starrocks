@@ -41,6 +41,7 @@ import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
+import org.apache.arrow.flight.FlightClient;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
@@ -427,10 +428,85 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private void getStreamResult(String ticket, ServerStreamListener listener) {
+        LOG.warn("[ARROW] Calling getStreamResult with ticket: {}", ticket); 
         String[] ticketParts = ticket.split(":");
-        String token = ticketParts[0];
-        String queryId = ticketParts[1];
 
+        if (ticketParts.length == 2) {
+            getStreamResultFromFE(ticketParts[0], ticketParts[1], listener); 
+        } else if (ticketParts.length == 4) {
+            LOG.warn("[ARROW] BE ticket received");
+            getStreamResultFromBE(ticketParts[0], ticketParts[1], ticketParts[2], 
+                             Integer.parseInt(ticketParts[3]), listener);
+        } else {
+            throw CallStatus.INVALID_ARGUMENT.withDescription(
+                    "Invalid ticket format: expected 2 or 4 parts, got " + ticketParts.length)
+                    .toRuntimeException(); 
+        }
+    }
+
+    private void getStreamResultFromBE(String queryId, String fragmentInstanceId, 
+                                    String beHost, int bePort, ServerStreamListener listener) {
+        LOG.warn("[ARROW] Proxying result from BE {}:{} for queryId: {}", beHost, bePort, queryId);
+        
+        FlightClient beClient = null;
+        FlightStream beStream = null;
+        
+        try {
+            // Create Arrow Flight client to connect to the BE
+            Location beLocation = Location.forGrpcInsecure(beHost, bePort);
+            beClient = FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
+            
+            // Reconstruct the original BE ticket (without BE host/port)
+            String beTicket = queryId + ":" + fragmentInstanceId;
+            FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
+                    .setStatementHandle(ByteString.copyFromUtf8(beTicket))
+                    .build();
+            
+            Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
+            
+            // Get stream from BE
+            beStream = beClient.getStream(ticket);
+            
+            // Get schema from the stream
+            Schema schema = beStream.getSchema();
+            VectorSchemaRoot root = beStream.getRoot();
+            
+            // Start streaming to client
+            listener.start(root);
+            
+            // Stream all batches from BE to client
+            while (beStream.next()) {
+                listener.putNext();
+            }
+            
+            listener.completed();
+            
+        } catch (Exception e) {
+            LOG.error("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
+            listener.error(CallStatus.INTERNAL
+                    .withDescription("Failed to proxy result from BE: " + e.getMessage())
+                    .toRuntimeException());
+        } finally {
+            // Clean up resources
+            try {
+                if (beStream != null) {
+                    beStream.close();
+                }
+            } catch (Exception e) {
+                LOG.warn("[ARROW] Error closing BE stream", e);
+            }
+            
+            try {
+                if (beClient != null) {
+                    beClient.close();
+                }
+            } catch (Exception e) {
+                LOG.warn("[ARROW] Error closing BE client", e);
+            }
+        }
+    }
+
+    private void getStreamResultFromFE(String token, String queryId, ServerStreamListener listener) {
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
         VectorSchemaRoot vectorSchemaRoot = ctx.getResult(queryId);
         if (vectorSchemaRoot == null) {
@@ -513,11 +589,11 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Schema schema = buildSchema(execPlan);
 
             // Build BE ticket.
-            final ByteString handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
+            final ByteString handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
             Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
-            return buildFlightInfo(ticketStatement, descriptor, schema, endpoint);
+            return buildFlightInfo(ticketStatement, descriptor, schema, feEndpoint);
         } catch (Exception e) {
             ctx.reset();
             LOG.warn("[ARROW] failed to getFlightInfoFromQuery [queryID={}]", DebugUtil.printId(ctx.getExecutionId()), e);
@@ -530,9 +606,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
     }
 
-    private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
+    private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId, ComputeNode worker) {
         // BETicket: <QueryId> : <FragmentInstanceId>
-        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(rootFragmentInstanceId));
+        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" 
+                        + hexStringFromUniqueId(rootFragmentInstanceId) + ":" 
+                        + worker.getHost() + ":" 
+                        + worker.getArrowFlightPort());
     }
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
