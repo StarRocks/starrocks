@@ -150,7 +150,7 @@ Status HdfsJsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* ch
             auto value = field.value().value();
 
             RETURN_IF_ERROR(_construct_column(value, column.get(), _prev_parsed_position[key_index].type,
-                _prev_parsed_position[key_index].key));
+                                              _prev_parsed_position[key_index].key));
             key_index++;
         }
 
