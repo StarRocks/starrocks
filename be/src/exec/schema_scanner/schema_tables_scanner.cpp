@@ -45,6 +45,7 @@ SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         {"CHECKSUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
         {"CREATE_OPTIONS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"TABLE_COMMENT", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaTablesScanner::SchemaTablesScanner()
@@ -358,6 +359,16 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
                 const std::string* str = &table_info.table_comment;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 22: {
+            // creator
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(22);
+                const std::string* str = &table_info.creator;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }

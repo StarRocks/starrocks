@@ -88,6 +88,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
+import static com.starrocks.catalog.system.sys.SysDb.DATABASE_NAME;
+import static com.starrocks.statistic.StatsConstants.INFORMATION_SCHEMA;
+import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+
 public class InformationSchemaDataSource {
 
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -583,6 +587,9 @@ public class InformationSchemaDataSource {
                     info.setIndex_length(DEFAULT_EMPTY_NUM);
                     info.setData_free(DEFAULT_EMPTY_NUM);
                     info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                    String creator = (dbName.equals(DATABASE_NAME) || dbName.equals(STATISTICS_DB_NAME)
+                            || dbName.equals(INFORMATION_SCHEMA)) ? "system" : table.getCreator();
+                    info.setCreator(creator);
                     info.setCreate_time(table.getCreateTime());
                     // UPDATE_TIME (depend on the table type)
                     info.setCheck_time(table.getLastCheckTime() / 1000);

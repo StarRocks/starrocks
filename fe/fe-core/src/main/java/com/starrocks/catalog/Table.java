@@ -50,6 +50,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -171,6 +172,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected TableType type;
     @SerializedName(value = "createTime")
     protected long createTime;
+    @SerializedName(value = "creator")
+    protected String creator;
 
     /**
      * For OlapTable:
@@ -236,6 +239,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         }
         updateSchemaIndex();
         this.createTime = Instant.now().getEpochSecond();
+        if (ConnectContext.get() != null) {
+            this.creator = ConnectContext.get().getCurrentUserIdentity().toString();
+        }
         this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -511,6 +517,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public String getCreator() {
+        return creator;
     }
 
     public String getTableLocation() {

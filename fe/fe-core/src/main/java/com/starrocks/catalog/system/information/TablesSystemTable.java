@@ -73,6 +73,7 @@ public class TablesSystemTable extends SystemTable {
                 .column("INDEX_LENGTH", BIGINT)
                 .column("DATA_FREE", BIGINT)
                 .column("AUTO_INCREMENT", BIGINT)
+                .column("CREATOR", TypeFactory.createVarchar(64))
                 .column("CREATE_TIME", DATETIME)
                 .column("UPDATE_TIME", DATETIME)
                 .column("CHECK_TIME", DATETIME)
