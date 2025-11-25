@@ -202,7 +202,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
         return Status::OK();
     }
-    
+
     size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
     SparseRangeIterator<> iter = range.new_iterator();
     bool append_status = true;
