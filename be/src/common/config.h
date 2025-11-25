@@ -433,8 +433,15 @@ CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
 // smaller than this threshold, the task will not be split.
 // Default is 100MB.
 CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "104857600");
+// Target file size for primary key index in shared-data mode.
+// Default is 64MB.
+CONF_mInt64(pk_index_target_file_size, "67108864");
 // Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "false");
+CONF_mBool(enable_pk_index_parallel_compaction, "true");
+// The parameters for pk index size-tiered compaction strategy.
+CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
+CONF_mInt64(pk_index_size_tiered_level_multiple, "10");
+CONF_mInt64(pk_index_size_tiered_level_num, "5");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.

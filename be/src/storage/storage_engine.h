@@ -71,7 +71,6 @@ class Executor;
 
 namespace starrocks::lake {
 class LocalPkIndexManager;
-class LakePersistentIndexParallelCompactMgr;
 } // namespace starrocks::lake
 
 namespace starrocks {
@@ -252,9 +251,6 @@ public:
 #ifdef USE_STAROS
     lake::LocalPkIndexManager* local_pk_index_manager() {
         return _local_pk_index_manager.get();
-    }
-    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() {
-        return _parallel_compact_mgr.get();
     }
 #endif
 
@@ -551,7 +547,6 @@ private:
 
 #ifdef USE_STAROS
     std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
-    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
 #endif
 };
 

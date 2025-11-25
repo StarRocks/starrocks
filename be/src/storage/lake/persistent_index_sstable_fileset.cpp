@@ -20,14 +20,14 @@
 namespace starrocks::lake {
 
 Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<PersistentIndexSstable>>& sstables) {
-    sstable::Comparator* comparator = sstable::BytewiseComparator();
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
     for (auto&& sstable : sstables) {
-        if (sstable->sstable_pb().has_start_key() && sstable->sstable_pb().has_end_key()) {
+        if (sstable->sstable_pb().has_range()) {
             DCHECK(sstable->sstable_pb().has_fileset_id());
             // Make sure sstable is inorder via comparator
             if (!_sstable_map.empty()) {
                 const auto& last_end_key = _sstable_map.rbegin()->second.first;
-                if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().start_key())) >= 0) {
+                if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
                     return Status::InternalError("sstables are not in order or have overlap key range");
                 }
                 if (_fileset_id != sstable->sstable_pb().fileset_id()) {
@@ -35,13 +35,15 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
                 }
             }
             _fileset_id = sstable->sstable_pb().fileset_id();
-            _sstable_map.emplace(sstable->sstable_pb().start_key(),
-                                 std::make_pair(sstable->sstable_pb().end_key(), std::move(sstable)));
+            // Extract keys before moving sstable to avoid undefined behavior
+            std::string start_key = sstable->sstable_pb().range().start_key();
+            std::string end_key = sstable->sstable_pb().range().end_key();
+            _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
         } else {
-            DCHECK(!sstable->sstable_pb().has_fileset_id());
             if (_standalone_sstable != nullptr) {
                 return Status::InternalError("more than one standalone sstable in fileset");
             }
+            _fileset_id = UniqueId::gen_uid();
             _standalone_sstable = std::move(sstable);
         }
     }
@@ -49,43 +51,58 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
 }
 
 Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstable>& sstable) {
-    if (sstable->sstable_pb().has_start_key() && sstable->sstable_pb().has_end_key()) {
+    if (sstable->sstable_pb().has_range()) {
         DCHECK(sstable->sstable_pb().has_fileset_id());
-        _sstable_map.emplace(sstable->sstable_pb().start_key(),
-                             std::make_pair(sstable->sstable_pb().end_key(), std::move(sstable)));
+        _fileset_id = sstable->sstable_pb().fileset_id();
+        // Extract keys before moving sstable to avoid undefined behavior
+        std::string start_key = sstable->sstable_pb().range().start_key();
+        std::string end_key = sstable->sstable_pb().range().end_key();
+        _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
     } else {
-        DCHECK(!sstable->sstable_pb().has_fileset_id());
+        _fileset_id = UniqueId::gen_uid();
         _standalone_sstable = std::move(sstable);
     }
     return Status::OK();
 }
 
 Status PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstable>& sstable) {
-    sstable::Comparator* comparator = sstable::BytewiseComparator();
-    DCHECK(sstable->sstable_pb().has_fileset_id());
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
+    DCHECK(sstable->sstable_pb().has_range());
     // Make sure sstable is inorder via comparator
     if (!_sstable_map.empty()) {
         const auto& last_end_key = _sstable_map.rbegin()->second.first;
-        if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().start_key())) >= 0) {
+        if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
             return Status::InternalError("sstables are not in order or have overlap key range");
         }
-        if (_fileset_id != sstable->sstable_pb().fileset_id()) {
-            return Status::InternalError("inconsistent fileset_id in sstables");
+    } else {
+        return Status::InternalError("sstable fileset is not init yet");
+    }
+    // Extract keys before moving sstable to avoid undefined behavior
+    std::string start_key = sstable->sstable_pb().range().start_key();
+    std::string end_key = sstable->sstable_pb().range().end_key();
+    _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
+    return Status::OK();
+}
+
+bool PersistentIndexSstableFileset::can_append(const PersistentIndexSstablePB& sstable_pb) {
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
+    // Make sure sstable is inorder via comparator
+    if (!_sstable_map.empty() && sstable_pb.has_range()) {
+        const auto& last_end_key = _sstable_map.rbegin()->second.first;
+        if (comparator->Compare(Slice(last_end_key), Slice(sstable_pb.range().start_key())) < 0) {
+            return true;
         }
     }
-    _fileset_id = sstable->sstable_pb().fileset_id();
-    _sstable_map.emplace(sstable->sstable_pb().start_key(),
-                         std::make_pair(sstable->sstable_pb().end_key(), std::move(sstable)));
-    return Status::OK();
+    return false;
 }
 
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                                 IndexValue* values, KeyIndexSet* found_key_indexes) const {
-    sstable::Comparator* comparator = sstable::BytewiseComparator();
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
     // 1. divide key_indexes into different groups according to sstables
     std::map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
     for (auto& key_index : key_indexes) {
-        auto it = _sstable_map.upper_bound(std::string_view(keys[key_index].data, keys[key_index].size));
+        auto it = _sstable_map.upper_bound(keys[key_index]);
         if (it != _sstable_map.begin()) {
             --it;
             const auto& [start_key, end_sstable_pair] = *it;
@@ -101,6 +118,44 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
         RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
     }
     return Status::OK();
+}
+
+const std::string& PersistentIndexSstableFileset::standalone_sstable_filename() const {
+    return _standalone_sstable->sstable_pb().filename();
+}
+
+void PersistentIndexSstableFileset::get_all_sstable_pbs(std::vector<PersistentIndexSstablePB>* sstable_pbs) const {
+    for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
+        const auto& [end_key, sstable] = end_sstable_pair;
+        sstable_pbs->emplace_back(sstable->sstable_pb());
+    }
+    if (_standalone_sstable != nullptr) {
+        sstable_pbs->emplace_back(_standalone_sstable->sstable_pb());
+    }
+}
+
+size_t PersistentIndexSstableFileset::memory_usage() const {
+    size_t total_memory = 0;
+    for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
+        const auto& [end_key, sstable] = end_sstable_pair;
+        total_memory += sstable->memory_usage();
+    }
+    if (_standalone_sstable != nullptr) {
+        total_memory += _standalone_sstable->memory_usage();
+    }
+    return total_memory;
+}
+
+void PersistentIndexSstableFileset::print_debug_info(std::stringstream& ss) {
+    ss << " Fileset ID: " << _fileset_id.to_string();
+    ss << " Number of sstables: " << _sstable_map.size();
+    for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
+        const auto& [end_key, sstable] = end_sstable_pair;
+        ss << "  Sstable filesize: " << sstable->sstable_pb().filesize();
+    }
+    if (_standalone_sstable != nullptr) {
+        ss << "Standalone sstable filesize: " << _standalone_sstable->sstable_pb().filesize();
+    }
 }
 
 } // namespace starrocks::lake

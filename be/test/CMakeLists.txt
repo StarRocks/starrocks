@@ -492,6 +492,9 @@ SET(DW_TEST_FILES
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
+    ./storage/lake/lake_persistent_index_fileset_test.cpp
+    ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
+    ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp

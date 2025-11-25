@@ -38,8 +38,8 @@ message DelvecPagePB {
 
 message PersistentIndexSstableRangePB {
     // key range is [start_key, end_key].
-    optional string start_key = 1;
-    optional string end_key = 2;
+    optional bytes start_key = 1;
+    optional bytes end_key = 2;
 }
 
 message PersistentIndexSstablePB {
@@ -61,7 +61,7 @@ message PersistentIndexSstablePB {
     optional DelvecPagePB delvec = 10;
     optional PersistentIndexSstableRangePB range = 11;
     // This file's fileset id. All files under same fileset should be non-overlapped.
-    optional uint64 fileset_id = 12;
+    optional PUniqueId fileset_id = 12;
 }
 
 message PersistentIndexSstableMetaPB {

@@ -86,6 +86,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -575,6 +576,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
+    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
+    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -673,6 +676,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
         component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_parallel_compact_mgr) {
+        start = MonotonicMillis();
+        _parallel_compact_mgr->shutdown();
+        component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
     }
 
     if (_agent_server) {

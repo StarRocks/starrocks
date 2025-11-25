@@ -317,8 +317,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         if (op_write.ssts_size() > 0 && condition_column < 0 && use_cloud_native_pk_index(*metadata)) {
             // TODO support condition column with sst ingestion.
             // rowset_id + segment_id is the rssid of this segment
-            uint64_t fileset_id = (static_cast<uint64_t>(rowset_id + global_segment_id) << 32) | (UINT32_MAX - 1);
-            RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id), fileset_id,
+            RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
                                              rowset_id + global_segment_id, metadata->version(),
                                              DelvecPagePB() /* empty */, nullptr));
         }
@@ -1251,13 +1250,11 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     // 4. ingest ssts to index
     DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
             << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
-    uint64_t fileset_id =
-            (static_cast<uint64_t>(metadata.next_rowset_id() + op_compaction.ssts_size() - 1) << 32) | (UINT32_MAX - 1);
     for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(metadata); i++) {
         // metadata.next_rowset_id() + i is the rssid of output rowset's i-th segment
         DelvecPagePB delvec_page_pb = builder->delvec_page(metadata.next_rowset_id() + i);
         delvec_page_pb.set_version(metadata.version());
-        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i), fileset_id,
+        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i),
                                          metadata.next_rowset_id() + i, metadata.version(), delvec_page_pb,
                                          delvecs[i].second));
     }
@@ -1605,11 +1602,10 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
 }
 
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
-#ifdef USE_STAROS
     if (config::enable_pk_index_parallel_compaction) {
-        return LakePersistentIndex::major_compact_parallel(_tablet_mgr, metadata, txn_log);
+        return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
+                                                           metadata, txn_log);
     }
-#endif
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
 }
 

@@ -37,7 +37,7 @@ public:
                                     const std::shared_ptr<FileSystem>& fs) {
         return Status::OK();
     }
-    virtual StatusOr<FileInfo> flush_sst_writer() { return Status::OK(); }
+    virtual StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() { return Status::OK(); }
     virtual bool has_file_info() const { return false; }
 };
 

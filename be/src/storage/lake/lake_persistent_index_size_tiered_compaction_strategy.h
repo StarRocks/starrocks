@@ -34,8 +34,6 @@ public:
         std::vector<std::vector<PersistentIndexSstablePB>> candidate_filesets;
         // Whether to merge base level during compaction
         bool merge_base_level = false;
-        // Max max_rss_rowid among all sstables in candidate filesets
-        uint64_t output_fileset_id = 0;
     };
 
     // Pick compaction candidates from tablet metadata.

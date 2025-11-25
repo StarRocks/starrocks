@@ -23,43 +23,57 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/threadpool.h"
+#include "util/uid_util.h"
 
 namespace starrocks::lake {
 
 class TabletManager;
 class PersistentIndexSstable;
 
+// SeekRange represents a basic key range unit for compaction tasks split.
+struct SeekRange {
+    // scan range is [seek_key, stop_key). stop_key is exclusive.
+    std::string seek_key;
+    std::string stop_key; // could be empty meaning infinity
+    bool has_overlap(const PersistentIndexSstableRangePB& range) const;
+    bool full_contains(const PersistentIndexSstableRangePB& range) const;
+};
+
 class LakePersistentIndexParallelCompactTask {
 public:
     LakePersistentIndexParallelCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
-                                           const std::string& start_key, const std::string& end_key,
-                                           TabletManager* tablet_mgr, int64_t tablet_id, bool merge_base_level)
+                                           TabletManager* tablet_mgr, int64_t tablet_id, bool merge_base_level,
+                                           const UniqueId& fileset_id, const SeekRange& seek_range)
             : _input_sstables(input_sstables),
-              _start_key(start_key),
-              _end_key(end_key),
               _tablet_mgr(tablet_mgr),
               _tablet_id(tablet_id),
-              _merge_base_level(merge_base_level) {}
+              _merge_base_level(merge_base_level),
+              _output_fileset_id(fileset_id),
+              _seek_range(seek_range) {}
 
     Status run();
 
-    PersistentIndexSstablePB* get_output_sstable() { return &_output_sstable; }
+    const std::vector<PersistentIndexSstablePB>& output_sstables() { return _output_sstables; }
+
+private:
+    const PersistentIndexSstablePB* first_input_sstable() const;
+    size_t input_sstable_file_cnt() const;
 
 private:
     // Input sstables to be compacted
     // Each fileset is a vector of sstable metadata.
     // input_sstables contains partial sstable files in each input filesets.
     std::vector<std::vector<PersistentIndexSstablePB>> _input_sstables;
-    std::string _start_key; // Minimum start_key in this fileset
-    std::string _end_key;   // Maximum end_key in this fileset
 
     // Context info needed for compaction
     TabletManager* _tablet_mgr = nullptr;
     int64_t _tablet_id = 0;
     bool _merge_base_level = false;
+    UniqueId _output_fileset_id;
+    SeekRange _seek_range;
 
     // output sstable pb
-    PersistentIndexSstablePB _output_sstable;
+    std::vector<PersistentIndexSstablePB> _output_sstables;
 };
 
 // Manages parallel compaction of persistent index sstables.
@@ -70,20 +84,22 @@ public:
 
     Status init();
 
+    void shutdown();
+
     Status compact(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, int64_t tablet_id,
                    bool merge_base_level, std::vector<PersistentIndexSstablePB>* output_sstables);
+
+    // generate compaction tasks using candidate filesets.
+    // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
+    void generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
+                                   int64_t tablet_id, bool merge_base_level,
+                                   std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
 
 private:
     // Check if two key ranges overlap
     // Returns true if [start1, end1) overlaps with [start2, end2)
     static bool key_ranges_overlap(const std::string& start1, const std::string& end1, const std::string& start2,
                                    const std::string& end2);
-
-    // generate compaction tasks using candidate filesets.
-    // The final task number will be decided by config pk_parallel_compaction_task_split_threshold_bytes
-    static void generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
-                                          int64_t tablet_id, bool merge_base_level,
-                                          std::vector<LakePersistentIndexParallelCompactTask>* tasks);
 
     std::unique_ptr<ThreadPool> _thread_pool;
     TabletManager* _tablet_mgr = nullptr;

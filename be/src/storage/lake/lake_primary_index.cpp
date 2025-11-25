@@ -202,16 +202,15 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
 }
 
 Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range,
-                                    uint64_t fileset_id, uint32_t rssid, int64_t version,
-                                    const DelvecPagePB& delvec_page, DelVectorPtr delvec) {
+                                    uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
+                                    DelVectorPtr delvec) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, sst_range, fileset_id, rssid, version, delvec_page,
-                                                 std::move(delvec));
+        return lake_persistent_index->ingest_sst(sst_meta, sst_range, rssid, version, delvec_page, std::move(delvec));
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }

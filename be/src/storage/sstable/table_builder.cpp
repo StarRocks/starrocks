@@ -37,7 +37,6 @@ struct TableBuilder::Rep {
     Status status;
     BlockBuilder data_block;
     BlockBuilder index_block;
-    std::string first_key;
     std::string last_key;
     int64_t num_entries{0};
     bool closed{false}; // Either Finish() or Abandon() has been called.
@@ -56,6 +55,9 @@ struct TableBuilder::Rep {
     BlockHandle pending_handle; // Handle to add to index block
 
     std::string compressed_output;
+    // key range of the table
+    std::string start_key;
+    std::string end_key;
 };
 
 TableBuilder::TableBuilder(const Options& options, WritableFile* file) : rep_(new Rep(options, file)) {
@@ -93,9 +95,11 @@ Status TableBuilder::Add(const Slice& key, const Slice& value) {
         RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
                               "Key must be greater than the previously added key according to comparator");
     } else {
-        // record first key
-        r->first_key.assign(key.get_data(), key.get_size());
+        // record start key
+        r->start_key.assign(key.get_data(), key.get_size());
     }
+    // record end key
+    r->end_key.assign(key.get_data(), key.get_size());
 
     if (r->pending_index_entry) {
         RETURN_ERROR_IF_FALSE(r->data_block.empty(), "Data block must be empty when pending index entry exists");
@@ -281,7 +285,7 @@ uint64_t TableBuilder::FileSize() const {
 }
 
 std::pair<Slice, Slice> TableBuilder::KeyRange() const {
-    return {rep_->first_key, rep_->last_key};
+    return {rep_->start_key, rep_->end_key};
 }
 
 } // namespace starrocks::sstable

@@ -45,16 +45,16 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
     struct FilesetInfo {
         std::vector<int> sstable_indices;
         int64_t total_size = 0;
-        uint64_t fileset_id = 0;
+        UniqueId fileset_id;
     };
 
     std::vector<FilesetInfo> filesets;
-    std::map<uint64_t, size_t> fileset_id_to_index;
-    uint64_t base_level_fileset_id = 0; // fileset id of base level (the first fileset)
+    std::map<UniqueId, size_t> fileset_id_to_index;
+    UniqueId base_level_fileset_id; // fileset id of base level (the first fileset)
 
     for (int i = 0; i < sstable_meta.sstables_size(); ++i) {
         const auto& sstable_pb = sstable_meta.sstables(i);
-        uint64_t fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : i;
+        UniqueId fileset_id = sstable_pb.has_fileset_id() ? sstable_pb.fileset_id() : UniqueId::gen_uid();
         if (i == 0) {
             base_level_fileset_id = fileset_id;
         }
@@ -81,9 +81,9 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
 
     // Apply size-tiered compaction strategy
     // Similar to SizeTieredCompactionPolicy but for filesets
-    const int64_t level_multiple = config::size_tiered_level_multiple;
-    const int64_t max_level_size =
-            config::size_tiered_min_level_size * std::pow(level_multiple, config::size_tiered_level_num);
+    const int64_t level_multiple = config::pk_index_size_tiered_level_multiple;
+    const int64_t max_level_size = config::pk_index_size_tiered_min_level_size *
+                                   std::pow(level_multiple, config::pk_index_size_tiered_level_num);
     const int64_t min_compaction_filesets = 2;
 
     struct SizeTieredLevel {
@@ -113,7 +113,7 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
         // Level bonus: smaller levels have higher priority to reduce compaction latency
         // Small levels are cheaper to compact and finish faster
         int64_t level_bonus = 0;
-        for (int64_t v = level_size; v < max_level_size && level_bonus <= config::size_tiered_level_num;
+        for (int64_t v = level_size; v < max_level_size && level_bonus <= config::pk_index_size_tiered_level_num;
              ++level_bonus) {
             v = v * level_multiple;
         }
@@ -137,7 +137,7 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
         }
 
         // Check if we need to start a new level
-        if (level_size > config::size_tiered_min_level_size && fileset_size < level_size &&
+        if (level_size > config::pk_index_size_tiered_min_level_size && fileset_size < level_size &&
             level_size / fileset_size > (level_multiple - 1)) {
             // Close current level
             if (!transient_filesets.empty()) {
@@ -193,7 +193,6 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
 
         result->candidate_filesets.push_back(std::move(fileset_sstables));
     }
-    result->output_fileset_id = max_max_rss_rowid;
     result->merge_base_level = merge_base_level;
 
     return Status::OK();

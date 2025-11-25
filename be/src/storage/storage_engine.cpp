@@ -136,7 +136,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
 #ifdef USE_STAROS
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
-    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>();
 #endif
 #ifndef BE_TEST
     const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
@@ -261,7 +260,6 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
 #ifdef USE_STAROS
     RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
-    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
 #endif
 
     return Status::OK();
