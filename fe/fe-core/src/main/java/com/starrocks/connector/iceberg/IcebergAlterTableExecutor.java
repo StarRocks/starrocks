@@ -501,7 +501,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 }
                 spec.commit();
             } catch (Exception e) {
-                throw new StarRocksConnectorException("Failed to execute: " + clause, e);
+                throw new StarRocksConnectorException("Failed to add partition column: " + e.getMessage(), e);
             }
         });
         return null;
@@ -519,7 +519,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 }
                 spec.commit();
             } catch (Exception e) {
-                throw new StarRocksConnectorException("Failed to execute： " + clause, e);
+                throw new StarRocksConnectorException("Failed to drop partition column: " + e.getMessage(), e);
             }
         });
         return null;

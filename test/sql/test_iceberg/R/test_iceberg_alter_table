@@ -130,11 +130,11 @@ function: assert_query_error_contains("alter table test_part_evo add partition c
 -- result:
 None
 -- !result
-function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to execute")
+function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to add partition column")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to execute")
+function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to drop partition column")
 -- result:
 None
 -- !result

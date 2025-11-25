@@ -27,20 +27,6 @@ public class AddPartitionColumnClause extends AlterTableClause {
         return partitionExprList;
     }
 
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ADD PARTITION COLUMN (");
-        for (int i = 0; i < partitionExprList.size(); i++) {
-            sb.append(partitionExprList.get(i));
-            if (i != partitionExprList.size() - 1) {
-                sb.append(", ");
-            }
-        }
-        sb.append(")");
-        return sb.toString();
-    }
-
     public AddPartitionColumnClause(List<Expr> partitionExprList, NodePosition pos) {
         super(pos);
         this.partitionExprList = partitionExprList;

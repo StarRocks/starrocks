@@ -80,9 +80,9 @@ select * from test_part_evo order by id;
 
 function: assert_query_error_contains("alter table test_part_evo add partition column fn(dt)", "Unsupported partition transform")
 
-function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to execute")
+function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to add partition column")
 
-function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to execute")
+function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to drop partition column")
 
 drop table test_part_evo force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
