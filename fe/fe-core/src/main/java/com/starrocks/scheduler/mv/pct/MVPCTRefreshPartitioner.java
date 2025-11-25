@@ -659,7 +659,7 @@ public abstract class MVPCTRefreshPartitioner {
             return;
         }
         // remove pNULL partition if exists
-        if(toRefreshPartitions.containsName(NULL_PARTITION)){
+        if (toRefreshPartitions.containsName(NULL_PARTITION)) {
             logger.info("Filter partitions by partition_retention_condition, and remove null partition");
             toRefreshPartitions.removeByName(NULL_PARTITION);
         }
