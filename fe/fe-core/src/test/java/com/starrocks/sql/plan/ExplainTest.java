@@ -35,7 +35,7 @@ public class ExplainTest extends PlanTestBase {
                 + "                        Estimates: {row: 1, cpu: ?, memory: ?, network: ?, cost: 4.0}\n"
                 + "                        partitionRatio: 0/1, tabletRatio: 0/0");
 
-        Explain explain = new Explain(true, false, " ", " |");
+        Explain explain = new Explain(true, true, " ", " |");
         String plan2 = explain.print(execPlan.getPhysicalPlan(), execPlan.getOutputColumns());
         System.out.println("plan2" + plan2);
         assertContains(plan2, "- Output => [1:v1]\n"
