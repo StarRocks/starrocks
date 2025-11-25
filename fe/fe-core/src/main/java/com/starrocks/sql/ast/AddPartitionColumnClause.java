@@ -18,17 +18,16 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 // clause which is used to add one column to
-public class AddPartitionColumnClause implements ParseNode {
+public class AddPartitionColumnClause extends AlterTableClause {
     private final Expr partitionExpr;
-    private final NodePosition pos;
 
     public Expr getPartitionExpr() {
         return partitionExpr;
     }
 
     public AddPartitionColumnClause(Expr partitionExpr, NodePosition pos) {
+        super(pos);
         this.partitionExpr = partitionExpr;
-        this.pos = pos;
     }
 
     @Override

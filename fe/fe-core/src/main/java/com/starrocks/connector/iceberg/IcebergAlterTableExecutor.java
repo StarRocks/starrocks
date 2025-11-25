@@ -21,6 +21,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedureContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
@@ -44,6 +45,10 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TagOptions;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManageSnapshots;
@@ -52,8 +57,11 @@ import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdatePartitionSpec;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -440,15 +448,74 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
+    private Term transformExprToIcebergTerm(Expr expr) {
+        if (expr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) expr;
+            return Expressions.ref(slotRef.getColumnName());
+        } else if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            String fn = functionCallExpr.getFnName().getFunction();
+            Expr child = functionCallExpr.getChild(0);
+            if (child instanceof SlotRef) {
+                String colName = ((SlotRef) child).getColumnName();
+                switch (fn.toLowerCase()) {
+                    case "year":
+                        return Expressions.year(colName);
+                    case "month":
+                        return Expressions.month(colName);
+                    case "day":
+                        return Expressions.day(colName);
+                    case "hour":
+                        return Expressions.hour(colName);
+                    case "identity":
+                        return Expressions.ref(colName);
+                    case "truncate":
+                        IntLiteral width = (IntLiteral) functionCallExpr.getChild(1);
+                        return Expressions.truncate(colName, (int) width.getValue());
+                    case "bucket":
+                        IntLiteral numBuckets = (IntLiteral) functionCallExpr.getChild(1);
+                        return Expressions.bucket(colName, (int) numBuckets.getValue());
+                    case "void":
+                        // not supported yet.
+                    default:
+                        throw new SemanticException(
+                                "Unsupported partition transform %s for column %s", fn, colName);
+                }
+            } else {
+                throw new SemanticException("Unsupported partition transform %s for arguments", fn);
+            }
+        } else {
+            throw new SemanticException("Does not support partition clause: " + expr);
+        }
+    }
+
     @Override
     public Void visitAddPartitionColumnClause(AddPartitionColumnClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        actions.add(() -> {
+            UpdatePartitionSpec spec = this.table.updateSpec();
+            Term term = transformExprToIcebergTerm(clause.getPartitionExpr());
+            try {
+                spec.addField(term);
+                spec.commit();
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Failed to add partition column: " + clause.getPartitionExpr(), e);
+            }
+        });
         return null;
     }
 
     @Override
     public Void visitDropPartitionColumnClause(DropPartitionColumnClause clause, ConnectContext context) {
-        unsupportedException("Not support");
+        actions.add(() -> {
+            UpdatePartitionSpec spec = this.table.updateSpec();
+            Term term = transformExprToIcebergTerm(clause.getPartitionExpr());
+            try {
+                spec.removeField(term);
+                spec.commit();
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Failed to drop partition column: " + clause.getPartitionExpr(), e);
+            }
+        });
         return null;
     }
 }

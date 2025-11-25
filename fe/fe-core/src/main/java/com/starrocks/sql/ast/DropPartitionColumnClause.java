@@ -18,17 +18,16 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 // clause which is used to drop one partition column
-public class DropPartitionColumnClause implements ParseNode {
+public class DropPartitionColumnClause extends AlterTableClause {
     private final Expr partitionExpr;
-    private final NodePosition pos;
 
     public Expr getPartitionExpr() {
         return partitionExpr;
     }
 
     public DropPartitionColumnClause(Expr partitionExpr, NodePosition pos) {
+        super(pos);
         this.partitionExpr = partitionExpr;
-        this.pos = pos;
     }
 
     @Override
