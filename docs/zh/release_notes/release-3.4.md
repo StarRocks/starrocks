@@ -4,6 +4,38 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.9
+
+发布日期：2025年11月24日
+
+### 行为变更
+
+- 在 Trino 方言中，将 `json_extract` 的返回类型从 STRING 更改为 JSON。这可能会导致 CAST、UNNEST 以及类型检查逻辑出现兼容性问题。[#59718](https://github.com/StarRocks/starrocks/pull/59718)
+- `/metrics` 下用于上报“每个用户的连接数”的指标现在需要管理员认证。未认证时仅返回总连接数，以避免通过指标信息泄露所有用户名。[#64635](https://github.com/StarRocks/starrocks/pull/64635)
+- 移除了已废弃的系统变量 `analyze_mv`。物化视图刷新不再自动触发 ANALYZE 任务，从而避免大量后台统计任务。对于依赖旧行为的用户，需要注意预期的变化。[#64863](https://github.com/StarRocks/starrocks/pull/64863)
+- 调整了 x86 平台上从 LARGEINT 转换为 DECIMAL128 的溢出检测逻辑。`INT128_MIN * 1` 不再被视为溢出，以确保极值情况下的类型转换语义一致。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- 为 `finishTransaction` 新增可配置的表级锁超时时间。如果在超时内无法获取表锁，本轮事务完成会失败并在之后重试，不再无限阻塞。最终结果不变，但锁行为更加透明。[#63981](https://github.com/StarRocks/starrocks/pull/63981)
+
+### 问题修复
+
+已修复以下问题：
+
+- 在 BE 启动过程中，如果从 RocksDB 加载 Tablet 元数据超时，RocksDB 可能会从头重新加载并错误拾取过期的 Tablet 条目，存在数据版本丢失风险。[#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- 数据湖主键表 delete-vector 的 CRC32C 校验相关的数据损坏问题。[#65006](https://github.com/StarRocks/starrocks/pull/65006) [#65354](https://github.com/StarRocks/starrocks/pull/65354) [#65442](https://github.com/StarRocks/starrocks/pull/65442) [#65354](https://github.com/StarRocks/starrocks/pull/65354)
+- 当 JSON Hyper Path 为 `$` 或所有路径均被跳过时，内部 `flat_path` 字符串为空，此时调用 `substr` 会抛出异常并导致 BE 崩溃。[#65260](https://github.com/StarRocks/starrocks/pull/65260)
+- 在将大型字符串 Spill 到磁盘时，由于长度检查不足、使用 32 位附件长度以及 BlockReader 内的问题可能导致崩溃。[#65373](https://github.com/StarRocks/starrocks/pull/65373)
+- 当多个 HTTP 请求复用同一个 TCP 连接时，如果 ExecuteSQL 请求之后收到非 ExecuteSQL 请求，则在通道关闭时 `HttpConnectContext` 无法注销，导致 HTTP Context 泄漏。[#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- 在 JSON 扁平化过程中，在某些场景下可能出现 Primitive 类型值丢失问题。[#64939](https://github.com/StarRocks/starrocks/pull/64939) [#64703](https://github.com/StarRocks/starrocks/pull/64703)
+- 当 Chunk 与为其追加的 JSON Schema 不兼容时，`ChunkAccumulator` 会崩溃。[#64894](https://github.com/StarRocks/starrocks/pull/64894)
+- 在 `AsyncFlushOutputStream` 中，异步 I/O 任务可能访问已被销毁的 `MemTracker`，导致 use-after-free 崩溃。[#64735](https://github.com/StarRocks/starrocks/pull/64735)
+- 多个 Compaction 并发操作同一个数据湖主键表时缺乏完整性检查，在 Publish 失败后可能使元数据不一致。[#65005](https://github.com/StarRocks/starrocks/pull/65005)
+- 在 Spill Hash Join 过程中，如果构建端的 `set_finishing` 任务失败，状态仅会记录在 Spiller 中，探测端仍会继续运行，最终可能导致崩溃或无限循环。[#65027](https://github.com/StarRocks/starrocks/pull/65027)
+- 在 Tablet 迁移过程中，如果唯一最新副本被标记为 DECOMMISSION，则目标副本的版本会过时并卡在 VERSION_INCOMPLETE 状态。[#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- 当 `PartitionedSpillerWriter` 删除分区时，相关 Block Group 未被释放，导致 use-after-free 问题。[#63903](https://github.com/StarRocks/starrocks/pull/63903) [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- MorselQueue 无法获取 Splits 时导致 BE 崩溃。[#62753](https://github.com/StarRocks/starrocks/pull/62753)
+- 在存算分离集群中，Sorted-by-key 扫描在多 I/O 任务情况下，可能导致基于排序的聚合返回错误结果。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- 在 ARM 架构，读取某些 Hive 外部表的 Parquet 列时，如果在复制 NULL Bitmap 时由于乱序执行导致目标 null buffer 指针失效，可能在 LZ4 转换中崩溃。[#63294](https://github.com/StarRocks/starrocks/pull/63294)
+
 ## 3.4.8
 
 发布日期：2025年9月30日
