@@ -42,7 +42,7 @@ public class ShowLoadWarningsStmt extends ShowStmt {
     public ShowLoadWarningsStmt(String db, String url, Expr labelExpr, LimitElement limitElement,
                                 NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(db);
+        this.dbName = db;
         this.rawUrl = url;
         this.whereClause = labelExpr;
         this.limitElement = limitElement;

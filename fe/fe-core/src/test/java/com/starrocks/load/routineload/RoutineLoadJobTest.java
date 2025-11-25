@@ -34,7 +34,6 @@
 
 package com.starrocks.load.routineload;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -56,8 +55,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.RowDelimiter;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
@@ -194,8 +200,8 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testAfterCommitted(@Mocked RoutineLoadMgr routineLoadMgr,
-                                 @Injectable TransactionState transactionState,
-                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
+                                   @Injectable TransactionState transactionState,
+                                   @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -332,7 +338,6 @@ public class RoutineLoadJobTest {
             Assertions.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
             Assertions.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
 
-
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
             Assertions.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
             //The displayed value is the actual value - 1
@@ -385,7 +390,6 @@ public class RoutineLoadJobTest {
             Assertions.assertEquals("", showInfo.get(16));
             Assertions.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"false\""));
 
-
             loadJobInfo = routineLoadJob.toThrift();
             Assertions.assertEquals("RUNNING", loadJobInfo.getState());
             Assertions.assertEquals("", loadJobInfo.getReasons_of_state_changed());
@@ -401,7 +405,7 @@ public class RoutineLoadJobTest {
             }
         };
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
-        
+
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
@@ -609,11 +613,37 @@ public class RoutineLoadJobTest {
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties());
-        Assertions.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
-        Assertions.assertEquals("`a` = 1", ExprToSql.toSql(routineLoadJob.getWhereExpr()));
-        Assertions.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
-        Assertions.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
-        Assertions.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
+
+        List<ImportColumnDesc> columnDescs = routineLoadJob.getColumnDescs();
+        Assertions.assertNotNull(columnDescs);
+        Assertions.assertEquals(4, columnDescs.size());
+        Assertions.assertEquals("a", columnDescs.get(0).getColumnName());
+        Assertions.assertEquals("b", columnDescs.get(1).getColumnName());
+        Assertions.assertEquals("c", columnDescs.get(2).getColumnName());
+        ImportColumnDesc expressionColumn = columnDescs.get(3);
+        Assertions.assertEquals("d", expressionColumn.getColumnName());
+        Assertions.assertTrue(expressionColumn.getExpr() instanceof SlotRef);
+        SlotRef expressionSlotRef = (SlotRef) expressionColumn.getExpr();
+        Assertions.assertEquals("a", expressionSlotRef.getColumnName());
+
+        Assertions.assertTrue(routineLoadJob.getWhereExpr() instanceof BinaryPredicate);
+        BinaryPredicate predicate = (BinaryPredicate) routineLoadJob.getWhereExpr();
+        Assertions.assertEquals(BinaryType.EQ, predicate.getOp());
+        Assertions.assertTrue(predicate.getChild(0) instanceof SlotRef);
+        SlotRef leftSlotRef = (SlotRef) predicate.getChild(0);
+        Assertions.assertEquals("a", leftSlotRef.getColumnName());
+        Assertions.assertTrue(predicate.getChild(1) instanceof IntLiteral);
+        IntLiteral rightLiteral = (IntLiteral) predicate.getChild(1);
+        Assertions.assertEquals(1L, rightLiteral.getLongValue());
+
+        ColumnSeparator columnSeparator = routineLoadJob.getColumnSeparator();
+        Assertions.assertEquals(",", columnSeparator.getOriSeparator());
+        RowDelimiter rowDelimiter = routineLoadJob.getRowDelimiter();
+        Assertions.assertEquals("A", rowDelimiter.getOriDelimiter());
+
+        PartitionNames partitions = routineLoadJob.getPartitions();
+        Assertions.assertNotNull(partitions);
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2", "p3"), partitions.getPartitionNames());
     }
 
     @Test
@@ -818,7 +848,7 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testPauseOnFatalParseError(@Injectable TransactionState transactionState,
-                                            @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+                                           @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
         long txnId = 1L;
         new Expectations() {

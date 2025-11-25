@@ -43,11 +43,11 @@ public class ShowTableStmt extends ShowStmt {
     public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where,
                          String catalogName, NodePosition pos) {
         super(pos);
-        this.db = normalizeName(db);
+        this.db = db;
         this.isVerbose = isVerbose;
         this.pattern = pattern;
         this.where = where;
-        this.catalogName = normalizeName(catalogName);
+        this.catalogName = catalogName;
     }
 
     public String getDb() {

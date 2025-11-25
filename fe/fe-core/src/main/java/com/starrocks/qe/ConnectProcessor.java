@@ -651,7 +651,7 @@ public class ConnectProcessor {
             ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = executeStmt.toSql();
+            String originStmt = AstToSQLBuilder.toSQL(executeStmt);
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);

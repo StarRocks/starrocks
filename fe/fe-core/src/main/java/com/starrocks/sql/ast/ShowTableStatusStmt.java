@@ -31,7 +31,7 @@ public class ShowTableStatusStmt extends ShowStmt {
 
     public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
         super(pos);
-        this.db = normalizeName(db);
+        this.db = db;
         this.wild = wild;
         this.where = where;
     }

@@ -53,7 +53,7 @@ public class ShowExportStmt extends ShowStmt {
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
                           LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(db);
+        this.dbName = db;
         this.whereClause = whereExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;

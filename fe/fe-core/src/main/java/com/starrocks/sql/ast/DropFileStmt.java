@@ -37,7 +37,7 @@ public class DropFileStmt extends DdlStmt {
     public DropFileStmt(String fileName, String dbName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.fileName = fileName;
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.properties = properties;
     }
 
