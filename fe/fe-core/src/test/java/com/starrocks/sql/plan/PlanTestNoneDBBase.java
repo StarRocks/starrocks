@@ -313,6 +313,14 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
                 getExplainString(TExplainLevel.COSTS);
     }
 
+    public String getCostExplainWithLabels(String sql) throws Exception {
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(true);
+        String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                getExplainString(TExplainLevel.COSTS);
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(false);
+        return plan;
+    }
+
     public String getDumpString(String sql) throws Exception {
         UtFrameUtils.getPlanAndFragment(connectContext, sql);
         return GsonUtils.GSON.toJson(connectContext.getDumpInfo());
