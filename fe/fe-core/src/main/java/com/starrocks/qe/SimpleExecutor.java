@@ -61,29 +61,13 @@ public class SimpleExecutor {
         this.queryResultProtocol = queryResultProtocol;
     }
 
-<<<<<<< HEAD
-=======
-    private String formatSQL(String sql, StatementBase stmt) {
-        if (!Config.enable_internal_sql) {
-            return "?";
-        }
-        if (Config.enable_sql_desensitize_in_log) {
-            return AstToSQLBuilder.toSQL(stmt, FormatOptions.allEnable().setColumnSimplifyTableName(false))
-                    .orElse("this is statistic desensitize sql");
-        }
-        return sql;
-    }
-
     /**
-     * Set the execution DOP of this executor
-     *
-     * @param dop
+     * Set the execution DOP of this executor.
      */
     public void setDop(int dop) {
         this.dop = dop;
     }
 
->>>>>>> a5f5b4537f ([BugFix] change the dop of PredicateColumnStorage to 1 (#65853))
     public void executeDML(String sql) {
         ConnectContext prev = ConnectContext.get();
         try {
@@ -93,14 +77,9 @@ public class SimpleExecutor {
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
-<<<<<<< HEAD
+            context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit().info(name + " execute SQL | Query_id {} | SQL {}",
                     DebugUtil.printId(context.getQueryId()), sql);
-=======
-            context.getSessionVariable().setPipelineDop(dop);
-            AuditLog.getInternalAudit()
-                    .info("{} execute SQL | Query_id {} | DML {}", name, DebugUtil.printId(context.getQueryId()), sql);
->>>>>>> a5f5b4537f ([BugFix] change the dop of PredicateColumnStorage to 1 (#65853))
             executor.execute();
         } catch (Exception e) {
             LOG.error(name + " execute SQL {} failed: {}", sql, e.getMessage(), e);
@@ -123,14 +102,9 @@ public class SimpleExecutor {
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
-<<<<<<< HEAD
+            context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit().info(name + " execute SQL | Query_id {} | SQL {}",
                     DebugUtil.printId(context.getQueryId()), sql);
-=======
-            context.getSessionVariable().setPipelineDop(dop);
-            AuditLog.getInternalAudit()
-                    .info("{} execute SQL | Query_id {} | DQL {}", name, DebugUtil.printId(context.getQueryId()), sql);
->>>>>>> a5f5b4537f ([BugFix] change the dop of PredicateColumnStorage to 1 (#65853))
             Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
             if (!sqlResult.second.ok()) {
                 throw new SemanticException(name + "execute sql failed with status: " + sqlResult.second.getErrorMsg());
