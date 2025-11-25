@@ -212,7 +212,6 @@ absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo&
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_filesystem(ShardId id,
                                                                                       const Configuration& conf) {
     ShardInfo shard_info;
-    std::shared_ptr<std::string> existing_fs_cache_key;
     { // shared_lock, check if the filesystem already created
         std::shared_lock l(_mtx);
         auto it = _shards.find(id);
@@ -226,13 +225,18 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         if (fs != nullptr) {
             return fs;
         }
+
+        // Cache miss: reset the fs_cache_key to ensure a new shared_ptr will be created
+        {
+            std::lock_guard<std::mutex> reset_lock(_fs_cache_key_reset_mtx);
+            it->second.fs_cache_key.reset();
+        }
         shard_info = it->second.shard_info;
-        existing_fs_cache_key = it->second.fs_cache_key;
     }
 
     // Build the filesystem under no lock, so the op won't hold the lock for a long time.
     // It is possible that multiple filesystems are built for the same shard from multiple threads under no lock here.
-    auto fs_or = build_filesystem_from_shard_info(shard_info, conf, existing_fs_cache_key);
+    auto fs_or = build_filesystem_from_shard_info(shard_info, conf);
     if (!fs_or.ok()) {
         return fs_or.status();
     }
@@ -284,8 +288,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
-StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf,
-                                               const std::shared_ptr<std::string>& existing_fs_cache_key) {
+StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf) {
     auto localconf = build_conf_from_shard_info(info);
     if (!localconf.ok()) {
         return localconf.status();
@@ -295,7 +298,7 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         return scheme.status();
     }
 
-    return new_shared_filesystem(*scheme, *localconf, existing_fs_cache_key);
+    return new_shared_filesystem(*scheme, *localconf);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {
@@ -337,8 +340,7 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
 }
 
 absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
-StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration& conf,
-                                    const std::shared_ptr<std::string>& existing_fs_cache_key) {
+StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration& conf) {
     std::string cache_key = get_cache_key(scheme, conf);
 
     // Lookup LRU cache
@@ -365,7 +367,7 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
         VLOG(9) << "Share filesystem";
         return value_or;
     }
-    auto fs_cache_key = insert_fs_cache(cache_key, fs, existing_fs_cache_key);
+    auto fs_cache_key = insert_fs_cache(cache_key, fs);
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
 }
@@ -383,23 +385,13 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
 }
 
 std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& key,
-                                                           const std::shared_ptr<FileSystem>& fs,
-                                                           const std::shared_ptr<std::string>& existing_fs_cache_key) {
-    std::shared_ptr<std::string> fs_cache_key;
-
-    // Reuse existing fs_cache_key if it matches the current key
-    if (existing_fs_cache_key != nullptr && *existing_fs_cache_key == key) {
-        fs_cache_key = existing_fs_cache_key;
-    }
-
-    if (fs_cache_key == nullptr) {
-        fs_cache_key = std::shared_ptr<std::string>(new std::string(key), [](std::string* key) {
-            if (g_worker) {
-                g_worker->erase_fs_cache(*key);
-            }
-            delete key;
-        });
-    }
+                                                           const std::shared_ptr<FileSystem>& fs) {
+    std::shared_ptr<std::string> fs_cache_key(new std::string(key), [](std::string* key) {
+        if (g_worker) {
+            g_worker->erase_fs_cache(*key);
+        }
+        delete key;
+    });
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
