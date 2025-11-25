@@ -176,6 +176,7 @@ struct AdaptiveSliceHashSet {
                 assert(pos != nullptr);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
+                distinct_size++;
             });
         }
     }
