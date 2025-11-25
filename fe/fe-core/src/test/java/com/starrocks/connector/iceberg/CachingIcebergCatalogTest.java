@@ -18,7 +18,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
-import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.UtFrameUtils;
@@ -171,3 +170,4 @@ public class CachingIcebergCatalogTest {
         Assertions.assertEquals(nativeTable, t2);
     }
 }
+

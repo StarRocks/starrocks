@@ -67,7 +67,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final int MEMORY_FILE_SAMPLES = 100;
     private final String catalogName;
     private final IcebergCatalog delegate;
-    private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableCacheKey, Table> tables;
+    private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
     private final com.github.benmanes.caffeine.cache.Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -93,20 +93,19 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE)
                 .executor(executorService)
-                .removalListener((IcebergTableCacheKey key, Table value, RemovalCause cause) -> {
+                .removalListener((IcebergTableName key, Table value, RemovalCause cause) -> {
                     if (key != null) {
                         LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
-                                key.icebergTableName.dbName, key.icebergTableName.tableName,
+                                key.dbName, key.tableName,
                                 cause, cause.wasEvicted());
                     }
                 })
-                .build(new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableCacheKey, Table>() {
+                .build(new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Table>() {
                     @Override
-                    public Table load(IcebergTableCacheKey key) throws Exception {
+                    public Table load(IcebergTableName key) throws Exception {
                         LOG.debug("Loading iceberg table {}.{} from remote catalog",
-                                key.icebergTableName.dbName, key.icebergTableName.tableName);
-                        return delegate.getTable(key.connectContext, key.icebergTableName.dbName,
-                                key.icebergTableName.tableName);
+                                key.dbName, key.tableName);
+                        return delegate.getTable(key.dbName, key.tableName);
                     }
                 });
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
@@ -114,7 +113,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                            Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
+                            Table nativeTable = getTable(key.dbName, key.tableName);
                             IcebergTable icebergTable =
                                     IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
                                             .setNativeTable(nativeTable).build();
@@ -208,11 +207,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
 
-        if (!icebergProperties.isEnableIcebergTableCache()) {
+        if (!icebergProperties.isEnableIcebergMetadataCache()) {
             return delegate.getTable(dbName, tableName);
         }
         
-        IcebergTableCacheKey key = new IcebergTableCacheKey(icebergTableName, connectContext);
         try {
             return tables.get(icebergTableName);
         } catch (Exception e) {
@@ -425,7 +423,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     private void invalidateCache(IcebergTableName key) {
-        tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
+        tables.invalidate(key);
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
         Set<String> paths = metaFileCacheMap.get(key);
