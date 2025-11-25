@@ -19,6 +19,7 @@
 #include <mutex>
 #include <utility>
 
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -127,15 +128,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
             return Status::OK();
         }
 
-        // Prepare operators' local state in parallel way
-        // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
-        struct SyncContext {
-            std::mutex mutex;
-            std::condition_variable cv;
-            std::atomic<std::shared_ptr<Status>> first_error{nullptr};
-            std::atomic<int> pending_tasks{0};
-        };
-        auto sync_ctx = std::make_shared<SyncContext>();
+        auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
         sync_ctx->pending_tasks = static_cast<int>(all_drivers.size());
 
         for (auto& driver : all_drivers) {
@@ -143,9 +136,12 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
                 Status st = driver->prepare_local_state(runtime_state);
                 if (!st.ok()) {
-                    auto error_ptr = std::make_shared<Status>(std::move(st));
-                    std::shared_ptr<Status> expected = nullptr;
-                    (void)sync_ctx->first_error.compare_exchange_strong(expected, error_ptr);
+                    Status* expected = nullptr;
+                    Status* new_error = new Status(std::move(st));
+                    if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
+                        // Another thread already set the error, clean up our allocation
+                        delete new_error;
+                    }
                 }
 
                 if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
@@ -166,9 +162,10 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
             sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
         }
 
-        Status* error = sync_ctx->first_error.load().get();
+        Status* error = sync_ctx->first_error.load();
         if (error != nullptr) {
-            return *error;
+            Status result = *error;
+            return result;
         }
 
         return Status::OK();

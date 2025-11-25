@@ -84,8 +84,12 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
             Status status = driver->prepare_local_state(runtime_state);
 
             if (!status.ok()) {
-                std::shared_ptr<Status> expected = nullptr;
-                sync_ctx->first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
+                Status* expected = nullptr;
+                Status* new_error = new Status(status);
+                if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
+                    // Another thread already set the error, clean up our allocation
+                    delete new_error;
+                }
             }
 
             if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
@@ -97,8 +101,12 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
         if (!submitted) {
             Status status = driver->prepare_local_state(state);
             if (!status.ok()) {
-                std::shared_ptr<Status> expected = nullptr;
-                sync_ctx->first_error.compare_exchange_strong(expected, std::make_shared<Status>(status));
+                Status* expected = nullptr;
+                Status* new_error = new Status(status);
+                if (!sync_ctx->first_error.compare_exchange_strong(expected, new_error)) {
+                    // Another thread already set the error, clean up our allocation
+                    delete new_error;
+                }
             }
 
             if (sync_ctx->pending_tasks.fetch_sub(1) == 1) {
