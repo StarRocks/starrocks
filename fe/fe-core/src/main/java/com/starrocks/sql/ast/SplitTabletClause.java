@@ -28,11 +28,11 @@ public class SplitTabletClause extends AlterTableClause {
 
     private final Map<String, String> properties;
 
-    private long dynamicTabletSplitSize;
+    private long tabletReshardSplitSize;
 
     public SplitTabletClause() {
         this(null, null, null);
-        this.dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+        this.tabletReshardSplitSize = Config.tablet_reshard_split_size;
     }
 
     public SplitTabletClause(
@@ -65,12 +65,12 @@ public class SplitTabletClause extends AlterTableClause {
         return properties;
     }
 
-    public long getDynamicTabletSplitSize() {
-        return dynamicTabletSplitSize;
+    public long getTabletReshardSplitSize() {
+        return tabletReshardSplitSize;
     }
 
-    public void setDynamicTabletSplitSize(long dynamicTabletSplitSize) {
-        this.dynamicTabletSplitSize = dynamicTabletSplitSize;
+    public void setTabletReshardSplitSize(long tabletReshardSplitSize) {
+        this.tabletReshardSplitSize = tabletReshardSplitSize;
     }
 
     @Override

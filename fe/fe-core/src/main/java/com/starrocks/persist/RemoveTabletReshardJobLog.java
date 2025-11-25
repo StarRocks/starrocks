@@ -12,25 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.persist;
 
-import com.starrocks.common.Config;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Writable;
 
-public class DynamicTabletUtils {
+public class RemoveTabletReshardJobLog implements Writable {
+    @SerializedName("jobId")
+    private final long jobId;
 
-    public static boolean isPowerOfTwo(long n) {
-        return n > 1 && (n & (n - 1)) == 0;
+    public RemoveTabletReshardJobLog(long jobId) {
+        this.jobId = jobId;
     }
 
-    public static int calcSplitCount(long dataSize, long splitSize) {
-        int splitCount = 1;
-        for (long size = dataSize; size >= splitSize; size /= 2) {
-            int newSplitCount = splitCount * 2;
-            if (newSplitCount > Config.dynamic_tablet_max_split_count) {
-                break;
-            }
-            splitCount = newSplitCount;
-        }
-        return splitCount;
+    public long getJobId() {
+        return jobId;
     }
+
 }

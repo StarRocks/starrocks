@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
@@ -1265,14 +1265,14 @@ public class EditLog {
                     globalStateMgr.getSqlPlanStorage().replayUpdateBaselinePlan(bp, false);
                     break;
                 }
-                case OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG: {
-                    DynamicTabletJob log = (DynamicTabletJob) journal.data();
-                    globalStateMgr.getDynamicTabletJobMgr().replayUpdateDynamicTabletJob(log);
+                case OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG: {
+                    TabletReshardJob log = (TabletReshardJob) journal.data();
+                    globalStateMgr.getTabletReshardJobMgr().replayUpdateTabletReshardJob(log);
                     break;
                 }
-                case OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG: {
-                    RemoveDynamicTabletJobLog log = (RemoveDynamicTabletJobLog) journal.data();
-                    globalStateMgr.getDynamicTabletJobMgr().replayRemoveDynamicTabletJob(log.getJobId());
+                case OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG: {
+                    RemoveTabletReshardJobLog log = (RemoveTabletReshardJobLog) journal.data();
+                    globalStateMgr.getTabletReshardJobMgr().replayRemoveTabletReshardJob(log.getJobId());
                     break;
                 }
                 default: {
@@ -2217,12 +2217,12 @@ public class EditLog {
         }
     }
 
-    public void logUpdateDynamicTabletJob(DynamicTabletJob job) {
-        logJsonObject(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job);
+    public void logUpdateTabletReshardJob(TabletReshardJob job) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
-    public void logRemoveDynamicTabletJob(long jobId) {
-        logJsonObject(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
+    public void logRemoveTabletReshardJob(long jobId) {
+        logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId));
     }
 
     public void logCreateGroupProvider(GroupProviderLog provider, WALApplier walApplier) {
