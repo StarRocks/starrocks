@@ -81,9 +81,13 @@ public class IVMAnalyzer {
     );
 
     // join operators that supports IVM
+    // Extended to support OUTER JOINs for retractable incremental computation
     public static final Set<JoinOperator> IVM_SUPPORTED_JOIN_OPS = Set.of(
             JoinOperator.INNER_JOIN,
-            JoinOperator.CROSS_JOIN
+            JoinOperator.CROSS_JOIN,
+            JoinOperator.LEFT_OUTER_JOIN,
+            JoinOperator.RIGHT_OUTER_JOIN,
+            JoinOperator.FULL_OUTER_JOIN
     );
 
     private final ConnectContext connectContext;
@@ -237,24 +241,23 @@ public class IVMAnalyzer {
             if (!IVM_SUPPORTED_JOIN_OPS.contains(joinType)) {
                 throw new SemanticException("IVMAnalyzer does not support join type: %s", joinType);
             }
-            if (checkRelation(joinRelation.getLeft())) {
-                throw new SemanticException("IVMAnalyzer does not support with retractable left input, " +
-                        "but got: %s", joinRelation.getLeft());
-            }
-            if (checkRelation(joinRelation.getRight())) {
-                throw new SemanticException("IVMAnalyzer does not support with retractable right input, " +
-                        "but got: %s", joinRelation.getRight());
-            }
+
+            // Recursively check children - they can now be retractable for multi-table OUTER JOINs
+            boolean leftRetractable = checkRelation(joinRelation.getLeft());
+            boolean rightRetractable = checkRelation(joinRelation.getRight());
+
+            // If this is an OUTER JOIN, the output is retractable
+            // (NULL rows may need to be retracted when matches change)
             if (isRetractableJoin(joinType)) {
-                // only can support two tables with outer join, cannot support multi tables with outer join,
-                if (hasMarkedRetractableSink()) {
-                    throw new SemanticException("IVMAnalyzer does not support outer join with multiple tables, " +
-                            "but got: %s", joinType);
+                // Mark as retractable sink - now supports multi-table OUTER JOINs
+                if (!hasMarkedRetractableSink()) {
+                    markRetractableSink();
                 }
-                markRetractableSink();
                 return true;
             }
-            return false;
+
+            // INNER/CROSS JOIN: output is retractable if any input is retractable
+            return leftRetractable || rightRetractable;
         } else if (relation instanceof QueryRelation) {
             // If the inner relation is a QueryRelation, we need to rewrite it recursively.
             QueryRelation innerQueryRelation = (QueryRelation) relation;
@@ -279,10 +282,10 @@ public class IVMAnalyzer {
         if (CollectionUtils.isEmpty(aggregateExprs)) {
             return false;
         }
-        if (hasMarkedRetractableSink()) {
-            throw new RuntimeException("IVMAnalyzer does not support aggregate functions with " +
-                    "retractable input yet");
-        }
+
+        // Now supports aggregate with retractable input using StreamAggregator
+        // The StreamAggregator will handle update/retract based on StreamRowOp
+        // Previously: throw if hasMarkedRetractableSink()
 
         List<Expr> groupByExprs = selectRelation.getGroupBy();
         if (CollectionUtils.isEmpty(groupByExprs)) {

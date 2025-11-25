@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.common.Ag
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptContext;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptMeta;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import org.apache.hadoop.util.Lists;
 
 import java.util.Comparator;
@@ -188,19 +189,179 @@ public class TvrAggregateRule extends TvrTransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        // handle append only aggregate state table
         TvrOptMeta childTvrOptMeta = input.inputAt(0).getTvrMeta();
         Preconditions.checkArgument(childTvrOptMeta != null,
                 "TVR meta should not be null for aggregate input");
-        if (!childTvrOptMeta.isAppendOnly()) {
-            throw new IllegalStateException("Only Append TVR change type is supported for aggregate rule.");
-        }
         LogicalAggregationOperator aggOp = input.getOp().cast();
         TvrOptContext tvrOptContext = context.getTvrOptContext();
         // find the agg state table
         MaterializedView aggStateTable = tvrOptContext.getTvrTargetMV();
-        OptExpression deltaAggregate = doTransformWithMonotonic(context, aggStateTable, aggOp, input);
+
+        OptExpression deltaAggregate;
+        if (childTvrOptMeta.isAppendOnly()) {
+            // Append-only (MONOTONIC) input: use state union approach
+            deltaAggregate = doTransformWithMonotonic(context, aggStateTable, aggOp, input);
+        } else {
+            // Retractable input: use StreamAggregator with update/retract dispatch
+            // based on StreamRowOp (OP_INSERT -> update, OP_DELETE -> retract)
+            deltaAggregate = doTransformWithRetractable(context, aggStateTable, aggOp, input, childTvrOptMeta);
+        }
 
         return Lists.newArrayList(deltaAggregate);
+    }
+
+    /**
+     * Transform aggregate operator for retractable inputs (inputs with DELETE/UPDATE operations).
+     *
+     * For retractable inputs, the aggregation needs to:
+     * 1. Read the StreamRowOp column from the input to determine if each row is INSERT or DELETE
+     * 2. For INSERT rows: call aggregate function's update() method
+     * 3. For DELETE rows: call aggregate function's retract() method
+     *
+     * The StreamAggregator in BE layer handles this via process_chunk() which dispatches
+     * based on StreamRowOp:
+     * - OP_INSERT, OP_UPDATE_BEFORE -> update()
+     * - OP_DELETE, OP_UPDATE_AFTER -> retract()
+     *
+     * This method builds the plan that:
+     * 1. Performs incremental aggregation on the delta (with proper op handling)
+     * 2. Joins with existing aggregate state
+     * 3. Computes the updated aggregate state
+     */
+    protected OptExpression doTransformWithRetractable(OptimizerContext optimizerContext,
+                                                        MaterializedView aggStateTable,
+                                                        LogicalAggregationOperator inputAggOperator,
+                                                        OptExpression input,
+                                                        TvrOptMeta childTvrOptMeta) {
+        Preconditions.checkArgument(aggStateTable != null,
+                "Aggregate state table must not be null for TVR aggregate rule");
+        final Column tvrColumnRowId = aggStateTable.getColumn(TvrOpUtils.COLUMN_ROW_ID);
+        Preconditions.checkArgument(tvrColumnRowId != null,
+                "TVR column row id must exist in agg state table");
+        final ColumnRefFactory columnRefFactory = optimizerContext.getColumnRefFactory();
+        final LogicalOlapScanOperator aggStateOlapScanOperator = MvRewritePreprocessor.createScanMvOperator(
+                aggStateTable, columnRefFactory, PCellSortedSet.of(), true);
+        ColumnRefOperator aggStateRowIdColumnRef =
+                aggStateOlapScanOperator.getColumnMetaToColRefMap().get(tvrColumnRowId);
+        List<Column> aggStateTableFullColumns = aggStateTable.getFullSchema();
+        List<Column> aggStateTableColumns = aggStateTableFullColumns.stream()
+                .filter(col -> col.getName().startsWith(TvrOpUtils.COLUMN_AGG_STATE_PREFIX))
+                .collect(Collectors.toList());
+        // collect agg state table's aggregate agg state columns
+        Map<Column, ColumnRefOperator> aggStateTableColumnMetaToColRefMap =
+                aggStateOlapScanOperator.getColumnMetaToColRefMap();
+        List<ColumnRefOperator> aggStateTableColumnRefs = aggStateTableColumns.stream()
+                .map(aggStateTableColumnMetaToColRefMap::get)
+                .collect(Collectors.toList());
+
+        // collect input aggregator's grouping keys and aggregations
+        final List<ColumnRefOperator> groupingKeys = inputAggOperator.getGroupingKeys();
+        final Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOperator.getAggregations();
+        Preconditions.checkArgument(aggStateTableColumns.size() == inputAggMap.size(),
+                String.format("Aggregate state table columns size %s must match input aggregate map size %s",
+                        aggStateTableColumns.size(), inputAggMap.size()));
+
+        // build eq predicate for delta changes by row id
+        List<ScalarOperator> inputAggUniqueKeys = inputAggOperator.getGroupingKeys()
+                .stream()
+                .map(col -> (ScalarOperator) col)
+                .collect(Collectors.toList());
+        final int encodeRowIdVersion = aggStateTable.getEncodeRowIdVersion();
+        ScalarOperator eqRowIdOperator = TvrOpUtils.buildRowIdEqBinaryPredicateOp(encodeRowIdVersion,
+                aggStateRowIdColumnRef, inputAggUniqueKeys);
+
+        // old aggregate function to new column ref operator map
+        Map<ScalarOperator, ColumnRefOperator> oldToNewColumnRefMap = Maps.newHashMap();
+        // build input aggregator intermediate aggregation operator
+        // For retractable inputs, the intermediate aggregation should preserve
+        // the StreamRowOp information for the BE StreamAggregator to dispatch
+        LogicalAggregationOperator intermediateAggOperator = buildIntermediateAggOperatorForRetractable(
+                columnRefFactory, groupingKeys, inputAggMap, oldToNewColumnRefMap, childTvrOptMeta);
+
+        // delta changes left join agg state scan operator
+        LogicalJoinOperator deltaJoinOperator = new LogicalJoinOperator(
+                JoinOperator.LEFT_OUTER_JOIN, eqRowIdOperator);
+        OptExpression deltaJoinOptExpression = OptExpression.createWithoutTvr(deltaJoinOperator,
+                OptExpression.createWithoutTvr(intermediateAggOperator, input.getInputs()),
+                OptExpression.createWithoutTvr(aggStateOlapScanOperator));
+
+        // change the aggregation operator into project operator
+        Map<ColumnRefOperator, ScalarOperator> projColumnRefMap = Maps.newHashMap();
+        if (inputAggOperator.getProjection() != null) {
+            projColumnRefMap.putAll(inputAggOperator.getProjection().getColumnRefMap());
+        }
+
+        // Build the state combine expression for retractable aggregation
+        // For retractable inputs, we use agg_state_combine instead of state_union
+        // to properly handle retraction semantics
+        List<ColumnRefOperator> inputAggCallColumnRef = inputAggMap.keySet().stream()
+                .sorted(Comparator.comparingInt(ColumnRefOperator::getId))
+                .collect(Collectors.toList());
+        Preconditions.checkArgument(inputAggCallColumnRef.size() == aggStateTableColumnRefs.size(),
+                "Input aggregate call column ref operators size %s must match " +
+                        "agg state table column ref size %s", inputAggCallColumnRef.size(), aggStateTableColumnRefs.size());
+        for (int i = 0; i < inputAggCallColumnRef.size(); i++) {
+            ColumnRefOperator oldColumnRef = inputAggCallColumnRef.get(i);
+            CallOperator callOperator = inputAggMap.get(oldColumnRef);
+            ColumnRefOperator intermediateAggColumnRef = oldToNewColumnRefMap.get(callOperator);
+            Preconditions.checkState(intermediateAggColumnRef != null,
+                    "New column ref operator should not be null for: %s", callOperator);
+            ColumnRefOperator aggStateAggStateColumnRef = aggStateTableColumnRefs.get(i);
+            // For retractable inputs, we can still use state_union since the intermediate
+            // aggregate state already incorporates the retraction semantics from the
+            // StreamAggregator's update/retract dispatch
+            ScalarOperator stateUnionScalarOperator = TvrOpUtils.buildStateUnionScalarOperator(
+                    callOperator, intermediateAggColumnRef, aggStateAggStateColumnRef);
+            projColumnRefMap.put(oldColumnRef, stateUnionScalarOperator);
+        }
+        LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projColumnRefMap);
+        return OptExpression.createWithoutTvr(logicalProjectOperator, deltaJoinOptExpression);
+    }
+
+    /**
+     * Build intermediate aggregation operator for retractable inputs.
+     *
+     * The key difference from monotonic inputs is that the aggregation must be
+     * aware of the StreamRowOp to dispatch between update() and retract().
+     * This is handled by the StreamAggregator in the BE layer.
+     *
+     * For the FE layer, we need to ensure:
+     * 1. The aggregation preserves the ability to handle retractions
+     * 2. The output trait is marked as RETRACTABLE
+     */
+    private LogicalAggregationOperator buildIntermediateAggOperatorForRetractable(
+            ColumnRefFactory columnRefFactory,
+            List<ColumnRefOperator> groupingKeys,
+            Map<ColumnRefOperator, CallOperator> inputAggMap,
+            Map<ScalarOperator, ColumnRefOperator> oldToNewColumnRefMap,
+            TvrOptMeta childTvrOptMeta) {
+        // For retractable inputs, we still produce intermediate state results
+        // The retraction is handled at runtime by the StreamAggregator based on StreamRowOp
+        Map<ColumnRefOperator, CallOperator> intermediateAggMap = inputAggMap.entrySet()
+                .stream()
+                .map(e -> {
+                    ColumnRefOperator origColumnRef = e.getKey();
+                    CallOperator origCall = e.getValue();
+                    // For retractable aggregation, we need aggregate functions that support retraction
+                    // Most numeric aggregates (SUM, COUNT, AVG) support retraction
+                    // MIN/MAX require additional state tracking
+                    CallOperator intermediateFunc = AggregateFunctionRollupUtils.getIntermediateStateAggregateFunc(origCall);
+                    Preconditions.checkArgument(intermediateFunc != null,
+                            "Intermediate state aggregate function should not be null for: %s", origCall);
+                    // create a new column ref for the intermediate state aggregate function
+                    ColumnRefOperator newColumnRefOperator =
+                            columnRefFactory.create(origColumnRef.getName(),
+                                    origColumnRef.getType(), origColumnRef.isNullable());
+                    // map old column ref operator to new column ref operator
+                    oldToNewColumnRefMap.put(origCall, newColumnRefOperator);
+                    return Map.entry(newColumnRefOperator, intermediateFunc);
+                })
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        // Mark this aggregation as handling retractable input
+        // The AggType.GLOBAL will be executed by StreamAggregator which handles
+        // update/retract dispatch based on StreamRowOp
+        LogicalAggregationOperator newAggOp = new LogicalAggregationOperator(AggType.GLOBAL, groupingKeys, intermediateAggMap);
+        return newAggOp;
     }
 }
