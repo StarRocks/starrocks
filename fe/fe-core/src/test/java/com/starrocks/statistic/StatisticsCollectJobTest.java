@@ -75,6 +75,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Config.statistic_auto_collect_predicate_columns_threshold = 0;
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        new StatisticsMetaManager().createStatisticsTablesForTest();
 
         starRocksAssert.withTable("CREATE TABLE `t0_stats` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
