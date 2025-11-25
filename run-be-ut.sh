@@ -37,6 +37,7 @@ Usage: $0 <options>
      --dry-run                      dry-run unit tests
      --clean                        clean old unit tests before run
      --with-gcov                    enable to build with gcov
+     --with-dynamic                 enable to build with dynamic libs
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --excluding-test-suit          don't run cases of specific suit
@@ -84,6 +85,7 @@ OPTS=$(getopt \
   -l 'dry-run' \
   -l 'clean' \
   -l 'with-gcov' \
+  -l 'with-dynamic' \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
@@ -92,7 +94,6 @@ OPTS=$(getopt \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
   -l 'without-java-ext' \
-  -l 'with-brpc-keepalive' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -o 'j:' \
@@ -120,6 +121,9 @@ WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
+if [[ -z ${WITH_DYNAMIC} ]]; then
+    WITH_DYNAMIC=OFF
+fi
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -131,8 +135,8 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
+        --with-dynamic) WITH_DYNAMIC=ON; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
-        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
@@ -218,23 +222,32 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
             -DSTARROCKS_JIT_ENABLE=ON \
             -DWITH_RELATIVE_SRC_PATH=OFF \
+            -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
 
 cd ${STARROCKS_HOME}
-export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}/test
-TEST_BIN=starrocks_test
-if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
-    pushd ${STARROCKS_TEST_BINARY_DIR} >/dev/null 2>&1
-    TEST_BIN_SYMBOL=starrocks_test.debuginfo
-    echo -n "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
-    objcopy --only-keep-debug $TEST_BIN $TEST_BIN_SYMBOL
-    strip --strip-debug $TEST_BIN
-    objcopy --add-gnu-debuglink=$TEST_BIN_SYMBOL $TEST_BIN
-    # continue the echo output from the previous `echo -n`
-    echo " split done."
-    popd >/dev/null 2>&1
+export STARROCKS_TEST_BINARY_BASE_DIR=${CMAKE_BUILD_DIR}
+export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
+
+split_debug_symbol() {
+    local bin="$1"
+    local symbol="${bin}.debuginfo"
+    echo -n "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    objcopy --only-keep-debug "$bin" "$symbol"
+    strip --strip-debug "$bin"
+    objcopy --add-gnu-debuglink="$symbol" "$bin"
+}
+
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] ; then
+    if [ "x$WITH_DEBUG_SO_SYMBOL_SPLIT" = "xON" ] ; then
+        find "${STARROCKS_TEST_BINARY_BASE_DIR}" -type f -name "*.so*" ! -name "*.debuginfo" | while read -r so; do
+            split_debug_symbol "$so"
+        done
+    fi
+    split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test
+    split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test
 fi
 
 echo "*********************************"
