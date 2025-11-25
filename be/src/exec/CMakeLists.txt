@@ -352,6 +352,10 @@ add_library(join_hash_map_inst_objs OBJECT
     join/join_hash_map_asof_inst.cpp
 )
 
+IF(ENABLE_MULTI_DYNAMIC_LIBS)
+    set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
+ENDIF()
+
 target_precompile_headers(join_hash_map_inst_objs
     PRIVATE
     join/join_hash_map.h
