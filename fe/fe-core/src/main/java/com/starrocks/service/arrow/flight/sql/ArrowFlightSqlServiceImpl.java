@@ -78,7 +78,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-//import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
@@ -87,7 +87,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final ArrowFlightSqlSessionManager sessionManager;
     private final Location feEndpoint;
     private final SqlInfoBuilder sqlInfoBuilder;
-    //private final ConcurrentHashMap<String, FlightClient> beClientCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, FlightClient> beClientCache = new ConcurrentHashMap<>();
 
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.arrow_max_service_task_threads_num, "arrow-flight-executor", true);
@@ -117,14 +117,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     public void close() throws Exception {
         AutoCloseables.close(rootAllocator);
 
-        //beClientCache.values().forEach(client -> {
-        //    try {
-        //        client.close();
-        //    } catch (Exception e) {
-        //        LOG.warn("[ARROW] Error closing FlightClient during shutdown", e);
-        //    }
-        //});
-        //beClientCache.clear();
+        beClientCache.values().forEach(client -> {
+            try {
+                client.close();
+            } catch (Exception e) {
+                LOG.warn("[ARROW] Error closing FlightClient during shutdown", e);
+            }
+        });
+        beClientCache.clear();
     }
 
     @Override
@@ -459,14 +459,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                     String beHost, int bePort, ServerStreamListener listener) {
         LOG.warn("[ARROW] Proxying result from BE {}:{} for queryId: {}", beHost, bePort, queryId);
         
-        FlightClient beClient = null;
         FlightStream beStream = null;
         
         try {
-            // Create Arrow Flight client to connect to the BE
-            Location beLocation = Location.forGrpcInsecure(beHost, bePort);
-            beClient = FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
-            
+            String beKey = beHost + ":" + bePort;
+            FlightClient beClient = beClientCache.computeIfAbsent(beKey, key -> {
+                Location beLocation = Location.forGrpcInsecure(beHost, bePort);
+                return FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
+            });
             // Reconstruct the original BE ticket (without BE host/port)
             String beTicket = queryId + ":" + fragmentInstanceId;
             FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
@@ -497,14 +497,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 }
             } catch (Exception e) {
                 LOG.warn("[ARROW] Error closing BE stream", e);
-            }
-
-            try {
-                if (beClient != null) {
-                    beClient.close();
-                }
-            } catch (Exception e) {
-                LOG.warn("[ARROW] Error closing BE client", e);
             }
         }
     }
@@ -591,15 +583,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Preconditions.checkNotNull(execPlan, "execPlan is null");
             Schema schema = buildSchema(execPlan);
 
-            // Build BE ticket.
             ByteString handle;
             Location endpoint;
-            if (sv.isArrowFlightFEProxy()) {
-                handle = buildFEProxyTicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
-                endpoint = feEndpoint;
-            } else {
+            if (sv.getArrowFlightProxy().isEmpty()) {
+                // route directly to BE
                 handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
                 endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
+            } else {
+                // route to variable (FE/NLB)
+                handle = buildFEProxyTicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
+                String[] split = sv.getArrowFlightProxy().split(":");
+                endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
             }
             LOG.warn("[ARROW] Built ticket: {}", handle.toStringUtf8());
 
