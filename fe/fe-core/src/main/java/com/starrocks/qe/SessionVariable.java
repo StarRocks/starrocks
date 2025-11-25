@@ -1026,6 +1026,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
 
+    public static final String ARROW_FLIGHT_FE_PROXY = "arrow_flight_fe_proxy";
+
     public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
@@ -2128,6 +2130,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
+
+    @VarAttr(name = ARROW_FLIGHT_FE_PROXY)
+    private boolean arrowFlightFEProxy = true;
 
     @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enablePreAggTopNPushDown = true;
@@ -5621,6 +5626,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePreAggTopNPushDown() {
         return enablePreAggTopNPushDown;
+    }
+
+    public void setArrowFlightFEProxy(boolean flag) {
+        this.arrowFlightFEProxy = flag;
+    }
+
+    public boolean isArrowFlightFEProxy() {
+        return this.arrowFlightFEProxy;
     }
 
     // Serialize to thrift object
