@@ -798,8 +798,13 @@ public class MvRewritePreprocessor {
         if (partitionNamesToRefresh.isEmpty()) {
             logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
         } else {
+<<<<<<< HEAD
             logMVPrepare(tracers, mv, "MV' partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
                     MvUtils.shrinkToSize(partitionNamesToRefresh, Config.max_mv_task_run_meta_message_values_length));
+=======
+            logMVPrepare(tracers, mv, "MV's partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
+                    partitionNamesToRefresh);
+>>>>>>> e27916f99f ([BugFix] Fix mv refresh bug with intersected partitions of multi tables (#65920))
         }
 
         MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
