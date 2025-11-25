@@ -51,6 +51,14 @@ select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0[_META_];
 -- result:
 2024-01-01	2024-01-05	1	5	1	5
 -- !result
+select count(1) from t0[_META_];
+-- result:
+5
+-- !result
+select count(*) from t0[_META_];
+-- result:
+5
+-- !result
 create table t1 (
     c0 DATE,
     c1 INT
