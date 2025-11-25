@@ -1,0 +1,354 @@
+-- name: test_flat_json_config
+CREATE TABLE `test_json_config` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `my_json_col` json NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"flat_json.enable" = "true",
+"flat_json.null.factor" = "0.1",
+"flat_json.sparsity.factor" = "0.8",
+"flat_json.column.max" = "50"
+);
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(1, parse_json('{"key1": "value1", "key2": 100, "key3": true}')),
+(2, parse_json('{"key1": "value2", "key2": 200, "key4": "extra"}')),
+(3, parse_json('{"key1": "value3", "key2": 300}'));
+-- result:
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.null.factor" = "0.2");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(4, parse_json('{"key1": "value4", "key2": 400, "key5": "new"}')),
+(5, parse_json('{"key1": "value5", "key2": 500}'));
+-- result:
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+-- !result
+SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+-- result:
+1	"value1"
+2	"value2"
+3	"value3"
+4	"value4"
+5	"value5"
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.sparsity.factor" = "0.9");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(6, parse_json('{"key1": "value6", "key2": 600, "key6": "sparsity"}')),
+(7, parse_json('{"key1": "value7", "key2": 700}'));
+-- result:
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+6	{"key1": "value6", "key2": 600, "key6": "sparsity"}
+7	{"key1": "value7", "key2": 700}
+-- !result
+SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
+-- result:
+1	100
+2	200
+3	300
+4	400
+5	500
+6	600
+7	700
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.column.max" = "100");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(8, parse_json('{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}')),
+(9, parse_json('{"key1": "value9", "key2": 900}'));
+-- result:
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+6	{"key1": "value6", "key2": 600, "key6": "sparsity"}
+7	{"key1": "value7", "key2": 700}
+8	{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}
+9	{"key1": "value9", "key2": 900}
+-- !result
+SELECT id, my_json_col->'$.key3' FROM test_json_config ORDER BY id;
+-- result:
+1	true
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	false
+9	None
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(10, parse_json('{"key1": "value10", "key2": 1000, "key8": "disabled"}')),
+(11, parse_json('{"key1": "value11", "key2": 1100}'));
+-- result:
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+6	{"key1": "value6", "key2": 600, "key6": "sparsity"}
+7	{"key1": "value7", "key2": 700}
+8	{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}
+9	{"key1": "value9", "key2": 900}
+10	{"key1": "value10", "key2": 1000, "key8": "disabled"}
+11	{"key1": "value11", "key2": 1100}
+-- !result
+SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+-- result:
+1	"value1"
+2	"value2"
+3	"value3"
+4	"value4"
+5	"value5"
+6	"value6"
+7	"value7"
+8	"value8"
+9	"value9"
+10	"value10"
+11	"value11"
+-- !result
+SELECT COUNT(*) FROM test_json_config;
+-- result:
+11
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(12, parse_json('{"key1": "value12", "key2": 1200, "key9": "reenabled"}')),
+(13, parse_json('{"key1": "value13", "key2": 1300}'));
+-- result:
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+6	{"key1": "value6", "key2": 600, "key6": "sparsity"}
+7	{"key1": "value7", "key2": 700}
+8	{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}
+9	{"key1": "value9", "key2": 900}
+10	{"key1": "value10", "key2": 1000, "key8": "disabled"}
+11	{"key1": "value11", "key2": 1100}
+12	{"key1": "value12", "key2": 1200, "key9": "reenabled"}
+13	{"key1": "value13", "key2": 1300}
+-- !result
+SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
+-- result:
+1	100
+2	200
+3	300
+4	400
+5	500
+6	600
+7	700
+8	800
+9	900
+10	1000
+11	1100
+12	1200
+13	1300
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(14, parse_json('{"key1": "value14", "key2": 1400, "key10": "disabled2"}')),
+(15, parse_json('{"key1": "value15", "key2": 1500}'));
+-- result:
+-- !result
+SELECT id FROM test_json_config ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+-- !result
+SELECT my_json_col FROM test_json_config ORDER BY id;
+-- result:
+{"key1": "value1", "key2": 100, "key3": true}
+{"key1": "value2", "key2": 200, "key4": "extra"}
+{"key1": "value3", "key2": 300}
+{"key1": "value4", "key2": 400, "key5": "new"}
+{"key1": "value5", "key2": 500}
+{"key1": "value6", "key2": 600, "key6": "sparsity"}
+{"key1": "value7", "key2": 700}
+{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}
+{"key1": "value9", "key2": 900}
+{"key1": "value10", "key2": 1000, "key8": "disabled"}
+{"key1": "value11", "key2": 1100}
+{"key1": "value12", "key2": 1200, "key9": "reenabled"}
+{"key1": "value13", "key2": 1300}
+{"key1": "value14", "key10": "disabled2", "key2": 1400}
+{"key1": "value15", "key2": 1500}
+-- !result
+SELECT COUNT(*) FROM test_json_config;
+-- result:
+15
+-- !result
+SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+-- result:
+1	"value1"
+2	"value2"
+3	"value3"
+4	"value4"
+5	"value5"
+6	"value6"
+7	"value7"
+8	"value8"
+9	"value9"
+10	"value10"
+11	"value11"
+12	"value12"
+13	"value13"
+14	"value14"
+15	"value15"
+-- !result
+ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
+-- result:
+-- !result
+INSERT INTO test_json_config VALUES
+(16, parse_json('{"key1": "value16", "key2": 1600, "key11": "final"}')),
+(17, parse_json('{"key1": "value17", "key2": 1700}'));
+-- result:
+-- !result
+SELECT * FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+6	{"key1": "value6", "key2": 600, "key6": "sparsity"}
+7	{"key1": "value7", "key2": 700}
+8	{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}
+9	{"key1": "value9", "key2": 900}
+10	{"key1": "value10", "key2": 1000, "key8": "disabled"}
+11	{"key1": "value11", "key2": 1100}
+12	{"key1": "value12", "key2": 1200, "key9": "reenabled"}
+13	{"key1": "value13", "key2": 1300}
+14	{"key1": "value14", "key10": "disabled2", "key2": 1400}
+15	{"key1": "value15", "key2": 1500}
+16	{"key1": "value16", "key11": "final", "key2": 1600}
+17	{"key1": "value17", "key2": 1700}
+-- !result
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+-- result:
+1	{"key1": "value1", "key2": 100, "key3": true}
+2	{"key1": "value2", "key2": 200, "key4": "extra"}
+3	{"key1": "value3", "key2": 300}
+4	{"key1": "value4", "key2": 400, "key5": "new"}
+5	{"key1": "value5", "key2": 500}
+6	{"key1": "value6", "key2": 600, "key6": "sparsity"}
+7	{"key1": "value7", "key2": 700}
+8	{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}
+9	{"key1": "value9", "key2": 900}
+10	{"key1": "value10", "key2": 1000, "key8": "disabled"}
+11	{"key1": "value11", "key2": 1100}
+12	{"key1": "value12", "key2": 1200, "key9": "reenabled"}
+13	{"key1": "value13", "key2": 1300}
+14	{"key1": "value14", "key10": "disabled2", "key2": 1400}
+15	{"key1": "value15", "key2": 1500}
+16	{"key1": "value16", "key11": "final", "key2": 1600}
+17	{"key1": "value17", "key2": 1700}
+-- !result
+SELECT my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+-- result:
+"value1"
+"value2"
+"value3"
+"value4"
+"value5"
+"value6"
+"value7"
+"value8"
+"value9"
+"value10"
+"value11"
+"value12"
+"value13"
+"value14"
+"value15"
+"value16"
+"value17"
+-- !result
+SELECT my_json_col->'$.key2' FROM test_json_config ORDER BY id;
+-- result:
+100
+200
+300
+400
+500
+600
+700
+800
+900
+1000
+1100
+1200
+1300
+1400
+1500
+1600
+1700
+-- !result
+SELECT COUNT(*) FROM test_json_config;
+-- result:
+17
+-- !result
+DROP TABLE test_json_config;
+-- result:
+-- !result
