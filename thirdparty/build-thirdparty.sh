@@ -1772,7 +1772,7 @@ declare -a all_packages=(
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate pprof)
+    all_packages+=(breakpad libdeflate)
 fi
 
 # Initialize packages array - if none specified, build all
