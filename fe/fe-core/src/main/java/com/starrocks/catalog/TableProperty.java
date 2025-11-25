@@ -470,13 +470,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
             
-            // If flat_json.enable is false, only allow setting the enable property
-            if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
-                throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
-            }
-            
+            // In gsonPostProcess, we should be tolerant of existing properties even when flat_json.enable is false.
+            // The validation should be done at ALTER TABLE time, not during deserialization/copy.
+            // If flat_json.enable is false, ignore other flat JSON properties and use default values.
             try {
                 double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
                         PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
