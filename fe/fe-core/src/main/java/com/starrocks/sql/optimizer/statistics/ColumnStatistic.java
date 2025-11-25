@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.qe.ConnectContext;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -173,14 +174,28 @@ public class ColumnStatistic {
     @Override
     public String toString() {
         String separator = ", ";
-        return "[MIN: " + minValue + separator
-                + "MAX: " + maxValue + separator
-                + "NULLS: " + nullsFraction + separator
-                + "ROS: " + averageRowSize + separator
-                + "NDV: " + distinctValuesCount + "] "
-                + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
-                + (histogram == null ? "" : histogram.getMcvString() + " ")
-                + type;
+        boolean enableLabeledColumnStatisticOutput =
+                ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null &&
+                        ConnectContext.get().getSessionVariable().isEnableLabeledColumnStatisticOutput();
+        if (enableLabeledColumnStatisticOutput) {
+            return "[MIN: " + minValue + separator
+                    + "MAX: " + maxValue + separator
+                    + "NULLS: " + nullsFraction + separator
+                    + "ROS: " + averageRowSize + separator
+                    + "NDV: " + distinctValuesCount + "] "
+                    + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
+                    + (histogram == null ? "" : histogram.getMcvString() + " ")
+                    + type;
+        } else {
+            return "[" + minValue + separator
+                    + maxValue + separator
+                    + nullsFraction + separator
+                    + averageRowSize + separator
+                    + distinctValuesCount + "] "
+                    + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
+                    + (histogram == null ? "" : histogram.getMcvString() + " ")
+                    + type;
+        }
     }
 
     public static Builder buildFrom(ColumnStatistic other) {
