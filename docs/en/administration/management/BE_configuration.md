@@ -98,6 +98,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
 - Introduced in: -
 
+##### sys_log_timezone
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to show timezone information in the log prefix. `true` indicates to show timezone information, `false` indicates not to show.
+- Introduced in: -
+
 ### Server
 
 ##### abort_on_large_memory_allocation

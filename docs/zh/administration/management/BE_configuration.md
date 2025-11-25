@@ -94,6 +94,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
 - 引入版本：-
 
+##### sys_log_timezone
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否在日志前缀中显示时区信息。`true` 表示显示时区信息，`false` 表示不显示。
+- 引入版本：-
+
 ### 服务器
 
 ##### be_exit_after_disk_write_hang_second
