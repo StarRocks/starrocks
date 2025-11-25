@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 
 #include <memory>
-#include <new>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_node.h"
+#include "exec/join/join_hash_map_method.h"
+#include "exec/join/join_key_constructor.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
@@ -342,22 +343,6 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_linear
     } else {
         return {true, JoinHashMapMethodTypeTraits<JoinHashMapMethodType::LINEAR_CHAINED, LT>::unary_type};
     }
-}
-
-// ------------------------------------------------------------------------------------
-// JoinHashMap
-// ------------------------------------------------------------------------------------
-
-template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-void JoinHashMap<LT, CT, MT>::_probe_index_output(ChunkPtr* chunk) {
-    _probe_state->probe_index.resize((*chunk)->num_rows());
-    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
-}
-
-template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
-void JoinHashMap<LT, CT, MT>::_build_index_output(ChunkPtr* chunk) {
-    _probe_state->build_index.resize(_probe_state->count);
-    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
 }
 
 // ------------------------------------------------------------------------------------
@@ -987,5 +972,17 @@ void JoinHashTable::_remove_duplicate_index_for_full_outer_join(Filter* filter) 
         }
     }
 }
+
+template <bool is_remain>
+Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
+    visit([&](const auto& hash_map) { hash_map->template lazy_output<is_remain>(state, probe_chunk, result_chunk); });
+    if (_table_items->has_large_column) {
+        RETURN_IF_ERROR((*result_chunk)->downgrade());
+    }
+    return Status::OK();
+}
+
+template Status JoinHashTable::lazy_output<true>(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
+template Status JoinHashTable::lazy_output<false>(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
 
 } // namespace starrocks

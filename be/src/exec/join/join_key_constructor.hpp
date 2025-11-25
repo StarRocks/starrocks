@@ -17,7 +17,7 @@
 #include <optional>
 
 #include "column/column.h"
-#include "join_key_constructor.h"
+#include "exec/join/join_key_constructor.h"
 
 namespace starrocks {
 

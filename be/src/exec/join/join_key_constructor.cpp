@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "join_key_constructor.hpp"
+#include "exec/join/join_key_constructor.hpp"
 
 #include <optional>
 
 #include "serde/column_array_serde.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -155,4 +156,67 @@ void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTabl
 
     probe_state->null_array = probe_state->is_nulls;
 }
+
+template class ProbeKeyConstructorForOneKey<TYPE_BOOLEAN>;
+template class ProbeKeyConstructorForOneKey<TYPE_TINYINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_SMALLINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_INT>;
+template class ProbeKeyConstructorForOneKey<TYPE_BIGINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_LARGEINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_FLOAT>;
+template class ProbeKeyConstructorForOneKey<TYPE_DOUBLE>;
+template class ProbeKeyConstructorForOneKey<TYPE_DATE>;
+template class ProbeKeyConstructorForOneKey<TYPE_DATETIME>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMALV2>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMAL32>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMAL64>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMAL128>;
+template class ProbeKeyConstructorForOneKey<TYPE_VARCHAR>;
+
+template class BuildKeyConstructorForOneKey<TYPE_BOOLEAN>;
+template class BuildKeyConstructorForOneKey<TYPE_TINYINT>;
+template class BuildKeyConstructorForOneKey<TYPE_SMALLINT>;
+template class BuildKeyConstructorForOneKey<TYPE_INT>;
+template class BuildKeyConstructorForOneKey<TYPE_BIGINT>;
+template class BuildKeyConstructorForOneKey<TYPE_LARGEINT>;
+template class BuildKeyConstructorForOneKey<TYPE_FLOAT>;
+template class BuildKeyConstructorForOneKey<TYPE_DOUBLE>;
+template class BuildKeyConstructorForOneKey<TYPE_DATE>;
+template class BuildKeyConstructorForOneKey<TYPE_DATETIME>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMALV2>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMAL32>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMAL64>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMAL128>;
+template class BuildKeyConstructorForOneKey<TYPE_VARCHAR>;
+
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_BOOLEAN>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_TINYINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_SMALLINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_INT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_BIGINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_LARGEINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_FLOAT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DOUBLE>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DATE>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DATETIME>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMALV2>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMAL32>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMAL64>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMAL128>;
+
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_BOOLEAN>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_TINYINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_SMALLINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_INT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_BIGINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_LARGEINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_FLOAT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DOUBLE>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DATE>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DATETIME>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMALV2>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMAL32>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMAL64>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMAL128>;
+
 } // namespace starrocks
