@@ -76,6 +76,5 @@ private:
 
     bool _no_data = false;
     std::unique_ptr<HdfsJsonReader> _reader;
-    size_t _total_size = 0;
 };
 } // namespace starrocks
