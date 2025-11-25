@@ -214,6 +214,14 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowAlterStatement(ShowAlterStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowProcStmt(ShowProcStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
