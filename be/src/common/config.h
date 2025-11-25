@@ -222,6 +222,8 @@ CONF_Strings(sys_log_verbose_modules, "");
 CONF_Int32(sys_log_verbose_level, "10");
 // The log buffer level.
 CONF_String(log_buffer_level, "");
+// Whether to show timezone in log prefix.
+CONF_Bool(sys_log_timezone, "false");
 
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
