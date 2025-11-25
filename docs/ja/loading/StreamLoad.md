@@ -249,7 +249,7 @@ v3.4.0 以降、システムは複数の Stream Load リクエストのマージ
 
 :::warning
 
-Merge Commit 最適化は、単一テーブルに対する**並行** Stream Load ジョブが実行されるシナリオに適しています。並行度が 1 の場合は推奨されません。また、`merge_commit_async` を `true` に設定し、`merge_commit_interval_ms` を大きな値に設定する場合は慎重に検討してください。これらはロードパフォーマンスの低下を引き起こす可能性があります。
+Merge Commit 最適化は、単一テーブルに対する**並行** Stream Load ジョブが実行されるシナリオに適しています。並行度が 1 の場合は推奨されません。また、`merge_commit_async` を `false` に設定し、`merge_commit_interval_ms` を大きな値に設定する場合は慎重に検討してください。これらはロードパフォーマンスの低下を引き起こす可能性があります。
 
 :::
 
