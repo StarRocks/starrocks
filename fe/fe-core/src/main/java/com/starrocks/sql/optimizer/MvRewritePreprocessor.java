@@ -777,7 +777,7 @@ public class MvRewritePreprocessor {
         if (partitionNamesToRefresh.isEmpty()) {
             logMVPrepare(tracers, connectContext, mv, "MV {} has no partitions to refresh", mv.getName());
         } else {
-            logMVPrepare(tracers, mv, "MV' partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
+            logMVPrepare(tracers, mv, "MV's partitions to refresh(size: {}): {}", partitionNamesToRefresh.size(),
                     partitionNamesToRefresh);
         }
 
