@@ -54,7 +54,7 @@ public class ReplicationMgr extends FrontendDaemon {
     private final Map<Long, ReplicationJob> abortedJobs = Maps.newConcurrentMap(); // Aborted jobs, will retry later
 
     public ReplicationMgr() {
-        super("ReplicationMgr", Config.replication_interval_ms);
+        super("replication-mgr", Config.replication_interval_ms);
     }
 
     @Override

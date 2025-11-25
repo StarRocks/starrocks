@@ -154,7 +154,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public BackupHandler(GlobalStateMgr globalStateMgr) {
-        super("backupHandler", 3000L);
+        super("backup-handler", 3000L);
         this.globalStateMgr = globalStateMgr;
     }
 
