@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -37,6 +38,7 @@ import com.starrocks.sql.ast.CreateOrReplaceTagClause;
 import com.starrocks.sql.ast.DropBranchClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
+import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -438,4 +440,15 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
+    @Override
+    public Void visitAddPartitionColumnClause(AddPartitionColumnClause clause, ConnectContext context) {
+        unsupportedException("Not support");
+        return null;
+    }
+
+    @Override
+    public Void visitDropPartitionColumnClause(DropPartitionColumnClause clause, ConnectContext context) {
+        unsupportedException("Not support");
+        return null;
+    }
 }
