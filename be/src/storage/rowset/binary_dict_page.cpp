@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "column/binary_column.h"
+#include "column/append_with_mask.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/logging.h"
@@ -313,9 +314,9 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
             return Status::OK();
         }
 
-        // Append selected rows using append_with_filter
         auto nullable_column = down_cast<NullableColumn*>(column);
-        nullable_column->append_with_filter(*temp_nullable_column, selection, num_rows);
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection,
+                                                                  num_rows));
 
         return Status::OK();
     }

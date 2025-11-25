@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <memory>
 
+#include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
@@ -267,8 +268,7 @@ public:
             return Status::OK();
         }
 
-        // Append selected rows using append_with_filter
-        column->append_with_filter(*temp_column, selection, num_rows);
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(column, *temp_column, selection, num_rows));
 
         *data_filtered = true;
         size_t added_col_size = column->size() - original_col_size;
