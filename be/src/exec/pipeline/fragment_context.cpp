@@ -496,7 +496,7 @@ Status FragmentContext::prepare_active_drivers() {
     Status* error = sync_ctx->first_error.load();
     if (error != nullptr) {
         Status ret = *error;
-        return *ret;
+        return ret;
     }
 
     RETURN_IF_ERROR(submit_all_timer());
