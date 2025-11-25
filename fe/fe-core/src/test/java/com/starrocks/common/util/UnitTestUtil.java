@@ -35,7 +35,6 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -56,6 +55,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;

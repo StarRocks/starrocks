@@ -23,6 +23,7 @@ import java.util.Map;
 public class ModifyColumnClause extends AlterTableColumnClause {
     private final ColumnDef columnDef;
     private final ColumnPosition colPos;
+    private String rollupName;
 
     public ColumnDef getColumnDef() {
         return columnDef;
@@ -39,13 +40,22 @@ public class ModifyColumnClause extends AlterTableColumnClause {
 
     public ModifyColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollup,
                               Map<String, String> properties, NodePosition pos) {
-        super(rollup, properties, pos);
+        super(properties, pos);
         this.columnDef = columnDef;
         this.colPos = colPos;
+        this.rollupName = rollup;
+    }
+
+    public String getRollupName() {
+        return rollupName;
+    }
+
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyColumnClause(this, context);
+        return visitor.visitModifyColumnClause(this, context);
     }
 }

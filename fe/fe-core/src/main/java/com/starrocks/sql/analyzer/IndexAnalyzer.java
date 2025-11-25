@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
@@ -34,6 +33,7 @@ import com.starrocks.common.VectorIndexParams.IndexParamsKey;
 import com.starrocks.common.VectorIndexParams.SearchParamsKey;
 import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;

@@ -35,7 +35,6 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
@@ -46,6 +45,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;

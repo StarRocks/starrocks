@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -24,6 +23,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -220,12 +220,12 @@ public class AnalyzeAlterTableStatementTest {
             AlterClause clause = alter.getAlterClauseList().get(0);
             Assertions.assertTrue(clause instanceof AddColumnsClause);
             AddColumnsClause addColumnsClause = (AddColumnsClause) clause;
-            Assertions.assertEquals(2, addColumnsClause.getColumns().size());
+            Assertions.assertEquals(2, addColumnsClause.getColumnDefs().size());
 
-            Column nonNullColumn = addColumnsClause.getColumns().get(0);
+            ColumnDef nonNullColumn = addColumnsClause.getColumnDefs().get(0);
             Assertions.assertFalse(nonNullColumn.isAllowNull());
-            Assertions.assertNotNull(nonNullColumn.getDefaultValue());
-            Assertions.assertNotNull(addColumnsClause.getColumns().get(1).getDefaultValue());
+            Assertions.assertNotNull(nonNullColumn.getDefaultValueDef());
+            Assertions.assertNotNull(addColumnsClause.getColumnDefs().get(1).getDefaultValueDef());
         } finally {
             AnalyzeTestUtil.getStarRocksAssert().dropTable("test.pk_bitmap_base");
         }

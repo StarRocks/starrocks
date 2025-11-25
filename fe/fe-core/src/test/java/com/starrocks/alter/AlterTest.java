@@ -2502,7 +2502,7 @@ public class AlterTest {
                     + "`col2` int(11) not null default \"0\" comment \"\") in `testTable`;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         AddColumnsClause clause = (AddColumnsClause) alterTableStmt.getAlterClauseList().get(0);
-        Assertions.assertEquals(2, clause.getColumns().size());
+        Assertions.assertEquals(2, clause.getColumnDefs().size());
         Assertions.assertEquals(0, clause.getProperties().size());
         Assertions.assertEquals("testTable", clause.getRollupName());
 

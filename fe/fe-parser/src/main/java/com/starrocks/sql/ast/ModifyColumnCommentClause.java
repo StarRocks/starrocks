@@ -17,28 +17,29 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
-import java.util.Map;
+import java.util.HashMap;
 
-// reorder column
-public class ReorderColumnsClause extends AlterTableColumnClause {
-    private final List<String> columnsByPos;
+// modify one column comment
+public class ModifyColumnCommentClause extends AlterTableColumnClause {
+    private final String columnName;
+    private final String comment;
 
-    public List<String> getColumnsByPos() {
-        return columnsByPos;
+    public String getColumnName() {
+        return columnName;
     }
 
-    public ReorderColumnsClause(List<String> cols, String rollup, Map<String, String> properties) {
-        this(cols, rollup, properties, NodePosition.ZERO);
+    public String getComment() {
+        return comment;
     }
 
-    public ReorderColumnsClause(List<String> cols, String rollup, Map<String, String> properties, NodePosition pos) {
-        super(rollup, properties, pos);
-        this.columnsByPos = cols;
+    public ModifyColumnCommentClause(String columnName, String comment, NodePosition pos) {
+        super(new HashMap<>(), pos);
+        this.columnName = columnName;
+        this.comment = comment;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitReorderColumnsClause(this, context);
+        return visitor.visitModifyColumnCommentClause(this, context);
     }
 }
