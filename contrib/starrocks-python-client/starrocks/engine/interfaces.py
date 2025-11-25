@@ -20,6 +20,8 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, TypedDict, Unio
 
 from sqlalchemy.engine.interfaces import ReflectedColumn
 
+from starrocks.common.params import TableInfoKeyWithPrefix, TableKind
+
 
 """
 Follow the mysql's ReflectedState, but with more specific types
@@ -27,25 +29,131 @@ It will be much cleaner and easier to use.
 """
 
 
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
-class ReflectedStateV1(object):
-    """Stores information about table or view."""
-    table_name: Union[str, None] = None
-    columns: List[Dict] = dataclasses.field(default_factory=list)
-    table_options: Dict[str, str] = dataclasses.field(default_factory=dict)
-    keys: List[Dict] = dataclasses.field(default_factory=list)
-    fk_constraints: List[Dict] = dataclasses.field(default_factory=list)
-    ck_constraints: List[Dict] = dataclasses.field(default_factory=list)
+def add_cached_str_clause(cls):
+    """Add cached full string clause for a table attribute."""
+
+    cls._cached_clause = None
+
+    original_str = getattr(cls, "__str__", None)
+
+    def __str__(self):
+        if getattr(self, "_cached_clause", None) is None:
+            self._cached_clause = original_str(self)
+        return self._cached_clause
+
+    cls.__str__ = __str__
+    return cls
 
 
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
-class ReflectedState(object):
+@dataclasses.dataclass
+class ReflectedState:
+    """Reflected information for a Table (base class). Similar to MySQL's implementation.
+    comment is in table_options as the key `{dialect_name}_comment`.
+    """
     table_name: Optional[str]
-    columns: List[ReflectedColumn]
-    table_options: Dict[str, str]  = dataclasses.field(default_factory=dict)
-    keys: List[Union[ReflectedIndexInfo, ReflectedPKInfo, ReflectedUKInfo]]  = dataclasses.field(default_factory=list)
-    fk_constraints: List[ReflectedFKInfo] = dataclasses.field(default_factory=list)
-    ck_constraints: List[ReflectedCKInfo] = dataclasses.field(default_factory=list)
+    columns: List[ReflectedColumn] = dataclasses.field(default_factory=list)
+    table_options: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    keys: List[Union['ReflectedIndexInfo', 'ReflectedPKInfo', 'ReflectedUKInfo']] = dataclasses.field(default_factory=list)
+    fk_constraints: List['ReflectedFKInfo'] = dataclasses.field(default_factory=list)
+    ck_constraints: List['ReflectedCKInfo'] = dataclasses.field(default_factory=list)
+
+    @property
+    def name(self) -> Optional[str]:
+        return self.table_name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self.table_name = value
+
+    @property
+    def table_kind(self) -> str:
+        return TableKind.TABLE
+
+    @property
+    def comment(self) -> Optional[str]:
+        """Get the comment easily only, not able to write to it."""
+        return self.table_options.get(TableInfoKeyWithPrefix.COMMENT)
+
+    @property
+    def partition_info(self) -> Optional['ReflectedPartitionInfo']:
+        return self.table_options.get(TableInfoKeyWithPrefix.PARTITION_BY)
+
+    @property
+    def distribution_info(self) -> Optional['ReflectedDistributionInfo']:
+        return self.table_options.get(TableInfoKeyWithPrefix.DISTRIBUTED_BY)
+
+    @property
+    def refresh_info(self) -> Optional['ReflectedRefreshInfo']:
+        return self.table_options.get(TableInfoKeyWithPrefix.REFRESH)
+
+    @property
+    def order_by(self) -> Optional[str]:
+        return self.table_options.get(TableInfoKeyWithPrefix.ORDER_BY)
+
+    @property
+    def properties(self) -> Optional[Union[str, Dict[str, str]]]:
+        return self.table_options.get(TableInfoKeyWithPrefix.PROPERTIES)
+
+
+@dataclasses.dataclass
+class ReflectedViewState(ReflectedState):
+    """Reflected information for a View"""
+    definition: str = ''
+    # security: Optional[str] = None # Moved to table_options
+
+    # Views have no primary keys, foreign keys, or indexes
+    keys: list = dataclasses.field(default_factory=list, init=False)
+    fk_constraints: list = dataclasses.field(default_factory=list, init=False)
+
+    @property
+    def table_kind(self) -> str:
+        return TableKind.VIEW
+
+    @property
+    def view_name(self) -> Optional[str]:
+        return self.table_name
+
+    @view_name.setter
+    def view_name(self, value: str) -> None:
+        self.table_name = value
+
+    @property
+    def security(self) -> Optional[str]:
+        """Get the security type easily only, not able to write to it."""
+        return self.table_options.get(TableInfoKeyWithPrefix.SECURITY)
+
+
+@dataclasses.dataclass
+class ReflectedMVState(ReflectedViewState):
+    """Reflected information for a Materialized View"""
+
+    @property
+    def table_kind(self) -> str:
+        return TableKind.MATERIALIZED_VIEW
+
+    @property
+    def mv_name(self) -> Optional[str]:
+        return self.table_name
+
+    @mv_name.setter
+    def mv_name(self, value: str) -> None:
+        self.table_name = value
+
+
+@add_cached_str_clause
+@dataclasses.dataclass
+class ReflectedRefreshInfo:
+    """Stores structured reflection information about a materialized view's refresh scheme."""
+    moment: Optional[str] = None
+    type: Optional[str] = None
+
+    def __str__(self) -> str:
+        parts = []
+        if self.moment:
+            parts.append(self.moment)
+        if self.type:
+            parts.append(self.type)
+        return " ".join(parts)
 
 
 class MySQLKeyType(Enum):
@@ -104,57 +212,12 @@ class ReflectedCKInfo(TypedDict):
     sqltext: str
 
 
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
-class ReflectedViewState:
-    """Stores reflection information about a view."""
-    name: str
-    definition: str
-    comment: Union[str, None] = None
-    security: Union[str, None] = None
-
-
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
-class ReflectedMVOptions:
-    """Stores physical properties of a reflected materialized view."""
-    partition_by: Optional[ReflectedPartitionInfo] = None
-    distributed_by: Optional[ReflectedDistributionInfo] = None
-    order_by: Optional[str] = None
-    refresh_moment: Optional[str] = None
-    refresh_type: Optional[str] = None
-    properties: Optional[str] = None
-
-
-@dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
-class ReflectedMVState:
-    """Stores reflection information about a materialized view, primarily from information_schema."""
-    name: str
-    definition: str
-    schema: Optional[str] = None
-    comment: Optional[str] = None
-    mv_options: ReflectedMVOptions = dataclasses.field(default_factory=ReflectedMVOptions)
-
-
-def add_cached_clause(cls):
-    """Add cached full clause for a table attribute."""
-
-    cls._cached_clause = None
-
-    original_str = getattr(cls, "__str__", None)
-
-    def __str__(self):
-        if getattr(self, "_cached_clause", None) is None:
-            self._cached_clause = original_str(self)
-        return self._cached_clause
-
-    cls.__str__ = __str__
-    return cls
-
-
-@add_cached_clause
+@add_cached_str_clause
 @dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedTableKeyInfo:
     """
     Stores structed reflection information about a table' key/type.
+    Such as `PRIMARY KEY (id, name)`, `UNIQUE KEY (id, name)`, `DUPLICATE KEY (id, name)`.
 
     Attributes:
         type: The key type string (e.g., 'PRIMARY KEY', 'UNIQUE KEY', 'DUPLICATE KEY').
@@ -175,7 +238,7 @@ class ReflectedTableKeyInfo:
         return repr(str(self))
 
 
-@add_cached_clause
+@add_cached_str_clause
 @dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedPartitionInfo:
     """
@@ -204,7 +267,7 @@ class ReflectedPartitionInfo:
         return repr(str(self))
 
 
-@add_cached_clause
+@add_cached_str_clause
 @dataclasses.dataclass(**dict(kw_only=True) if 'KW_ONLY' in dataclasses.__all__ else {})
 class ReflectedDistributionInfo:
     """Stores reflection information about a view."""

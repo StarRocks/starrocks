@@ -13,13 +13,14 @@
 # limitations under the License.
 
 import logging
-from typing import Any, Final
+from typing import Any
 
 from alembic.autogenerate import renderers
 from alembic.autogenerate.api import AutogenContext
 from sqlalchemy.types import TypeEngine
 
 from .ops import (
+    AlterMaterializedViewOp,
     AlterTableDistributionOp,
     AlterTableOrderOp,
     AlterTablePropertiesOp,
@@ -34,20 +35,44 @@ from .ops import (
 logger = logging.getLogger("starrocks.alembic.render")
 
 
-op_param_indent: Final[str] = " " * 4
+INDENT = " " * 4
+
+
+def _render_op_call(autogen_context: AutogenContext, op_name: str, args: list[str]) -> str:
+    """Render an operation call, with Alembic prefix and standard 4-space indent per line.
+    """
+    # prefix = alembic_render._alembic_autogenerate_prefix(autogen_context)
+    prefix = "op."
+    size = sum(len(a) for a in args)
+    if len(args) <= 2 or size <= 80:
+        return f"{prefix}{op_name}({', '.join(args)})"
+    else:
+        args_block = ",\n".join(f"{INDENT}{a}" for a in args)
+        return f"{prefix}{op_name}(\n{args_block}\n)"
 
 
 def render_column_type(type_: str, obj: Any, autogen_context: AutogenContext):
     """
-    Custom rendering function. To reander ARRAY, MAP, STRUCT, etc.
+    Custom rendering function. To render ARRAY, MAP, STRUCT, etc.
     Currently, it's only used to import the starrocks.datatype module.
     We will use __repr__ to render the type, without the prefix "sr."
+
+    NOTE: StarRocksImpl.compare_type() will do real comparison logic, so we don't need to do it here.
+    Such as compasion VARCHAR(65533) and STRING.
+
+    Args:
+        type_: The type of the column.
+        obj: The object to render.
+        autogen_context: The autogen context.
+
+    Returns:
+        The string representation of the type.
     """
     # only care about the column type
     if type_ != "type":
         return False
 
-    logger.debug(f"rendering type: {obj!r}, type: {type_}, module: {obj.__class__.__module__}")
+    # logger.debug(f"rendering type: {obj!r}, type: {type_}, module: {obj.__class__.__module__}")
     # Check if the object is a user-defined type in our custom module
     if not isinstance(obj, TypeEngine) or not obj.__class__.__module__.startswith('starrocks.datatype'):
         # For other objects, return False, let Alembic use the default rendering logic
@@ -101,32 +126,56 @@ def _quote_schema(schema: str) -> str:
 @renderers.dispatch_for(AlterViewOp)
 def _alter_view(autogen_context: AutogenContext, op: AlterViewOp) -> str:
     """Render an AlterViewOp for autogenerate."""
-    args = [f"{op.view_name!r}", f"\n{op_param_indent}{op.definition!r}\n"]
+    args = [f"{op.view_name!r}"]
+
+    if op.definition:
+        args.append(f"{op.definition!r}")
+
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
-    if op.comment:
+        args.append(f"schema={op.schema!r}")
+    if op.columns:
+        # Render columns as a list of dicts
+        args.append(f"columns={op.columns!r}")
+    if op.comment or op.existing_comment:
         args.append(f"comment={op.comment!r}")
-    if op.security:
+    if op.security or op.existing_security:
         args.append(f"security={op.security!r}")
 
-    call = f"op.alter_view({', '.join(args)})"
+    # render reverse values for downgrade if present
+    if op.existing_definition:
+        args.append(f"existing_definition={op.existing_definition!r}")
+    if op.existing_columns:
+        args.append(f"existing_columns={op.existing_columns!r}")
+    if op.existing_comment or op.comment:
+        args.append(f"existing_comment={op.existing_comment!r}")
+    if op.existing_security or op.security:
+        args.append(f"existing_security={op.existing_security!r}")
+
+    call = _render_op_call(autogen_context, "alter_view", args)
     logger.debug("render alter_view: %s", call)
     return call
 
 @renderers.dispatch_for(CreateViewOp)
 def _create_view(autogen_context: AutogenContext, op: CreateViewOp) -> str:
+    """Render a CreateViewOp as Python code for migration script."""
     args = [
         f"{op.view_name!r}",
         f"{op.definition!r}"
     ]
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
-    if op.security:
-        args.append(f"security={op.security!r}")
+        args.append(f"schema={op.schema!r}")
     if op.comment:
         args.append(f"comment={op.comment!r}")
+    if op.columns:
+        # Render columns as a list of dicts
+        args.append(f"columns={op.columns!r}")
 
-    call = f"op.create_view({', '.join(args)})"
+    # Render dialect-specific kwargs (e.g., starrocks_security)
+    for key, value in op.kwargs.items():
+        if value is not None:
+            args.append(f"{key}={value!r}")
+
+    call = _render_op_call(autogen_context, "create_view", args)
     logger.debug("render create_view: %s", call)
     return call
 
@@ -135,26 +184,70 @@ def _create_view(autogen_context: AutogenContext, op: CreateViewOp) -> str:
 def _drop_view(autogen_context: AutogenContext, op: DropViewOp) -> str:
     args = [f"{op.view_name!r}"]
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
+        args.append(f"schema={op.schema!r}")
+    if op.if_exists:
+        args.append(f"if_exists={op.if_exists!r}")
 
-    call = f"op.drop_view({', '.join(args)})"
+    call = _render_op_call(autogen_context, "drop_view", args)
     logger.debug("render drop_view: %s", call)
     return call
 
 
 @renderers.dispatch_for(CreateMaterializedViewOp)
 def _create_materialized_view(autogen_context: AutogenContext, op: CreateMaterializedViewOp) -> str:
+    """
+    Render CREATE MATERIALIZED VIEW operation.
+
+    Similar to _create_view but with MV-specific parameters.
+    """
     args = [
         f"{op.view_name!r}",
-        f"{op.definition!r}",
+        f"{op.definition!r}"
     ]
-    if op.properties:
-        args.append(f"properties={op.properties!r}")
-    if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
 
-    call = f"op.create_materialized_view({', '.join(args)})"
+    if op.schema:
+        args.append(f"schema={op.schema!r}")
+    if op.comment:
+        args.append(f"comment={op.comment!r}")
+    if op.columns:
+        # Render columns as a list of dicts
+        args.append(f"columns={op.columns!r}")
+
+    # MV-specific attributes from kwargs (should all have "starrocks_" prefix)
+    for key, value in op.kwargs.items():
+        if value is not None:
+            args.append(f"{key}={value!r}")
+
+    call = _render_op_call(autogen_context, "create_materialized_view", args)
     logger.debug("render create_materialized_view: %s", call)
+    return call
+
+
+@renderers.dispatch_for(AlterMaterializedViewOp)
+def _alter_materialized_view(autogen_context: AutogenContext, op: AlterMaterializedViewOp) -> str:
+    """
+    Render ALTER MATERIALIZED VIEW operation.
+
+    Only renders mutable attributes (refresh, properties).
+    """
+    args = [f"{op.view_name!r}"]
+
+    if op.schema:
+        args.append(f"schema={op.schema!r}")
+
+    if op.refresh or op.existing_refresh:
+        args.append(f"refresh={op.refresh!r}")
+    if op.properties or op.existing_properties:
+        args.append(f"properties={op.properties!r}")
+
+    # Render reverse values for downgrade if present
+    if op.existing_refresh or op.refresh:
+        args.append(f"existing_refresh={op.existing_refresh!r}")
+    if op.existing_properties or op.properties:
+        args.append(f"existing_properties={op.existing_properties!r}")
+
+    call = _render_op_call(autogen_context, "alter_materialized_view", args)
+    logger.debug("render alter_materialized_view: %s", call)
     return call
 
 
@@ -162,9 +255,11 @@ def _create_materialized_view(autogen_context: AutogenContext, op: CreateMateria
 def _drop_materialized_view(autogen_context: AutogenContext, op: DropMaterializedViewOp) -> str:
     args = [f"{op.view_name!r}"]
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
+        args.append(f"schema={op.schema!r}")
+    if op.if_exists:
+        args.append(f"if_exists={op.if_exists!r}")
 
-    call = f"op.drop_materialized_view({', '.join(args)})"
+    call = _render_op_call(autogen_context, "drop_materialized_view", args)
     logger.debug("render drop_materialized_view: %s", call)
     return call
 
@@ -179,9 +274,9 @@ def _render_alter_table_distribution(autogen_context: AutogenContext, op: AlterT
     if op.buckets is not None:
         args.append(f"buckets={op.buckets}")
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
+        args.append(f"schema={op.schema!r}")
 
-    return f"op.alter_table_distribution({', '.join(args)})"
+    return _render_op_call(autogen_context, "alter_table_distribution", args)
 
 
 @renderers.dispatch_for(AlterTableOrderOp)
@@ -192,9 +287,9 @@ def _render_alter_table_order(autogen_context: AutogenContext, op: AlterTableOrd
         f"{op.order_by!r}"
     ]
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
+        args.append(f"schema={op.schema!r}")
 
-    return f"op.alter_table_order({', '.join(args)})"
+    return _render_op_call(autogen_context, "alter_table_order", args)
 
 
 @renderers.dispatch_for(AlterTablePropertiesOp)
@@ -205,6 +300,6 @@ def _render_alter_table_properties(autogen_context: AutogenContext, op: AlterTab
         f"{op.properties!r}"
     ]
     if op.schema:
-        args.append(f"schema={_quote_schema(op.schema)}")
+        args.append(f"schema={op.schema!r}")
 
-    return f"op.alter_table_properties({', '.join(args)})"
+    return _render_op_call(autogen_context, "alter_table_properties", args)
