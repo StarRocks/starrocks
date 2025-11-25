@@ -492,7 +492,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public Void visitAddPartitionColumnClause(AddPartitionColumnClause clause, ConnectContext context) {
         actions.add(() -> {
-            UpdatePartitionSpec spec = this.table.updateSpec();
+            UpdatePartitionSpec spec = this.transaction.updateSpec();
             List<Term> terms = clause.getPartitionExprList().stream()
                     .map(this::transformExprToIcebergTerm).toList();
             try {
@@ -510,7 +510,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public Void visitDropPartitionColumnClause(DropPartitionColumnClause clause, ConnectContext context) {
         actions.add(() -> {
-            UpdatePartitionSpec spec = this.table.updateSpec();
+            UpdatePartitionSpec spec = this.transaction.updateSpec();
             List<Term> terms = clause.getPartitionExprList().stream()
                     .map(this::transformExprToIcebergTerm).toList();
             try {
