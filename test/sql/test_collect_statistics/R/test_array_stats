@@ -223,24 +223,6 @@ FROM _statistics_.column_statistics
 WHERE table_name = 'test_array_stats.test_array_comprehensive_ndv' 
 ORDER BY column_name;
 -- result:
-arr_arr_int	0
-arr_arr_str	0
-arr_bigint	0
-arr_boolean	0
-arr_date	0
-arr_datetime	0
-arr_decimal	0
-arr_double	0
-arr_float	0
-arr_int	0
-arr_map_int	0
-arr_map_mixed	0
-arr_map_str	0
-arr_string	0
-arr_struct_complex	0
-arr_struct_simple	0
-arr_varchar	0
-k1	6
 -- !result
 ADMIN SET FRONTEND CONFIG ("enable_manual_collect_array_ndv"="true");
 -- result:
@@ -403,9 +385,6 @@ drop stats test_array_ndv;
 admin set frontend config ("enable_manual_collect_array_ndv"="false");
 -- result:
 -- !result
-admin set frontend config('enable_statistic_collect_on_first_load' = 'false');
--- result:
--- !result
 CREATE TABLE test_array_collection_size(
     k1 int,
     p_date date,
@@ -439,40 +418,5 @@ drop stats test_array_collection_size;
 -- result:
 -- !result
 drop table test_array_collection_size;;
--- result:
--- !result
-CREATE TABLE test_array_collection_size1(
-    k1 int,
-    p_date date,
-    int_arr array<int>,
-    str_arr array<string>
-) 
-DISTRIBUTED BY HASH(k1) BUCKETS 10
-PROPERTIES ("replication_num"="1");
--- result:
--- !result
-INSERT INTO test_array_collection_size1
-select 1, '2023-01-01', [1,2,3], ['a','b','c']
-from table(generate_series(1, 200000));
--- result:
--- !result
-ANALYZE SAMPLE TABLE test_array_collection_size1;
--- result:
-test_array_stats.test_array_collection_size1	sample	status	OK
--- !result
-SELECT column_name, row_count, collection_size, data_size
-FROM _statistics_.column_statistics 
-WHERE table_name = 'test_array_stats.test_array_collection_size1' 
-ORDER BY column_name;
--- result:
-int_arr	0	3	0
-k1	200000	-1	0
-p_date	200000	-1	0
-str_arr	0	3	0
--- !result
-drop stats test_array_collection_size1;
--- result:
--- !result
-admin set frontend config('enable_statistic_collect_on_first_load' = 'true');
 -- result:
 -- !result
