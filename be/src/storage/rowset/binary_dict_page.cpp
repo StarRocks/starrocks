@@ -278,11 +278,11 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
-        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
     DCHECK(Type != TYPE_CHAR);
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null_data, selection,
-                                                          selected_idx, data_filtered);
+                                                          selected_idx);
     }
 
     DCHECK(_parsed);
@@ -290,8 +290,6 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
     DCHECK(null_data == nullptr || column->is_nullable());
 
     if (null_data != nullptr) {
-        *data_filtered = true;
-
         // Create temporary nullable column for predicate evaluation
         auto temp_column = column->clone_empty();
         auto temp_nullable_column = down_cast<NullableColumn*>(temp_column.get());
@@ -316,12 +314,10 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
 
         auto nullable_column = down_cast<NullableColumn*>(column);
         RETURN_IF_ERROR(
-                append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection, num_rows))
+                append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection, num_rows));
 
         return Status::OK();
     }
-
-    *data_filtered = true;
 
     if (PREDICT_FALSE(_data_page_decoder->current_index() >= _data_page_decoder->count())) {
         return Status::OK();

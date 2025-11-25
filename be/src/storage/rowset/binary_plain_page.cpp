@@ -196,14 +196,13 @@ void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32
 template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
         Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
-        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx, bool* data_filtered) {
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
     DCHECK(null_data == nullptr || column->is_nullable());
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
         return Status::OK();
     }
 
-    *data_filtered = true;
 
     size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
     SparseRangeIterator<> iter = range.new_iterator();

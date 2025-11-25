@@ -348,13 +348,12 @@ Status ScalarColumnIterator::_next_batch_template(const SparseRange<>& range, Co
 Status ScalarColumnIterator::next_batch_with_filter(const SparseRange<>& range, Column* dst,
                                                     const std::vector<const ColumnPredicate*>& compound_and_predicates,
                                                     Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
-                                                    bool* data_filtered, size_t* processed_rows) {
+                                                    size_t* processed_rows) {
     size_t cur_col_size = dst->size();
     uint8_t* cur_sel = selection->data() + cur_col_size;
     uint16_t* cur_idx = selected_idx->data() + cur_col_size;
     auto read_func = [&](ParsedPage* page, Column* column, const SparseRange<>& read_range) -> Status {
-        RETURN_IF_ERROR(
-                page->read_with_filter(column, read_range, compound_and_predicates, cur_sel, cur_idx, data_filtered));
+        RETURN_IF_ERROR(page->read_with_filter(column, read_range, compound_and_predicates, cur_sel, cur_idx));
         // Update selection and selected_idx pointers to point to the next position
         // after processing this page's data
         size_t total_rows = read_range.span_size();

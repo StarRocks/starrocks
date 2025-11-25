@@ -247,7 +247,7 @@ public:
     // since at least 80% rows is null, so it won't hurt performance much
     Status read_with_filter(Column* column, const SparseRange<>& range,
                             const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
-                            uint16_t* selected_idx, bool* data_filtered) override {
+                            uint16_t* selected_idx) override {
         DCHECK_LE(range.span_size(), remaining());
 
         size_t original_col_size = column->size();
@@ -270,7 +270,6 @@ public:
 
         RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(column, *temp_column, selection, num_rows));
 
-        *data_filtered = true;
         size_t added_col_size = column->size() - original_col_size;
         if (selected_count != added_col_size) {
             return Status::InternalError(
@@ -339,7 +338,7 @@ public:
 
     Status read_with_filter(Column* column, const SparseRange<>& range,
                             const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
-                            uint16_t* selected_idx, bool* data_filtered) override {
+                            uint16_t* selected_idx) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
 
@@ -347,7 +346,7 @@ public:
 
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
-                                                                  selection, selected_idx, data_filtered));
+                                                                  selection, selected_idx));
         } else {
             // For ParsedPageV2 with nulls: pass null flags to data_decoder
             // The data_decoder will handle null predicates
@@ -357,16 +356,14 @@ public:
             // The data_decoder will handle appending null flags to the column
             const uint8_t* null_data = _null_flags.data() + _offset_in_page;
             RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_data,
-                                                                  selection, selected_idx, data_filtered));
+                                                                  selection, selected_idx));
         }
 
         size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
-        if (*data_filtered) {
-            size_t added_col_size = column->size() - original_col_size;
-            if (selected_size != added_col_size) {
-                return Status::InternalError(fmt::format("Selected size:{}, does not match added col size:{}",
-                                                         selected_size, added_col_size));
-            }
+        size_t added_col_size = column->size() - original_col_size;
+        if (selected_size != added_col_size) {
+            return Status::InternalError(fmt::format("Selected size:{}, does not match added col size:{}",
+                                                     selected_size, added_col_size));
         }
         _offset_in_page = range.end();
 
