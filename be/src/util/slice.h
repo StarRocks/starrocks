@@ -247,8 +247,7 @@ public:
 
     SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
 
-    explicit SliceContainerAdaptor(const std::vector<Slice>& slices)
-            : _slices(slices.data()), _size(slices.size()) {}
+    explicit SliceContainerAdaptor(const std::vector<Slice>& slices) : _slices(slices.data()), _size(slices.size()) {}
 
     const Slice* data() const { return _slices; }
 
