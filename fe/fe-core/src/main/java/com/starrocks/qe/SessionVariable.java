@@ -416,6 +416,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
     public static final String PREFER_CTE_REWRITE = "prefer_cte_rewrite";
     public static final String CBO_CTE_FORCE_REUSE_NODE_COUNT = "cbo_cte_force_reuse_node_count";
+    public static final String CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY =
+            "cbo_cte_force_reuse_limit_without_order_by";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -1328,6 +1330,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // When the value is 0, disable the force reuse optimization.
     @VarAttr(name = CBO_CTE_FORCE_REUSE_NODE_COUNT)
     private int cboCTEForceReuseNodeCount = 2000;
+
+    // If true, force CTE reuse when CTE contains LIMIT without ORDER BY to avoid unstable results.
+    // When false, allow inline even if CTE has LIMIT without ORDER BY (may cause inconsistent results).
+    @VarAttr(name = CBO_CTE_FORCE_REUSE_LIMIT_WITHOUT_ORDER_BY, flag = VariableMgr.INVISIBLE)
+    private boolean cboCTEForceReuseLimitWithoutOrderBy = true;
 
     @VarAttr(name = PREFER_CTE_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean preferCTERewrite = false;
@@ -3145,6 +3152,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboCTEForceReuseNodeCount(int cboCTEForceReuseNodeCount) {
         this.cboCTEForceReuseNodeCount = cboCTEForceReuseNodeCount;
+    }
+
+    public boolean isCboCTEForceReuseLimitWithoutOrderBy() {
+        return cboCTEForceReuseLimitWithoutOrderBy;
+    }
+
+    public void setCboCTEForceReuseLimitWithoutOrderBy(boolean cboCTEForceReuseLimitWithoutOrderBy) {
+        this.cboCTEForceReuseLimitWithoutOrderBy = cboCTEForceReuseLimitWithoutOrderBy;
     }
 
     public double getCboPruneShuffleColumnRate() {
