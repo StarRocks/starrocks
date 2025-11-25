@@ -262,7 +262,9 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
         size_t data_length = temp_offsets.back();
         const void* data_ptr = _data.get_data() + page_data_offset;
 
-        auto temp_data_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
+        // Create zero-copy BinaryColumn directly from page
+        ContainerResource container(_page_handle, data_ptr, data_length);
+        auto temp_data_column = BinaryColumn::create(container, std::move(temp_offsets));
 
         // Create temporary column for predicate evaluation
         ColumnPtr temp_eval_column;
