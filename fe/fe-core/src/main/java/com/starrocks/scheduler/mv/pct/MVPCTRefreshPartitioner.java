@@ -658,14 +658,14 @@ public abstract class MVPCTRefreshPartitioner {
         if (toRefreshPartitions == null || toRefreshPartitions.isEmpty()) {
             return;
         }
-        // remove pNULL partition if exists
-        if (toRefreshPartitions.containsName(NULL_PARTITION)) {
-            logger.info("Filter partitions by partition_retention_condition, and remove null partition");
-            toRefreshPartitions.removeByName(NULL_PARTITION);
-        }
         // filter partitions by partition_retention_condition
         String ttlCondition = mv.getTableProperty().getPartitionRetentionCondition();
         if (!Strings.isNullOrEmpty(ttlCondition)) {
+            // remove pNULL partition if exists
+            if (toRefreshPartitions.containsName(NULL_PARTITION)) {
+                logger.info("Filter partitions by partition_retention_condition, and remove null partition");
+                toRefreshPartitions.removeByName(NULL_PARTITION);
+            }
             List<String> toRemovePartitions =
                     getExpiredPartitionsWithRetention(ttlCondition, toRefreshPartitions, isMockPartitionIds);
             if (CollectionUtils.isNotEmpty(toRemovePartitions)) {
