@@ -48,7 +48,7 @@ public class CreateFileStmt extends DdlStmt {
     public CreateFileStmt(String fileName, String dbName, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.fileName = fileName;
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.properties = properties;
     }
 

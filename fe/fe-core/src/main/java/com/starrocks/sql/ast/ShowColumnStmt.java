@@ -20,8 +20,6 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
     private final TableName tableName;
@@ -42,7 +40,7 @@ public class ShowColumnStmt extends ShowStmt {
                           Expr where, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
-        this.db = normalizeName(db);
+        this.db = db;
         this.pattern = pattern;
         this.isVerbose = isVerbose;
         this.where = where;

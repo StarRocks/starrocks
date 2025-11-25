@@ -30,7 +30,7 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
 
     public ShowDynamicPartitionStmt(String db, NodePosition pos) {
         super(pos);
-        this.db = normalizeName(db);
+        this.db = db;
     }
 
     public String getDb() {

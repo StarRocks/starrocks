@@ -46,7 +46,7 @@ public class ShowPipeStmt extends ShowStmt {
     public ShowPipeStmt(String dbName, String like, Expr where, List<OrderByElement> orderBy, LimitElement limit,
             NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.like = like;
         this.where = where;
         if (where != null) {

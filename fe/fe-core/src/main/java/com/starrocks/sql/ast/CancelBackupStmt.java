@@ -36,7 +36,7 @@ public class CancelBackupStmt extends CancelStmt {
     public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog,
                             NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.isRestore = isRestore;
         this.isExternalCatalog = isExternalCatalog;
     }

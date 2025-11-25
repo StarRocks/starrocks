@@ -48,7 +48,7 @@ public class ShowLoadStmt extends ShowStmt {
     public ShowLoadStmt(String db, Expr labelExpr, List<OrderByElement> orderByElements,
                         LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(db);
+        this.dbName = db;
         this.whereClause = labelExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;

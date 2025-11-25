@@ -1299,7 +1299,11 @@ public class ShowExecutor {
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
-                    createRoutineLoadSql.append(desc.toString());
+                    createRoutineLoadSql.append(desc.getColumnName());
+                    if (desc.getExpr() != null) {
+                        createRoutineLoadSql.append("=").append(ExprToSql.toSql(desc.getExpr()));
+                    }
+
                     if (descs.size() == 1 || i == descs.size() - 1) {
                         createRoutineLoadSql.append(")");
                     } else {

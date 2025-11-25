@@ -52,7 +52,7 @@ public class ShowAlterStmt extends ShowStmt {
                          LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.type = type;
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.whereClause = whereClause;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;

@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -1352,11 +1353,11 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
     public String visitLargeInPredicate(LargeInPredicate node, Void context) {
         StringBuilder strBuilder = new StringBuilder();
         String notStr = (node.isNotIn()) ? "NOT " : "";
-        
+
         strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN (");
         strBuilder.append(node.getRawText());
         strBuilder.append(")");
-        
+
         return strBuilder.toString();
     }
 
@@ -1708,5 +1709,13 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
         sb.append(SqlCredentialRedactor.redact(stmt.getSqlText()));
 
         return sb.toString();
+    }
+
+    @Override
+    public String visitExecuteStatement(ExecuteStmt stmt, Void context) {
+        String stmtName = stmt.getStmtName();
+        List<Expr> paramsExpr = stmt.getParamsExpr();
+        return "EXECUTE `" + stmtName + "`" +
+                paramsExpr.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ", " USING ", ""));
     }
 }

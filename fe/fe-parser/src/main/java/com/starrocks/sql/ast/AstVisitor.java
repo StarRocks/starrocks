@@ -230,6 +230,14 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowBackupStatement(ShowBackupStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowRestoreStatement(ShowRestoreStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -251,6 +259,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFailPointStatement(ShowFailPointStatement statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -494,11 +506,75 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitDropDictionaryStatement(DropDictionaryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCreateDictionaryStatement(CreateDictionaryStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
+    default R visitRefreshDictionaryStatement(RefreshDictionaryStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
     default R visitDropRepositoryStatement(DropRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelCompactionStatement(CancelCompactionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitPrepareStatement(PrepareStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitExecuteStatement(ExecuteStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitAlterLoadStatement(AlterLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -524,6 +600,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropIndexClause(DropIndexClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -540,11 +620,59 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropPersistentIndexClause(DropPersistentIndexClause clause, C context) {
         return visitNode(clause, context);
     }
 
     default R visitAlterStorageVolumeCommentClause(AlterStorageVolumeCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitTableRenameClause(TableRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitSwapTableClause(SwapTableClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitColumnRenameClause(ColumnRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCompactionClause(CompactionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableCommentClause(AlterTableCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
         return visitNode(clause, context);
     }
 
