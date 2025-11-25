@@ -197,5 +197,10 @@ def _get_mv_refresh_parser() -> Lark:
 
 
 def parse_mv_refresh_clause(refresh_clause_str: str) -> dict:
-    """Parses a full 'REFRESH ...' string and returns a dictionary with moment and scheme."""
+    """Parses a full 'REFRESH ...' string and returns a dictionary with moment and scheme.
+    Returns:
+        A dictionary with keys "refresh_moment" and "refresh_type". The values are like:
+        - "refresh_moment": "IMMEDIATE" | "DEFERRED" | None,
+        - "refresh_type": "ASYNC" | "MANUAL" | "INCREMENTAL" | None,
+    """
     return _get_mv_refresh_parser().parse(refresh_clause_str)

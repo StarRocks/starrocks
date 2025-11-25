@@ -129,7 +129,6 @@ class TestReflectionColumnAutoIncrementIntegration:
     def _full_table_name(self, name: str) -> str:
         return f"{self.test_schema}.{name}" if self.test_schema else name
 
-    @pytest.mark.xfail(reason="AUTO_INCREMENT reflection not implemented yet", strict=False)
     def test_reflects_autoincrement_true(self) -> None:
         tname = "reflect_columns_ai_true"
         with self.sr_engine.begin() as conn:
@@ -147,12 +146,11 @@ class TestReflectionColumnAutoIncrementIntegration:
             insp: Inspector = inspect(self.sr_engine)
             cols: list[ReflectedColumn] = insp.get_columns(tname, schema=self.test_schema)
             id_col: ReflectedColumn = next(c for c in cols if c["name"].lower() == "id")
-            assert id_col.autoincrement is True  # Not implemented yet
+            assert id_col["autoincrement"] is True
         finally:
             with self.sr_engine.begin() as conn:
                 conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._full_table_name(tname)}")
 
-    @pytest.mark.xfail(reason="AUTO_INCREMENT reflection not implemented yet", strict=False)
     def test_reflects_autoincrement_false(self) -> None:
         tname = "reflect_columns_ai_false"
         with self.sr_engine.begin() as conn:
@@ -170,7 +168,7 @@ class TestReflectionColumnAutoIncrementIntegration:
             insp: Inspector = inspect(self.sr_engine)
             cols: list[ReflectedColumn] = insp.get_columns(tname, schema=self.test_schema)
             id_col: ReflectedColumn = next(c for c in cols if c["name"].lower() == "id")
-            assert id_col.autoincrement is False  # Not implemented yet
+            assert id_col["autoincrement"] is False
         finally:
             with self.sr_engine.begin() as conn:
                 conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._full_table_name(tname)}")

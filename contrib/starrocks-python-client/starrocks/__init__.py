@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 # import it to import some internal alembic packages implicitly
 # but, it's not needed if users only want to use SQLAlchemy rather than Alembic
@@ -43,25 +43,24 @@ from .datatype import (
     VARBINARY,
     VARCHAR,
 )
-from .sql import schema
 from .sql.dml import (
-    InsertIntoFiles,
-    FilesTarget,
-    FilesTargetOptions,
-    FilesFormat,
-    InsertFromFiles,
-    FilesSource,
-    FilesSourceOptions,
-    CSVFormat,
-    ParquetFormat,
-    ORCFormat,
-    AVROFormat,
     AmazonS3,
+    AVROFormat,
     AzureBlobStorage,
     AzureDataLakeStorage1,
     AzureDataLakeStorage2,
-    GoogleCloudStorage,
     Compression,
+    CSVFormat,
+    FilesFormat,
+    FilesSource,
+    FilesSourceOptions,
+    FilesTarget,
+    FilesTargetOptions,
+    GoogleCloudStorage,
+    InsertFromFiles,
+    InsertIntoFiles,
+    ORCFormat,
+    ParquetFormat,
 )
 
 
@@ -72,8 +71,6 @@ __all__ = (
     "CHAR", "VARCHAR", "STRING", "BINARY", "VARBINARY",
     "HLL", "BITMAP", "PERCENTILE",
     "ARRAY", "MAP", "STRUCT", "JSON",
-
-    "schema",
 
     "InsertIntoFiles",
     "FilesTarget",

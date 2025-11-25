@@ -1,6 +1,6 @@
 # DDL Compilation Design
 
-This document describes the DDL (Data Definition Language) compilation process in the `sqlalchemy-starrocks` dialect. Compilation is the process of converting SQLAlchemy's abstract schema objects (like `Table`, `Column`, `View`, and `Materialized View`) into StarRocks-specific SQL strings.
+This document describes the DDL (Data Definition Language) compilation process in the `starrocks-sqlalchemy` dialect. Compilation is the process of converting SQLAlchemy's abstract schema objects (like `Table`, `Column`, `View`, and `Materialized View`) into StarRocks-specific SQL strings.
 
 ## `StarRocksDDLCompiler`
 
@@ -17,9 +17,16 @@ The `ddl_compiler` is registered with the dialect and is automatically invoked b
   - **Aggregate Types**: For `AGGREGATE KEY` tables, it appends the aggregate function (e.g., `SUM`, `REPLACE`) to the column definition based on the attributes in `column.dialect_options['starrocks']`.
   - **StarRocks Data Types**: It ensures that StarRocks-specific data types like `BITMAP` and `HLL` are compiled correctly.
 
-- **`visit_create_view(self, create)`**: A custom visitor that compiles a `starrocks.sql.schema.View` object into a `CREATE VIEW` statement.
+- **`visit_create_view(self, create)`**: A custom visitor that compiles a `starrocks.schema.View` object into a `CREATE VIEW` statement.
 
-- **`visit_create_materialized_view(self, create)`**: A custom visitor that compiles a `starrocks.sql.schema.MaterializedView` object into a `CREATE MATERIALIZED VIEW` statement.
+- **`visit_create_materialized_view(self, create)`**: A custom visitor that compiles a `starrocks.schema.MaterializedView` object into a `CREATE MATERIALIZED VIEW` statement.
+
+### Unified Table-Based Compilation for View / Materialized View
+
+In line with the unified design described in `docs/design/view_and_mv.md`, **views and materialized views are compiled through the same Table-based pipeline**:
+
+- At compile time, the element passed to the compiler is always a `Table`-like object. The real kind (`TABLE` / `VIEW` / `MATERIALIZED_VIEW`) is determined by `table.info['table_kind']`.
+- `StarRocksDDLCompiler.visit_create_table()` can inspect `table.info['table_kind']` and, when it is `VIEW` or `MATERIALIZED_VIEW`, delegate to the corresponding `CREATE VIEW` / `CREATE MATERIALIZED VIEW` helpers. This ensures that whether a View/MV was created via the `View` / `MaterializedView` convenience classes or directly as a `Table` with `info['table_kind']` set, the generated DDL is consistent.
 
 ## How it Works
 

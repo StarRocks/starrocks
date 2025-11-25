@@ -15,7 +15,7 @@
 """Quickstart: autogenerate views with Alembic and StarRocks.
 
 Prerequisites:
-- A running StarRocks FE reachable via STARROCKS_URI env (e.g. starrocks://root:@127.0.0.1:9030/test)
+- A running StarRocks FE reachable via STARROCKS_URI env (e.g. starrocks://root:@127.0.0.1:9030/test_sqla)
 - Alembic installed and a temp env.py can be created ad-hoc in tests/examples
 """
 
@@ -30,14 +30,14 @@ from starrocks.sql.schema import View
 
 
 def main() -> None:
-    uri = os.getenv("STARROCKS_URI", "starrocks://root:@127.0.0.1:9030/test")
+    uri = os.getenv("STARROCKS_URI", "starrocks://root:@127.0.0.1:9030/test_sqla")
     engine = create_engine(uri)
 
     with engine.connect() as conn:
         # Desired metadata state
         target_metadata = MetaData()
-        v = View("quickstart_view", "SELECT 1 AS c")
-        target_metadata.info.setdefault("views", {})[(v, None)] = v
+        # Register the view directly by binding it to metadata
+        View("quickstart_view", target_metadata, definition="SELECT 1 AS c")
 
         # Autogenerate against current DB
         mc = MigrationContext.configure(connection=conn)

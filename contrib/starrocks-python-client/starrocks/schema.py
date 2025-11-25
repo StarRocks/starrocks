@@ -1,10 +1,11 @@
+#! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     https:#www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,16 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import compare, ops, render, toimpl  # noqa: F401
-from .compare import combine_include_object, include_object_for_view_mv
-from .render import render_column_type
-from .starrocks import StarRocksImpl
 
-
-__all__ = [
-    "StarRocksImpl",
-    "render",
-    "render_column_type",
-    "include_object_for_view_mv",
-    "combine_include_object",
-]
+from .sql.ddl import CreateMaterializedView, CreateView, DropMaterializedView, DropView  # noqa: F401
+from .sql.schema import MaterializedView, View  # noqa: F401
