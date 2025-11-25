@@ -61,23 +61,24 @@ jobs:
         env:
           SHA: ${{ steps.upload_info.outputs.SHA }}
         run: |
-          round_limit=12
+          round_limit=10
           while [[ $round_limit -gt 0 ]]
           do
             pr_check_run_info=$(gh run list -R ${{ github.repository }} -c ${SHA} --json status,name,startedAt,conclusion | jq '[.[] | select(.name == "PR CHECKER")] | sort_by(.startedAt)| last')
-            if [[ $pr_check_run_info == 'null' ]] || [[ $(echo $pr_check_run_info | jq -r .status) != 'completed' ]] || [[ $(echo $pr_check_run_info | jq -r .conclusion) != 'success' ]]
-            then
-              break
+            if [[ "$pr_check_run_info" != 'null' ]] && [[ $(echo "$pr_check_run_info" | jq -r .status) == 'completed' ]]; then
+              status=$(echo "$pr_check_run_info" | jq -r .conclusion)
+              if [[ "$status" == 'success' ]]; then
+                exit 0
+              else
+                echo "::warning::The latest PR CHECKER status: ${status}!"
+              fi
             fi
             round_limit=$((round_limit-1))
-            sleep 10
+            sleep 30
           done
-
-          if [[ $round_limit -le 0 ]]
-          then
-            echo "::error::PR CHECKER is failed, please check and then you can re-execute by commenting on `rerun`!"
-            exit 1
-          fi
+          
+          echo "::error::PR CHECKER is timeout, please check and then you can re-execute by commenting on rerun!"
+          exit 1
 
       - name: Check Blacklist
         id: check_blacklist
@@ -354,7 +355,7 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: thirdparty-info
-    timeout-minutes: 90
+    timeout-minutes: 150
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -365,7 +366,6 @@ jobs:
       - name: INIT ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
@@ -657,7 +657,7 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 60
+        timeout-minutes: 90
         env:
           EXTENSION: ${{ needs.fe-codestyle-check.outputs.extension_filter }}
         run: |
@@ -925,6 +925,101 @@ jobs:
         run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
           rm -rf ${{ github.workspace }}/*
+
+  docgen:
+    runs-on: [self-hosted, normal]
+    needs: deploy
+    name: Generate Documentation
+    if: >
+      contains(github.event.pull_request.labels.*.name, 'docgen')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BRANCH: ${{ github.base_ref }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            be-config:
+              - 'be/src/common/config.h'
+            fe-config:
+              - 'fe/fe-core/src/main/java/com/starrocks/common/Config.java'
+            variable:
+              - 'fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java'
+              - 'fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java'
+            function:
+              - 'gensrc/script/functions.py'
+
+      - name: init doc-agent
+        id: init-doc-agent
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && ./lib/init_doc.sh
+          ./bin/doc-checkout.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER}
+
+      - name: FE config 
+        id: fe-config-gen
+        if: steps.path-filter.outputs.fe-config == 'true'
+        run: |
+          ./ci-tool/bin/run-doc-gen.sh --type fe_config --sr starrocks --limit 5
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
+      - name: BE config 
+        id: be-config-gen
+        if: steps.path-filter.outputs.be-config == 'true'
+        run: |
+          ./ci-tool/bin/run-doc-gen.sh --type be_config --sr starrocks --limit 5 
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
+
+      - name: variables 
+        id: variables-gen
+        if: steps.path-filter.outputs.variable == 'true'
+        run: |
+          ./ci-tool/bin/run-doc-gen.sh --type variables --sr starrocks --limit 5
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
+
+      - name: function 
+        id: function-gen
+        if: steps.path-filter.outputs.function == 'true'
+        run: |
+          ./ci-tool/bin/run-doc-gen.sh --type functions --sr starrocks --fe ${FE_NODE} --limit 5
+          result=$(grep -Eao 'Created Pull Request:.+' /root/DocsAgent/logs/*.log)
+          echo "PR_RESULT=${result}" >> $GITHUB_OUTPUT
+
+      - name: Comment DocGen Result
+        if: >
+          (steps.fe-config-gen.outputs.PR_RESULT != '' ) ||
+          (steps.be-config-gen.outputs.PR_RESULT != '' ) ||
+          (steps.variables-gen.outputs.PR_RESULT != '' ) ||
+          (steps.function-gen.outputs.PR_RESULT != '' )
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FE_RES: ${{ steps.fe-config-gen.outputs.PR_RESULT }}
+          BE_RES: ${{ steps.be-config-gen.outputs.PR_RESULT }}
+          VAR_RES: ${{ steps.variables-gen.outputs.PR_RESULT }}
+          FUNC_RES: ${{ steps.function-gen.outputs.PR_RESULT }}
+        run: |
+          link="${FE_RES}"
+          [[ -z "$link" ]] && link="${BE_RES}"
+          [[ -z "$link" ]] && link="${VAR_RES}"
+          [[ -z "$link" ]] && link="${FUNC_RES}"
+          if [[ -z "$link" ]]; then
+            echo "No PR_RESULT found, skip comment."
+            exit 0
+          fi
+          comment="## 📄 DocsAgent 
+          \n\n Generate Documents PR: ${link}\n- FE Config: ${FE_RES}\n- BE Config: ${BE_RES}\n- Variables: ${VAR_RES}\n- Function: ${FUNC_RES}\n\n(Generated by [DocsAgent](https://github.com/starrocks/docsagent))"
+          gh pr comment ${{ github.event.number }} -R ${{ github.repository }} -b "${comment}"
+
+
+      - name: Remove docgen label
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit ${{ github.event.number }} -R ${{ github.repository }} --remove-label "docgen"
 
   SQL-Tester:
     runs-on: [self-hosted, normal]

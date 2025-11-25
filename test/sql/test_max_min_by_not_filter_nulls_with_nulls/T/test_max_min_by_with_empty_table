@@ -30,3 +30,4 @@ CREATE TABLE `primary_table_with_null_partition` (
             );
 
 select max_by(k1,k1) from primary_table_with_null_partition;
+select max_by(named_struct("k",k1,"v", "v1"),k1) from primary_table_with_null_partition;

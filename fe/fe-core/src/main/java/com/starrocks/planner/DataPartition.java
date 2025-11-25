@@ -38,12 +38,18 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
+import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TDataPartition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Specification of the partition of a single stream of data.
@@ -64,6 +70,7 @@ public class DataPartition {
 
     // for hash partition: exprs used to compute hash value
     private ImmutableList<Expr> partitionExprs;
+    List<TBucketProperty> tBucketProperties = new ArrayList<>();
 
     public DataPartition(TPartitionType type, List<Expr> exprs) {
         if (type != TPartitionType.UNPARTITIONED && type != TPartitionType.RANDOM) {
@@ -78,6 +85,17 @@ public class DataPartition {
         } else {
             this.type = type;
             this.partitionExprs = ImmutableList.of();
+        }
+    }
+
+    public DataPartition(TPartitionType type, List<Expr> exprs, Optional<List<BucketProperty>> bucketProperties) {
+        Preconditions.checkArgument(type.equals(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED));
+        this.type = type;
+        this.partitionExprs = ImmutableList.copyOf(exprs);
+        if (bucketProperties.isPresent()) {
+            for (BucketProperty bucketProperty : bucketProperties.get()) {
+                tBucketProperties.add(bucketProperty.toThrift());
+            }
         }
     }
 
@@ -112,7 +130,10 @@ public class DataPartition {
     public TDataPartition toThrift() {
         TDataPartition result = new TDataPartition(type);
         if (partitionExprs != null) {
-            result.setPartition_exprs(Expr.treesToThrift(partitionExprs));
+            result.setPartition_exprs(ExprToThrift.treesToThrift(partitionExprs));
+        }
+        if (!tBucketProperties.isEmpty()) {
+            result.setBucket_properties(tBucketProperties);
         }
         return result;
     }
@@ -123,7 +144,7 @@ public class DataPartition {
         if (!partitionExprs.isEmpty()) {
             List<String> strings = Lists.newArrayList();
             for (Expr expr : partitionExprs) {
-                strings.add(expr.toSql());
+                strings.add(ExprToSql.toSql(expr));
             }
             str.append(": ").append(Joiner.on(", ").join(strings));
         }

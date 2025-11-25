@@ -655,6 +655,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     if (total_time_ms > 0) {
         copy_rate = total_file_size / ((double)total_time_ms) / 1000;
     }
+    _copy_size = (int64_t)total_file_size;
+    _copy_time_ms = (int64_t)total_time_ms;
     LOG(INFO) << "Copied tablet " << _signature << " files=" << file_name_list.size() << ". bytes=" << total_file_size
               << " cost=" << total_time_ms << " ms"
               << " rate=" << copy_rate << " MB/s";
@@ -1001,7 +1003,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
-            if (!st.ok()) {
+            if (!clear_st.ok()) {
                 LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
             }
         }

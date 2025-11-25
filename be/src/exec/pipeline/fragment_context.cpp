@@ -130,6 +130,8 @@ void FragmentContext::count_down_execution_group(size_t val) {
         (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
     }
 
+    destroy_pass_through_chunk_buffer();
+
     query_ctx->count_down_fragments();
 }
 
@@ -333,6 +335,14 @@ void FragmentContextManager::cancel(const Status& status) {
         _fragment_context.second->cancel(status);
     }
 }
+void FragmentContext::prepare_pass_through_chunk_buffer() {
+    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+}
+void FragmentContext::destroy_pass_through_chunk_buffer() {
+    if (_runtime_state) {
+        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
+    }
+}
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
@@ -358,6 +368,13 @@ void FragmentContext::clear_pipeline_timer() {
             SAFE_DELETE(_timeout_task);
         }
     }
+}
+
+TQueryType::type FragmentContext::query_type() const {
+    if (_runtime_state == nullptr) {
+        return TQueryType::EXTERNAL;
+    }
+    return _runtime_state->query_options().query_type;
 }
 
 Status FragmentContext::reset_epoch() {
@@ -451,7 +468,7 @@ void FragmentContext::add_timer_observer(PipelineObserver* observer, uint64_t ti
     if (auto iter = _rf_timeout_tasks.find(timeout); iter != _rf_timeout_tasks.end()) {
         task = down_cast<RFScanWaitTimeout*>(iter->second);
     } else {
-        task = new RFScanWaitTimeout(this);
+        task = new RFScanWaitTimeout();
         _rf_timeout_tasks.emplace(timeout, task);
     }
     task->add_observer(_runtime_state.get(), observer);

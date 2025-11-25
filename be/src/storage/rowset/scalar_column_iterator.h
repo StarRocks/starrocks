@@ -69,7 +69,7 @@ public:
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                       const ColumnPredicate* del_predicate, SparseRange<>* range,
-                                      CompoundNodeType pred_relationn) override;
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
 
     bool has_original_bloom_filter_index() const override;
     bool has_ngram_bloom_filter_index() const override;
@@ -152,9 +152,6 @@ private:
 
     // keep dict page decoder
     std::unique_ptr<PageDecoder> _dict_decoder;
-
-    // keep dict page handle to avoid released
-    PageHandle _dict_page_handle;
 
     // page iterator used to get next page when current page is finished.
     // This value will be reset when a new seek is issued

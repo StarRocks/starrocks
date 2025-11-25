@@ -18,17 +18,16 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -127,7 +126,7 @@ public class JDBCScanNode extends ScanNode {
             return;
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
-        Expr.collectList(conjuncts, SlotRef.class, slotRefs);
+        ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
         String identifier = getIdentifierSymbol();
         for (SlotRef slotRef : slotRefs) {
@@ -137,9 +136,9 @@ public class JDBCScanNode extends ScanNode {
             sMap.put(slotRef, tmpRef);
         }
 
-        ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
+        ArrayList<Expr> jdbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
-            p = p.replaceLargeStringLiteral();
+            p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(AstToStringBuilder.toString(p));
         }
     }

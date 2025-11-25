@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
@@ -46,7 +47,7 @@ public class ShowLoadWarningsStmtTest {
 
         stmt = (ShowLoadWarningsStmt) analyzeSuccess("SHOW LOAD WARNINGS ON 'http://127.0.0.1:8000'");
         Assertions.assertEquals("http://127.0.0.1:8000", stmt.getRawUrl());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(3, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
@@ -85,11 +86,5 @@ public class ShowLoadWarningsStmtTest {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         analyzeFail("SHOW LOAD WARNINGS ON 'xxx'", "Invalid url: no protocol: xxx");
         analyzeFail("SHOW LOAD WARNINGS ON ''", "Error load url is missing");
-    }
-
-    @Test
-    public void testGetRedirectStatus() {
-        ShowLoadWarningsStmt stmt = new ShowLoadWarningsStmt(null, null, null, null);
-        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.NO_FORWARD);
     }
 }

@@ -1,10 +1,12 @@
 ---
 sidebar_position: 1
+sidebar_label: "Overview"
+keywords: ['S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 ---
 
-# Overview
+# Best Practices
 
-These best practices are written by experienced database engineers.
+These best practices are written by experienced database engineers. Designing for efficiency does more than improve query speed, it decreases costs by reducing storage, CPU, and object storage (e.g., S3) API costs.
 
 ## General table design
 

@@ -1,6 +1,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
@@ -24,8 +25,8 @@ public class ShowWarningStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals(10L, stmt.getLimitNum());
 
-        Assertions.assertEquals( 3, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Message", stmt.getMetaData().getColumn(2).getName());
+        Assertions.assertEquals( 3, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Message", new ShowResultMetaFactory().getMetadata(stmt).getColumn(2).getName());
 
         // show Error cases
         ShowWarningStmt stmt_e = (ShowWarningStmt) UtFrameUtils.parseStmtWithNewParser("SHOW ERRORS limit 10", ctx);

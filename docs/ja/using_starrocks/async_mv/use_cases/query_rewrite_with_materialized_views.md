@@ -555,6 +555,66 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+上記の関数に加えて、StarRocks v3.4.0以降では、非同期マテリアライズドビューは汎用集計関数もサポートしており、クエリの書き換えにも使用できます。汎用集計関数の詳細については、[汎用集計関数の状態](../../../table_design/table_types/aggregate_table.md#generic-aggregate-states-in-asynchronous-materialized-views)を参照してください。
+
+```SQL
+-- Create an asynchronous materialized view test_mv2 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY (dt)
+DISTRIBUTED BY RANDOM
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+
+-- Refresh the materialized view.
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+
+-- Direct queries against the aggregate function will be transparently accelerated by test_mv2.
+SELECT 
+    dt,
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01'
+GROUP BY dt;
+
+SELECT 
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01';
+```
+
 ### 集計プッシュダウン
 
 v3.3.0 以降、StarRocks はマテリアライズドビュークエリの書き換えに対する集計プッシュダウンをサポートしています。この機能が有効な場合、集計関数はクエリ実行中に Scan Operator にプッシュダウンされ、Join Operator が実行される前にマテリアライズドビューによって書き換えられます。これにより、Join によるデータの拡張が軽減され、クエリパフォーマンスが向上します。

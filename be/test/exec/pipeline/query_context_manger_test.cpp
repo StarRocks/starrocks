@@ -171,6 +171,34 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         sleep(2);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
     }
+
+    {
+        auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+        ASSERT_TRUE(query_ctx_mgr->init().ok());
+        TUniqueId query_id;
+        query_id.hi = 100;
+        query_id.lo = 3;
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
+        query_ctx->set_total_fragments(8);
+        query_ctx->set_delivery_expire_seconds(60);
+        query_ctx->set_query_expire_seconds(300);
+        query_ctx->extend_delivery_lifetime();
+        query_ctx->extend_query_lifetime();
+        query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+        // port query_ctx to second map
+        query_ctx->count_down_fragments(query_ctx_mgr.get());
+
+        // Single thread cannot reproduce query context registration success,
+        // while this query context is in the second case. So let's simulate it here.
+        query_ctx->increment_num_fragments();
+
+        // cancel
+        query_ctx->cancel(Status::Cancelled("cannelled"), true);
+
+        ASSERT_TRUE(query_ctx_mgr->get_or_register(query_id).status().is_cancelled());
+
+        ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
+    }
 }
 
 TEST(QueryContextManagerTest, testMulitiThreadOperations) {
@@ -249,9 +277,9 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
     ASSERT_TRUE(query_ctx_mgr->init().ok());
 
-    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>("wg1", 1, 1, 1, 1, 1 /* concurrency_limit */,
-                                                                        1.0 /* spill_mem_limit_threshold */,
-                                                                        workgroup::WorkGroupType::WG_NORMAL);
+    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>(
+            "wg1", 1, 1, 1, 1, 1 /* concurrency_limit */, 1.0 /* spill_mem_limit_threshold */,
+            workgroup::WorkGroupType::WG_NORMAL, workgroup::WorkGroup::DEFAULT_MEM_POOL);
 
     auto* query_ctx1 = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 0, 1, 3, 60, 300);
     auto* query_ctx_overloaded = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 1, 2, 3, 60, 300);
@@ -297,6 +325,13 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_FALSE(query_ctx_mgr->remove(query_id2)); // Trigger _clean_slot.
     ASSERT_EQ(0, wg->num_running_queries());
+}
+
+TEST(QueryContextManagerTest, testReadStats) {
+    QueryContext ctx;
+    ctx.incr_read_stats(100, 200);
+    ASSERT_EQ(100, ctx.get_read_local_cnt());
+    ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
 } // namespace starrocks::pipeline

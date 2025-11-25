@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
@@ -34,13 +33,13 @@ public class ModifyColumnCommentClause extends AlterTableColumnClause {
     }
 
     public ModifyColumnCommentClause(String columnName, String comment, NodePosition pos) {
-        super(AlterOpType.SCHEMA_CHANGE, null, new HashMap<>(), pos);
+        super(null, new HashMap<>(), pos);
         this.columnName = columnName;
         this.comment = comment;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyColumnCommentClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyColumnCommentClause(this, context);
     }
 }

@@ -28,6 +28,7 @@ displayed_sidebar: docs
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.9     | 1.15,1.16,1.17,1.18           | 2.1 and later | 8    | 2.11,2.12 |
@@ -42,7 +43,25 @@ displayed_sidebar: docs
 
 ### 1.2
 
-## Release 1.2.11
+#### 1.2.12
+
+Release date: September 19, 2025
+
+##### Improvements
+
+- Supports specifying a warehouse for the source. [#423](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/423)
+- Added security policy. [#434](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/434)
+- Sanitized sensitive data in the error log. [#446](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/446)
+- Supports configuring `prepared_timeout` for the Stream Load transaction interface. [#453](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/453)
+
+##### Bug Fixes
+
+The following issues have been fixed:
+
+- The source reader was not closed if the open failed. [#441](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/441)
+- False success caused by any exception in StreamLoadManagerV2.flush. [#451](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/451)
+
+#### 1.2.11
 
 Release data: June 3, 2025
 

@@ -54,6 +54,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
@@ -67,7 +68,6 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -403,6 +403,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.errMsg = errMsg;
     }
 
+    public String getErrMsg() {
+        return errMsg;
+    }
+
     public long getCopySize() {
         return copySize;
     }
@@ -535,6 +539,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.balanceType = balanceType;
     }
 
+    public boolean isIntraNodeBalance() {
+        return balanceType != null &&
+                (balanceType == BalanceType.INTRA_NODE_DISK_USAGE || balanceType == BalanceType.INTRA_NODE_TABLET_DISTRIBUTION);
+    }
+
     public void setSrcPathResourceHold() {
         this.srcPathResourceHold = true;
     }
@@ -560,12 +569,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 tabletHealthStatus == TabletHealthStatus.NEED_FURTHER_REPAIR;
     }
 
-    public List<Replica> getHealthyReplicas() {
+    public List<Replica> getHealthyReplicas(boolean includeDecommissioned) {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad()
-                    || replica.getState() == ReplicaState.DECOMMISSION
-                    || replica.getState() == ReplicaState.RECOVER) {
+            if (replica.isBad() || replica.getState() == ReplicaState.RECOVER ||
+                    (!includeDecommissioned && replica.getState() == ReplicaState.DECOMMISSION)) {
                 continue;
             }
 
@@ -600,9 +608,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          * 1. source replica should be healthy.
          * 2. slot of this source replica is available.
          */
-        List<Replica> candidates = getHealthyReplicas();
+        List<Replica> candidates = getHealthyReplicas(false);
         if (candidates.isEmpty()) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
+            candidates = getHealthyReplicas(true);
+            if (candidates.isEmpty()) {
+                throw new SchedException(Status.UNRECOVERABLE,
+                        "unable to find source replica. replicas: " + tablet.getReplicaInfos());
+            }    
         }
 
         // Shuffle the candidate list first so that we won't always choose the same replica with
@@ -702,7 +714,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (chosenReplica == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica(maybe no incomplete replica");
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "unable to choose dest replica(maybe no incomplete replica). replicas: " + tablet.getReplicaInfos());
         }
 
         // check if the dest replica has available slot
@@ -1005,7 +1018,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      * 1. SCHEDULE_FAILED: will keep the tablet RUNNING.
      * 2. UNRECOVERABLE: will remove the tablet from runningTablets.
      */
-    public void finishCloneTask(CloneTask cloneTask, TFinishTaskRequest request)
+    public void finishCloneTask(CloneTask cloneTask, TFinishTaskRequest request, TabletSchedulerStat stat)
             throws SchedException {
         Preconditions.checkState(state == State.RUNNING, state);
         Preconditions.checkArgument(cloneTask.getTaskVersion() == CloneTask.VERSION_2);
@@ -1099,10 +1112,20 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         if (request.isSetCopy_size()) {
             this.copySize = request.getCopy_size();
+            if (isIntraNodeBalance()) {
+                stat.counterCloneTaskIntraNodeCopyBytes.addAndGet(copySize);
+            } else {
+                stat.counterCloneTaskInterNodeCopyBytes.addAndGet(copySize);
+            }
         }
 
         if (request.isSetCopy_time_ms()) {
             this.copyTimeMs = request.getCopy_time_ms();
+            if (isIntraNodeBalance()) {
+                stat.counterCloneTaskIntraNodeCopyDurationMs.addAndGet(copyTimeMs);
+            } else {
+                stat.counterCloneTaskInterNodeCopyDurationMs.addAndGet(copyTimeMs);
+            }
         }
     }
 
@@ -1255,12 +1278,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.add(String.valueOf(srcPathHash));
         result.add(String.valueOf(destBackendId));
         result.add(String.valueOf(destPathHash));
-        result.add(String.valueOf(taskTimeoutMs));
+        result.add(String.valueOf(taskTimeoutMs)); // milliseconds
         result.add(TimeUtils.longToTimeString(createTime));
         result.add(TimeUtils.longToTimeString(lastSchedTime));
         result.add(TimeUtils.longToTimeString(lastVisitedTime));
         result.add(TimeUtils.longToTimeString(finishedTime));
-        result.add(copyTimeMs > 0 ? String.valueOf((double) copySize / copyTimeMs / 1000.0) : FeConstants.NULL_STRING);
+        result.add(copyTimeMs > 0 ?
+                String.valueOf((double) copySize * 1000.0 / copyTimeMs / 1048576.0) : FeConstants.NULL_STRING); // MB/s
         result.add(String.valueOf(failedSchedCounter));
         result.add(String.valueOf(failedRunningCounter));
         result.add(TimeUtils.longToTimeString(lastAdjustPrioTime));
@@ -1274,20 +1298,31 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public TTabletSchedule toTabletScheduleThrift() {
         TTabletSchedule result = new TTabletSchedule();
+        result.setTablet_id(tabletId);
         result.setTable_id(tblId);
         result.setPartition_id(physicalPartitionId);
-        result.setTablet_id(tabletId);
         result.setType(type.name());
-        result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");
         result.setState(state != null ? state.name() : "");
-        result.setTablet_status(tabletHealthStatus != null ? tabletHealthStatus.name() : "");
+        result.setSchedule_reason(getTabletScheduleStatus());
+        result.setMedium(storageMedium == null ? "" : storageMedium.name());
+        result.setPriority(dynamicPriority != null ? dynamicPriority.name() : "");
+        result.setOrig_priority(origPriority.name());
+        result.setLast_priority_adjust_time(lastAdjustPrioTime / 1000);
+        result.setVisible_version(visibleVersion);
+        result.setCommitted_version(committedVersion);
+        result.setSrc_be_id(srcReplica == null ? -1 : srcReplica.getBackendId());
+        result.setSrc_path(String.valueOf(srcPathHash));
+        result.setDest_be_id(destBackendId);
+        result.setDest_path(String.valueOf(destPathHash));
+        result.setTimeout(taskTimeoutMs / 1000); // seconds
         result.setCreate_time(createTime / 1000.0);
         result.setSchedule_time(lastSchedTime / 1000.0);
         result.setFinish_time(finishedTime / 1000.0);
-        result.setClone_src(srcReplica == null ? -1 : srcReplica.getBackendId());
-        result.setClone_dest(destBackendId);
         result.setClone_bytes(copySize);
-        result.setClone_duration(copyTimeMs / 1000.0);
+        result.setClone_duration(copyTimeMs / 1000.0); // seconds
+        result.setClone_rate(copyTimeMs > 0 ? (double) copySize * 1000.0 / copyTimeMs / 1048576.0 : 0); // MB/s
+        result.setFailed_schedule_count(failedSchedCounter);
+        result.setFailed_running_count(failedRunningCounter);
         result.setError_msg(errMsg);
         return result;
     }

@@ -34,18 +34,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.util.List;
-import java.util.Set;
 
 public class RandomDistributionDesc extends DistributionDesc {
     int numBucket;
@@ -60,35 +49,13 @@ public class RandomDistributionDesc extends DistributionDesc {
 
     public RandomDistributionDesc(int numBucket, NodePosition pos) {
         super(pos);
-        type = DistributionInfoType.RANDOM;
         this.numBucket = numBucket;
     }
 
-    @Override
-    public void analyze(Set<String> colSet) {
-        if (numBucket < 0) {
-            throw new SemanticException("Number of random distribution is zero.");
-        }
-    }
 
     @Override
     public int getBuckets() {
         return numBucket;
-    }
-
-    @Override
-    public DistributionInfo toDistributionInfo(List<Column> columns) {
-        return new RandomDistributionInfo(numBucket);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeInt(numBucket);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        numBucket = in.readInt();
     }
 
     @Override

@@ -45,6 +45,7 @@
 
 namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
+DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
@@ -160,6 +161,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {
                     _global_rf_descriptors.emplace_back(desc);
+#ifdef FIU_ENABLE
+                    FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
+#endif
+                    desc->add_observer(_runtime_state, &_observer);
                 }
             }
 
@@ -328,7 +333,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
                     curr_op->common_metrics()->add_info_string("ErrorMsg", std::string(return_status.message()));
-                    LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
+                    LOG_IF(WARNING, !return_status.is_suppressed())
+                            << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
 
@@ -532,9 +538,9 @@ void PipelineDriver::runtime_report_action() {
     _update_driver_level_timer();
 
     for (auto& op : _operators) {
-        COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +
-                                              op->_finishing_timer->value() + op->_finished_timer->value() +
-                                              op->_close_timer->value());
+        COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
+                                              COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +
+                                              COUNTER_VALUE(op->_close_timer));
         op->update_metrics(_fragment_ctx->runtime_state());
     }
 }
@@ -727,10 +733,11 @@ void PipelineDriver::_update_driver_level_timer() {
     COUNTER_SET(_total_timer, static_cast<int64_t>(_total_timer_sw->elapsed_time()));
 
     // Schedule Time
-    COUNTER_SET(_schedule_timer, _total_timer->value() - _active_timer->value() - _pending_timer->value());
+    COUNTER_SET(_schedule_timer,
+                COUNTER_VALUE(_total_timer) - COUNTER_VALUE(_active_timer) - COUNTER_VALUE(_pending_timer));
 
     // Overhead Time
-    int64_t overhead_time = _active_timer->value();
+    int64_t overhead_time = COUNTER_VALUE(_active_timer);
     RuntimeProfile* profile = _runtime_profile.get();
     std::vector<RuntimeProfile*> operator_profiles;
     profile->get_children(&operator_profiles);
@@ -738,8 +745,7 @@ void PipelineDriver::_update_driver_level_timer() {
         auto* common_metrics = operator_profile->get_child("CommonMetrics");
         DCHECK(common_metrics != nullptr);
         auto* total_timer = common_metrics->get_counter("OperatorTotalTime");
-        DCHECK(total_timer != nullptr);
-        overhead_time -= total_timer->value();
+        overhead_time -= COUNTER_VALUE(total_timer);
     }
 
     if (overhead_time < 0) {
@@ -754,7 +760,7 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
-    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx, true);
+    auto timer = std::make_unique<RFScanWaitTimeout>(true);
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
@@ -891,8 +897,9 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         QUERY_TRACE_SCOPED(op->get_name(), "close");
         op->close(state);
     }
-    COUNTER_SET(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() + op->_finishing_timer->value() +
-                                          op->_finished_timer->value() + op->_close_timer->value());
+    COUNTER_SET(op->_total_timer, COUNTER_VALUE(op->_pull_timer) + COUNTER_VALUE(op->_push_timer) +
+                                          COUNTER_VALUE(op->_finishing_timer) + COUNTER_VALUE(op->_finished_timer) +
+                                          COUNTER_VALUE(op->_close_timer));
     return Status::OK();
 }
 

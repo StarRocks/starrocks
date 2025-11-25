@@ -337,7 +337,9 @@ struct TQueryOptions {
 
   160: optional bool enable_join_runtime_filter_pushdown;
   161: optional bool enable_join_runtime_bitset_filter;
-  162: optional bool enable_hash_join_range_direct_mapping_opt
+  162: optional bool enable_hash_join_range_direct_mapping_opt;
+  163: optional bool enable_hash_join_linear_chained_opt;
+  164: optional bool enable_hash_join_serialize_fixed_size_string;
 
   170: optional bool enable_parquet_reader_bloom_filter;
   171: optional bool enable_parquet_reader_page_index;
@@ -346,6 +348,8 @@ struct TQueryOptions {
 
   190: optional i64 column_view_concat_rows_limit;
   191: optional i64 column_view_concat_bytes_limit;
+
+  200: optional bool enable_full_sort_use_german_string;
 }
 
 // A scan range plus the parameters needed to execute that scan.
@@ -409,6 +413,7 @@ struct TPlanFragmentExecParams {
 
   // Debug options: perform some action in a particular phase of a particular node
   74: optional list<TExecDebugOption> exec_debug_options
+
 }
 
 // Global query parameters assigned by the coordinator.
@@ -449,6 +454,7 @@ struct TAdaptiveDopParam {
 struct TPredicateTreeParams {
   1: optional bool enable_or
   2: optional bool enable_show_in_profile
+  3: optional i32 max_pushdown_or_predicates
 }
 
 // ExecPlanFragment
@@ -519,6 +525,10 @@ struct TExecPlanFragmentParams {
 struct TExecPlanFragmentResult {
   // required in V1
   1: optional Status.TStatus status
+
+  // short circuit optimization on `select limit`
+  // scan nodes that don't need any scan ranges.
+  2: optional list<i32> closed_scan_nodes;
 }
 
 struct TExecBatchPlanFragmentsParams {

@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "column/column_helper.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/group_reader.h"

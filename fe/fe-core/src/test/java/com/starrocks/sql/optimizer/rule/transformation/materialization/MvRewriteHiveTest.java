@@ -387,8 +387,8 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
         MaterializedView mv1 = getMv("test", "hive_unpartitioned_mv");
         MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
-        Set<String> toRefreshPartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
-        Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+        Set<String> toRefreshPartitions = mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
+        Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
         Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
         Assertions.assertEquals(0, toRefreshPartitions.size());
 
@@ -461,7 +461,7 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
         String plan = getFragmentPlan(query1, "MV");
-        PlanTestBase.assertNotContains(plan, "hive_partitioned_mv");
+        PlanTestBase.assertContains(plan, "hive_partitioned_mv");
         dropMv("test", "hive_partitioned_mv");
     }
 

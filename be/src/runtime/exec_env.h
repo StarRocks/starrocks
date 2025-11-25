@@ -107,6 +107,10 @@ namespace spill {
 class DirManager;
 }
 
+namespace connector {
+class ConnectorSinkSpillExecutor;
+}
+
 class GlobalEnv {
 public:
     static GlobalEnv* GetInstance() {
@@ -127,6 +131,7 @@ public:
 
     MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
+    std::shared_ptr<MemTracker> query_pool_mem_tracker_shared() { return _query_pool_mem_tracker; }
     MemTracker* connector_scan_pool_mem_tracker() { return _connector_scan_pool_mem_tracker.get(); }
     MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
@@ -156,7 +161,6 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
-    MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
@@ -230,9 +234,6 @@ private:
 
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
-
-    // The memory used for poco connection pool
-    std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };
@@ -310,6 +311,8 @@ public:
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
+
+    connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
@@ -407,6 +410,8 @@ private:
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
+
+    connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
     std::unique_ptr<ThreadPool> _automatic_partition_pool;
 

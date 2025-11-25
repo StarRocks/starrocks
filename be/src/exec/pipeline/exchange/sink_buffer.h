@@ -23,7 +23,6 @@
 #include <memory>
 #include <mutex>
 #include <queue>
-#include <thread>
 #include <unordered_set>
 
 #include "column/chunk.h"
@@ -31,7 +30,6 @@
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
-#include "runtime/data_stream_mgr_fwd.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
@@ -56,10 +54,8 @@ struct TransmitChunkInfo {
     TUniqueId fragment_instance_id;
     std::shared_ptr<PInternalService_RecoverableStub> brpc_stub;
     PTransmitChunkParamsPtr params;
-    ChunkPassThroughVectorPtr pass_through_chunks;
-    DataStreamMgr* stream_mgr;
     butil::IOBuf attachment;
-    int64_t physical_bytes;
+    int64_t attachment_physical_bytes;
     const TNetworkAddress brpc_addr;
 };
 
@@ -115,15 +111,6 @@ public:
         });
     }
 
-    // Similar to defer_notify, but only attempts to notify all observers when sink buffer is finished
-    auto finishing_defer() {
-        return DeferOp([this]() {
-            if (is_finished()) {
-                this->defer_notify();
-            }
-        });
-    }
-
     int64_t get_sent_bytes() const { return _bytes_sent; }
 
 private:
@@ -136,8 +123,6 @@ private:
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
     // _discontinuous_acked_seqs[x] stored the received discontinuous acks
     void _process_send_window(const TUniqueId& instance_id, const int64_t sequence);
-
-    Status _try_to_send_local(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
@@ -193,11 +178,6 @@ private:
         Mutex mutex;
 
         TNetworkAddress dest_addrs;
-
-        std::atomic_bool pass_through_blocked;
-
-        // currently only used for local send. Record the id of the thread that sent it.
-        std::thread::id owner_id{};
     };
     phmap::flat_hash_map<int64_t, std::unique_ptr<SinkContext>, StdHash<int64_t>> _sink_ctxs;
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
@@ -217,7 +197,7 @@ private:
     // So _num_sending_rpc is introduced to solve this problem by providing extra information
     // of how many threads are calling _try_to_send_rpc
     std::atomic<bool> _is_finishing = false;
-    std::atomic<int32_t> _num_sending = 0;
+    std::atomic<int32_t> _num_sending_rpc = 0;
 
     std::atomic<int64_t> _rpc_count = 0;
     std::atomic<int64_t> _rpc_cumulative_time = 0;

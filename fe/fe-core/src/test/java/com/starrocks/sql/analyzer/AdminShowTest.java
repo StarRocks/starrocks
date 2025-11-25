@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -64,12 +65,12 @@ public class AdminShowTest {
     @Test
     public void testDescribe() {
         DescribeStmt stmt = (DescribeStmt) analyzeSuccess("desc test.t0");
-        Assertions.assertEquals(6, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals(6, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
         Assertions.assertEquals("test", stmt.getDb());
         Assertions.assertEquals("t0", stmt.getTableName());
 
         stmt = (DescribeStmt) analyzeSuccess("desc test.t0 all");
-        Assertions.assertEquals(8, stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals(8, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
         Assertions.assertEquals("test", stmt.getDb());
         Assertions.assertEquals("t0", stmt.getTableName());
         Assertions.assertTrue(stmt.isAllTables());

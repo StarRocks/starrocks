@@ -102,7 +102,8 @@ enum TPrimitiveType {
   FUNCTION,
   VARBINARY,
   DECIMAL256,
-  INT256
+  INT256,
+  VARIANT
 }
 
 enum TTypeNodeType {
@@ -600,6 +601,7 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+    102: optional bool is_rewrite;
 }
 
 struct TSnapshotInfo {
@@ -625,4 +627,21 @@ struct TParquetOptions {
     3: optional bool use_dict
     // for files table function
     4: optional string version
+}
+
+struct TVariant {
+    1: optional TTypeDesc type
+    2: optional i64 int_value
+    3: optional string string_value
+}
+
+struct TTuple {
+    1: optional list<TVariant> values
+}
+
+struct TTabletRange {
+    1: optional TTuple lower_bound
+    2: optional TTuple upper_bound
+    3: optional bool lower_bound_included
+    4: optional bool upper_bound_included
 }

@@ -24,7 +24,7 @@ namespace starrocks::csv {
 Status DateConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                    const Options& options) const {
     auto date_column = down_cast<const FixedLengthColumn<DateValue>*>(&column);
-    return os->write(date_column->get_data()[row_num]);
+    return os->write(date_column->immutable_data()[row_num]);
 }
 
 Status DateConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,

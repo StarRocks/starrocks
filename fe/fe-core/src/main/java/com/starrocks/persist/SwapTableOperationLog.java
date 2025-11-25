@@ -15,12 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class SwapTableOperationLog implements Writable {
     @SerializedName(value = "dbId")
@@ -48,10 +43,4 @@ public class SwapTableOperationLog implements Writable {
         return newTblId;
     }
 
-
-
-    public static SwapTableOperationLog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SwapTableOperationLog.class);
-    }
 }

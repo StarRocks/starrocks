@@ -35,14 +35,11 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -50,11 +47,14 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -94,9 +94,9 @@ public class StreamLoadPlannerTest {
     @Test
     public void testNormalPlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, false);
+        Column c1 = new Column("c1", IntegerType.BIGINT, false);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
         columns.add(c2);
         new Expectations() {
             {
@@ -133,9 +133,9 @@ public class StreamLoadPlannerTest {
     @Test
     public void testPartialUpdatePlan() throws StarRocksException {
         List<Column> columns = Lists.newArrayList();
-        Column c1 = new Column("c1", Type.BIGINT, false);
+        Column c1 = new Column("c1", IntegerType.BIGINT, false);
         columns.add(c1);
-        Column c2 = new Column("c2", Type.BIGINT, true);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
         columns.add(c2);
         new Expectations() {
             {

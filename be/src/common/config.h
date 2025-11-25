@@ -58,6 +58,19 @@ CONF_String(ssl_private_key_path, "");
 // The max number of single connections maintained by the brpc client and each server.
 // These connections are created during the first few access and will be used thereafter
 CONF_Int32(brpc_max_connections_per_server, "1");
+// BRPC stub cache expire configurations
+// The expire time of BRPC stub cache, default 60 minutes.
+CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
+
+// Whether to resolve backend hostnames to IP addresses in generated error URLs.
+// - true: StarRocks will attempt to resolve hostnames to IPs.
+//  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)
+//  are not resolvable from the client’s network, so you can curl or open the
+//   error URL directly.
+// - false (default) : Keep the original hostname in the error URL.
+//  Recommended if your DNS setup already allows resolving backend hostnames
+//  across your network, or if IP-based access is unstable (e.g., NAT environments).
+CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
 
 // Declare a selection strategy for those servers have many ips.
 // Note that there should at most one ip match this list.
@@ -209,6 +222,8 @@ CONF_Strings(sys_log_verbose_modules, "");
 CONF_Int32(sys_log_verbose_level, "10");
 // The log buffer level.
 CONF_String(log_buffer_level, "");
+// Whether to show timezone in log prefix.
+CONF_Bool(sys_log_timezone, "false");
 
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
@@ -309,6 +324,8 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+CONF_mBool(enable_zero_copy_from_page_cache, "true");
+
 // Page cache is the cache for the decompressed or decoded page of data file.
 // Currently, BE does not support configure the upper limit of the page cache.
 // The memory limit of page cache are uniformly restricted by datacache_mem_size.
@@ -322,6 +339,14 @@ CONF_mBool(enable_bitmap_index_memory_page_cache, "true");
 CONF_mBool(enable_zonemap_index_memory_page_cache, "true");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "true");
+
+// ========================== ZONEMAP BEGIN ===================================
+// Enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max
+CONF_mBool(enable_string_prefix_zonemap, "true");
+// Prefix length used for string ZoneMap min/max when enabled
+CONF_mInt32(string_prefix_zonemap_prefix_len, "16");
+
+// ========================== ZONEMAP END ===================================
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
@@ -398,6 +423,11 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
+// Enable parallel execution within tablet for primary key tables.
+CONF_mBool(enable_pk_parallel_execution, "true");
+// The minimum threshold of data size for enabling pk parallel execution.
+// Default is 300MB.
+CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -561,12 +591,16 @@ CONF_Bool(use_mmap_allocate_chunk, "false");
 
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
+// The directory of the flamegraph tool, which should contains pprof, stackcollapse-go.pl, and flamegraph.pl.
+CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
+
+CONF_Bool(enable_jvm_metrics, "false");
 
 CONF_mBool(enable_prefetch, "true");
 
@@ -759,8 +793,14 @@ CONF_mBool(brpc_load_ignore_overcrowded, "true");
 CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // The tablet map shard size, the value must be power of two.
-// this is an enhancement for better performance to manage tablet.
-CONF_Int32(tablet_map_shard_size, "32");
+//
+// It is the total number of slots pre-allocated by TabletManager in shared-nothing mode.
+// All the tablets hosted on the backend will be hashed and put into the corresponding slots.
+// Tablets in the same slots shares the single mutex for R/W ops from TabletManager.
+// Increasing this number would greatly reduce the lock contention between tablets in the same slot.
+// Recommended setting:
+//   tablet_map_shard_size = total_num_of_tablets_in_BE / 512
+CONF_Int32(tablet_map_shard_size, "1024");
 // The value must be power of two.
 CONF_Int32(pk_index_map_shard_size, "4096");
 
@@ -855,10 +895,19 @@ CONF_mInt32(tablet_max_pending_versions, "1000");
 // NOTE: it will be deleted.
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
-// pipeline poller timeout guard
+// pipeline poller timeout guard. Suggested Value: 500
 CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
-// pipeline fragment prepare timeout guard
+// pipeline fragment prepare timeout guard. Suggested Value: 1000
 CONF_mInt64(pipeline_prepare_timeout_guard_ms, "-1");
+// pipeline process timeout guard. Suggested Value: 5000
+CONF_mInt64(pipeline_process_timeout_guard_ms, "-1");
+// pipeline scan timeout guard. Suggested Value: 10000
+CONF_mInt64(pipeline_scan_timeout_guard_ms, "-1");
+// pipeline runtime filter worker timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
+// pipeline datastream timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
+
 // whether to enable large column detection in the pipeline execution framework.
 CONF_mBool(pipeline_enable_large_column_checker, "false");
 
@@ -914,6 +963,9 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
+
+// Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
+CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 
 // The bitmap serialize version.
 CONF_Int16(bitmap_serialize_version, "1");
@@ -991,7 +1043,7 @@ CONF_mInt32(orc_writer_version, "-1");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
-CONF_Bool(parquet_late_materialization_enable, "true");
+CONF_mBool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
@@ -1073,6 +1125,8 @@ CONF_Int64(rpc_connect_timeout_ms, "30000");
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
+// Valid example: jaeger_endpoint = localhost:14268
+// Invalid example: jaeger_endpoint = http://localhost:14268
 CONF_String(jaeger_endpoint, "");
 
 // Config for query debug trace
@@ -1131,6 +1185,7 @@ CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_tim
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1158,10 +1213,14 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
+CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
-CONF_mBool(lake_clear_corrupted_cache, "true");
+// clear *.meta cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_meta, "true");
+// clear *.data cache for lake table
+CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
@@ -1273,19 +1332,8 @@ CONF_Bool(datacache_block_buffer_enable, "true");
 // To control how many threads will be created for datacache synchronous tasks.
 // For the default value, it means for every 8 cpu, one thread will be created.
 CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
-// To control whether cache raw data both in memory and disk.
-// If true, the raw data will be written to the tiered cache composed of memory cache and disk cache,
-// and the memory cache hotter data than disk.
-// If false, the raw data will be written to disk directly and read from disk without promotion.
-// For object data, such as parquet footer object, which can only be cached in memory are not affected
-// by this configuration.
-CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
-// DataCache engines, alternatives: starcache, lrucache
-// Set the default value empty to indicate whether it is manually configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_STARCACHE".
-CONF_String_enum(datacache_engine, "", ",starcache,lrucache");
 // The interval time (millisecond) for agent report datacache metrics to FE.
 CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
@@ -1306,8 +1354,8 @@ CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
 // The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
 // cache quota will be reset to zero to avoid overly frequent population and eviction.
-// Default: 100G
-CONF_mInt64(datacache_min_disk_quota_for_adjustment, "107374182400");
+// Default: 10G
+CONF_mInt64(datacache_min_disk_quota_for_adjustment, "10737418240");
 // The maximum inline cache item count in datacache.
 // When a cache item has a tiny data size, we will try to cache it inline with its metadata
 // to optimize the io performance and reduce disk waste.
@@ -1319,7 +1367,7 @@ CONF_mInt64(datacache_mem_adjust_period, "20");
 // Sleep time in seconds between datacache adjust iterations.
 CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
 
-CONF_Int32(datacache_inline_item_count_limit, "130172");
+CONF_mInt32(datacache_inline_item_count_limit, "130172");
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
 // The eviction policy for datacache, alternatives: [lru, slru].
@@ -1339,7 +1387,6 @@ CONF_Alias(datacache_block_size, block_cache_block_size);
 CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
 CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
 CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
-CONF_Alias(datacache_engine, block_cache_engine);
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 // max wal file size in l0
@@ -1510,8 +1557,10 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
 
 CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
 CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// ======================= FLAT JSON start ==============================================
 // json flat flag
-CONF_mBool(enable_json_flat, "false");
+CONF_mBool(enable_json_flat, "true");
 
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
@@ -1538,13 +1587,14 @@ CONF_mDouble(json_flat_complex_type_factor, "0.3");
 CONF_mDouble(json_flat_null_factor, "0.3");
 
 // extract flat json column when row_num * sparsity_factor < hit_row_num
-CONF_mDouble(json_flat_sparsity_factor, "0.9");
+CONF_mDouble(json_flat_sparsity_factor, "0.3");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+// ======================= FLAT JSON end ==============================================
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0
@@ -1587,7 +1637,9 @@ CONF_mBool(apply_del_vec_after_all_index_filter, "true");
 // connector sink memory watermark
 CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
 CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
-CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.1");
+CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.05");
+// Whether enable spill intermediate data for connector sink.
+CONF_mBool(enable_connector_sink_spill, "true");
 
 // .crm file can be removed after 1day.
 CONF_mInt32(unused_crm_file_threshold_second, "86400" /** 1day **/);
@@ -1697,6 +1749,10 @@ CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 CONF_mInt64(load_spill_merge_max_thread, "16");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
+// Batch size for column mode partial update when processing insert rows.
+// If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
+// Default is 4096.
+CONF_mInt32(column_mode_partial_update_insert_batch_size, "4096");
 
 // ignore union type tag in avro kafka routine load
 CONF_mBool(avro_ignore_union_type_tag, "true");
@@ -1724,8 +1780,18 @@ CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
 
+// modules that code segments need to be mlocked, separated by commas
+// locked pages will not be swapped out
+CONF_Strings(sys_mlock_modules, "main,linux-vdso.so.1,libjemalloc.so.2,libc.so.6,libm.so.6,ld-linux-x86-64.so.2");
+
 CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 
 // when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
 CONF_mInt64(two_level_memory_threshold, "-1");
+
+CONF_Int32(llm_max_queue_size, "4096");
+
+CONF_Int32(llm_max_concurrent_queries, "8");
+
+CONF_Int32(llm_cache_size, "131072");
 } // namespace starrocks::config

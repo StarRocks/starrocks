@@ -4,7 +4,7 @@
 
 ARG GCC_INSTALL_HOME=/opt/rh/gcc-toolset-10/root/usr
 ARG GCC_10_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-10.3.0/gcc-10.3.0.tar.gz
-ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.gz
+ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.3.0/gcc-14.3.0.tar.gz
 ARG CMAKE_INSTALL_HOME=/opt/cmake
 ARG MAVEN_VERSION=3.6.3
 ARG JDK_INSTALL_HOME=/opt/jdk17
@@ -13,6 +13,7 @@ ARG MAVEN_INSTALL_HOME=/opt/maven
 ARG BINUTILS_DOWNLOAD_URL=https://ftp.gnu.org/gnu/binutils/binutils-2.30.tar.bz2
 # install epel-release directly from the url link
 ARG EPEL_RPM_URL=https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/Packages/e/epel-release-7-14.noarch.rpm
+ARG COMMIT_ID=unset
 
 FROM centos:centos7 AS fixed-centos7-image
 # Fix the centos mirrorlist, due to official list is gone after EOL
@@ -67,12 +68,15 @@ ARG JDK_INSTALL_HOME
 ARG MAVEN_VERSION
 ARG MAVEN_INSTALL_HOME
 ARG EPEL_RPM_URL
+ARG COMMIT_ID
 
-LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
+LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
+LABEL com.starrocks.commit=${COMMIT_ID}
 
 RUN yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && yum install -y gh && \
         yum install -y ${EPEL_RPM_URL} && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
         libtool which git ccache binutils-devel python3 file less psmisc && \
+        localedef --no-archive -i en_US -f UTF-8 en_US.UTF-8 && \
         yum clean all && rm -rf /var/cache/yum
 
 # install gcc
@@ -81,7 +85,7 @@ COPY --from=gcc-builder /workspace/installed/ /
 COPY --from=binutils-builder /workspace/installed/ /
 # install cmake
 RUN ARCH=`uname -m` && mkdir -p $CMAKE_INSTALL_HOME && cd $CMAKE_INSTALL_HOME && \
-    curl -s -k https://cmake.org/files/v3.22/cmake-3.22.4-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
+    curl -s -k https://cmake.org/files/v3.31/cmake-3.31.9-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
     ln -s $CMAKE_INSTALL_HOME/bin/cmake /usr/bin/cmake
 
 # install jdk17

@@ -29,20 +29,20 @@ REFRESH DEFERRED MANUAL AS
 
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
 -- TODO
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
 -- TODO
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
 
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt order by dt;
@@ -59,27 +59,27 @@ SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt or
 
 -- union rewrite
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use mv_mysql_db_${uuid0}; INSERT INTO t1 VALUES (3,"2020-06-15");'
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
 
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
 -- cannot partition prune
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
 
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-15' and '2020-07-01' GROUP BY dt;", "test_mv1", "UNION")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1", "UNION")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-15' and '2020-07-01' GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1", "UNION")
 -- cannot partition prune
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1", "UNION")
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1", "UNION")
 
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt order by dt;
@@ -106,20 +106,20 @@ REFRESH DEFERRED MANUAL AS
   SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
 -- TODO
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
 -- TODO
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
 
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt order by dt;
@@ -137,26 +137,26 @@ SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt or
 -- union rewrite
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use mv_mysql_db_${uuid0}; INSERT INTO t1 VALUES (3,"2020-06-15");'
 alter materialized view test_mv1 set('query_rewrite_consistency' = 'loose');
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
 
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
 -- cannot partition prune
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-15' and '2020-07-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt between '2020-06-15' and '2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
 -- cannot partition prune
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
 
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 SELECT dt,sum(num) FROM mv_mysql_${uuid0}.mv_mysql_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt order by dt;

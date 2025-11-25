@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.connector.Connector;
@@ -71,7 +70,9 @@ public class HiveTableSink extends DataSink {
         } else {
             this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
+            sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,

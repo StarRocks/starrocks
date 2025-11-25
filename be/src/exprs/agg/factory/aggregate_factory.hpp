@@ -36,6 +36,7 @@
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
+#include "exprs/agg/histogram_hll_ndv.h"
 #include "exprs/agg/hll_ndv.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
@@ -201,7 +202,11 @@ public:
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
+    static AggregateFunctionPtr MakePercentileApproxArrayAggregateFunction();
+
     static AggregateFunctionPtr MakePercentileApproxWeightedAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileApproxWeightedArrayAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
@@ -258,6 +263,11 @@ public:
     template <LogicalType LT>
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<LT>>();
+    }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeHistogramHllNdvAggregationFunction() {
+        return std::make_shared<HistogramHllNdvAggregateFunction<LT>>();
     }
 
     // Stream MV Retractable Agg Functions

@@ -14,7 +14,7 @@
 
 package com.starrocks.connector.parser.trino;
 
-import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.ParsingException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +53,7 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
     // refer to https://trino.io/docs/current/language/types.html#interval-year-to-month
     @Test
     public void testIntervalDataType() {
-        assertThrows(StarRocksPlannerException.class, () -> {
+        assertThrows(ParsingException.class, () -> {
             // StarRocks do not support this query.
             String sql = "select INTERVAL '2' DAY";
             // It will throw exception in optimize stage

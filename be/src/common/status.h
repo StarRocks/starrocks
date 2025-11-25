@@ -223,6 +223,10 @@ public:
 
     bool is_not_authorized() const { return code() == TStatusCode::NOT_AUTHORIZED; }
 
+    bool is_global_dict_error() const { return code() == TStatusCode::GLOBAL_DICT_ERROR; }
+
+    bool is_suppressed() const { return is_global_dict_error(); }
+
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
     template <typename T>

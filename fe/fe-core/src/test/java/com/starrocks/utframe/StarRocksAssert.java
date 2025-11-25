@@ -40,12 +40,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -56,6 +54,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -76,8 +75,8 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -90,6 +89,7 @@ import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -123,9 +123,11 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.BackendResourceStat;
@@ -348,7 +350,7 @@ public class StarRocksAssert {
         TypeDef returnType = createFunctionStmt.getReturnType();
         // check argument
         argsDef.analyze();
-        returnType.analyze();
+        TypeDefAnalyzer.analyze(returnType);
 
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
@@ -831,7 +833,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.accept(mvName);
         } catch (Exception e) {
-            Assertions.fail();
+            Assertions.fail(e.getMessage());
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {
@@ -996,7 +998,7 @@ public class StarRocksAssert {
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
             taskRun.executeTaskRun();
-            waitingTaskFinish(taskRun);
+            waitTaskRunFinish(taskRun);
         }
         return this;
     }
@@ -1023,6 +1025,21 @@ public class StarRocksAssert {
         }
         return taskRun == null;
     }
+
+    private void waitTaskRunFinish(TaskRun taskRun) {
+        MVTaskRunProcessor mvTaskRunProcessor = (MVTaskRunProcessor) taskRun.getProcessor();
+        MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
+        int retryCount = 0;
+        int maxRetry = 50;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(200L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
+        }
+    }
+
 
     /**
      * Refresh materialized view asynchronously.
@@ -1055,19 +1072,6 @@ public class StarRocksAssert {
         getCtx().executeSql(sql);
         waitRefreshFinished(mv.getId());
         return this;
-    }
-
-    private void waitingTaskFinish(TaskRun taskRun) {
-        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
-        int retryCount = 0;
-        int maxRetry = 5;
-        while (retryCount < maxRetry) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
-                break;
-            }
-            retryCount++;
-        }
     }
 
     public void updateTablePartitionVersion(String dbName, String tableName, long version) {
@@ -1279,14 +1283,14 @@ public class StarRocksAssert {
         public void analysisError(String... keywords) {
             try {
                 explainQuery();
-            } catch (AnalysisException | StarRocksPlannerException analysisException) {
+            } catch (AnalysisException | StarRocksPlannerException | ParsingException analysisException) {
                 Assertions.assertTrue(Stream.of(keywords).allMatch(analysisException.getMessage()::contains),
                             analysisException.getMessage());
                 return;
             } catch (Exception ex) {
                 Assertions.fail();
             }
-            Assertions.fail();
+            Assertions.fail("expect error but actually succeed");
         }
     }
 

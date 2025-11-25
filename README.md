@@ -39,7 +39,8 @@
 </div>
 StarRocks is the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
 
-Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData)
+Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData), 
+Join [StarRocks Summit 2025](https://summit.starrocks.io/2025)!
 
 <br>
  <p align="center">
@@ -129,13 +130,19 @@ This project is used by the following companies. Learn more about their use case
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
 - [Airtable](https://medium.com/airtable-eng/live-shard-data-archive-export-and-ingestion-to-starrocks-for-validation-6af555e8b3fe)
+- [Alibaba](https://www.youtube.com/watch?v=7N34q65mthk)
+- [Celonis](https://www.youtube.com/watch?v=Jm-D0xvOtek)
+- [Cisco](https://www.starrocks.io/blog/how-cisco-webex-unified-real-time-analytics-with-starrocks)
 - [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
 - [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks)
 - [Eightfold.ai](https://www.youtube.com/watch?v=qNk_-QTZk3E)
 - [Fanatics](https://www.youtube.com/watch?v=hbXovqR6tOc)
+- [Fresha](https://medium.com/fresha-data-engineering/how-we-accidentally-became-one-of-uks-first-starrocks-production-pioneers-7db249f10010)
 - [Grab](https://engineering.grab.com/building-a-spark-observability)
+- [Haezoom](https://www.starrocks.io/blog/haezoom-and-cloudshift-overcome-apache-druids-limits-with-starrocks)
 - [HerdWatch](https://medium.com/p/a7916a7e87bf)
+- [Intuit](https://www.youtube.com/watch?v=tUC3FS3ki10)
 - [iQiyi](https://medium.com/starrocks-engineering/real-time-analytics-at-scale-why-we-use-starrocks-0aa3c859cbeb)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)

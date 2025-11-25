@@ -21,6 +21,7 @@
 namespace starrocks {
 
 using NullData = FixedLengthColumn<uint8_t>::Container;
+using ImmutableNullData = FixedLengthColumn<uint8_t>::ImmContainer;
 using NullColumn = FixedLengthColumn<uint8_t>;
 using NullColumnPtr = NullColumn::Ptr;
 using NullColumns = std::vector<NullColumnPtr>;
@@ -92,6 +93,7 @@ public:
 
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
+    bool is_variant() const override { return _data_column->is_variant(); }
     bool is_array() const override { return _data_column->is_array(); }
     bool is_array_view() const override { return _data_column->is_array_view(); }
 
@@ -209,8 +211,8 @@ public:
         return create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
-    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) const override;
+    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
+                                       size_t start, size_t count) const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
@@ -249,8 +251,8 @@ public:
     const NullColumn& null_column_ref() const { return *_null_column; }
 
     NullData& null_column_data() { return _null_column->get_data(); }
-    const NullData& null_column_data() const { return _null_column->get_data(); }
-    const NullData& immutable_null_column_data() const { return _null_column->get_data(); }
+    const ImmutableNullData null_column_data() const { return _null_column->immutable_data(); }
+    const ImmutableNullData immutable_null_column_data() const { return _null_column->immutable_data(); }
 
     const Column* immutable_data_column() const { return _data_column.get(); }
 

@@ -280,6 +280,117 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 
 Tablet Scheduler 调度 Tablet 时，会选择一定数量的正常 Tablet 作为候选 Tablet。调度 Tablet 时，Tablet Scheduler 会通过 Load Balancer 平衡这些正常的 Tablet。
 
+### 查看系统均衡状态
+
+您可以查看系统当前总体的均衡状态及不同均衡类型的详细情况。
+
+- **查看系统当前总体的均衡状态：**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/balance_stat';
+  ```
+
+  示例：
+
+  ```Plain
+  +---------------+--------------------------------+----------+----------------+----------------+
+  | StorageMedium | BalanceType                    | Balanced | PendingTablets | RunningTablets |
+  +---------------+--------------------------------+----------+----------------+----------------+
+  | HDD           | inter-node disk usage          | true     | 0              | 0              |
+  | HDD           | inter-node tablet distribution | true     | 0              | 0              |
+  | HDD           | intra-node disk usage          | true     | 0              | 0              |
+  | HDD           | intra-node tablet distribution | true     | 0              | 0              |
+  | HDD           | colocation group               | true     | 0              | 0              |
+  | HDD           | label-aware location           | true     | 0              | 0              |
+  +---------------+--------------------------------+----------+----------------+----------------+
+  ```
+
+  - `StorageMedium`：存储介质。
+  - `BalanceType`：均衡类型。
+  - `Balanced`：是否均衡。
+  - `PendingTablets`：任务状态为 Pending 的 Tablet 数。
+  - `RunningTablets`：任务状态为 Running 的 Tablet 数。
+
+- **查看按节点之间磁盘使用率的均衡情况：**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/cluster_load_stat';
+  ```
+
+  示例：
+
+  ```Plain
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  | StorageMedium | ClusterDiskBalanceStat                                                                                               |
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  | HDD           | {"balanced":false,"maxBeId":1,"minBeId":2,"maxUsedPercent":0.9,"minUsedPercent":0.1,"type":"INTER_NODE_DISK_USAGE"}  |
+  | SSD           | {"balanced":true}                                                                                                    |
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `StorageMedium`：存储介质。
+  - `ClusterDiskBalanceStat`：节点之间基于磁盘使用率的均衡情况。如果不均衡，则显示磁盘最大最小使用率及对应的 BE。
+
+- **查看按节点内部磁盘使用率的均衡情况：**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/cluster_load_stat/HDD';
+  ```
+
+  示例：
+
+  ```Plain
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | BeId  | Cluster         | Available | UsedCapacity | Capacity     | UsedPercent | ReplicaNum | CapCoeff | ReplCoeff | Score | Class | BackendDiskBalanceStat                                                                                                                      |
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | 10004 | default_cluster | true      | 651509602    | 243695955810 | 0.267       | 339        | 0.5      | 0.5       | 1.0   | MID   | {"maxUsedPercent":0.9,"minUsedPercent":0.1,"beId":1,"maxPath":"/disk1","minPath":"/disk2","type":"INTRA_NODE_DISK_USAGE","balanced":false}  |
+  | 10005 | default_cluster | true      | 651509602    | 243695955810 | 0.267       | 339        | 0.5      | 0.5       | 1.0   | MID   | {"balanced":true}                                                                                                                           |
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `BeId`：BE 节点 ID。
+  - `BackendDiskBalanceStat`：节点内磁盘之间基于磁盘使用率的均衡情况。如果不均衡，则显示磁盘最大最小使用率及对应的磁盘路径。
+
+- **查看按 tablet 分布的均衡情况：**
+
+  ```SQL
+  SHOW PROC '/dbs/ssb/lineorder/partitions/lineorder';
+  ```
+
+  示例：
+
+  ```Plain
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  | IndexId | IndexName | State  | LastConsistencyCheckTime | TabletBalanceStat                                                                                                                                  |
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  | 11129   | lineorder | NORMAL | NULL                     | {"maxTabletNum":23,"minTabletNum":21,"maxBeId":10012,"minBeId":10013,"type":"INTER_NODE_TABLET_DISTRIBUTION","balanced":false}                     |
+  | 11230   | lineorder | NORMAL | NULL                     | {"maxTabletNum":23,"minTabletNum":21,"beId":10012,"maxPath":"/disk1","minPath":"/disk2","type":"INTRA_NODE_TABLET_DISTRIBUTION","balanced":false}  |
+  | 10432   | lineorder | NORMAL | NULL                     | {"tabletId":10435,"currentBes":[10002,10004],"expectedBes":[10003,10004],"type":"COLOCATION_GROUP","balanced":false}                               |
+  | 10436   | lineorder | NORMAL | NULL                     | {"tabletId":10438,"currentBes":[10005,10006],"expectedLocations":{"rack":["rack1","rack2"]},"type":"LABEL_AWARE_LOCATION","balanced":false}        |
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `IndexId`：分区内 Materialized Index 的 ID。
+  - `TabletBalanceStat`：节点之间或者节点内部 Tablet 分布的均衡情况。如果不均衡，则显示不均衡的具体情况,包括 Colocation Group、Label-aware Location。
+
+- **查看 Tablet 分布不均衡的分区：**
+
+  ```SQL
+  SELECT DB_NAME, TABLE_NAME, PARTITION_NAME, TABLET_BALANCED FROM information_schema.partitions_meta WHERE TABLET_BALANCED = 0;
+  ```
+
+  示例：
+
+  ```Plain
+  +--------------+---------------+----------------+-----------------+
+  | DB_NAME      | TABLE_NAME    | PARTITION_NAME | TABLET_BALANCED |
+  +--------------+---------------+----------------+-----------------+
+  | ssb          | lineorder     | lineorder      |               0 |
+  +--------------+---------------+----------------+-----------------+
+  ```
+
+  - `TABLET_BALANCED`：Tablet 分布是否均衡。
+
 ### 查看 Tablet 调度任务
 
 您可以查看状态为等待执行、正在执行或已完成的 Tablet 调度任务。

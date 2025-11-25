@@ -15,12 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class DropCatalogLog implements Writable {
 
@@ -35,9 +30,4 @@ public class DropCatalogLog implements Writable {
         return catalogName;
     }
 
-
-
-    public static DropCatalogLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), DropCatalogLog.class);
-    }
 }

@@ -14,9 +14,7 @@
 
 #pragma once
 
-#include <any>
-
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/exec_node.h"
 
 namespace starrocks {

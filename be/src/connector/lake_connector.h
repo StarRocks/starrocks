@@ -55,6 +55,11 @@ public:
         _reader->get_split_tasks(split_tasks);
     }
 
+    // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
+    // generates predicates by ScanConjunctsManager, so skip parse_runtime_filters to make the parse logic is consistent
+    // to the share-nothing mode.
+    Status parse_runtime_filters(RuntimeState* state) override { return Status::OK(); }
+
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
@@ -66,8 +71,9 @@ private:
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
-    void update_counter();
+    void update_counter(RuntimeState* state);
 
+    Status _extend_schema_by_access_paths();
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -181,8 +187,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 
     RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
     RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;

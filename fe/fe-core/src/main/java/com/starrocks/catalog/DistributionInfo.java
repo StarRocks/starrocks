@@ -35,13 +35,10 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.DistributionDesc;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +46,8 @@ public abstract class DistributionInfo implements Writable {
 
     public enum DistributionInfoType {
         HASH,
-        RANDOM
+        RANDOM,
+        RANGE
     }
 
     // for Gson runtime type adaptor
@@ -99,12 +97,6 @@ public abstract class DistributionInfo implements Writable {
     public DistributionInfo copy() {
         throw new NotImplementedException();
     }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-    }
-
     public String toSql(Map<ColumnId, Column> idToColumn) {
         return "";
     }

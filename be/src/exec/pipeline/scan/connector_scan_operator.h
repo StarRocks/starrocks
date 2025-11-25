@@ -67,6 +67,7 @@ public:
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
+    const std::vector<TBucketProperty>& get_bucket_properties() const override;
     void set_chunk_source_mem_bytes(int64_t mem_bytes);
     void set_scan_mem_limit(int64_t scan_mem_limit);
     void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
@@ -127,6 +128,8 @@ public:
     }
     std::string get_name() const override;
     bool need_notify_all() override;
+
+    int64_t get_scan_table_id() const override;
 
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);

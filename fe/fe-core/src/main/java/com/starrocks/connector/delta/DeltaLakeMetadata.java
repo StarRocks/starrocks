@@ -23,6 +23,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -32,7 +34,6 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
@@ -123,7 +124,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String dbName = deltaLakeTable.getCatalogDBName();
         String tableName = deltaLakeTable.getCatalogTableName();
         PredicateSearchKey key =
-                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
+                PredicateSearchKey.of(dbName, tableName, params);
 
         triggerDeltaLakePlanFilesIfNeeded(key, table, params.getPredicate(), params.getFieldNames());
 
@@ -138,13 +139,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
-        return buildRemoteInfoSource(table, params.getPredicate(), false);
+        return buildRemoteInfoSource(table, params);
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
-                                         TableVersionRange versionRange) {
+                                         TvrVersionRange versionRange) {
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
@@ -155,7 +156,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         String tableName = deltaLakeTable.getCatalogTableName();
         Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
-        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);
+
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(snapshot.getVersion(engine)))
+                .setPredicate(predicate)
+                .setLimit(limit)
+                .build();
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, params);
 
         DeltaUtils.checkProtocolAndMetadata(snapshot.getProtocol(), snapshot.getMetadata());
 
@@ -236,7 +243,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
                 DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
                 return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
-                                estimateRowSize, dv);
+                        estimateRowSize, dv);
             }
 
             private void ensureOpen() {
@@ -264,9 +271,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         };
     }
 
-    private RemoteFileInfoSource buildRemoteInfoSource(Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
+    private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {
         Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
-                buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
+                buildFileScanTaskIterator(table, params.getPredicate(), params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {

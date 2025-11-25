@@ -39,7 +39,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class ConsistencyCheckInfo implements Writable {
@@ -112,21 +111,6 @@ public class ConsistencyCheckInfo implements Writable {
         return isConsistent;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        out.writeLong(physicalPartitionId);
-        out.writeLong(indexId);
-        out.writeLong(tabletId);
-
-        out.writeLong(lastCheckTime);
-        out.writeLong(checkedVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-
-        out.writeBoolean(isConsistent);
-    }
-
     public void readFields(DataInput in) throws IOException {
         dbId = in.readLong();
         tableId = in.readLong();
@@ -139,12 +123,6 @@ public class ConsistencyCheckInfo implements Writable {
         in.readLong(); // read a version_hash for compatibility
 
         isConsistent = in.readBoolean();
-    }
-
-    public static ConsistencyCheckInfo read(DataInput in) throws IOException {
-        ConsistencyCheckInfo info = new ConsistencyCheckInfo();
-        info.readFields(in);
-        return info;
     }
 
     @Override

@@ -1574,7 +1574,7 @@ public:
         if constexpr (is_directly_copyable<SrcType, DstType>) {
             if (!src.is_nullable() && !src.is_constant()) {
                 auto* dst_column = down_cast<DstColumnType*>(dst.get());
-                auto* src_column = down_cast<const SrcColumnType*>(&src);
+                auto* src_column = down_cast<SrcColumnType*>(const_cast<Column*>(&src));
                 // TODO (by satanson): unsafe abstraction leak
                 //  swap std::vector<DecimalV2Value> and std::vector<int128_t>,
                 //  raw memory copy is more sound.
@@ -1638,6 +1638,7 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
             TYPE_CASE_CLAUSE(TYPE_OBJECT)
             TYPE_CASE_CLAUSE(TYPE_PERCENTILE)
             TYPE_CASE_CLAUSE(TYPE_JSON)
+            TYPE_CASE_CLAUSE(TYPE_VARIANT)
             TYPE_CASE_CLAUSE(TYPE_VARBINARY)
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:

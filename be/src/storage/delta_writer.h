@@ -249,7 +249,7 @@ private:
 
     void _garbage_collection();
 
-    void _reset_mem_table();
+    Status _reset_mem_table();
 
     void _set_state(State state, const Status& st);
 
@@ -288,6 +288,7 @@ private:
     int64_t _write_buffer_size = 0;
 
     DeltaWriterStat _stats;
+    bool _is_shadow = false;
 };
 
 } // namespace starrocks

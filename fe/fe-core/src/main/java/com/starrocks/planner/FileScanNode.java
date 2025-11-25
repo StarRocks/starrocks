@@ -38,25 +38,12 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -72,8 +59,18 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -91,6 +88,8 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -300,7 +299,7 @@ public class FileScanNode extends LoadScanNode {
             String path = filePaths.get(0);
             if (fileScanType == TFileScanType.LOAD) {
                 THdfsProperties hdfsProperties = new THdfsProperties();
-                HdfsUtil.getTProperties(path, brokerDesc, hdfsProperties);
+                HdfsUtil.getTProperties(path, brokerDesc.getProperties(), hdfsProperties);
                 params.setHdfs_properties(hdfsProperties);
             } else {
                 // FILES_INSERT, FILES_QUERY
@@ -433,7 +432,7 @@ public class FileScanNode extends LoadScanNode {
                             + destSlotDesc.getColumn().getName() + "=hll_hash(xxx) or " +
                             destSlotDesc.getColumn().getName() + "=hll_empty()");
                 }
-                expr.setType(Type.HLL);
+                expr.setType(HLLType.HLL);
             }
 
             checkBitmapCompatibility(destSlotDesc, expr);
@@ -441,10 +440,10 @@ public class FileScanNode extends LoadScanNode {
             // analyze negative
             if (isNegative && destSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr = Expr.analyzeAndCastFold(expr);
+                expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(destSlotDesc, expr);
-            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());
+            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(expr));
         }
         context.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());
@@ -506,7 +505,7 @@ public class FileScanNode extends LoadScanNode {
                     if (brokerDesc.hasBroker()) {
                         BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
                     } else {
-                        HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+                        HdfsUtil.parseFile(path, brokerDesc.getProperties(), fileStatuses);
                     }
                 }
                 fileStatusesList.add(fileStatuses);
@@ -585,9 +584,8 @@ public class FileScanNode extends LoadScanNode {
             long rangeBytes = 0;
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
-            if (smallestLocations.second + leftBytes > bytesPerInstance &&
-                    ((formatType == TFileFormatType.FORMAT_CSV_PLAIN || formatType == TFileFormatType.FORMAT_PARQUET)
-                            && fileStatus.isSplitable)) {
+            if (smallestLocations.second + leftBytes > bytesPerInstance && isFileFormatSupportSplit(formatType)
+                            && fileStatus.isSplitable) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
             } else {
                 rangeBytes = leftBytes;
@@ -616,6 +614,17 @@ public class FileScanNode extends LoadScanNode {
             if (brokerScanRange(locations).isSetRanges()) {
                 locationsList.add(locations);
             }
+        }
+    }
+    
+    private boolean isFileFormatSupportSplit(TFileFormatType format) {
+        switch (format) {
+            case FORMAT_CSV_PLAIN:
+            case FORMAT_PARQUET:
+            case FORMAT_ORC:
+                return true;
+            default:
+                return false;
         }
     }
 

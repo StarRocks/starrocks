@@ -37,6 +37,7 @@ public:
 
     const std::vector<int32_t>& bucketseq_to_driverseq() const { return _bucketseq_to_driverseq; }
     const std::vector<int32_t>& bucketseq_to_partition() const { return _bucketseq_to_partition; }
+    const std::vector<TBucketProperty>& bucket_properties() const { return _bucket_properties; }
 
 protected:
     int _filter_id;
@@ -48,6 +49,7 @@ protected:
     std::vector<int32_t> _bucketseq_to_instance;
     std::vector<int32_t> _bucketseq_to_driverseq;
     std::vector<int32_t> _bucketseq_to_partition;
+    std::vector<TBucketProperty> _bucket_properties;
 };
 
 class WithLayoutMixin {

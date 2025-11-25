@@ -37,8 +37,6 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -55,10 +53,14 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.NextIdLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -142,7 +144,7 @@ public class BrokerLoadJobTest {
                                   @Mocked GlobalStateMgr globalStateMgr) {
 
         String label = "label";
-        long dbId = 1;
+        long dbId = System.currentTimeMillis();
         String tableName = "table";
         String databaseName = "database";
         List<DataDescription> dataDescriptionList = Lists.newArrayList();
@@ -209,7 +211,7 @@ public class BrokerLoadJobTest {
                               @Mocked GlobalStateMgr globalStateMgr) {
 
         String label = "label";
-        long dbId = 1;
+        long dbId = System.currentTimeMillis();
         String tableName = "table";
         String databaseName = "database";
         List<DataDescription> dataDescriptionList = Lists.newArrayList();
@@ -323,8 +325,8 @@ public class BrokerLoadJobTest {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
             @Mock
-            public void logSaveNextId(long nextId) {
-
+            public void logSaveNextId(long nextId, WALApplier walApplier) {
+                walApplier.apply(new NextIdLog(nextId));
             }
         };
 
@@ -356,8 +358,8 @@ public class BrokerLoadJobTest {
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         new MockUp<EditLog>() {
             @Mock
-            public void logSaveNextId(long nextId) {
-
+            public void logSaveNextId(long nextId, WALApplier walApplier) {
+                walApplier.apply(new NextIdLog(nextId));
             }
 
             @Mock

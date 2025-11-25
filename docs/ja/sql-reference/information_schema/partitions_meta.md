@@ -40,3 +40,4 @@ displayed_sidebar: docs
 | STORAGE_PATH                  | パーティションのストレージパス。                 |
 | STORAGE_SIZE                  | パーティションのストレージサイズ。               |
 | METADATA_SWITCH_VERSION       | パーティションのメタデータスイッチバージョン。   |
+| TABLET_BALANCED               | Tablet の配置がパーティション内で均等に分散されているかどうか。 |

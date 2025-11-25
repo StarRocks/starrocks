@@ -15,12 +15,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class UpdateHistoricalNodeLog implements Writable {
@@ -75,7 +71,4 @@ public class UpdateHistoricalNodeLog implements Writable {
         return computeNodeIds;
     }
 
-    public static UpdateHistoricalNodeLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), UpdateHistoricalNodeLog.class);
-    }
 }

@@ -14,9 +14,11 @@
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
+#include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -157,6 +159,12 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
     auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* provider = connector_scan_node->data_source_provider();
     return provider->partition_exprs();
+}
+
+const std::vector<TBucketProperty>& ConnectorScanOperatorFactory::get_bucket_properties() const {
+    auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+    auto* provider = connector_scan_node->data_source_provider();
+    return provider->get_bucket_properties();
 }
 
 void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
@@ -547,10 +555,9 @@ std::string ConnectorScanOperator::get_name() const {
     bool has_active = has_shared_chunk_source();
     std::string morsel_queue_name = _morsel_queue->name();
     bool morsel_queue_empty = _morsel_queue->empty();
-    return fmt::format(
-            "{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{} has_output:{}}}", _name,
-            _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(), morsel_queue_name,
-            morsel_queue_empty, has_output());
+    return fmt::format("{}_{}_{}({}) {{ full:{} iostasks:{} has_active:{} num_chunks:{} morsel:{} empty:{}}}", _name,
+                       _plan_node_id, (void*)this, finished, full, io_tasks, has_active, num_buffered_chunks(),
+                       morsel_queue_name, morsel_queue_empty);
 }
 
 bool ConnectorScanOperator::need_notify_all() {
@@ -573,6 +580,27 @@ Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     }
     RETURN_IF_ERROR(_morsel_queue->append_morsels(std::move(morsels)));
     return Status::OK();
+}
+
+int64_t ConnectorScanOperator::get_scan_table_id() const {
+    auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
+
+    if (scan_node->connector_type() != connector::ConnectorType::LAKE) {
+        return -1;
+    }
+
+    const auto& tuple_ids = scan_node->get_tuple_ids();
+    if (tuple_ids.empty()) {
+        return -1;
+    }
+
+    TupleId tuple_id = tuple_ids[0];
+    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
+        return tuple_desc->table_desc()->table_id();
+    }
+
+    return -1;
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -757,7 +785,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
         if (mem_alloc_failed) {
             _mem_alloc_failed_count += 1;
-            return Status::TimedOut("");
+            return Status::EAgain("");
         }
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");

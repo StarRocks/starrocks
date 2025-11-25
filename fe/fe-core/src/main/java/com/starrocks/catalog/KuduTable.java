@@ -15,7 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.lang3.StringUtils;

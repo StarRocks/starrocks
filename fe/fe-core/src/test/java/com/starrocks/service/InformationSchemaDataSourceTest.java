@@ -18,13 +18,16 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.slot.SlotManager;
@@ -37,7 +40,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -615,8 +617,9 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
     @Test
     public void testWarehouseMetricsEvaluation() throws Exception {
         starRocksAssert.withDatabase("d1").useDatabase("d1");
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         new MockUp<SlotManager>() {
             @Mock
@@ -787,7 +790,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         TGetTablesInfoRequest params = new TGetTablesInfoRequest();
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setPattern("test_db");
-        authInfo.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
+        authInfo.setCurrent_user_ident(UserIdentityUtils.toThrift(connectContext.getCurrentUserIdentity()));
         params.setAuth_info(authInfo);
         {
             FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
@@ -865,7 +868,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         }
 
         TGetTablesParams params = new TGetTablesParams();
-        params.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
+        params.setCurrent_user_ident(UserIdentityUtils.toThrift(connectContext.getCurrentUserIdentity()));
         params.setDb("test_db");
         params.setType(TTableType.SCHEMA_TABLE);
 

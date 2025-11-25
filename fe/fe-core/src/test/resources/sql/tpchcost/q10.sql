@@ -66,7 +66,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: customer
 tabletRatio=10/10
-tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
 cardinality=15000000
 avgRowSize=217.0
 
@@ -84,7 +83,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: nation
 tabletRatio=1/1
-tabletList=10185
 cardinality=25
 avgRowSize=29.0
 
@@ -120,7 +118,6 @@ PREDICATES: 28: L_RETURNFLAG = 'R'
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=200000000
 avgRowSize=25.0
 
@@ -143,7 +140,6 @@ PREDICATES: 14: O_ORDERDATE >= '1994-05-01', 14: O_ORDERDATE < '1994-08-01'
 partitions=1/1
 rollup: orders
 tabletRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=5738046
 avgRowSize=20.0
 [end]

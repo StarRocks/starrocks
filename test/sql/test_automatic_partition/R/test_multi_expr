@@ -42,6 +42,9 @@ select * from t;
 
 
 -- name: test_multi_list_function
+ADMIN SET FRONTEND CONFIG ("query_detail_explain_level" = "NORMAL");
+-- result:
+-- !result
 create table t(k1 int, k2 datetime, v int) partition by k1,date_trunc('day', k2);
 -- result:
 -- !result
@@ -403,7 +406,7 @@ show create table multi_level_expr_par_tbl_1;
 -- result:
 multi_level_expr_par_tbl_1	CREATE TABLE `multi_level_expr_par_tbl_1` (
   `c1` bigint(20) NOT NULL COMMENT "",
-  `c2` varchar(65533) NULL COMMENT "",
+  `c2` varchar(1048576) NULL COMMENT "",
   `c3` date NULL COMMENT "",
   `__generated_partition_column_0` varchar(1048576) NULL AS from_unixtime(c1) COMMENT ""
 ) ENGINE=OLAP 
@@ -449,8 +452,8 @@ show create table multi_level_expr_par_tbl_2;
 multi_level_expr_par_tbl_2	CREATE TABLE `multi_level_expr_par_tbl_2` (
   `k1` date NOT NULL COMMENT "",
   `k2` datetime NOT NULL COMMENT "",
-  `k3` varchar(20) NOT NULL COMMENT "",
-  `k4` varchar(20) NOT NULL COMMENT "",
+  `k3` varchar(1048576) NOT NULL COMMENT "",
+  `k4` varchar(1048576) NOT NULL COMMENT "",
   `k5` boolean NOT NULL COMMENT "",
   `k6` tinyint(4) NULL COMMENT "",
   `k7` smallint(6) NULL COMMENT "",

@@ -21,6 +21,7 @@ import com.starrocks.common.StarRocksException;
 
 import java.io.IOException;
 
+
 public class BuiltinPluginLoader extends PluginLoader {
 
     BuiltinPluginLoader(String path, PluginInfo info, Plugin plugin) {

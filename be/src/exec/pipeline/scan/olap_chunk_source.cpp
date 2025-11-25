@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
@@ -22,6 +23,7 @@
 #include "column/column_access_path.h"
 #include "column/field.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -178,7 +180,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
-    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _rows_key_range_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
@@ -409,6 +411,10 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
             } else {
                 LOG(WARNING) << "failed to convert column access path: " << res.status();
             }
+        } else if (path->is_root() && !path->children().empty()) {
+            // Check if this is a ROOT path for JSON field that has been pruned
+            // For JSON fields, the root column might be pruned but sub-paths are still needed
+            VLOG_ROW << "Skipping pruned JSON root path: " << root;
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
         }
@@ -509,7 +515,17 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
         column.set_type(value_type);
         column.set_length(path->value_type().len);
         column.set_is_nullable(true);
-        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_column_index));
+        // Record root column unique id to make it robust across schema changes
+        int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // For UNIQUE/AGG tables, extended flat JSON subcolumns act as value columns and
+        // must have a valid aggregation method for pre-aggregation. Use REPLACE, which is
+        // consistent with value-column semantics in these models.
+        auto keys_type = _tablet_schema->keys_type();
+        if (keys_type == KeysType::UNIQUE_KEYS || keys_type == KeysType::AGG_KEYS) {
+            column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
+        }
 
         tmp_schema->append_column(column);
         VLOG(2) << "extend the access path column: " << path->linear_path();
@@ -605,7 +621,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }

@@ -19,20 +19,37 @@ namespace starrocks::pipeline {
 Status HashJoinerFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_param._build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_param._probe_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::prepare(_param._common_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_param._other_join_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_param._conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_param._build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_param._probe_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_param._common_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_param._other_join_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_param._conjunct_ctxs, state));
+    if (_param._asof_join_condition_build_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_param._asof_join_condition_build_expr_ctx->prepare(state));
+        RETURN_IF_ERROR(_param._asof_join_condition_build_expr_ctx->open(state));
+    }
+    if (_param._asof_join_condition_probe_expr_ctx != nullptr) {
+        RETURN_IF_ERROR(_param._asof_join_condition_probe_expr_ctx->prepare(state));
+        RETURN_IF_ERROR(_param._asof_join_condition_probe_expr_ctx->open(state));
+    }
     return Status::OK();
 }
 
 void HashJoinerFactory::close(RuntimeState* state) {
+    Expr::close(_param._common_expr_ctxs, state);
     Expr::close(_param._conjunct_ctxs, state);
     Expr::close(_param._other_join_conjunct_ctxs, state);
     Expr::close(_param._probe_expr_ctxs, state);
     Expr::close(_param._build_expr_ctxs, state);
+    if (_param._asof_join_condition_build_expr_ctx != nullptr) {
+        _param._asof_join_condition_build_expr_ctx->close(state);
+    }
+    if (_param._asof_join_condition_probe_expr_ctx != nullptr) {
+        _param._asof_join_condition_probe_expr_ctx->close(state);
+    }
 }
 
 HashJoinerPtr HashJoinerFactory::create_builder(int32_t builder_dop, int32_t builder_driver_seq) {

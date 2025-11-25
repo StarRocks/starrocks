@@ -1,0 +1,25 @@
+-- name: test_hive_overwrite
+
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+create database hive_sink_test_${uuid0}.hive_db_${uuid0} PROPERTIES("location" = "oss://starrocks-ci-test/dla_test_data/hive_db_${uuid0}.db");
+
+create table hive_sink_test_${uuid0}.hive_db_${uuid0}.t1(c1 int);
+insert into hive_sink_test_${uuid0}.hive_db_${uuid0}.t1 values(1);
+select * from hive_sink_test_${uuid0}.hive_db_${uuid0}.t1;
+insert overwrite hive_sink_test_${uuid0}.hive_db_${uuid0}.t1 values(2), (3);
+select * from hive_sink_test_${uuid0}.hive_db_${uuid0}.t1;
+
+create table hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 (c1 int, c2 int) partition by c2;
+insert into hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 values(1, 2);
+insert into hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 values(2, 2);
+insert into hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 values(3, 2);
+select * from hive_sink_test_${uuid0}.hive_db_${uuid0}.t2;
+insert overwrite hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 values(1, 1);
+insert overwrite hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 values(4, 2);
+select * from hive_sink_test_${uuid0}.hive_db_${uuid0}.t2;
+
+
+drop table hive_sink_test_${uuid0}.hive_db_${uuid0}.t1 force;
+drop table hive_sink_test_${uuid0}.hive_db_${uuid0}.t2 force;
+drop database hive_sink_test_${uuid0}.hive_db_${uuid0};
+drop catalog hive_sink_test_${uuid0};

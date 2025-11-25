@@ -14,17 +14,13 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -34,12 +30,9 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -53,13 +46,26 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.DateType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -119,6 +125,10 @@ public class StatisticUtils {
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
         context.getSessionVariable().setEnablePlanSerializeConcurrently(false);
+        // set the max task num of connector io tasks per scan operator to collectStatsIoTasksPerConnectorOperator,
+        // default value is 4, avoid generate too many chunk source for collect stats in BE
+        context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
+        context.getSessionVariable().setEnableSPMRewrite(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
@@ -192,6 +202,7 @@ public class StatisticUtils {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
         // check database
         if (db == null) {
+            LOG.warn("Statistics database {} not found", StatsConstants.STATISTICS_DB_NAME);
             return false;
         }
 
@@ -199,6 +210,7 @@ public class StatisticUtils {
             // check table
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
             if (table == null) {
+                LOG.warn("Statistics table {} not found in database {}", tableName, db.getFullName());
                 return false;
             }
             if (table.isCloudNativeTableOrMaterializedView()) {
@@ -209,6 +221,8 @@ public class StatisticUtils {
             for (Partition partition : table.getPartitions()) {
                 if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
+                            tableName, partition.getName());
                     return false;
                 }
             }
@@ -218,8 +232,8 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
-            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
-                    .max(Long::compareTo).orElse(0L);
+            long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
+                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -229,6 +243,21 @@ public class StatisticUtils {
                 return null;
             }
         }
+    }
+
+    /**
+     * Retrieves the last update timestamp of the specified table in milliseconds.
+     *
+     * @param table The table object for which the last update time is to be retrieved.
+     * @return The timestamp in milliseconds since the Unix epoch, or null if the update time is not available.
+     */
+    public static Long getTableLastUpdateTimestamp(Table table) {
+        LocalDateTime updateTime = getTableLastUpdateTime(table);
+        if (updateTime == null) {
+            return null;
+        }
+        Instant instant = updateTime.atZone(Clock.systemDefaultZone().getZone()).toInstant();
+        return instant.toEpochMilli();
     }
 
     public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
@@ -290,48 +319,49 @@ public class StatisticUtils {
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {
-        ScalarType columnNameType = ScalarType.createVarcharType(65530);
-        ScalarType tableNameType = ScalarType.createVarcharType(65530);
-        ScalarType tableUUIDType = ScalarType.createVarcharType(65530);
-        ScalarType partitionNameType = ScalarType.createVarcharType(65530);
-        ScalarType dbNameType = ScalarType.createVarcharType(65530);
-        ScalarType maxType = ScalarType.createOlapMaxVarcharType();
-        ScalarType minType = ScalarType.createOlapMaxVarcharType();
-        ScalarType bucketsType = ScalarType.createOlapMaxVarcharType();
-        ScalarType mostCommonValueType = ScalarType.createOlapMaxVarcharType();
-        ScalarType catalogNameType = ScalarType.createVarcharType(65530);
+        ScalarType columnNameType = TypeFactory.createVarcharType(65530);
+        ScalarType tableNameType = TypeFactory.createVarcharType(65530);
+        ScalarType tableUUIDType = TypeFactory.createVarcharType(65530);
+        ScalarType partitionNameType = TypeFactory.createVarcharType(65530);
+        ScalarType dbNameType = TypeFactory.createVarcharType(65530);
+        ScalarType maxType = TypeFactory.createOlapMaxVarcharType();
+        ScalarType minType = TypeFactory.createOlapMaxVarcharType();
+        ScalarType bucketsType = TypeFactory.createOlapMaxVarcharType();
+        ScalarType mostCommonValueType = TypeFactory.createOlapMaxVarcharType();
+        ScalarType catalogNameType = TypeFactory.createVarcharType(65530);
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
-                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
-                    new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("distinct_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("row_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("data_size", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("distinct_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("null_count", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("partition_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
-                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("partition_name", new TypeDef(partitionNameType)),
-                    new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),
-                    new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("row_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("data_size", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(HLLType.HLL)),
+                    new ColumnDef("null_count", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
-                    new ColumnDef("collection_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)), false, null,
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME)),
+                    new ColumnDef("collection_size",
+                            new TypeDef(IntegerType.BIGINT), false, null,
                             null, true, new ColumnDef.DefaultValueDef(true, new StringLiteral("-1")), "")
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
@@ -342,25 +372,25 @@ public class StatisticUtils {
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),
-                    new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("row_count", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("data_size", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(HLLType.HLL)),
+                    new ColumnDef("null_count", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("max", new TypeDef(maxType)),
                     new ColumnDef("min", new TypeDef(minType)),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
-                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -373,17 +403,17 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else if (tableName.equals(StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
-                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("column_ids", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("column_ids", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("column_names", new TypeDef(columnNameType)),
-                    new ColumnDef("ndv",  new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("ndv",  new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else {
             throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);
@@ -434,8 +464,16 @@ public class StatisticUtils {
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
-            if (column.isGeneratedColumn() && column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+            if (column.isGeneratedColumn() && column.getName()
+                    .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
+            }
+            // generated column doesn't support cross DB use
+            if (column.isGeneratedColumn() && column.generatedColumnExprToString() != null) {
+                String expr = column.generatedColumnExprToString().toLowerCase();
+                if (expr.contains("dict_mapping") || expr.contains("dictionary_get")) {
+                    continue;
+                }
             }
             if (!column.isAggregated()) {
                 columns.add(column.getName());
@@ -575,7 +613,16 @@ public class StatisticUtils {
         if (column instanceof SlotRef) {
             colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
         } else {
-            colName = ((SubfieldExpr) column).getPath();
+            SubfieldExpr subfieldExpr = (SubfieldExpr) column;
+            String childPath;
+            if (column.getChild(0) instanceof SlotRef) {
+                childPath = ((SlotRef) column.getChild(0)).getColumnName();
+            } else {
+                childPath = ExprToSql.toSql(column.getChild(0));
+            }
+
+            colName = childPath + "." + Joiner.on('.').join(subfieldExpr.getFieldNames());
+
         }
         return colName;
     }

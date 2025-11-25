@@ -46,9 +46,9 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
-#include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
@@ -104,6 +104,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _is_lake_table = table_sink.is_lake_table;
     _write_txn_log = table_sink.write_txn_log;
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
+    _is_multi_statements_txn = table_sink.is_multi_statements_txn;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
@@ -335,7 +336,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
         auto* index = _schema->indexes()[i];
         auto& tablet_to_be = index_id_to_tablet_be_map[index->index_id];
         for (auto& [id, part] : partitions) {
-            for (auto tablet_id : part->indexes[i].tablets) {
+            for (auto tablet_id : part->indexes[i].tablet_ids) {
                 auto& tablet_info = tablets.emplace_back();
                 tablet_info.set_tablet_id(tablet_id);
                 tablet_info.set_partition_id(part->id);
@@ -537,7 +538,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
             auto& tablets = index_tablets_map[index.index_id];
             auto& tablet_to_be = index_tablet_bes_map[index.index_id];
             // setup new partitions's tablets
-            for (auto tablet_id : index.tablets) {
+            for (auto tablet_id : index.tablet_ids) {
                 auto& tablet_info = tablets.emplace_back();
                 tablet_info.set_tablet_id(tablet_id);
                 // TODO: support logical materialized views;
@@ -599,7 +600,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
         });
 
         if (channel->has_intolerable_failure()) {
-            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
             return err_st;
         }
     }
@@ -790,7 +791,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     }
 
     ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
-    Filter filter(NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data());
+    const auto null_datas = NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data();
+    Filter filter(null_datas.begin(), null_datas.end());
 
     Filter init_filter(chunk->num_rows(), 0);
 

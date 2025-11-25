@@ -25,8 +25,8 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -38,6 +38,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
@@ -49,7 +50,6 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -124,15 +124,15 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_REPLICA_V2, ReplicaPersistInfo.class)
             .put(OperationType.OP_DELETE_REPLICA_V2, ReplicaPersistInfo.class)
             .put(OperationType.OP_ADD_BACKEND_V2, Backend.class)
-            .put(OperationType.OP_DROP_BACKEND_V2, Backend.class)
-            .put(OperationType.OP_BACKEND_STATE_CHANGE_V2, Backend.class)
+            .put(OperationType.OP_DROP_BACKEND_V2, DropBackendInfo.class)
+            .put(OperationType.OP_BACKEND_STATE_CHANGE_V2, UpdateBackendInfo.class)
             .put(OperationType.OP_ADD_COMPUTE_NODE, ComputeNode.class)
             .put(OperationType.OP_DROP_COMPUTE_NODE, DropComputeNodeLog.class)
             .put(OperationType.OP_UPDATE_HISTORICAL_NODE, UpdateHistoricalNodeLog.class)
             .put(OperationType.OP_ADD_FRONTEND_V2, Frontend.class)
             .put(OperationType.OP_ADD_FIRST_FRONTEND_V2, Frontend.class)
-            .put(OperationType.OP_UPDATE_FRONTEND_V2, Frontend.class)
-            .put(OperationType.OP_REMOVE_FRONTEND_V2, Frontend.class)
+            .put(OperationType.OP_UPDATE_FRONTEND_V2, UpdateFrontendInfo.class)
+            .put(OperationType.OP_REMOVE_FRONTEND_V2, DropFrontendInfo.class)
             .put(OperationType.OP_RESET_FRONTENDS, Frontend.class)
             .put(OperationType.OP_LEADER_INFO_CHANGE_V2, LeaderInfo.class)
             .put(OperationType.OP_TIMESTAMP_V2, Timestamp.class)
@@ -154,6 +154,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, RoutineLoadJob.class)
             .put(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, RoutineLoadOperation.class)
             .put(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, StreamLoadTask.class)
+            .put(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK, StreamLoadMultiStmtTask.class)
             .put(OperationType.OP_CREATE_LOAD_JOB_V2, LoadJob.class)
             .put(OperationType.OP_END_LOAD_JOB_V2, LoadJobFinalOperation.class)
             .put(OperationType.OP_UPDATE_LOAD_JOB, LoadJob.LoadJobStateUpdateInfo.class)
@@ -161,14 +162,14 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_RESOURCE, DropResourceOperationLog.class)
             .put(OperationType.OP_RESOURCE_GROUP, ResourceGroupOpEntry.class)
             .put(OperationType.OP_CREATE_TASK, Task.class)
-            .put(OperationType.OP_ALTER_TASK, Task.class)
+            .put(OperationType.OP_ALTER_TASK, AlterTaskInfo.class)
             .put(OperationType.OP_DROP_TASKS, DropTasksLog.class)
             .put(OperationType.OP_CREATE_TASK_RUN, TaskRunStatus.class)
             .put(OperationType.OP_UPDATE_TASK_RUN, TaskRunStatusChange.class)
             .put(OperationType.OP_UPDATE_TASK_RUN_STATE, TaskRunPeriodStatusChange.class)
             .put(OperationType.OP_ARCHIVE_TASK_RUNS, ArchiveTaskRunsLog.class)
             .put(OperationType.OP_CREATE_SMALL_FILE_V2, SmallFileMgr.SmallFile.class)
-            .put(OperationType.OP_DROP_SMALL_FILE_V2, SmallFileMgr.SmallFile.class)
+            .put(OperationType.OP_DROP_SMALL_FILE_V2, RemoveSmallFileLog.class)
             .put(OperationType.OP_ALTER_JOB_V2, AlterJobV2.class)
             .put(OperationType.OP_BATCH_ADD_ROLLUP_V2, BatchAlterJobPersistInfo.class)
             .put(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, TableInfo.class)
@@ -184,6 +185,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, ModifyTablePropertyOperationLog.class)
+            .put(OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_CONFIG, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, ModifyTablePropertyOperationLog.class)
@@ -192,7 +194,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_REPLACE_TEMP_PARTITION, ReplacePartitionOperationLog.class)
             .put(OperationType.OP_INSTALL_PLUGIN, PluginInfo.class)
-            .put(OperationType.OP_UNINSTALL_PLUGIN, PluginInfo.class)
+            .put(OperationType.OP_UNINSTALL_PLUGIN, UninstallPluginLog.class)
             .put(OperationType.OP_REMOVE_ALTER_JOB_V2, RemoveAlterJobV2OperationLog.class)
             .put(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, AlterRoutineLoadJobOperationLog.class)
             .put(OperationType.OP_ALTER_LOAD_JOB, AlterLoadJobOperationLog.class)
@@ -229,6 +231,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, UserPrivilegeCollectionInfo.class)
             .put(OperationType.OP_DROP_ROLE_V2, RolePrivilegeCollectionInfo.class)
             .put(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, RolePrivilegeCollectionInfo.class)
+            .put(OperationType.OP_GRANT_ROLE_TO_GROUP, UpdateGroupToRoleLog.class)
+            .put(OperationType.OP_REVOKE_ROLE_FROM_GROUP, UpdateGroupToRoleLog.class)
             .put(OperationType.OP_MV_JOB_STATE, MVMaintenanceJob.class)
             .put(OperationType.OP_MV_EPOCH_UPDATE, MVEpoch.class)
             .put(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, TableAddOrDropColumnsInfo.class)
@@ -261,8 +265,15 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
             .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
+            .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
+            .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
+            .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)
+            .put(OperationType.OP_DROP_ALL_BROKER_V2, DropBrokerLog.class)
+            .put(OperationType.OP_DROP_REPOSITORY_V2, DropRepositoryLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {
@@ -270,6 +281,7 @@ public class EditLogDeserializer {
 
         Writable data = null;
         switch (opCode) {
+            // This is for compatibility reasons. Do not delete the read code. You can delete it in version 4.2.
             case OperationType.OP_SAVE_NEXTID:
             case OperationType.OP_ERASE_DB:
             case OperationType.OP_ERASE_PARTITION:
@@ -279,21 +291,14 @@ public class EditLogDeserializer {
                 ((Text) data).readFields(in);
                 break;
             }
-            case OperationType.OP_ADD_REPLICA: {
-                data = ReplicaPersistInfo.read(in);
-                break;
-            }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 break;
             }
+            // This is for compatibility reasons. Do not delete the read code. You can delete it in version 4.2.
             case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                 data = new ConsistencyCheckInfo();
                 ((ConsistencyCheckInfo) data).readFields(in);
-                break;
-            }
-            case OperationType.OP_META_VERSION_V2: {
-                data = MetaVersion.read(in);
                 break;
             }
             case OperationType.OP_GLOBAL_VARIABLE_V2: {

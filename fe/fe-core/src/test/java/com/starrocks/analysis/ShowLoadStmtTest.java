@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadStmt;
@@ -58,7 +59,7 @@ public class ShowLoadStmtTest {
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(21, metaData.getColumnCount());
         Assertions.assertEquals("JobId", metaData.getColumn(0).getName());
@@ -94,7 +95,7 @@ public class ShowLoadStmtTest {
     public void testInvalidWhere() {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         String fallMessage = "Where clause should looks like: LABEL = \"your_load_label\", or LABEL LIKE \"matcher\","
-            + "  or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED|QUEUEING\",  or compound predicate with operator AND";
+                + "  or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED|QUEUEING\",  or compound predicate with operator AND";
         analyzeFail("SHOW LOAD WHERE STATE = 'RUNNING'", fallMessage);
         analyzeFail("SHOW LOAD WHERE STATE != 'LOADING'", fallMessage);
         analyzeFail("SHOW LOAD WHERE STATE LIKE 'LOADING'", fallMessage);
@@ -118,17 +119,12 @@ public class ShowLoadStmtTest {
         Assertions.assertNull(stmt.getStates());
         Assertions.assertEquals(-1, stmt.getOffset());
 
-        stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM `testCluster:testDb` WHERE `label` LIKE 'abc' and `state` = 'LOADING' ORDER BY `Label` DESC");
+        stmt = (ShowLoadStmt) analyzeSuccess(
+                "SHOW LOAD FROM `testCluster:testDb` WHERE `label` LIKE 'abc' and `state` = 'LOADING' ORDER BY `Label` DESC");
         Assertions.assertEquals("abc", stmt.getLabelValue());
         Assertions.assertEquals(ImmutableSet.of(JobState.LOADING), stmt.getStates());
         Assertions.assertEquals(1, stmt.getOrderByPairs().get(0).getIndex());
         Assertions.assertTrue(stmt.getOrderByPairs().get(0).isDesc());
-    }
-
-    @Test
-    public void testGetRedirectStatus() {
-        ShowLoadStmt stmt = new ShowLoadStmt(null, null, null, null);
-        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
     }
 
     @Test

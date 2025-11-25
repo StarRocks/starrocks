@@ -55,6 +55,13 @@ FunctionUtils::FunctionUtils(RuntimeState* state) {
     _fn_ctx = FunctionContext::create_context(_state, _memory_pool, return_type, arg_types);
 }
 
+FunctionUtils::FunctionUtils(RuntimeState* state, const FunctionContext::TypeDesc& return_type,
+                             const std::vector<FunctionContext::TypeDesc>& arg_types) {
+    _state = state;
+    _memory_pool = new MemPool();
+    _fn_ctx = FunctionContext::create_context(_state, _memory_pool, return_type, arg_types);
+}
+
 FunctionUtils::~FunctionUtils() {
     delete _fn_ctx;
     delete _memory_pool;

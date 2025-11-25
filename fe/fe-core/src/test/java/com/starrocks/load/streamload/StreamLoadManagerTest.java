@@ -23,6 +23,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -78,6 +79,16 @@ public class StreamLoadManagerTest {
 
             @Mock
             public void logInsertTransactionState(TransactionState transactionState) {
+            }
+
+            @Mock
+            public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask, WALApplier walApplier) {
+                walApplier.apply(streamLoadTask);
+            }
+
+            @Mock
+            public void logCreateMultiStmtStreamLoadJob(StreamLoadMultiStmtTask streamLoadTask, WALApplier walApplier) {
+                walApplier.apply(streamLoadTask);
             }
         };
 
@@ -210,7 +221,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
+        List<AbstractStreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assertions.assertEquals(1, tasks.size());
         Assertions.assertEquals("label1", tasks.get(0).getLabel());
         Assertions.assertEquals("test_db", tasks.get(0).getDBName());
@@ -236,7 +247,7 @@ public class StreamLoadManagerTest {
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
 
-        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
+        List<AbstractStreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
         Assertions.assertEquals(2, tasks.size());
         Assertions.assertEquals("label1", tasks.get(0).getLabel());
         Assertions.assertEquals("label2", tasks.get(1).getLabel());

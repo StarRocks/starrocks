@@ -20,12 +20,8 @@ package com.starrocks.backup;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
@@ -116,44 +112,8 @@ public class SnapshotInfo implements Writable {
         return basePath;
     }
 
-    public static SnapshotInfo read(DataInput in) throws IOException {
-        SnapshotInfo info = new SnapshotInfo();
-        info.readFields(in);
-        return info;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tblId);
-        out.writeLong(partitionId);
-        out.writeLong(indexId);
-        out.writeLong(tabletId);
-        out.writeLong(beId);
-        out.writeInt(schemaHash);
-        Text.writeString(out, path);
 
-        out.writeInt(files.size());
-        for (String file : files) {
-            Text.writeString(out, file);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tblId = in.readLong();
-        partitionId = in.readLong();
-        indexId = in.readLong();
-        tabletId = in.readLong();
-        beId = in.readLong();
-        schemaHash = in.readInt();
-        path = Text.readString(in);
-
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            files.add(Text.readString(in));
-        }
-    }
 
     @Override
     public String toString() {

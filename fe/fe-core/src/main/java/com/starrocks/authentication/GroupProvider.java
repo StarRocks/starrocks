@@ -15,9 +15,9 @@
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Map;
 import java.util.Set;
@@ -39,7 +39,7 @@ public abstract class GroupProvider {
 
     }
 
-    public void destory() {
+    public void destroy() {
 
     }
 
@@ -59,7 +59,7 @@ public abstract class GroupProvider {
         return "";
     }
 
-    public abstract Set<String> getGroup(UserIdentity userIdentity);
+    public abstract Set<String> getGroup(UserIdentity userIdentity, String distinguishedName);
 
     public abstract void checkProperty() throws SemanticException;
 }

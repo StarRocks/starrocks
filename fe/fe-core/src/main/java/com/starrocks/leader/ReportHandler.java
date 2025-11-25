@@ -869,7 +869,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return;
         }
 
-        backend.updateDisks(backendDisks);
+        backend.updateDisks(backendDisks,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         long cost = System.currentTimeMillis() - start;
         if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
             LOG.info("finished to handle disk report from backend {}, cost: {} ms",
@@ -1175,7 +1175,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
 
                     ReplicaState state = replica.getState();
-                    if (state == ReplicaState.NORMAL || state == ReplicaState.SCHEMA_CHANGE) {
+                    if (state == ReplicaState.NORMAL || state == ReplicaState.SCHEMA_CHANGE
+                            || state == ReplicaState.DECOMMISSION) {
                         // if state is PENDING / ROLLUP / CLONE
                         // it's normal that the replica is not created in BE but exists in meta.
                         // so we do not delete it.
@@ -1299,12 +1300,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
-                                           long tabletId, int schemaHash, String reason, boolean force) {
+                                           long tabletId, int schemaHash, boolean force) {
         DropReplicaTask task =
                 new DropReplicaTask(backendId, tabletId, schemaHash, force);
         batchTask.addTask(task);
-        LOG.info("delete tablet[{}] from backend[{}] because {}",
-                tabletId, backendId, reason);
     }
 
     @VisibleForTesting
@@ -1344,7 +1343,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId, backendId));
+                        -1 /* Unknown schema hash */, invertedIndex.tabletForceDelete(tabletId, backendId));
+                LOG.debug("delete tablet[{}] from backend[{}] because not found in meta", tabletId, backendId);
                 if (!FeConstants.runningUnitTest) {
                     invertedIndex.eraseTabletForceDelete(tabletId, backendId);
                 }
@@ -1389,10 +1389,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
+                    String reason = "invalid meta, " +
+                            (errorMsgAddingReplica != null ? errorMsgAddingReplica : "replica unhealthy");
                     addDropReplicaTask(batchTask, backendId, tabletId, backendTabletInfo.getSchema_hash(),
-                            "invalid meta, " +
-                                    (errorMsgAddingReplica != null ? errorMsgAddingReplica : "replica unhealthy"),
                             true);
+                    LOG.info("delete tablet[{}] from backend[{}] because {}", tabletId, backendId, reason);
                     ++deleteFromBackendCounter;
                     --maxTaskSendPerBe;
                 }

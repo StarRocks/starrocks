@@ -208,42 +208,11 @@ public class MetaHelper {
 
     public static void checkMetaDir() throws InvalidMetaDirException,
                                              IOException {
-        // check meta dir
-        //   if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
-        //   we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
-        //   and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
-        //   we need to let users keep only one to avoid starting from outdated metadata.
-        Path oldDefaultMetaDir = Paths.get(System.getenv("DORIS_HOME") + "/doris-meta");
-        Path newDefaultMetaDir = Paths.get(System.getenv("STARROCKS_HOME") + "/meta");
         Path metaDir = Paths.get(Config.meta_dir);
-        if (metaDir.equals(newDefaultMetaDir)) {
-            File oldMeta = new File(oldDefaultMetaDir.toUri());
-            File newMeta = new File(newDefaultMetaDir.toUri());
-            if (oldMeta.exists() && newMeta.exists()) {
-                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
-                                "Please make sure {} has the latest data, and remove the another one.",
-                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
-                throw new InvalidMetaDirException();
-            }
-        }
-
         File meta = new File(metaDir.toUri());
         if (!meta.exists()) {
-            // If metaDir is not the default config, it means the user has specified the other directory
-            // We should not use the oldDefaultMetaDir.
-            // Just exit in this case
-            if (!metaDir.equals(newDefaultMetaDir)) {
-                LOG.error("meta dir {} dose not exist", metaDir);
-                throw new InvalidMetaDirException();
-            }
-            File oldMeta = new File(oldDefaultMetaDir.toUri());
-            if (oldMeta.exists()) {
-                // For backward compatible
-                Config.meta_dir = oldDefaultMetaDir.toString();
-            } else {
-                LOG.error("meta dir {} does not exist", meta.getAbsolutePath());
-                throw new InvalidMetaDirException();
-            }
+            LOG.error("meta dir {} does not exist", metaDir);
+            throw new InvalidMetaDirException();
         }
 
         long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());

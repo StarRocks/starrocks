@@ -550,7 +550,8 @@ Status Rowset::_link_delta_column_group_files(KVStore* kvstore, const std::strin
     return Status::OK();
 }
 
-Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
+StatusOr<int64_t> Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
+    int64_t ncopy = 0;
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_path = segment_file_path(dir, rowset_id(), i);
         if (fs::path_exist(dst_path)) {
@@ -558,12 +559,16 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
             return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
         }
         std::string src_path = segment_file_path(_rowset_path, rowset_id(), i);
-        if (!fs::copy_file(src_path, dst_path).ok()) {
+        auto copy_st = fs::copy_file(src_path, dst_path);
+        if (!copy_st.ok()) {
             LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
                          << ", errno=" << std::strerror(Errno::no());
             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path, dst_path,
                                                std::strerror(Errno::no())));
+        } else {
+            ncopy += copy_st.value();
         }
+
         // copy index
         const auto& indexes = *_schema->indexes();
         if (!indexes.empty()) {
@@ -586,12 +591,15 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
                         auto dst_absolute_path =
                                 fmt::format("{}/{}_{}_{}_{}", dir, rowset_id().to_string(), i, index.index_id(), file);
 
-                        if (!fs::copy_file(src_absolute_path, dst_absolute_path).ok()) {
+                        copy_st = fs::copy_file(src_absolute_path, dst_absolute_path);
+                        if (!copy_st.ok()) {
                             LOG(WARNING) << "Error to copy index. src:" << src_absolute_path
                                          << ", dst:" << dst_absolute_path << ", errno=" << std::strerror(Errno::no());
                             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ",
                                                                src_absolute_path, dst_absolute_path,
                                                                std::strerror(Errno::no())));
+                        } else {
+                            ncopy += copy_st.value();
                         }
                     }
                 }
@@ -606,11 +614,14 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
                 LOG(WARNING) << "Path already exist: " << dst_path;
                 return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (!fs::copy_file(src_path, dst_path).ok()) {
+            auto copy_st = fs::copy_file(src_path, dst_path);
+            if (!copy_st.ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
                              << ", errno=" << std::strerror(Errno::no());
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
                                                    dst_path, std::strerror(Errno::no())));
+            } else {
+                ncopy += copy_st.value();
             }
         }
     }
@@ -622,19 +633,26 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
                 LOG(WARNING) << "Path already exist: " << dst_path;
                 return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_path));
             }
-            if (!fs::copy_file(src_path, dst_path).ok()) {
+            auto copy_st = fs::copy_file(src_path, dst_path);
+            if (!copy_st.ok()) {
                 LOG(WARNING) << "Error to copy file. src:" << src_path << ", dst:" << dst_path
                              << ", errno=" << std::strerror(Errno::no());
                 return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ", src_path,
                                                    dst_path, std::strerror(Errno::no())));
+            } else {
+                ncopy += copy_st.value();
             }
         }
     }
-    RETURN_IF_ERROR(_copy_delta_column_group_files(kvstore, dir, INT64_MAX));
-    return Status::OK();
+
+    ASSIGN_OR_RETURN(auto delta_file_size, _copy_delta_column_group_files(kvstore, dir, INT64_MAX));
+    ncopy += delta_file_size;
+
+    return ncopy;
 }
 
-Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version) {
+StatusOr<int64_t> Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version) {
+    int64_t ncopy = 0;
     if (num_segments() > 0 && kvstore != nullptr && _rowset_path != dir) {
         // link dcg files
         for (int i = 0; i < num_segments(); i++) {
@@ -661,18 +679,20 @@ Status Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::strin
                         return Status::AlreadyExist(fmt::format("Path already exist: {}", dst_copy_path));
                     }
 
-                    if (!fs::copy_file(src_file_path.c_str(), dst_copy_path.c_str()).ok()) {
+                    auto copy_st = fs::copy_file(src_file_path.c_str(), dst_copy_path.c_str());
+                    if (!copy_st.ok()) {
                         LOG(WARNING) << "Fail to copy " << src_file_path << " to " << dst_copy_path;
                         return Status::RuntimeError(fmt::format("Fail to copy segment cols file, src: {}, dst {}",
                                                                 src_file_path, dst_copy_path));
                     } else {
+                        ncopy += copy_st.value();
                         VLOG(2) << "success to copy " << src_file_path << " to " << dst_copy_path;
                     }
                 }
             }
         }
     }
-    return Status::OK();
+    return ncopy;
 }
 
 void Rowset::do_close() {

@@ -20,15 +20,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.Delimiter;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
@@ -36,9 +32,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URI;
@@ -79,21 +77,21 @@ public class ExportStmt extends StatementBase {
     private boolean includeQueryId = true;
 
     // may catalog.db.table
-    private TableRef tableRef;
+    private TableRefPersist tableRef;
     private long exportStartTime;
     private boolean sync;
 
-    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
         this(tableRef, columnNames, path, properties, brokerDesc, NodePosition.ZERO);
     }
 
-    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
         this(tableRef, columnNames, path, properties, brokerDesc, pos, false);
     }
 
-    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+    public ExportStmt(TableRefPersist tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos, boolean sync) {
         super(pos);
         this.tableRef = tableRef;
@@ -137,7 +135,7 @@ public class ExportStmt extends StatementBase {
         return tblName;
     }
 
-    public TableRef getTableRef() {
+    public TableRefPersist getTableRef() {
         return tableRef;
     }
 
@@ -339,12 +337,7 @@ public class ExportStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExportStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExportStatement(this, context);
     }
 
     @Override

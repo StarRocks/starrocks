@@ -22,6 +22,7 @@
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/persistent_index_tablet_loader.h"
@@ -2184,7 +2185,9 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         size_t snapshot_size = _index_file->size();
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add write stats manually
+#ifndef __APPLE__
         IOProfiler::add_write(snapshot_size, watch.elapsed_time());
+#endif
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -2272,7 +2275,9 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         RETURN_IF_ERROR(load_snapshot(ar, dumped_shard_idxes));
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add read stats manually
+#ifndef __APPLE__
         IOProfiler::add_read(snapshot_size, watch.elapsed_time());
+#endif
     }
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
@@ -2280,7 +2285,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     // read wals and build hash map
     for (int i = 0; i < n; i++) {
         const auto& page_pointer_pb = meta.wals(i).data();
-        auto offset = page_pointer_pb.offset();
+        size_t offset = page_pointer_pb.offset();
         const auto end = offset + page_pointer_pb.size();
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, 4);
@@ -3706,6 +3711,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     }
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
+        stat->total_file_size = (_l0 ? _l0->file_size() : 0) + _l1_l2_file_size();
     }
     _calc_memory_usage();
 
@@ -3783,7 +3789,9 @@ public:
               _io_stat_entry(io_stat_entry) {}
 
     void run() override {
+#ifndef __APPLE__
         auto scope = IOProfiler::scope(_io_stat_entry);
+#endif
         WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                                            _found_keys_info),
                       "Failed to run GetFromImmutableIndexTask");
@@ -5067,7 +5075,8 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 1. load current l2 vec
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
-Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
+Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                                         IOStat* stat) {
     if (_cancel_major_compaction) {
         return Status::InternalError("cancel major compaction");
     }
@@ -5126,6 +5135,9 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
                 l0_version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
         _calc_memory_usage();
+        if (stat != nullptr) {
+            stat->total_file_size = (_l0 ? _l0->file_size() : 0) + _l1_l2_file_size();
+        }
     }
     (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();

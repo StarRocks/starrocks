@@ -15,6 +15,7 @@
 #include "storage/update_compaction_state.h"
 
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"

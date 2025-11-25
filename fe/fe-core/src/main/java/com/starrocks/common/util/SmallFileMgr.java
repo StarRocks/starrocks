@@ -43,9 +43,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.RemoveSmallFileLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -60,10 +60,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedInputStream;
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -119,12 +115,6 @@ public class SmallFileMgr implements Writable {
             this.isContent = isContent;
         }
 
-        public static SmallFile read(DataInput in) throws IOException {
-            SmallFile smallFile = new SmallFile();
-            smallFile.readFields(in);
-            return smallFile;
-        }
-
         public byte[] getContentBytes() {
             if (!isContent) {
                 return null;
@@ -132,28 +122,9 @@ public class SmallFileMgr implements Writable {
             return Base64.getDecoder().decode(content);
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeLong(dbId);
-            Text.writeString(out, catalog);
-            Text.writeString(out, name);
-            out.writeLong(id);
-            Text.writeString(out, content);
-            out.writeLong(size);
-            Text.writeString(out, md5);
-            out.writeBoolean(isContent);
-        }
 
-        public void readFields(DataInput in) throws IOException {
-            dbId = in.readLong();
-            catalog = Text.readString(in);
-            name = Text.readString(in);
-            id = in.readLong();
-            content = Text.readString(in);
-            size = in.readLong();
-            md5 = Text.readString(in);
-            isContent = in.readBoolean();
-        }
+
+
     }
 
     public static class SmallFiles {
@@ -168,10 +139,13 @@ public class SmallFileMgr implements Writable {
             return files;
         }
 
-        public void addFile(String fileName, SmallFile file) throws DdlException {
+        public void checkFileExist(String fileName) throws DdlException {
             if (files.containsKey(fileName)) {
                 throw new DdlException("File " + fileName + " already exist");
             }
+        }
+
+        public void addFile(String fileName, SmallFile file) {
             this.files.put(fileName, file);
         }
 
@@ -211,7 +185,7 @@ public class SmallFileMgr implements Writable {
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
-        removeFile(db.getId(), stmt.getCatalogName(), stmt.getFileName(), false);
+        removeFile(db.getId(), stmt.getCatalogName(), stmt.getFileName());
     }
 
     private void downloadAndAddFile(long dbId, String catalog, String fileName, String downloadUrl, String md5sum,
@@ -228,21 +202,25 @@ public class SmallFileMgr implements Writable {
             if (idToFiles.size() >= Config.max_small_file_number) {
                 throw new DdlException("File number exceeds limit: " + Config.max_small_file_number);
             }
+            SmallFiles smallFiles = getOrCreateSmallFiles(dbId, catalog);
+            smallFiles.checkFileExist(fileName);
 
-            SmallFiles smallFiles = files.get(dbId, catalog);
-            if (smallFiles == null) {
-                smallFiles = new SmallFiles();
-                files.put(dbId, catalog, smallFiles);
-            }
-
-            smallFiles.addFile(fileName, smallFile);
-            idToFiles.put(smallFile.id, smallFile);
-
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateSmallFile(smallFile);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateSmallFile(smallFile, wal -> {
+                addFileInternal(smallFiles, smallFile);
+            });
 
             LOG.info("finished to add file {} from url {}. current file number: {}", fileName, downloadUrl,
                     idToFiles.size());
         }
+    }
+
+    private SmallFiles getOrCreateSmallFiles(long dbId, String catalog) {
+        SmallFiles smallFiles = files.get(dbId, catalog);
+        if (smallFiles == null) {
+            smallFiles = new SmallFiles();
+            files.put(dbId, catalog, smallFiles);
+        }
+        return smallFiles;
     }
 
     public void replayCreateFile(SmallFile smallFile) {
@@ -253,43 +231,52 @@ public class SmallFileMgr implements Writable {
                 files.put(smallFile.dbId, smallFile.catalog, smallFiles);
             }
 
-            try {
-                smallFiles.addFile(smallFile.name, smallFile);
-                idToFiles.put(smallFile.id, smallFile);
-            } catch (DdlException e) {
-                LOG.warn("should not happen", e);
-            }
+            addFileInternal(smallFiles, smallFile);
         }
     }
 
-    public void removeFile(long dbId, String catalog, String fileName, boolean isReplay) throws DdlException {
+    private void addFileInternal(SmallFiles smallFiles, SmallFile smallFile) {
+        smallFiles.addFile(smallFile.name, smallFile);
+        idToFiles.put(smallFile.id, smallFile);
+    }
+
+    public void removeFile(long dbId, String catalog, String fileName) throws DdlException {
         synchronized (files) {
             SmallFiles smallFiles = files.get(dbId, catalog);
             if (smallFiles == null) {
                 throw new DdlException("No such file in globalStateMgr: " + catalog);
             }
-            SmallFile smallFile = smallFiles.removeFile(fileName);
+            SmallFile smallFile = smallFiles.getFile(fileName);
             if (smallFile != null) {
-                idToFiles.remove(smallFile.id);
-
-                if (!isReplay) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logDropSmallFile(smallFile);
-                }
-
-                LOG.info("finished to remove file {}. current file number: {}. is replay: {}",
-                        fileName, idToFiles.size(), isReplay);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropSmallFile(
+                        new RemoveSmallFileLog(dbId, catalog, fileName), wal -> {
+                            removeFileInternal(smallFiles, smallFile);
+                        });
+                LOG.info("finished to remove file {}. current file number: {}", fileName, idToFiles.size());
             } else {
                 throw new DdlException("No such file: " + fileName);
             }
         }
     }
 
-    public void replayRemoveFile(SmallFile smallFile) {
-        try {
-            removeFile(smallFile.dbId, smallFile.catalog, smallFile.name, true);
-        } catch (DdlException e) {
-            LOG.error("should not happen", e);
+    public void replayRemoveFile(RemoveSmallFileLog fileLog) {
+        long dbId = fileLog.getDbId();
+        String catalog = fileLog.getCatalog();
+        String fileName = fileLog.getName();
+        synchronized (files) {
+            SmallFiles smallFiles = files.get(dbId, catalog);
+            if (smallFiles != null) {
+                SmallFile smallFile = smallFiles.getFile(fileName);
+                if (smallFile != null) {
+                    removeFileInternal(smallFiles, smallFile);
+                }
+            }
         }
+    }
+
+    private void removeFileInternal(SmallFiles smallFiles, SmallFile smallFile) {
+        smallFiles.removeFile(smallFile.name);
+        idToFiles.remove(smallFile.id);
     }
 
     public boolean containsFile(long dbId, String catalog, String fileName) {
@@ -325,7 +312,7 @@ public class SmallFileMgr implements Writable {
         }
     }
 
-    private SmallFile downloadAndCheck(long dbId, String catalog, String fileName,
+    protected SmallFile downloadAndCheck(long dbId, String catalog, String fileName,
                                        String downloadUrl, String md5sum, boolean saveContent) throws DdlException {
         try {
             URL url = new URL(downloadUrl);
@@ -524,33 +511,8 @@ public class SmallFileMgr implements Writable {
         return infos;
     }
 
-    public static SmallFileMgr read(DataInput in) throws IOException {
-        SmallFileMgr mgr = new SmallFileMgr();
-        mgr.readFields(in);
-        return mgr;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(idToFiles.size());
-        for (SmallFile smallFile : idToFiles.values()) {
-            smallFile.write(out);
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            SmallFile smallFile = SmallFile.read(in);
-            putToFiles(smallFile);
-        }
-    }
-
-    public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
-        readFields(in);
-        LOG.info("finished replay smallFiles from image");
-        return checksum;
-    }
 
     public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
         reader.readCollection(SmallFile.class, this::putToFiles);
@@ -563,16 +525,7 @@ public class SmallFileMgr implements Writable {
             smallFiles = new SmallFiles();
             files.put(smallFile.dbId, smallFile.catalog, smallFiles);
         }
-        try {
-            smallFiles.addFile(smallFile.name, smallFile);
-        } catch (DdlException e) {
-            LOG.warn("add file: {} failed", smallFile.name, e);
-        }
-    }
-
-    public long saveSmallFiles(DataOutputStream out, long checksum) throws IOException {
-        write(out);
-        return checksum;
+        smallFiles.addFile(smallFile.name, smallFile);
     }
 
     public void saveSmallFilesV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

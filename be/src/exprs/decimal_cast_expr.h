@@ -140,9 +140,18 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
     using NonDecimalColumnType = RunTimeColumnType<NonDecimalType>;
 
     static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+        if (scale == 0) {
+            return _decimal_from<true>(column, precision, scale);
+        } else {
+            return _decimal_from<false>(column, precision, scale);
+        }
+    }
+
+    template <bool ZeroScale>
+    static inline ColumnPtr _decimal_from(const ColumnPtr& column, int precision, int scale) {
         const auto num_rows = column->size();
         typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
-        const auto data = &ColumnHelper::cast_to_raw<NonDecimalType>(column.get())->get_data().front();
+        const auto data = &ColumnHelper::cast_to_raw<NonDecimalType>(column.get())->immutable_data().front();
         auto result_data = &ColumnHelper::cast_to_raw<DecimalType>(result.get())->get_data().front();
         NullColumn::MutablePtr null_column;
         NullColumn::ValueType* nulls = nullptr;
@@ -163,9 +172,16 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
                         DecimalV3Cast::from_integer<SignedBooleanType, DecimalCppType, check_overflow<overflow_mode>>(
                                 (SignedBooleanType)(data[i]), scale_factor, &result_data[i]);
             } else if constexpr (lt_is_integer<NonDecimalType>) {
-                overflow =
-                        DecimalV3Cast::from_integer<NonDecimalCppType, DecimalCppType, check_overflow<overflow_mode>>(
-                                data[i], scale_factor, &result_data[i]);
+                if constexpr (ZeroScale) {
+                    // Fast path for integer-to-decimal conversion with scale 0.
+                    overflow =
+                            DecimalV3Cast::to_decimal_trivial<NonDecimalCppType, DecimalCppType,
+                                                              check_overflow<overflow_mode>>(data[i], &result_data[i]);
+                } else {
+                    overflow = DecimalV3Cast::from_integer<NonDecimalCppType, DecimalCppType,
+                                                           check_overflow<overflow_mode>>(data[i], scale_factor,
+                                                                                          &result_data[i]);
+                }
             } else if constexpr (lt_is_float<NonDecimalType>) {
                 overflow = DecimalV3Cast::from_float<NonDecimalCppType, DecimalCppType>(data[i], scale_factor,
                                                                                         &result_data[i]);
@@ -218,6 +234,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
                 }
             }
         }
+
         if constexpr (check_overflow<overflow_mode>) {
             ColumnBuilder<DecimalType> builder(std::move(result), std::move(null_column), has_null);
             return builder.build(column->is_constant());

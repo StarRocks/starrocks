@@ -14,8 +14,8 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

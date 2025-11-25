@@ -22,10 +22,8 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.AlterJobV2Builder;
-import com.starrocks.backup.Status;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -41,17 +39,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.LakeTableHelper;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.server.WarehouseManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -111,12 +104,6 @@ public class LakeTable extends OlapTable {
             return null;
         }
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
-    }
-
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
     }
 
     @Override
@@ -181,46 +168,10 @@ public class LakeTable extends OlapTable {
         return properties;
     }
 
-    @Override
-    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash,
-                                          long physicalPartitionId, Database db) {
-        FilePathInfo fsInfo = getPartitionFilePathInfo(physicalPartitionId);
-        FileCacheInfo cacheInfo = getPartitionFileCacheInfo(physicalPartitionId);
-        Map<String, String> properties = new HashMap<>();
-        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
-        properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
-        List<Long> shardIds = null;
-        try {
-            // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, index.getShardGroupId(),
-                    null, properties, WarehouseManager.DEFAULT_RESOURCE);
-        } catch (DdlException e) {
-            LOG.error(e.getMessage(), e);
-            return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
-        }
-        for (long shardId : shardIds) {
-            LakeTablet tablet = new LakeTablet(shardId);
-            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
-        }
-        return Status.OK;
-    }
-
     // used in colocate table index, return an empty list for LakeTable
     @Override
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
         return Lists.newArrayList();
-    }
-
-    public List<Long> getShardGroupIds() {
-        List<Long> shardGroupIds = new ArrayList<>();
-        for (Partition p : getAllPartitions()) {
-            for (MaterializedIndex index : p.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                shardGroupIds.add(index.getShardGroupId());
-            }
-        }
-        return shardGroupIds;
     }
 
     @Override

@@ -115,7 +115,7 @@ public class QueryDumpInfo implements DumpInfo {
 
         if (table instanceof MaterializedView) {
             String queryExcludingMVNames = connectContext.getSessionVariable().getQueryExcludingMVNames();
-            // Disable mv rewrite just like `PartitionBasedMvRefreshProcessor`.
+            // Disable mv rewrite just like `MVPCTBasedRefreshProcessor`.
             connectContext.getSessionVariable().setQueryExcludingMVNames(table.getName());
             {
                 MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();

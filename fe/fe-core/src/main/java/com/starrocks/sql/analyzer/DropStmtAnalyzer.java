@@ -15,26 +15,29 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
+import com.google.common.collect.Sets;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.TemporaryTableMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
@@ -45,9 +48,10 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Set;
 import java.util.UUID;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class DropStmtAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DropStmtAnalyzer.class);
@@ -56,7 +60,7 @@ public class DropStmtAnalyzer {
         new DropStmtAnalyzerVisitor().analyze(ddlStmt, session);
     }
 
-    static class DropStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DropStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(DdlStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -110,6 +114,24 @@ public class DropStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "TABLE");
                 }
             }
+            // Check mv dependency
+            if (context.getSessionVariable().isEnableDropTableCheckMvDependency()) {
+                Set<MvId> relatedMvIds = table.getRelatedMaterializedViews();
+                if (!relatedMvIds.isEmpty()) {
+                    Set<String> relatedMvNames = Sets.newHashSet();
+                    for (MvId mvId : relatedMvIds) {
+                        Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getDb(mvId.getDbId());
+                        Table mvTbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(mvId.getDbId(), mvId.getId());
+                        relatedMvNames.add(mvDb.getOriginName() + "." + mvTbl.getName());
+                    }
+                    throw new SemanticException(tableName.toString() + " exists mv dependencies: " +
+                            relatedMvNames.toString() + ", drop is not allowed. " +
+                            "See more detailed information in `sys.object_dependencies`, " +
+                            "or `set global enable_drop_table_check_mv_dependency=false`");
+                }
+            }
             return null;
         }
 
@@ -155,7 +177,9 @@ public class DropStmtAnalyzer {
                 if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
                     throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
                 }
-                statement.setCatalogName(context.getCurrentCatalog());
+
+                String normalizedCatalogName = Util.normalizeName(context.getCurrentCatalog());
+                statement.setCatalogName(normalizedCatalogName);
             }
 
             MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());

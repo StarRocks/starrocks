@@ -31,10 +31,6 @@ public class ModifyStorageVolumePropertiesClause extends AlterStorageVolumeClaus
         this.properties = properties;
     }
 
-    public void setOpType(AlterOpType opType) {
-        this.opType = opType;
-    }
-
     @Override
     @Nonnull
     public Map<String, String> getProperties() {
@@ -43,6 +39,6 @@ public class ModifyStorageVolumePropertiesClause extends AlterStorageVolumeClaus
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitModifyStorageVolumePropertiesClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitModifyStorageVolumePropertiesClause(this, context);
     }
 }

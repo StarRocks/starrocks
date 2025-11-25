@@ -32,29 +32,38 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class DataCacheSelectExecutor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectExecutor.class);
 
     public static DataCacheSelectMetrics cacheSelect(DataCacheSelectStatement statement,
-                                                             ConnectContext connectContext) throws Exception {
+                                                     ConnectContext connectContext) throws Exception {
         InsertStmt insertStmt = statement.getInsertStmt();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final Warehouse wh = warehouseManager.getWarehouse(connectContext.getCurrentWarehouseName());
+        final ComputeResourceProvider computeResourceProvider = warehouseManager.getComputeResourceProvider();
+        final List<ComputeResource> computeResources = computeResourceProvider.getComputeResources(wh);
+
         List<StmtExecutor> subStmtExecutors = Lists.newArrayList();
-        for (long workerGroupId : wh.getWorkerGroupIds()) {
-            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext);
-            ComputeResource computeResource = warehouseManager.getComputeResourceProvider().ofComputeResource(
-                    wh.getId(), workerGroupId);
+        boolean isFirstSubContext = true;
+        for (ComputeResource computeResource : computeResources) {
+            if (!computeResourceProvider.isResourceAvailable(computeResource)) {
+                // skip if this compute resource is not available
+                LOG.warn("skip cache select for compute resource {} because it is not available", computeResource);
+                continue;
+            }
+
+            ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
             subContext.setCurrentComputeResource(computeResource);
             StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
+            isFirstSubContext = false;
             // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
             // If DataCacheSelect is forward to leader, connectContext's Executor is null
             if (connectContext.getExecutor() != null) {
@@ -105,7 +114,8 @@ public class DataCacheSelectExecutor {
     }
 
     public static ConnectContext buildCacheSelectConnectContext(DataCacheSelectStatement statement,
-                                                                ConnectContext connectContext) {
+                                                                ConnectContext connectContext,
+                                                                boolean isFirstSubContext) {
         // Create a new ConnectContext for the sub task of cache select.
         final ConnectContext context = new ConnectContext(null);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -114,25 +124,31 @@ public class DataCacheSelectExecutor {
         context.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
         context.setCurrentRoleIds(connectContext.getCurrentRoleIds());
         context.setAuditEventBuilder(connectContext.getAuditEventBuilder());
+        context.setResourceGroup(connectContext.getResourceGroup());
         context.setSessionId(connectContext.getSessionId());
         context.setRemoteIP(connectContext.getRemoteIP());
         context.setQueryId(connectContext.getQueryId());
         context.getState().reset();
 
-        // Generate one different execution_id here for different compute resources.
-        // We make the high part of query id unchanged to facilitate tracing problem by log.
         TUniqueId queryId = UUIDUtil.toTUniqueId(connectContext.getQueryId());
-        UUID uuid = UUIDUtil.genUUID();
-        TUniqueId executionId = new TUniqueId(queryId.hi, uuid.getLeastSignificantBits());
+        TUniqueId executionId;
+        if (isFirstSubContext) {
+            executionId = queryId;
+        } else {
+            // For compute resources except the first one, generate different execution_id here.
+            // We make the high part of query id unchanged to facilitate tracing problem by log.
+            executionId = new TUniqueId(queryId.hi, UUIDUtil.genUUID().getLeastSignificantBits());
+            LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
+        }
         context.setExecutionId(executionId);
-        LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(UUIDUtil.fromTUniqueid(executionId)),
-                DebugUtil.printId(connectContext.getQueryId()));
-
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
 
-        SessionVariable sessionVariable = (SessionVariable) context.getSessionVariable();
+        // clone an new session variable
+        SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        // overwrite catalog
+        sessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate
         sessionVariable.setEnableScanDataCache(true);
         sessionVariable.setEnablePopulateDataCache(true);
@@ -144,6 +160,7 @@ public class DataCacheSelectExecutor {
         sessionVariable.setDataCachePriority(statement.getPriority());
         sessionVariable.setDatacacheTTLSeconds(statement.getTTLSeconds());
         sessionVariable.setEnableCacheSelect(true);
+        context.setSessionVariable(sessionVariable);
 
         return context;
     }

@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.parser.NodePosition;

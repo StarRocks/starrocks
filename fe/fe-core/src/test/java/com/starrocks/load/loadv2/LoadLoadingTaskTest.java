@@ -14,7 +14,6 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -22,11 +21,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -100,7 +100,7 @@ public class LoadLoadingTaskTest {
         OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
         LoadStmt stmt = new LoadStmt(null, null, new BrokerDesc(null), null, null);
         LoadLoadingTask loadLoadingTask = new LoadLoadingTask.Builder().setDb(database).setLoadStmt(stmt)
-                .setTable(olapTable).setContext(connectContext).setOriginStmt(new OriginStatement("")).build();
+                .setTable(olapTable).setContext(connectContext).setOriginStmt(new OriginStatementInfo("")).build();
         RuntimeProfile profile = loadLoadingTask.buildRunningTopLevelProfile();
         // Perform assertions to verify the behavior
         assertNotNull(profile, "Profile should not be null");

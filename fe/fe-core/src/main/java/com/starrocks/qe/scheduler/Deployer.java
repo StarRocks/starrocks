@@ -67,7 +67,8 @@ public class Deployer {
 
     static {
         int threadPoolSize = Math.max(ThreadPoolManager.cpuCores(), Config.deploy_serialization_thread_pool_size);
-        int threadPoolQueueSize = Math.max(threadPoolSize * 2, Config.deploy_serialization_queue_size);
+        int threadPoolQueueSize = Config.deploy_serialization_queue_size > 0 ? Config.deploy_serialization_queue_size :
+                threadPoolSize * 2;
         EXECUTOR = ThreadPoolManager.newDaemonThreadPool(1, threadPoolSize, 60, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(threadPoolQueueSize), new ThreadPoolExecutor.AbortPolicy(),
                 "deployer", true);

@@ -33,6 +33,33 @@ message DelvecPagePB {
     // position in file
     optional uint64 offset = 2;
     optional uint64 size = 3;
+    optional uint32 crc32c = 4;
+    // For upgrade compatibility.
+    optional int64 crc32c_gen_version = 5;
+}
+
+message PersistentIndexSstablePB {
+    optional int64 version = 1; // Deprecated
+    optional string filename = 2;
+    optional int64 filesize = 3;
+    // used for rebuild point of persistent index
+    optional uint64 max_rss_rowid = 4;
+    optional bytes encryption_meta = 5;
+    // Whether this file shared by multiple tablets
+    optional bool shared = 6 [default=false];
+    // Filter out rows which do not satisfy the predicate
+    // when reading this specific sstable
+    optional PersistentIndexSstablePredicatePB predicate = 7;
+    // For sstable generated during data write & compaction process.
+    optional uint32 shared_rssid = 8;
+    optional int64 shared_version = 9;
+    // For sstable generated during compaction process.
+    optional DelvecPagePB delvec = 10;
+}
+
+message PersistentIndexSstableMetaPB {
+    // sstables are ordered with the smaller version on the left.
+    repeated PersistentIndexSstablePB sstables = 1;
 }
 
 message DelvecCacheKeyPB {
@@ -45,6 +72,7 @@ message FileMetaPB {
     optional int64 size = 2;
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
+    optional bytes encryption_meta = 4;
 }
 
 message DelvecMetadataPB {
@@ -173,6 +201,8 @@ message TabletMetadataPB {
     optional int64 gtid = 19 [default=0];
     // compaction strategy
     optional CompactionStrategyPB compaction_strategy = 20;
+    // flat json
+    optional FlatJsonConfigPB flat_json_config = 21;
 }
 
 message MetadataUpdateInfoPB {
@@ -182,6 +212,7 @@ message MetadataUpdateInfoPB {
     optional PersistentIndexTypePB persistent_index_type = 3;
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
+    optional FlatJsonConfigPB flat_json_config = 6;
 }
 
 message BundleTabletMetadataPB {
@@ -199,6 +230,7 @@ message TxnLogPB {
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
+        repeated FileMetaPB ssts = 6;
     }
 
     message OpCompaction {
@@ -216,6 +248,7 @@ message TxnLogPB {
         // x and y might be new segments
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
+        repeated FileMetaPB ssts = 8;
     }
 
     message OpSchemaChange {
@@ -253,6 +286,7 @@ message TxnLogPB {
     optional OpAlterMetadata op_alter_metadata = 6;
     optional OpReplication op_replication = 7;
     optional int64 partition_id = 8;
+    optional PUniqueId load_id = 9;
 }
 
 message CombinedTxnLogPB {
@@ -270,6 +304,7 @@ message TxnInfoPB {
     optional bool force_publish = 5; // only used for compaction
     optional bool rebuild_pindex = 6;
     optional int64 gtid = 7 [default=0];
+    repeated PUniqueId load_ids = 8;
 }
 
 message SplittingTabletInfoPB {

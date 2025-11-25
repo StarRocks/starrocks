@@ -36,7 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -206,7 +206,7 @@ public class SchemaScanNode extends ScanNode {
         msg.schema_scan_node.setIp(frontendIP);
         msg.schema_scan_node.setPort(frontendPort);
 
-        TUserIdentity tCurrentUser = ConnectContext.get().getCurrentUserIdentity().toThrift();
+        TUserIdentity tCurrentUser = UserIdentityUtils.toThrift(ConnectContext.get().getCurrentUserIdentity());
         msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
 
         if (tableId != null) {

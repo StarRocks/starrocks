@@ -394,6 +394,35 @@ TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
     test_writeread(true);
 }
 
+TEST_F(TabletUpdatesTest, submit_apply_task_fail) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    // init fail point
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys, nullptr, true);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+}
+
 TEST_F(TabletUpdatesTest, test_pk_index_write_amp_score) {
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
@@ -860,7 +889,7 @@ void TabletUpdatesTest::test_pk_dump(size_t rowset_cnt) {
         starrocks::PrimaryKeyDumpPB dump_pb;
         ASSERT_TRUE(PrimaryKeyDump::read_deserialize_from_file(dump_filepath, &dump_pb).ok());
         ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
-                            dump_filepath, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            dump_filepath, dump_pb, [&](uint32_t segment_id, const starrocks::Chunk& chunk) {},
                             [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {})
                             .ok());
         ASSERT_TRUE(dump_pb.tablet_meta().tablet_id() == _tablet->tablet_id());
@@ -910,6 +939,16 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
         ASSERT_EQ(N, read_tablet(_tablet, i));
     }
     test_pk_dump(rowsets.size());
+    // test extra file size;
+    // get TabletUpdatesPB
+    TabletUpdatesPB updates_pb;
+    _tablet->updates()->to_updates_pb(&updates_pb);
+    // check extra file size exist.
+    if (enable_persistent_index) {
+        ASSERT_TRUE(updates_pb.extra_file_size().pindex_size() > 0);
+    } else {
+        ASSERT_TRUE(updates_pb.extra_file_size().pindex_size() == 0);
+    }
 }
 
 TEST_F(TabletUpdatesTest, apply) {
@@ -3912,7 +3951,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_TRUE(StorageEngine::instance()
                         ->txn_manager()
                         ->commit_txn(_tablet->data_dir()->get_meta(), 100, 100, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs1, false)
+                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs1, false, false)
                         .ok());
     ASSERT_EQ(true, rs1->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
@@ -3951,7 +3990,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_TRUE(StorageEngine::instance()
                         ->txn_manager()
                         ->commit_txn(_tablet->data_dir()->get_meta(), 101, 101, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs2, false)
+                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs2, false, false)
                         .ok());
     ASSERT_EQ(true, rs2->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
@@ -4000,7 +4039,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_TRUE(StorageEngine::instance()
                         ->txn_manager()
                         ->commit_txn(_tablet->data_dir()->get_meta(), 102, 102, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs3, false)
+                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs3, false, false)
                         .ok());
     ASSERT_EQ(false, rs3->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(0, _tablet->committed_rowset_size());
@@ -4025,7 +4064,7 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_TRUE(StorageEngine::instance()
                         ->txn_manager()
                         ->commit_txn(_tablet->data_dir()->get_meta(), 103, 103, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs4, false)
+                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs4, false, false)
                         .ok());
     ASSERT_EQ(true, rs4->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());

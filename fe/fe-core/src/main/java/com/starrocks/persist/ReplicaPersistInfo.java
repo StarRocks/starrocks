@@ -38,10 +38,6 @@ import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 public class ReplicaPersistInfo implements Writable {
 
     public enum ReplicaOperationType {
@@ -321,60 +317,6 @@ public class ReplicaPersistInfo implements Writable {
 
     public long getMinReadableVersion() {
         return minReadableVersion;
-    }
-
-    public static ReplicaPersistInfo read(DataInput in) throws IOException {
-        ReplicaPersistInfo replicaInfo = new ReplicaPersistInfo();
-        replicaInfo.readFields(in);
-        return replicaInfo;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        out.writeLong(partitionId);
-        out.writeLong(indexId);
-        out.writeLong(tabletId);
-        out.writeLong(backendId);
-        out.writeLong(replicaId);
-        out.writeLong(version);
-        out.writeLong(0); // write a version_hash for compatibility
-        out.writeLong(dataSize);
-        out.writeLong(rowCount);
-
-        out.writeInt(opType.value);
-        out.writeLong(lastFailedVersion);
-        out.writeLong(minReadableVersion); // originally used as version_hash, now reused as minReadableVersion
-        out.writeLong(lastSuccessVersion);
-        out.writeLong(0); // write a version_hash for compatibility
-
-        out.writeInt(schemaHash);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-
-        dbId = in.readLong();
-        tableId = in.readLong();
-        partitionId = in.readLong();
-        indexId = in.readLong();
-        tabletId = in.readLong();
-        backendId = in.readLong();
-        replicaId = in.readLong();
-        version = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-        dataSize = in.readLong();
-        rowCount = in.readLong();
-        opType = ReplicaOperationType.findByValue(in.readInt());
-        if (opType == null) {
-            throw new IOException("could not parse operation type from replica info");
-        }
-        lastFailedVersion = in.readLong();
-        minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
-        lastSuccessVersion = in.readLong();
-        in.readLong(); // read a version_hash for compatibility
-
-        schemaHash = in.readInt();
     }
 
     @Override

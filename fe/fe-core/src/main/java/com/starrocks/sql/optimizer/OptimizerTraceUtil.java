@@ -19,6 +19,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.DebugRelationTracer;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Rule;
 import org.slf4j.helpers.MessageFormatter;
 
@@ -86,6 +87,14 @@ public class OptimizerTraceUtil {
         });
     }
 
+    public static void logMVRewrite1(ConnectContext connectContext, String mvName, String format, Object... objects) {
+        if (connectContext == null || connectContext.getSessionVariable() == null ||
+                connectContext.getSessionVariable().getTraceLogLevel() < 1) {
+            return;
+        }
+        logMVRewrite(mvName, format, objects);
+    }
+
     public static void logMVRewrite(String mvName, String format, Object... objects) {
         Tracers.log(Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, objects).getMessage();
@@ -119,13 +128,18 @@ public class OptimizerTraceUtil {
     }
 
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
+        logMVRewrite(mvContext, null, format, object);
+    }
+
+    public static void logMVRewrite(MaterializationContext mvContext, Rule rule, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
+                    rule == null ? "" : rule.type().name(),
                     mvContext.getOptimizerContext().isInMemoPhase(),
                     mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE] [InMemo:{}] [{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
@@ -148,7 +162,7 @@ public class OptimizerTraceUtil {
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    rule.type().name(),
+                    rule == null ? "" : rule.type().name(),
                     optimizerContext.isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
@@ -171,26 +185,40 @@ public class OptimizerTraceUtil {
                 args -> String.format("[TRACE QUERY %s] RULE %s exhausted \n", ctx.getQueryId(), rule));
     }
 
+    private static int calculateRuleDepth(Pattern pattern) {
+        if (pattern == null) {
+            return 0;
+        }
+        int maxChildDepth = 0;
+        for (Pattern child : pattern.children()) {
+            int childDepth = calculateRuleDepth(child);
+            maxChildDepth = Math.max(maxChildDepth, childDepth);
+        }
+        return maxChildDepth + 1;
+    }
+
     public static void logApplyRuleBefore(OptimizerContext ctx, Rule rule,
                                           OptExpression oldExpression) {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
             StringBuilder sb = new StringBuilder();
+            int ruleDepth = calculateRuleDepth(rule.getPattern());
             sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", ctx.getQueryId(), rule));
-            sb.append("Original Expression:\n").append(oldExpression.debugString());
+            sb.append("Original Expression:\n").append(oldExpression.debugString(ruleDepth + 1));
             return sb.toString();
         });
     }
 
-    public static void logApplyRuleAfter(List<OptExpression> newExpressions) {
+    public static void logApplyRuleAfter(Rule rule, List<OptExpression> newExpressions) {
         Tracers.log(Tracers.Module.OPTIMIZER, args -> {
             StringBuilder sb = new StringBuilder();
             sb.append("\nNew Expression:");
             if (newExpressions.isEmpty()) {
                 sb.append("Empty");
             } else {
+                int ruleDepth = calculateRuleDepth(rule.getPattern());
                 sb.append("\n");
                 for (int i = 0; i < newExpressions.size(); i++) {
-                    sb.append(i).append(":").append(newExpressions.get(i).debugString());
+                    sb.append(i).append(":").append(newExpressions.get(i).debugString(ruleDepth + 1));
                 }
             }
             sb.append("\n");

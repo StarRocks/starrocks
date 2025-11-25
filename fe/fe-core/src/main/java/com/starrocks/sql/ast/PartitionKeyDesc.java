@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.parser.NodePosition;
 

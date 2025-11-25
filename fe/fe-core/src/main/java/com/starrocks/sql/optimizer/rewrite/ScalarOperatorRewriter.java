@@ -66,6 +66,13 @@ public class ScalarOperatorRewriter {
             SimplifiedCaseWhenRule.INSTANCE,
             PruneTediousPredicateRule.INSTANCE
     );
+
+    private static final List<ScalarOperatorRewriteRule> CASE_WHEN_PREDICATE_SKIP_COMPLEX_FUNCTIONS =
+            Lists.newArrayList(
+                    SimplifiedCaseWhenRule.SKIP_COMPLEX_FUNCTIONS_INSTANCE,
+                    PruneTediousPredicateRule.INSTANCE
+            );
+
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_SCAN_PREDICATE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
@@ -159,9 +166,12 @@ public class ScalarOperatorRewriter {
         return op;
     }
 
-    public static ScalarOperator simplifyCaseWhen(ScalarOperator predicates) {
-        // simplify case-when
-        return new ScalarOperatorRewriter().rewrite(predicates, CASE_WHEN_PREDICATE_RULE);
+    public static ScalarOperator simplifyCaseWhen(ScalarOperator predicates, boolean skipComplexFunctions) {
+        if (skipComplexFunctions) {
+            return new ScalarOperatorRewriter().rewrite(predicates, CASE_WHEN_PREDICATE_SKIP_COMPLEX_FUNCTIONS);
+        } else {
+            return new ScalarOperatorRewriter().rewrite(predicates, CASE_WHEN_PREDICATE_RULE);
+        }
     }
 
     public static ScalarOperator replaceScalarOperatorByColumnRef(ScalarOperator operator,

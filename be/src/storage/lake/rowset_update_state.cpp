@@ -17,12 +17,14 @@
 #include "common/tracer.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/update_manager.h"
+#include "storage/olap_common.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
@@ -812,10 +814,8 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
     ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     auto col = pk_column->clone();
-    if (serde::ColumnArraySerde::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()) ==
-        nullptr) {
-        return Status::InternalError("column deserialization failed");
-    }
+    using Serd = serde::ColumnArraySerde;
+    RETURN_IF_ERROR(Serd::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()));
     col->raw_data();
     _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);

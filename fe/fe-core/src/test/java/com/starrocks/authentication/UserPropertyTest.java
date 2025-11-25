@@ -18,6 +18,7 @@ package com.starrocks.authentication;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -28,7 +29,6 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -437,19 +437,6 @@ public class UserPropertyTest {
             throw e;
         }
         Assertions.assertEquals(2, context.getSessionVariable().getStatisticCollectParallelism());
-
-        try {
-            // the session variable statistic_collect_parallel has been set to 2, and it is not equal to its default value 1
-            // updateByUserProperty will ignore setting the session variable statistic_collect_parallel.
-            userProperty = new UserProperty();
-            Map<String, String> sessionVariables = userProperty.getSessionVariables();
-            sessionVariables.put("statistic_collect_parallel", "100");
-            userProperty.setSessionVariables(sessionVariables);
-            context.updateByUserProperty(userProperty);
-        } catch (Exception e) {
-            throw e;
-        }
-        Assertions.assertEquals(2, context.getSessionVariable().getStatisticCollectParallelism()); // not 100
 
         try {
             // catalog is valid

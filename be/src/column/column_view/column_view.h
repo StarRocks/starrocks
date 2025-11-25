@@ -29,6 +29,7 @@ public:
     ColumnView(ColumnView&& column_view) = delete;
     bool is_view() const override { return true; }
     bool is_json_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_json(); }
+    bool is_variant_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_variant(); }
     bool is_map_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_map(); }
     bool is_array_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_array(); }
     bool is_binary_view() const override { return ColumnHelper::get_data_column(_default_column.get())->is_binary(); }

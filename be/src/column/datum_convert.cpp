@@ -18,6 +18,7 @@
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
 #include "storage/type_traits.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -51,6 +52,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
         return Status::OK();
     }
         /* Type need memory allocated */
+    case TYPE_VARBINARY:
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         /* Type need memory allocated */
@@ -92,6 +94,7 @@ std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     switch (type) {
     case TYPE_BOOLEAN:
         return datum_to_string<TYPE_TINYINT>(type_info, datum);
+    case TYPE_VARBINARY:
     case TYPE_CHAR:
     case TYPE_VARCHAR:
         return datum_to_string<TYPE_VARCHAR>(type_info, datum);

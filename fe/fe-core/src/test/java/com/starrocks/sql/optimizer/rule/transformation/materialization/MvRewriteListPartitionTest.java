@@ -331,7 +331,7 @@ public class MvRewriteListPartitionTest extends MVTestBase {
                                 "SELECT * from mv1 where province = 'guangdong'",
                         };
                         for (String query : sqls) {
-                            System.out.println("start to check: " + query);
+                            logSysInfo("start to check: " + query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, "UNION", "mv1", "t2");
                         }
@@ -428,6 +428,7 @@ public class MvRewriteListPartitionTest extends MVTestBase {
 
     @Test
     public void testRewriteWithNestedMVs() {
+        disableMVRewriteConsiderDataLayout();
         starRocksAssert.withTables(ImmutableList.of(T2, T3), () -> {
             // update base table
             String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
@@ -521,5 +522,6 @@ public class MvRewriteListPartitionTest extends MVTestBase {
             starRocksAssert.dropMaterializedView("mv2");
             starRocksAssert.dropMaterializedView("mv1");
         });
+        enableMVRewriteConsiderDataLayout();
     }
 }

@@ -153,7 +153,7 @@ public class HiveConnectorInternalMgr {
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getRefreshMaxThreadNum()),
                     remoteFileConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
-                    remoteFileConf.getCacheMaxSize());
+                    remoteFileConf.getMemSizeRatio());
         }
 
         return baseRemoteFileIO;

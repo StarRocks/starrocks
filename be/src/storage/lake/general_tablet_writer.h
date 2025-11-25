@@ -78,7 +78,7 @@ public:
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 protected:
-    Status reset_segment_writer(bool eos);
+    virtual Status reset_segment_writer(bool eos);
     virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
 
     std::unique_ptr<SegmentWriter> _seg_writer;

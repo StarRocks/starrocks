@@ -53,10 +53,24 @@ void AggregateFuncResolver::register_others() {
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(
             "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
 
+    // percentile_approx(expr, ARRAY<DOUBLE>) -> ARRAY<DOUBLE>
+    add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_ARRAY, PercentileApproxState>(
+            "percentile_approx", false, AggregateFactory::MakePercentileApproxArrayAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_ARRAY, PercentileApproxState>(
+            "percentile_approx", false, AggregateFactory::MakePercentileApproxArrayAggregateFunction());
+
     add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
             "percentile_approx_weighted", false, AggregateFactory::MakePercentileApproxWeightedAggregateFunction());
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(
             "percentile_approx_weighted", false, AggregateFactory::MakePercentileApproxWeightedAggregateFunction());
+
+    // percentile_approx_weighted(expr, weight, ARRAY<DOUBLE>) -> ARRAY<DOUBLE>
+    add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_ARRAY, PercentileApproxState>(
+            "percentile_approx_weighted", false,
+            AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_ARRAY, PercentileApproxState>(
+            "percentile_approx_weighted", false,
+            AggregateFactory::MakePercentileApproxWeightedArrayAggregateFunction());
 
     add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
             "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());

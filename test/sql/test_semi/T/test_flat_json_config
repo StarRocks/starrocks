@@ -1,0 +1,124 @@
+-- name: test_flat_json_config
+-- Test case for flat JSON configuration changes and query correctness
+-- This test verifies that modifying flat JSON configs doesn't break queries
+
+-- Step 1: Create table with flat JSON enabled and custom properties
+CREATE TABLE `test_json_config` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `my_json_col` json NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"flat_json.enable" = "true",
+"flat_json.null.factor" = "0.1",
+"flat_json.sparsity.factor" = "0.8",
+"flat_json.column.max" = "50"
+);
+
+-- Insert test data
+INSERT INTO test_json_config VALUES
+(1, parse_json('{"key1": "value1", "key2": 100, "key3": true}')),
+(2, parse_json('{"key1": "value2", "key2": 200, "key4": "extra"}')),
+(3, parse_json('{"key1": "value3", "key2": 300}'));
+
+-- Verify initial query works
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+
+-- Step 2: Modify flat_json.null.factor
+ALTER TABLE test_json_config SET ("flat_json.null.factor" = "0.2");
+
+-- Insert data after changing null.factor
+INSERT INTO test_json_config VALUES
+(4, parse_json('{"key1": "value4", "key2": 400, "key5": "new"}')),
+(5, parse_json('{"key1": "value5", "key2": 500}'));
+
+-- Verify query still works after changing null.factor
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+
+-- Step 3: Modify flat_json.sparsity.factor
+ALTER TABLE test_json_config SET ("flat_json.sparsity.factor" = "0.9");
+
+-- Insert data after changing sparsity.factor
+INSERT INTO test_json_config VALUES
+(6, parse_json('{"key1": "value6", "key2": 600, "key6": "sparsity"}')),
+(7, parse_json('{"key1": "value7", "key2": 700}'));
+
+-- Verify query still works after changing sparsity.factor
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
+
+-- Step 4: Modify flat_json.column.max
+ALTER TABLE test_json_config SET ("flat_json.column.max" = "100");
+
+-- Insert data after changing column.max
+INSERT INTO test_json_config VALUES
+(8, parse_json('{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}')),
+(9, parse_json('{"key1": "value9", "key2": 900}'));
+
+-- Verify query still works after changing column.max
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+SELECT id, my_json_col->'$.key3' FROM test_json_config ORDER BY id;
+
+-- Step 5: Disable flat JSON (critical test - should not throw exception)
+ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
+
+-- Insert data after disabling flat JSON (should work)
+INSERT INTO test_json_config VALUES
+(10, parse_json('{"key1": "value10", "key2": 1000, "key8": "disabled"}')),
+(11, parse_json('{"key1": "value11", "key2": 1100}'));
+
+-- Verify query works after disabling flat JSON
+-- This is the critical test - before the fix, this would throw:
+-- "flat JSON configuration must be set after enabling flat JSON."
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+SELECT COUNT(*) FROM test_json_config;
+
+-- Step 6: Re-enable flat JSON
+ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
+
+-- Insert data after re-enabling flat JSON
+INSERT INTO test_json_config VALUES
+(12, parse_json('{"key1": "value12", "key2": 1200, "key9": "reenabled"}')),
+(13, parse_json('{"key1": "value13", "key2": 1300}'));
+
+-- Verify query works after re-enabling
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
+
+-- Step 7: Disable flat JSON again
+ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
+
+-- Insert data after disabling again (should work)
+INSERT INTO test_json_config VALUES
+(14, parse_json('{"key1": "value14", "key2": 1400, "key10": "disabled2"}')),
+(15, parse_json('{"key1": "value15", "key2": 1500}'));
+
+-- Verify multiple queries work
+SELECT id FROM test_json_config ORDER BY id;
+SELECT my_json_col FROM test_json_config ORDER BY id;
+SELECT COUNT(*) FROM test_json_config;
+SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+
+-- Step 8: Re-enable and verify all queries still work
+ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
+
+-- Insert data after final re-enable
+INSERT INTO test_json_config VALUES
+(16, parse_json('{"key1": "value16", "key2": 1600, "key11": "final"}')),
+(17, parse_json('{"key1": "value17", "key2": 1700}'));
+
+-- Final verification - all query types should work
+SELECT * FROM test_json_config ORDER BY id;
+SELECT id, my_json_col FROM test_json_config ORDER BY id;
+SELECT my_json_col->'$.key1' FROM test_json_config ORDER BY id;
+SELECT my_json_col->'$.key2' FROM test_json_config ORDER BY id;
+SELECT COUNT(*) FROM test_json_config;
+
+-- Clean up
+DROP TABLE test_json_config;
+

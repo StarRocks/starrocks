@@ -44,7 +44,7 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "cache/datacache.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -58,9 +58,9 @@
 #include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/persistent_index_load_executor.h"
@@ -89,6 +89,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
             return Status::OK();
         });
+#ifndef __APPLE__
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
             StoragePageCache* cache = DataCache::GetInstance()->page_cache();
             if (cache == nullptr || !cache->is_initialized()) {
@@ -100,6 +101,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             cache->set_capacity(cache_limit);
             return Status::OK();
         });
+#endif
+#ifndef __APPLE__
         _config_callback.emplace("disable_storage_page_cache", [&]() -> Status {
             StoragePageCache* cache = DataCache::GetInstance()->page_cache();
             if (cache == nullptr || !cache->is_initialized()) {
@@ -114,8 +117,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+#endif
+#ifndef __APPLE__
         _config_callback.emplace("datacache_mem_size", [&]() -> Status {
-            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+            LocalMemCacheEngine* cache = DataCache::GetInstance()->local_mem_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }
@@ -127,10 +132,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update datacache mem size";
                 return st;
             }
-            return cache->update_mem_quota(mem_size, true);
+            return cache->update_mem_quota(mem_size);
         });
         _config_callback.emplace("datacache_disk_size", [&]() -> Status {
-            LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
+            LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
             if (cache == nullptr || !cache->is_initialized()) {
                 return Status::InternalError("Local cache is not initialized");
             }
@@ -148,6 +153,14 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return cache->update_disk_spaces(spaces);
         });
+        _config_callback.emplace("datacache_inline_item_count_limit", [&]() -> Status {
+            LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
+            if (cache == nullptr || !cache->is_initialized()) {
+                return Status::InternalError("Local cache is not initialized");
+            }
+            return cache->update_inline_cache_count_limit(config::datacache_inline_item_count_limit);
+        });
+#endif
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
                 return Status::InvalidArgument(

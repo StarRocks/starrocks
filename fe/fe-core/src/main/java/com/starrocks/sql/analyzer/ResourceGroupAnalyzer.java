@@ -15,17 +15,21 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
 import org.apache.commons.collections.CollectionUtils;
@@ -54,7 +58,7 @@ public class ResourceGroupAnalyzer {
                 Expr lhs = eqPred.getChild(0);
                 Expr rhs = eqPred.getChild(1);
                 if (!(lhs instanceof SlotRef) || !(rhs instanceof StringLiteral)) {
-                    throw new SemanticException("Illegal classifier '" + eqPred.toSql() + "'");
+                    throw new SemanticException("Illegal classifier '" + ExprToSql.toSql(eqPred) + "'");
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
@@ -62,14 +66,14 @@ public class ResourceGroupAnalyzer {
                     if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
-                                        eqPred.toSql()));
+                                        ExprToSql.toSql(eqPred)));
                     }
                     classifier.setUser(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.ROLE)) {
                     if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.ROLE,
-                                        eqPred.toSql()));
+                                        ExprToSql.toSql(eqPred)));
                     }
                     classifier.setRole(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.SOURCE_IP)) {
@@ -96,7 +100,7 @@ public class ResourceGroupAnalyzer {
                     if (planCpuCostRange == null) {
                         throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
                                         + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
-                                ResourceGroup.PLAN_CPU_COST_RANGE, eqPred.toSql()));
+                                ResourceGroup.PLAN_CPU_COST_RANGE, ExprToSql.toSql(eqPred)));
                     }
                     classifier.setPlanCpuCostRange(planCpuCostRange);
                 } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_MEM_COST_RANGE)) {
@@ -104,7 +108,7 @@ public class ResourceGroupAnalyzer {
                     if (planMemCostRange == null) {
                         throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
                                         + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
-                                ResourceGroup.PLAN_MEM_COST_RANGE, eqPred.toSql()));
+                                ResourceGroup.PLAN_MEM_COST_RANGE, ExprToSql.toSql(eqPred)));
                     }
                     classifier.setPlanMemCostRange(planMemCostRange);
                 } else {
@@ -116,7 +120,7 @@ public class ResourceGroupAnalyzer {
                 List<Expr> rhs = inPred.getListChildren();
                 if (!(lhs instanceof SlotRef) || rhs.stream().anyMatch(e -> !(e instanceof StringLiteral))) {
                     throw new SemanticException(
-                            String.format("Illegal classifier specifier: '%s'", inPred.toSql()));
+                            String.format("Illegal classifier specifier: '%s'", ExprToSql.toSql(inPred)));
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 if (!key.equalsIgnoreCase(ResourceGroup.QUERY_TYPE)) {
@@ -134,7 +138,7 @@ public class ResourceGroupAnalyzer {
                         .map(String::toUpperCase).map(ResourceGroupClassifier.QueryType::valueOf)
                         .collect(Collectors.toSet()));
             } else {
-                throw new SemanticException(String.format("Illegal classifier specifier: '%s'", pred.toSql()));
+                throw new SemanticException(String.format("Illegal classifier specifier: '%s'", ExprToSql.toSql(pred)));
             }
         }
 
@@ -200,6 +204,11 @@ public class ResourceGroupAnalyzer {
                         throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(include)");
                     }
                     resourceGroup.setMemLimit(memLimit);
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_POOL)) {
+                    resourceGroup.setMemPool(value);
                     continue;
                 }
 
@@ -275,6 +284,93 @@ public class ResourceGroupAnalyzer {
             }
 
             throw new SemanticException("Unknown property: " + key);
+        }
+    }
+
+    /**
+     * Analyze CreateResourceGroupStmt for validation only
+     * The actual ResourceGroup construction is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeCreateResourceGroupStmt(CreateResourceGroupStmt stmt) throws SemanticException {
+        // Validate classifiers by converting them (this validates the syntax and format)
+        for (List<Predicate> predicates : stmt.getClassifiers()) {
+            convertPredicateToClassifier(predicates);
+        }
+
+        // Create a temporary ResourceGroup to validate properties
+        ResourceGroup tempResourceGroup = new ResourceGroup();
+        analyzeProperties(tempResourceGroup, stmt.getProperties());
+
+        // Validate required properties exist
+        if (tempResourceGroup.getMemLimit() == null) {
+            throw new SemanticException("property 'mem_limit' is absent");
+        }
+
+        // Set default type if not specified for validation
+        if (tempResourceGroup.getResourceGroupType() == null) {
+            tempResourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        }
+
+        // Validate short query resource group constraints
+        if (tempResourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
+                (tempResourceGroup.getExclusiveCpuCores() != null && tempResourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException("short query resource group should not set exclusive_cpu_cores");
+        }
+
+        // Validate CPU parameters
+        ResourceGroup.validateCpuParameters(tempResourceGroup.getRawCpuWeight(), tempResourceGroup.getExclusiveCpuCores());
+    }
+
+    /**
+     * Analyze AlterResourceGroupStmt for validation only
+     * The actual ResourceGroup modification is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeAlterResourceGroupStmt(AlterResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+
+        // Validate classifiers by converting them (this validates the syntax and format)
+        if (cmd instanceof AlterResourceGroupStmt.AddClassifiers addClassifiers) {
+            for (List<Predicate> predicates : addClassifiers.getClassifiers()) {
+                convertPredicateToClassifier(predicates);
+            }
+        } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties alterProperties) {
+            // Create a temporary ResourceGroup to validate properties
+            ResourceGroup tempResourceGroup = new ResourceGroup();
+            analyzeProperties(tempResourceGroup, alterProperties.getProperties());
+            
+            // Validate that type cannot be changed
+            if (tempResourceGroup.getResourceGroupType() != null) {
+                throw new SemanticException("type of ResourceGroup is immutable");
+            }
+            
+            // Validate that at least one property is specified
+            if (tempResourceGroup.getRawCpuWeight() == null &&
+                    tempResourceGroup.getExclusiveCpuCores() == null &&
+                    tempResourceGroup.getMemLimit() == null &&
+                    tempResourceGroup.getConcurrencyLimit() == null &&
+                    tempResourceGroup.getMaxCpuCores() == null &&
+                    tempResourceGroup.getBigQueryCpuSecondLimit() == null &&
+                    tempResourceGroup.getBigQueryMemLimit() == null &&
+                    tempResourceGroup.getBigQueryScanRowsLimit() == null &&
+                    tempResourceGroup.getSpillMemLimitThreshold() == null) {
+                throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
+                        "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
+                        "'big_query_cpu_second_limit','spill_mem_limit_threshold') " +
+                        "should be specified");
+            }
+        }
+
+        // Validate builtin resource group constraints
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
+        }
+    }
+
+    public static void analyzeDropResourceGroupStmt(DropResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
         }
     }
 }

@@ -19,13 +19,13 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDeltaLakeTable;
 import com.starrocks.thrift.THdfsPartition;
@@ -142,7 +142,9 @@ public class DeltaLakeTable extends Table {
         tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
 
         List<LiteralExpr> keys = key.getKeys();
-        tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+        tPartition.setPartition_key_exprs(keys.stream()
+                .map(ExprToThrift::treeToThrift)
+                .collect(Collectors.toList()));
 
         THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
         tPartitionLocation.setPrefix_index(-1);

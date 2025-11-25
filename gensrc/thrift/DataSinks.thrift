@@ -157,6 +157,8 @@ struct TResultSink {
     2: optional TResultFileSinkOptions file_options;
     3: optional TResultSinkFormatType format;
     4: optional bool is_binary_row;
+    // It is non-empty only for ARROW_FLIGHT_PROTOCAL.
+    5: optional list<string> output_column_names;
 }
 
 struct TMysqlTableSink {
@@ -233,6 +235,7 @@ struct TOlapTableSink {
     31: optional binary encryption_meta;
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
+    34: optional bool is_multi_statements_txn
 }
 
 struct TSchemaTableSink {
@@ -241,6 +244,7 @@ struct TSchemaTableSink {
 }
 
 struct TIcebergTableSink {
+    // table location
     1: optional string location
     2: optional string file_format
     3: optional i64 target_table_id
@@ -248,6 +252,8 @@ struct TIcebergTableSink {
     5: optional bool is_static_partition_sink
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i64 target_max_file_size
+    8: optional i32 tuple_id
+    9: optional string data_location
 }
 
 struct THiveTableSink {

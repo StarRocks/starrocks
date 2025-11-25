@@ -17,9 +17,10 @@ package com.starrocks.sql.spm;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.analysis.HintNode;
 import com.starrocks.sql.Expr2SQLPrinter;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -612,7 +613,7 @@ public class SPMPlan2SQLBuilder {
             }
             if (window.getAnalyticWindow() != null && !AnalyticWindow.DEFAULT_WINDOW.equals(
                     window.getAnalyticWindow())) {
-                frame += window.getAnalyticWindow().toSql();
+                frame += ExprToSql.toSql(window.getAnalyticWindow());
             }
             frame = " OVER (" + frame + ")";
 

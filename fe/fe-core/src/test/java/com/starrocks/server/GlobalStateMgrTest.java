@@ -41,6 +41,7 @@ import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -54,7 +55,6 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -123,19 +123,6 @@ public class GlobalStateMgrTest {
         field4.set(globalStateMgr, nodeMgr);
 
         return globalStateMgr;
-    }
-
-    @Test
-    public void testReplayUpdateFrontend() throws Exception {
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
-        Frontend fe = frontends.get(0);
-        fe.updateHostAndEditLogPort("testHost", 1000);
-        globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
-        List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
-        Frontend updatedfFe = updatedFrontends.get(0);
-        Assertions.assertEquals("testHost", updatedfFe.getHost());
-        Assertions.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
 
     @Mocked

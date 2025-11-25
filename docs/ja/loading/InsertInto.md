@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # INSERT を使用したデータのロード
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 このトピックでは、SQL ステートメント - INSERT を使用して StarRocks にデータをロードする方法について説明します。
 

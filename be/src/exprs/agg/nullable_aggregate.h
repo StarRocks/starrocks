@@ -127,7 +127,8 @@ public:
         // for nullable column when the real whole chunk data all not-null.
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            if (!nullable_column->null_column()->get_data()[row_num]) {
+            auto imm_null_data = nullable_column->immutable_null_column_data();
+            if (!imm_null_data[row_num]) {
                 this->data(state).is_null = false;
                 const Column* data_column = nullable_column->data_column().get();
                 nested_function->merge(ctx, data_column, this->data(state).mutable_nest_state(), row_num);
@@ -212,13 +213,13 @@ public:
                 nested_function->convert_to_serialize_format(ctx, src, chunk_size, &dst_nullable_column->data_column());
             } else if (nullable_column->has_null()) {
                 dst_nullable_column->set_has_null(true);
-                const NullData& src_null_data = nullable_column->immutable_null_column_data();
+                const auto src_null_data = nullable_column->immutable_null_column_data();
                 size_t null_size = SIMD::count_nonzero(src_null_data);
                 if (null_size == chunk_size) {
                     dst_nullable_column->append_nulls(chunk_size);
                 } else {
                     NullData& dst_null_data = dst_nullable_column->null_column_data();
-                    dst_null_data = src_null_data;
+                    dst_null_data.assign(src_null_data.begin(), src_null_data.end());
                     if constexpr (IgnoreNull) {
                         Columns src_data_columns(1);
                         src_data_columns[0] = nullable_column->data_column();
@@ -869,7 +870,7 @@ public:
                 this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
             }
         };
-        auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
+        auto slow_call_path = [&](const ImmutableNullData& null_data, const Column* data_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 auto& state_data = this->data(states[i] + state_offset);
                 if (null_data[i] == 0) {
@@ -896,7 +897,7 @@ public:
             }
         };
 
-        auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
+        auto slow_call_path = [&](const ImmutableNullData& null_data, const Column* data_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (filter[i] == 0) {
                     auto& state_data = this->data(states[i] + state_offset);
@@ -923,7 +924,7 @@ public:
                 this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
             }
         };
-        auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
+        auto slow_call_path = [&](const ImmutableNullData& null_data, const Column* data_column) {
             for (size_t i = start; i < start + size; ++i) {
                 auto& state_data = this->data(state);
                 if (null_data[i] == 0) {
@@ -1086,7 +1087,7 @@ public:
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
                     dst_nullable_column->set_has_null(true);
-                    const NullData& src_null_data = nullable_column->immutable_null_column_data();
+                    const auto src_null_data = nullable_column->immutable_null_column_data();
 
                     size_t null_size = SIMD::count_nonzero(src_null_data);
                     // if one column only has null element, set dst_column all null

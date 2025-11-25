@@ -17,9 +17,9 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.sql.ast.expression.Expr;
 
 import java.util.ArrayList;
 import java.util.Collection;

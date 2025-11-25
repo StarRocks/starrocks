@@ -54,12 +54,14 @@ OBJECT_DATABASE: NULL
 
 `sys` contains the following metadata views:
 
-| **View**             | **Description**                                                               |
-| -------------------- | ----------------------------------------------------------------------------- |
-| [grants_to_roles](../sys/grants_to_roles.md)         | Records the information of privileges that are granted to user-defined roles. |
-| [grants_to_users](../sys/grants_to_users.md)         | Records the information of privileges that are granted to users.              |
-| [role_edges](../sys/role_edges.md)                   | Records the grantees of roles.                                                |
-| [object_dependencies](../sys/object_dependencies.md) | Records the dependency relationship of asynchronous materialized views.       |
+| **View**                                        | **Description**                                                               |
+| ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| [grants_to_roles](./grants_to_roles.md)         | Records the information of privileges that are granted to user-defined roles. |
+| [grants_to_users](./grants_to_users.md)         | Records the information of privileges that are granted to users.              |
+| [role_edges](./role_edges.md)                   | Records the grantees of roles.                                                |
+| [object_dependencies](./object_dependencies.md) | Records the dependency relationship of asynchronous materialized views.       |
+| [policy_references](./policy_references.md)     | Records the objects row access policies and column masking policies reference.|
+| [fe_locks](./fe_locks.md)                       | Records the information about metadata locks in StarRocks FE.                 |
 
 :::note
 

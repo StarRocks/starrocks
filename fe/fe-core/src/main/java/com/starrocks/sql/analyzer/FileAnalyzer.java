@@ -17,12 +17,13 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.StatementBase;
 
+import java.util.Map;
 import java.util.Optional;
 
 public class FileAnalyzer {
@@ -30,7 +31,7 @@ public class FileAnalyzer {
         new FileAnalyzer.FileAnalyzerVisitor().visit(statement, context);
     }
 
-    static class FileAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class FileAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
@@ -38,7 +39,7 @@ public class FileAnalyzer {
             if (Strings.isNullOrEmpty(statement.getFileName())) {
                 throw new SemanticException("File name is not specified");
             }
-            statement.analyzeProperties();
+            analyzeCreateFileProperties(statement);
             return null;
         }
 
@@ -68,6 +69,25 @@ public class FileAnalyzer {
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
             statement.setDbName(AnalyzerUtils.getOrDefaultDatabase(statement.getDbName(), context));
             return null;
+        }
+
+        private void analyzeCreateFileProperties(CreateFileStmt statement) {
+            Map<String, String> properties = statement.getProperties();
+            
+            Optional<String> optional = properties.keySet().stream().filter(
+                    entity -> !CreateFileStmt.PROPERTIES_SET.contains(entity)).findFirst();
+            if (optional.isPresent()) {
+                throw new SemanticException(optional.get() + " is invalid property");
+            }
+
+            String url = properties.get(CreateFileStmt.PROP_URL);
+            if (Strings.isNullOrEmpty(url)) {
+                throw new SemanticException("download url is missing");
+            }
+
+            if (properties.containsKey(CreateFileStmt.PROP_SAVE_CONTENT)) {
+                throw new SemanticException("'save_content' property is not supported yet");
+            }
         }
     }
 }

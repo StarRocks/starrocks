@@ -17,13 +17,14 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -62,7 +63,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
     private final int queryStopIndex;
-    private final List<String> sortKeys;
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in materialized view now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private final List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
@@ -70,9 +76,15 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private String simpleViewDef;
     // original view definition of the mv query without any rewrite which can be used in text based rewrite.
     private String originalViewDefineSql;
+    // IVM view definition of the mv which is rewritten by IVMAnalyzer#rewrite
+    private String ivmViewDef;
     // current db name when creating mv
     private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
+    // the refresh mode of the mv determined by analyzer
+    private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
+    // the encode row id version deduced by analyzer
+    private int encodeRowIdVersion = 0;
 
     // Maintenance information
     ExecPlan maintenancePlan;
@@ -107,7 +119,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
                                            List<Expr> partitionByExprs,
-                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           DistributionDesc distributionDesc,
+                                           List<OrderByElement> orderByElements,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
@@ -123,7 +136,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.partitionByExprs = partitionByExprs;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
         this.queryStopIndex = queryStopIndex;
@@ -206,6 +219,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return distributionDesc;
     }
 
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
+    }
+
     public List<String> getSortKeys() {
         return sortKeys;
     }
@@ -244,6 +265,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setOriginalViewDefineSql(String originalViewDefineSql) {
         this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public String getIvmViewDef() {
+        return ivmViewDef;
+    }
+
+    public void setIvmViewDef(String ivmViewDef) {
+        this.ivmViewDef = ivmViewDef;
     }
 
     public int getQueryStartIndex() {
@@ -342,8 +371,24 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
     }
 
+    public void setCurrentRefreshMode(MaterializedView.RefreshMode currentRefreshMode) {
+        this.currentRefreshMode = currentRefreshMode;
+    }
+
+    public MaterializedView.RefreshMode getCurrentRefreshMode() {
+        return currentRefreshMode;
+    }
+
+    public void setEncodeRowIdVersion(int encodeRowIdVersion) {
+        this.encodeRowIdVersion = encodeRowIdVersion;
+    }
+
+    public int getEncodeRowIdVersion() {
+        return encodeRowIdVersion;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateMaterializedViewStatement(this, context);
     }
 }

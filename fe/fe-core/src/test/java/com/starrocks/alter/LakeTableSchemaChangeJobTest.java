@@ -46,9 +46,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
@@ -65,6 +68,16 @@ public class LakeTableSchemaChangeJobTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
+        // Schema change job is executed manually, so stop the schema change daemon to avoid interfering with the test.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
+        schemaChangeHandler.setStop();
+        schemaChangeHandler.interrupt();
+        long startTime = System.currentTimeMillis();
+        while (schemaChangeHandler.isRunning()) {
+            Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() - startTime < 60000,
+                    "Schema change handler is not stopped in 60 seconds");
+        }
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
@@ -404,7 +417,7 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testAlterTabletSuccessEnablePartitionAgg() throws Exception {
+    public void testAlterTabletSuccessEnableFileBundling() throws Exception {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -415,6 +428,51 @@ public class LakeTableSchemaChangeJobTest {
         LakeTable table1 = createTable(connectContext, 
                     "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
                                 "PROPERTIES('file_bundling'='true')");
+        
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
+        
+        schemaChangeJob1.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assertions.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Collection<Partition> partitions = table1.getPartitions();
+        Assertions.assertEquals(1, partitions.size());
+        Partition partition = partitions.stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assertions.assertEquals(1, shadowIndexes.size());
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+
+        while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+    }
+
+    @Test
+    public void testAlterTabletSuccessDisableFileBundling() throws Exception {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        LakeTable table1 = createTable(connectContext, 
+                    "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                                "PROPERTIES('file_bundling'='false')");
         
         Config.enable_fast_schema_evolution_in_share_data_mode = false;
         alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
@@ -535,6 +593,56 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testPublishRetry() throws Exception {
+        AtomicInteger numPublishRetry = new AtomicInteger(0);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                numPublishRetry.incrementAndGet();
+                return false;
+            }
+        };
+        
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        schemaChangeJob.run();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        long timeoutMs = 10 * 60 * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (numPublishRetry.get() < 2) {
+            schemaChangeJob.run();
+            Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    () -> String.format("publish does not retry before timeout, job state: %s", schemaChangeJob.getJobState()));
+        }
+
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                return true;
+            }
+        };
+
+        deadline = System.currentTimeMillis() + timeoutMs;
+        while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED
+                || table.getState() != OlapTable.OlapTableState.NORMAL) {
+            schemaChangeJob.run();
+            Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    () -> String.format("publish does not finish before timeout, job state: %s, table state: %s",
+                            schemaChangeJob.getJobState(), table.getState()));
+        }
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
+    }
+
+    @Test
     public void testTransactionRaceCondition() throws AlterCancelException {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
@@ -561,7 +669,13 @@ public class LakeTableSchemaChangeJobTest {
         Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
                 schemaChangeJob.runPendingJob());
         Assertions.assertTrue(exception.getMessage().contains(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
+                "concurrent transaction detected while adding shadow index, please re-run the alter table command"),
+                () -> {
+                    StringWriter sw = new java.io.StringWriter();
+                    PrintWriter pw = new java.io.PrintWriter(sw);
+                    exception.printStackTrace(pw);
+                    return sw.toString();
+                });
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assertions.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 

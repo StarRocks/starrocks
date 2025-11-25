@@ -27,6 +27,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "util/value_generator.h"
 
 namespace starrocks {
 

@@ -15,10 +15,10 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -41,6 +41,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -59,14 +60,17 @@ public class MetaScanNode extends ScanNode {
     private final List<Column> tableSchema;
     private final List<String> selectPartitionNames;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
+    private long selectedIndexId = -1;
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, ComputeResource computeResource) {
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames,
+                        long selectedIndexId, ComputeResource computeResource) {
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
         this.selectPartitionNames = selectPartitionNames;
+        this.selectedIndexId = selectedIndexId;
         this.computeResource = computeResource;
     }
 
@@ -75,8 +79,13 @@ public class MetaScanNode extends ScanNode {
         if (selectPartitionNames.isEmpty()) {
             partitions = olapTable.getPhysicalPartitions();
         } else {
-            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
-                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+            partitions = selectPartitionNames.stream().map(name -> {
+                Partition partition = olapTable.getPartition(name, false);
+                if (partition != null) {
+                    return partition;
+                }
+                return olapTable.getPartition(name, true);
+            }).map(Partition::getSubPartitions).flatMap(Collection::stream).collect(Collectors.toList());
         }
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
@@ -176,6 +185,17 @@ public class MetaScanNode extends ScanNode {
             columnsDesc.add(tColumn);
         }
         msg.meta_scan_node.setColumns(columnsDesc);
+        if (selectedIndexId != -1) {
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
+            if (indexMeta != null) {
+                long schemaId = indexMeta.getSchemaId();
+                msg.meta_scan_node.setSchema_id(schemaId);
+            }
+        }
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.meta_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+        }
     }
 
     @Override
@@ -192,6 +212,10 @@ public class MetaScanNode extends ScanNode {
         }
         if (!selectPartitionNames.isEmpty()) {
             output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            output.append(explainColumnAccessPath(prefix));
         }
         return output.toString();
     }

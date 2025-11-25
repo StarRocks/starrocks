@@ -23,23 +23,26 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -54,6 +57,13 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.TruncateTablePartitionStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -164,6 +174,83 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
         hmsOps.createTableLike(stmt);
+    }
+
+    @Override
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        String dbName = truncateTableStmt.getDbName();
+        String tableName = truncateTableStmt.getTblName();
+
+        Table table = getTable(context, dbName, tableName);
+        if (table == null) {
+            throw new DdlException("Table [" + tableName + "] does not exist");
+        }
+
+        if (!(table instanceof HiveTable hiveTable)) {
+            throw new DdlException("Table [" + tableName + "] is not a Hive table");
+        }
+
+        if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE) {
+            throw new StarRocksConnectorException("Only managed Hive table support truncate operation, table type is %s",
+                    hiveTable.getHiveTableType());
+        }
+
+        List<String> locations = Lists.newArrayList();
+        if (truncateTableStmt instanceof TruncateTablePartitionStmt truncateTablePartitionStmt) {
+            // truncate partitions data
+            locations.addAll(filterTruncatePartitions(truncateTablePartitionStmt, hiveTable, context));
+        } else if (hiveTable.isUnPartitioned()) {
+            // truncate whole unpartitioned table data
+            String tableLocation = hiveTable.getTableLocation();
+            locations.add(tableLocation);
+        } else {
+            // truncate whole partitioned table data
+            List<String> partitionNames = hmsOps.getPartitionKeys(dbName, tableName);
+            hmsOps.getPartitionByNames(hiveTable, partitionNames).values().forEach(partition -> {
+                locations.add(partition.getFullPath());
+            });
+        }
+
+        fileOps.truncateLocations(locations);
+        refreshTable(dbName, hiveTable, null, true);
+    }
+
+    private List<String> filterTruncatePartitions(TruncateTablePartitionStmt stmt, HiveTable table,
+                                                  ConnectContext context) throws DdlException {
+
+        if (table.isUnPartitioned()) {
+            throw new StarRocksConnectorException("Table [" + table.getName() + "] is not partitioned, " +
+                    "cannot truncate partitions");
+        }
+
+        List<String> partitionColNames = stmt.getKeyPartitionRef().getPartitionColNames();
+        if (partitionColNames.stream().anyMatch(p -> !table.getPartitionColumnNames().contains(p))) {
+            throw new DdlException("partition names in partition spec do not match table partition columns");
+        }
+
+        List<Expr> predicates = Lists.newArrayList();
+        for (int index = 0; index < partitionColNames.size(); index++) {
+            String partitionColName = partitionColNames.get(index);
+            Expr partitionColValueExpr = stmt.getKeyPartitionRef().getPartitionColValues().get(index);
+            BinaryPredicate eqPredicate = new BinaryPredicate(BinaryType.EQ,
+                    new SlotRef(new TableName(stmt.getCatalogName(), stmt.getDbName(), stmt.getTblName()), partitionColName),
+                    partitionColValueExpr);
+            predicates.add(eqPredicate);
+        }
+        Expr partitionFilter = ExprUtils.compoundAnd(predicates);
+
+        List<PartitionKey> partitionKeys = partitionFilter != null ?
+                PartitionUtil.getFilteredPartitionKeys(context, table, partitionFilter) : null;
+        if (partitionKeys == null || partitionKeys.isEmpty()) {
+            throw new StarRocksConnectorException("No partitions matched the partition filter");
+        }
+
+        List<String> partitionLocations = Lists.newArrayList();
+        hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values().forEach(partition -> {
+            partitionLocations.add(partition.getFullPath());
+        });
+
+        return partitionLocations;
     }
 
     @Override
@@ -310,7 +397,7 @@ public class HiveMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit,
-                                         TableVersionRange version) {
+                                         TvrVersionRange version) {
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
@@ -321,7 +408,7 @@ public class HiveMetadata implements ConnectorMetadata {
             if (session.getSessionVariable().enableHiveColumnStats()) {
                 statistics = statisticsProvider.getTableStatistics(session, table, columnRefOperators, partitionKeys);
             } else {
-                statistics = Statistics.builder().build();
+                statistics = Statistics.builder().setOutputRowCount(Config.default_statistics_output_row_count).build();
                 LOG.warn("Session variable {} is false when getting table statistics on table {}",
                         SessionVariable.ENABLE_HIVE_COLUMN_STATS, table);
             }
@@ -438,7 +525,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 addPartition(context, stmt, alterClause);
             } else {
                 throw new StarRocksConnectorException("This connector doesn't support alter table type: %s",
-                        alterClause.getOpType());
+                        alterClause.getClass().getSimpleName());
             }
         }
     }

@@ -2,6 +2,10 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.TableName;
+import com.starrocks.persist.ModifyBrokerInfo;
+import com.starrocks.persist.TableRefPersist;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -38,11 +42,10 @@ public class ExportRelativeStmtTest {
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
         fsBroker.handleHbResponse(hbResponse, false);
-        GlobalStateMgr.getCurrentState().getBrokerMgr().replayAddBrokers("broker", Lists.newArrayList(fsBroker));
+        GlobalStateMgr.getCurrentState().getBrokerMgr().replayAddBrokers(new ModifyBrokerInfo("broker", Lists.newArrayList(fsBroker)));
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assertions.assertNotNull(stmt.getRedirectStatus());
         Assertions.assertTrue(AuditEncryptionChecker.needEncrypt(stmt));
         Assertions.assertNotNull(stmt.getRowDelimiter());
         Assertions.assertNotNull(stmt.getTblName());
@@ -160,7 +163,7 @@ public class ExportRelativeStmtTest {
         TableName tb = new TableName(dbName, tableName);
         List<String> columnLst = Lists.newArrayList("c1", "c2");
 
-        ExportStmt stmt1 = new ExportStmt(new TableRef(tb, null), columnLst, path, new HashMap<>(), null);
+        ExportStmt stmt1 = new ExportStmt(new TableRefPersist(tb, null), columnLst, path, new HashMap<>(), null);
 
         try {
             Analyzer.analyze(stmt1, AnalyzeTestUtil.getConnectContext());
@@ -174,8 +177,7 @@ public class ExportRelativeStmtTest {
     public void testShowExport() {
         String originStmt = "Show Export limit 10";
         ShowExportStmt stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assertions.assertNotNull(stmt.getMetaData());
-        Assertions.assertNotNull(stmt.getRedirectStatus());
+        Assertions.assertNotNull(new ShowResultMetaFactory().getMetadata(stmt));
         Assertions.assertNull(stmt.getJobState());
         Assertions.assertEquals(0, stmt.getJobId());
         Assertions.assertNull(stmt.getQueryId());

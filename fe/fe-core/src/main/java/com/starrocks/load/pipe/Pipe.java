@@ -18,8 +18,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -446,7 +446,7 @@ public class Pipe implements GsonPostProcessable {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = TaskBuilder.buildPipeTask(taskDesc);
             try {
-                taskManager.createTask(task, false);
+                taskManager.createTask(task);
             } catch (DdlException e) {
                 recordTaskError(taskDesc, "create task failed");
                 return;

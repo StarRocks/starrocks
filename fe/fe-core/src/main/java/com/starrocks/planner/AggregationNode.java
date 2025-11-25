@@ -38,21 +38,23 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -63,6 +65,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
@@ -104,6 +108,8 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     private boolean withRuntimeFilters = false;
+
+    private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats = Lists.newArrayList();
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -168,6 +174,11 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
+    public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
+        this.groupByMinMaxStats = groupByMinMaxStats;
+    }
+
+    @Override
     public void disablePhysicalPropertyOptimize() {
         setUseSortAgg(false);
         setUsePerBucketOptimize(false);
@@ -217,11 +228,11 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
-            aggregateFunctions.add(e.treeToThrift());
+            aggregateFunctions.add(ExprToThrift.treeToThrift(e));
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
-            sqlAggFuncBuilder.append(e.toSql());
+            sqlAggFuncBuilder.append(ExprToSql.toSql(e));
         }
 
         msg.agg_node =
@@ -238,22 +249,51 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
-            msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
+            msg.agg_node.setGrouping_exprs(ExprToThrift.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {
                 if (sqlGroupingKeysBuilder.length() > 0) {
                     sqlGroupingKeysBuilder.append(", ");
                 }
-                sqlGroupingKeysBuilder.append(e.toSql());
+                sqlGroupingKeysBuilder.append(ExprToSql.toSql(e));
             }
             if (sqlGroupingKeysBuilder.length() > 0) {
                 msg.agg_node.setSql_grouping_keys(sqlGroupingKeysBuilder.toString());
+            }
+
+            List<Expr> minMaxStats = Lists.newArrayList();
+            if (groupByMinMaxStats.size() == groupingExprs.size()) {
+                for (int i = 0; i < groupingExprs.size(); i++) {
+                    final Expr expr = groupingExprs.get(i);
+
+                    String min = groupByMinMaxStats.get(i).first.getVarchar();
+                    String max = groupByMinMaxStats.get(i).second.getVarchar();
+
+                    try {
+                        Type type = expr.getType();
+                        LiteralExpr minExpr = LiteralExprFactory.create(min, type);
+                        LiteralExpr maxExpr = LiteralExprFactory.create(max, type);
+                        // cast decimal literal to matched precision type
+                        if (minExpr instanceof DecimalLiteral) {
+                            minExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(minExpr, type);
+                            maxExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(maxExpr, type);
+                        } 
+                        minMaxStats.add(minExpr);
+                        minMaxStats.add(maxExpr);
+                    } catch (AnalysisException e) {
+                        break;
+                    }
+                }
+            }
+
+            if (minMaxStats.size() == 2 * groupingExprs.size()) {
+                msg.agg_node.setGroup_by_min_max(ExprToThrift.treesToThrift(minMaxStats));
             }
         }
 
         List<Expr> intermediateAggrExprs = aggInfo.getIntermediateAggrExprs();
         if (intermediateAggrExprs != null && !intermediateAggrExprs.isEmpty()) {
-            msg.agg_node.setIntermediate_aggr_exprs(Expr.treesToThrift(intermediateAggrExprs));
+            msg.agg_node.setIntermediate_aggr_exprs(ExprToThrift.treesToThrift(intermediateAggrExprs));
         }
 
         if (!buildRuntimeFilters.isEmpty()) {
@@ -294,27 +334,27 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (nameDetail != null) {
             output.append(detailPrefix).append(nameDetail).append("\n");
         }
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
+        if (aggInfo.getAggregateExprs() != null && !aggInfo.getMaterializedAggregateExprs().isEmpty()) {
             if (detailLevel == TExplainLevel.VERBOSE) {
                 output.append(detailPrefix).append("aggregate: ");
             } else {
                 output.append(detailPrefix).append("output: ");
             }
-            output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
+            output.append(explainExpr(detailLevel, aggInfo.getAggregateExprs())).append("\n");
         }
         // TODO: unify them
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
                 output.append(detailPrefix).append("group by: ").append(
-                        getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                        explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
             }
         } else {
             output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+                    explainExpr(detailLevel, aggInfo.getGroupingExprs())).append("\n");
         }
 
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel))
+            output.append(detailPrefix).append("having: ").append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
         }
         if (useSortAgg) {
@@ -330,6 +370,14 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
                 output.append(detailPrefix).append("build runtime filters:\n");
                 for (RuntimeFilterDescription rf : buildRuntimeFilters) {
                     output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
+                }
+            }
+            if (!aggInfo.getGroupingExprs().isEmpty() &&
+                    groupByMinMaxStats.size() == aggInfo.getGroupingExprs().size()) {
+                output.append(detailPrefix).append("group by min-max stats:\n");
+                for (Pair<ConstantOperator, ConstantOperator> stat : groupByMinMaxStats) {
+                    output.append(detailPrefix).append("- ").append(stat.first).append(":").append(stat.second)
+                            .append("\n");
                 }
             }
         }
@@ -406,7 +454,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         // is unacceptable.
         List<ColumnStatistic> stringColumnStatistics = slotRefs.stream()
                 .map(slot -> columnStatistics.get(new ColumnRefOperator(slot.getSlotId().asInt(),
-                        ScalarType.UNKNOWN_TYPE, "key", false)))
+                        UnknownType.UNKNOWN_TYPE, "key", false)))
                 .filter(stat -> stat != null && !stat.isUnknown() &&
                         stat.getAverageRowSize() * stat.getDistinctValuesCount() > 24 * cardinalityLimit)
                 .collect(Collectors.toList());
@@ -498,7 +546,8 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
                                     ExecGroupSets execGroupSets) {
         SessionVariable sv = ConnectContext.get().getSessionVariable();
         // RF push down group by one column
-        if (limit > 0 && limit < sv.getAggInFilterLimit() && !aggInfo.getAggregateExprs().isEmpty() && !aggInfo.getGroupingExprs().isEmpty()) {
+        if (limit > 0 && limit < sv.getAggInFilterLimit() && !aggInfo.getAggregateExprs().isEmpty() &&
+                !aggInfo.getGroupingExprs().isEmpty()) {
             Expr groupingExpr = aggInfo.getGroupingExprs().get(0);
             pushDownUnaryInRuntimeFilter(generator, groupingExpr, descTbl, execGroupSets, 0);
         }

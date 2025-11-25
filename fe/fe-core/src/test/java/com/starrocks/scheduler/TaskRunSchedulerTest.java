@@ -197,7 +197,6 @@ public class TaskRunSchedulerTest {
         Assertions.assertTrue(scheduler.getRunningTaskCount() == 1);
         Assertions.assertTrue(scheduler.getPendingQueueCount() == 9);
 
-        System.out.println(scheduler);
         for (int i = 0; i < 1; i++) {
             Assertions.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
         }
@@ -294,7 +293,6 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        System.out.println(taskRunScheduler);
         Assertions.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
     }
 
@@ -322,6 +320,10 @@ public class TaskRunSchedulerTest {
         run3.setRunCtx(context3);
         run3.setTaskId(3L);
         taskRunScheduler.addPendingTaskRun(run3);
+        TaskRun runNull = new TaskRun();
+        runNull.setRunCtx(null);
+        runNull.setTaskId(4L);
+        taskRunScheduler.addPendingTaskRun(runNull);
 
         TaskRun run4 = new TaskRun();
         run4.setRunCtx(context1);
@@ -335,6 +337,10 @@ public class TaskRunSchedulerTest {
         run6.setRunCtx(context3);
         run6.setTaskId(6L);
         taskRunScheduler.addRunningTaskRun(run6);
+        TaskRun runNull2 = new TaskRun();
+        runNull2.setRunCtx(null);
+        runNull2.setTaskId(7L);
+        taskRunScheduler.addRunningTaskRun(runNull2);
 
         TaskRun run7 = new TaskRun();
         run7.setRunCtx(context1);
@@ -348,6 +354,10 @@ public class TaskRunSchedulerTest {
         run9.setRunCtx(context3);
         run9.setTaskId(9L);
         taskRunScheduler.addSyncRunningTaskRun(run9);
+        TaskRun runNull3 = new TaskRun();
+        runNull3.setRunCtx(null);
+        runNull3.setTaskId(10L);
+        taskRunScheduler.addSyncRunningTaskRun(runNull3);
 
         Map<Long, Long> result = taskRunScheduler.getAllRunnableTaskCount();
         Assertions.assertEquals(3, result.size());

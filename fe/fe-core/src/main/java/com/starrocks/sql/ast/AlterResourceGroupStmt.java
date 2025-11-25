@@ -14,17 +14,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -39,10 +31,8 @@ import java.util.Map;
 // 3. Modify properties
 //  ALTER RESOURCE GROUP <name> WITH ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='k')
 public class AlterResourceGroupStmt extends DdlStmt {
-    private String name;
-    private SubCommand cmd;
-    private List<ResourceGroupClassifier> newAddedClassifiers = Collections.emptyList();
-    private ResourceGroup changedProperties = new ResourceGroup();
+    private final String name;
+    private final SubCommand cmd;
 
     public AlterResourceGroupStmt(String name, SubCommand cmd) {
         this(name, cmd, NodePosition.ZERO);
@@ -54,62 +44,12 @@ public class AlterResourceGroupStmt extends DdlStmt {
         this.cmd = cmd;
     }
 
-    public SubCommand getCmd() {
-        return this.cmd;
-    }
-
     public String getName() {
         return this.name;
     }
 
-    public void analyze() {
-        if (cmd instanceof AddClassifiers) {
-            AddClassifiers addClassifiers = (AddClassifiers) cmd;
-            List<ResourceGroupClassifier> classifierList = new ArrayList<>();
-            for (List<Predicate> predicates : addClassifiers.classifiers) {
-                ResourceGroupClassifier classifier = ResourceGroupAnalyzer.convertPredicateToClassifier(predicates);
-                classifierList.add(classifier);
-            }
-            newAddedClassifiers = classifierList;
-        } else if (cmd instanceof AlterProperties) {
-            AlterProperties alterProperties = (AlterProperties) cmd;
-            ResourceGroupAnalyzer.analyzeProperties(changedProperties, alterProperties.properties);
-            if (changedProperties.getResourceGroupType() != null) {
-                throw new SemanticException("type of ResourceGroup is immutable");
-            }
-            if (changedProperties.getRawCpuWeight() == null &&
-                    changedProperties.getExclusiveCpuCores() == null &&
-                    changedProperties.getMemLimit() == null &&
-                    changedProperties.getConcurrencyLimit() == null &&
-                    changedProperties.getMaxCpuCores() == null &&
-                    changedProperties.getBigQueryCpuSecondLimit() == null &&
-                    changedProperties.getBigQueryMemLimit() == null &&
-                    changedProperties.getBigQueryScanRowsLimit() == null &&
-                    changedProperties.getSpillMemLimitThreshold() == null) {
-                throw new SemanticException("At least one of ('cpu_weight','exclusive_cpu_cores','mem_limit'," +
-                        "'max_cpu_cores','concurrency_limit','big_query_mem_limit', 'big_query_scan_rows_limit'," +
-                        "'big_query_cpu_second_limit','spill_mem_limit_threshold') " +
-                        "should be specified");
-            }
-        }
-
-        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterProperties)) {
-            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
-        }
-    }
-
-    public List<ResourceGroupClassifier> getNewAddedClassifiers() {
-        return newAddedClassifiers;
-    }
-
-    public ResourceGroup getChangedProperties() {
-        return changedProperties;
-    }
-
-    public List<Long> getClassifiersToDrop() {
-        Preconditions.checkArgument(cmd instanceof DropClassifiers);
-        DropClassifiers dropClassifiers = (DropClassifiers) cmd;
-        return dropClassifiers.classifierIds;
+    public SubCommand getCmd() {
+        return this.cmd;
     }
 
     public static class SubCommand implements ParseNode {
@@ -141,6 +81,10 @@ public class AlterResourceGroupStmt extends DdlStmt {
             super(pos);
             this.classifiers = classifiers;
         }
+
+        public List<List<Predicate>> getClassifiers() {
+            return classifiers;
+        }
     }
 
     public static class DropClassifiers extends SubCommand {
@@ -153,6 +97,10 @@ public class AlterResourceGroupStmt extends DdlStmt {
         public DropClassifiers(List<Long> classifierIds, NodePosition pos) {
             super(pos);
             this.classifierIds = classifierIds;
+        }
+
+        public List<Long> getClassifierIds() {
+            return classifierIds;
         }
     }
 
@@ -178,10 +126,14 @@ public class AlterResourceGroupStmt extends DdlStmt {
             super(pos);
             this.properties = properties;
         }
+
+        public Map<String, String> getProperties() {
+            return properties;
+        }
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterResourceGroupStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterResourceGroupStatement(this, context);
     }
 }

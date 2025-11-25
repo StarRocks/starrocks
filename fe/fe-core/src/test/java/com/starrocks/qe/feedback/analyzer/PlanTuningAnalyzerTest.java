@@ -124,6 +124,32 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testTuneGuidesInfoFormat() throws Exception {
+        String sql = "select * from (select * from customer where c_acctbal > 5000 ) c " +
+                     "join (select * from supplier where s_acctbal = 1) s on abs(c_custkey) = abs(s_suppkey)";
+        ExecPlan execPlan = getExecPlan(sql);
+        OptExpression root = execPlan.getPhysicalPlan();
+        NodeExecStats left = new NodeExecStats(0, 500000, 500000, 0, 0, 0);
+        NodeExecStats right = new NodeExecStats(4, 20000000, 20000000, 0, 0, 0);
+        Map<Integer, NodeExecStats> map = Maps.newHashMap();
+        map.put(0, left);
+        map.put(4, right);
+        SkeletonBuilder skeletonBuilder = new SkeletonBuilder(map);
+        Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair = skeletonBuilder.buildSkeleton(root);
+        OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
+        PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
+
+        String tuneGuidesInfo = tuningGuides.getTuneGuidesInfo(false);
+        String fullTuneGuidesInfo = tuningGuides.getFullTuneGuidesInfo();
+
+        Assertions.assertEquals("[PlanNode 5] (RightChildEstimationErrorTuningGuide)", tuneGuidesInfo);
+        Assertions.assertEquals("[PlanNode 5] (RightChildEstimationErrorTuningGuide) " +
+                                "(Reason: Right child statistics of JoinNode 5 had been underestimated.) " +
+                                "(Advice: Adjust the distribution join execution type " +
+                                "and join plan to improve the performance.)", fullTuneGuidesInfo);
+    }
+
+    @Test
     public void testSameScanNode() throws Exception {
         String sql = "select * from customer l join customer r on l.c_custkey = r.c_custkey";
         ExecPlan execPlan = getExecPlan(sql);

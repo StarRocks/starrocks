@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -32,6 +31,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -45,7 +45,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class CatalogUtils {
 
@@ -88,6 +88,10 @@ public class CatalogUtils {
                 if (partitionDesc.isSetIfNotExists()) {
                     existPartitionNameSet.add(partitionName);
                 } else {
+                    // add more information for user
+                    Partition existedPartition = olapTable.getPartition(partitionName);
+                    LOG.warn("Duplicate partition name {}, existed partition:{}, current partition:{}", partitionName,
+                            existedPartition, partitionDesc);
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }

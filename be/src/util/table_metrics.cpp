@@ -84,8 +84,8 @@ void TableMetricsManager::cleanup(bool force) {
     if (!config::enable_table_metrics) {
         return;
     }
-    int64_t current_second = MonotonicSeconds();
 #ifndef BE_TEST
+    int64_t current_second = MonotonicSeconds();
     if (!force && current_second - _last_cleanup_ts <= kCleanupIntervalSeconds) {
         return;
     }

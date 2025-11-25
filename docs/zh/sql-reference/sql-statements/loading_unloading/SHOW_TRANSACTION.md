@@ -25,12 +25,14 @@ Coordinator: FE: 10.74.167.16
 TransactionStatus: VISIBLE
 LoadJobSourceType: INSERT_STREAMING
 PrepareTime: 2020-01-09 14:59:07
+PreparedTime: 2020-01-09 14:59:08
 CommitTime: 2020-01-09 14:59:09
 FinishTime: 2020-01-09 14:59:09
 Reason:
 ErrorReplicasCount: 0
 ListenerId: -1
 TimeoutMs: 300000
+PreparedTimeoutMs: 86400000
 ```
 
 * TransactionId：事务 id
@@ -43,12 +45,14 @@ TimeoutMs: 300000
 * ABORTED：事务失败
 * LoadJobSourceType：导入任务的类型
 * PrepareTime：事务开始时间
+* PreparedTime: 事务预提交成功的时间（自v3.5.4版本起支持）
 * CommitTime：事务提交成功的时间
 * FinishTime：数据可见的时间
 * Reason：错误信息
 * ErrorReplicasCount：有错误的副本数
 * ListenerId：相关的导入作业的 id
-* TimeoutMs：事务超时时间，单位毫秒
+* TimeoutMs: 从 `PREPARE` 状态到 `PREPARED` 状态的事务超时时间，单位为毫秒
+* PreparedTimeoutMs: 从 `PREPARED` 状态到 `COMMITTED` 状态的事务超时时间，单位为毫秒（从 v3.5.4 版本开始支持）
 
 ## 示例
 

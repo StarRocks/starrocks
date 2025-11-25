@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.connector.BranchOptions;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreateOrReplaceBranchClause extends AlterTableClause {
@@ -27,7 +25,7 @@ public class CreateOrReplaceBranchClause extends AlterTableClause {
 
     public CreateOrReplaceBranchClause(NodePosition pos, String branchName,
                                      BranchOptions branchOptions, boolean create, boolean replace, boolean ifNotExists) {
-        super(AlterOpType.ALTER_BRANCH, pos);
+        super(pos);
         this.branchName = branchName;
         this.branchOptions = branchOptions;
         this.create = create;
@@ -57,6 +55,6 @@ public class CreateOrReplaceBranchClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateOrReplaceBranchClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateOrReplaceBranchClause(this, context);
     }
 }

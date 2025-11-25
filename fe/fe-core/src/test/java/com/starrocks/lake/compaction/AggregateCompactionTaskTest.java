@@ -15,7 +15,6 @@
 package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.lake.compaction.CompactionTask;
 import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;

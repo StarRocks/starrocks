@@ -49,6 +49,7 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Item").add("Number").build();
 
+    public static final String BALANCE_STAT = "balance_stat";
     public static final String CLUSTER_LOAD = "cluster_load_stat";
     public static final String WORKING_SLOTS = "working_slots";
     public static final String SCHED_STAT = "sched_stat";
@@ -66,8 +67,10 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String name) throws AnalysisException {
-        if (name.equals(CLUSTER_LOAD)) {
-            return new ClusterLoadStatByMedium();
+        if (name.equals(BALANCE_STAT)) {
+            return new BalanceStatProcNode(GlobalStateMgr.getCurrentState().getTabletScheduler());
+        } else if (name.equals(CLUSTER_LOAD)) {
+            return new ClusterLoadStatByMedium(GlobalStateMgr.getCurrentState().getTabletScheduler());
         } else if (name.equals(WORKING_SLOTS)) {
             return new SchedulerWorkingSlotsProcDir();
         } else if (name.equals(SCHED_STAT)) {
@@ -86,6 +89,7 @@ public class ClusterBalanceProcDir implements ProcDirInterface {
 
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
         TabletChecker tabletChecker = GlobalStateMgr.getCurrentState().getTabletChecker();
+        result.addRow(Lists.newArrayList(BALANCE_STAT, "1"));
         result.addRow(Lists.newArrayList(CLUSTER_LOAD, "1"));
         result.addRow(Lists.newArrayList(WORKING_SLOTS,
                 String.valueOf(tabletScheduler.getBackendsWorkingSlots().size())));

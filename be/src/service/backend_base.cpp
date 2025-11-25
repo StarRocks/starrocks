@@ -123,6 +123,9 @@ void BackendServiceBase::fetch_data(TFetchDataResult& return_val, const TFetchDa
 }
 
 void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) {
+#ifdef __APPLE__
+    Status::NotSupported("submit_routine_load_task is not supported on MacOS").to_thrift(&t_status);
+#else
     for (auto& task : tasks) {
         Status st = _exec_env->routine_load_task_executor()->submit_task(task);
         if (!st.ok()) {
@@ -132,13 +135,15 @@ void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::
     }
 
     return Status::OK().to_thrift(&t_status);
+#endif
 }
 
 void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TStreamLoadChannel& stream_load_channel) {
-    Status st = _exec_env->stream_context_mgr()->finish_body_sink(stream_load_channel.label,
-                                                                  stream_load_channel.channel_id);
+    Status st = _exec_env->stream_context_mgr()->finish_body_sink(
+            stream_load_channel.label, stream_load_channel.table_name, stream_load_channel.channel_id);
     if (!st.ok()) {
         LOG(WARNING) << "failed to finish stream load channel. label: " << stream_load_channel.label
+                     << " table name: " << stream_load_channel.table_name
                      << " channel id: " << stream_load_channel.channel_id;
         return st.to_thrift(&t_status);
     }
@@ -190,9 +195,10 @@ void BackendServiceBase::get_next(TScanBatchResult& result_, const TScanNextBatc
         LOG(ERROR) << "getNext error: context offset [" << context->offset << " ]"
                    << " ,client offset [ " << offset << " ]";
         // invalid offset
-        t_status.status_code = TStatusCode::NOT_FOUND;
-        t_status.error_msgs.push_back(strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2",
-                                                          context_id, offset, context->offset));
+        std::string error_msg = strings::Substitute("context_id=$0, send_offset=$1, context_offset=$2", context_id,
+                                                    offset, context->offset);
+        Status st = Status::NotFound(error_msg);
+        st.to_thrift(&t_status);
         result_.status = t_status;
     } else {
         // during accessing, should disabled last_access_time

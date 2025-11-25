@@ -14,8 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.DescriptorTable;
-
 public class RuntimeFilterPushDownContext {
     private final RuntimeFilterDescription description;
     private final DescriptorTable descTbl;
@@ -41,7 +39,7 @@ public class RuntimeFilterPushDownContext {
         return description;
     }
 
-    public ExecGroup getExecGroup(int planNodeId) {
-        return this.execGroups.getExecGroup(planNodeId);
+    public ExecGroupId getExecGroupId(int planNodeId) {
+        return this.execGroups.getExecGroupId(planNodeId);
     }
 }

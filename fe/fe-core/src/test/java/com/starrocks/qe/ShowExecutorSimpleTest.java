@@ -38,12 +38,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
@@ -64,8 +58,9 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -86,6 +81,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
@@ -99,14 +95,15 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
-import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -118,6 +115,9 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -158,8 +158,8 @@ public class ShowExecutorSimpleTest {
     public static void beforeClass() {
         FeConstants.runningUnitTest = true;
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -811,11 +811,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
+                Column columnYear = new Column("year", IntegerType.INT);
+                Column columnDt = new Column("dt", IntegerType.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -865,11 +865,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
+                Column columnYear = new Column("year", IntegerType.INT);
+                Column columnDt = new Column("dt", IntegerType.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -968,20 +968,6 @@ public class ShowExecutorSimpleTest {
         Assertions.assertEquals("testTable", resultSet.getResultRows().get(0).get(1));
         Assertions.assertEquals("ALL", resultSet.getResultRows().get(0).get(2));
         Assertions.assertEquals("FULL", resultSet.getResultRows().get(0).get(3));
-    }
-
-    @Test
-    public void testShowGrants() throws Exception {
-        ShowGrantsStmt stmt = new ShowGrantsStmt("root", GrantType.ROLE, NodePosition.ZERO);
-
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
-        resultSet.getResultRows().forEach(System.out::println);
-        String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
-        Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString1)));
-        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
-                "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
-        Assertions.assertTrue(resultSet.getResultRows().stream().anyMatch(l -> l.toString().contains(expectString2)));
     }
 
     @Test

@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 public class BackendLoadStatistic {
     private static final Logger LOG = LogManager.getLogger(BackendLoadStatistic.class);
@@ -502,7 +503,7 @@ public class BackendLoadStatistic {
         return json.toString();
     }
 
-    public List<String> getInfo(TStorageMedium medium) {
+    public List<String> getInfo(TStorageMedium medium, @NotNull BalanceStat balanceStat) {
         List<String> info = Lists.newArrayList();
         info.add(String.valueOf(beId));
         info.add(clusterName);
@@ -519,6 +520,7 @@ public class BackendLoadStatistic {
         info.add(String.valueOf(loadScore.replicaNumCoefficient));
         info.add(String.valueOf(loadScore.score));
         info.add(clazzMap.getOrDefault(medium, Classification.INIT).name());
+        info.add(balanceStat.toString());
         return info;
     }
 }

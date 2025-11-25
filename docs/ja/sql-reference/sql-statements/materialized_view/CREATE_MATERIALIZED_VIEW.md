@@ -125,6 +125,30 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
 | percentile_approx, percentile_union                    | percentile_union                                |
 
+上記の関数に加えて、StarRocks v3.4.0以降では、同期マテリアライズドビューは汎用集計関数もサポートしています。汎用集計関数の詳細については、[汎用集計関数の状態](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views)を参照してください。
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
+
 ## 非同期マテリアライズドビュー
 
 ### 構文
@@ -275,6 +299,11 @@ v3.5.0以降、非同期マテリアライズドビューは複数列パーテ�
 **order_by_expression** (オプション)
 
 非同期マテリアライズドビューのソートキー。このソートキーを指定しない場合、StarRocksはSELECT列からいくつかのプレフィックス列をソートキーとして選択します。例: `select a, b, c, d`では、ソートキーとして`a`と`b`を使用できます。このパラメータはStarRocks v3.0以降でサポートされています。
+
+> **注意**
+> マテリアライズドビューには2つの異なる`ORDER BY`の使用方法があります：
+> - CREATE MATERIALIZED VIEWステートメントの`ORDER BY`はマテリアライズドビューのソートキーを定義し、ソートキーに基づくクエリの加速に役立ちます。これはマテリアライズドビューのSPJGベースの透過的加速機能には影響しませんが、マテリアライズドビューのクエリ結果のグローバルソートを保証しません。
+> - マテリアライズドビューのクエリ定義の`ORDER BY`はクエリ結果のグローバルソートを保証しますが、マテリアライズドビューがSPJGベースの透過的クエリの書き換えに使用されることを防ぎます。したがって、マテリアライズドビューがクエリの書き換えに使用される場合、マテリアライズドビューのクエリ定義で`ORDER BY`を使用すべきではありません。
 
 **INDEX** (オプション)
 
@@ -796,8 +825,10 @@ PROPERTIES (
 例1: 非パーティション化されたマテリアライズドビューを作成します。
 
 ```SQL
+-- lo_custkeyでソートされた非パーティション化されたマテリアライズドビューを作成
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -808,15 +839,16 @@ select
     count(lo_shipmode) as shipmode_count
 from lineorder 
 group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
 ```
 
 例2: パーティション化されたマテリアライズドビューを作成します。
 
 ```SQL
+-- `lo_orderdate`でパーティション化され、`lo_custkey`でソートされたパーティション化されたマテリアライズドビューを作成
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -827,8 +859,8 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
+```
 
 -- date_trunc()関数を使用して、マテリアライズドビューを月単位でパーティション化します。
 CREATE MATERIALIZED VIEW order_mv1
@@ -999,4 +1031,23 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+例7: 特定のソートキーを持つパーティション化されたマテリアライズドビューを作成します：
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```

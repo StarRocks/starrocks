@@ -15,9 +15,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -25,7 +27,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TConnectionInfo;
 import com.starrocks.thrift.TListConnectionResponse;
@@ -39,6 +40,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.UUID;
 
 public class ShowProcesslistStmtTest {
     private static ConnectContext connectContext;
@@ -56,9 +58,9 @@ public class ShowProcesslistStmtTest {
 
     private void testSuccess(String originStmt) throws Exception {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
-        Assertions.assertEquals(13, metaData.getColumnCount());
+        Assertions.assertEquals(15, metaData.getColumnCount());
         Assertions.assertEquals("ServerName", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
         Assertions.assertEquals("User", metaData.getColumn(2).getName());
@@ -71,6 +73,10 @@ public class ShowProcesslistStmtTest {
         Assertions.assertEquals("Info", metaData.getColumn(9).getName());
         Assertions.assertEquals("IsPending", metaData.getColumn(10).getName());
         Assertions.assertEquals("Warehouse", metaData.getColumn(11).getName());
+        Assertions.assertEquals("CNGroup", metaData.getColumn(12).getName());
+        Assertions.assertEquals("Catalog", metaData.getColumn(13).getName());
+        Assertions.assertEquals("QueryId", metaData.getColumn(14).getName());
+
     }
 
     @Test
@@ -104,12 +110,14 @@ public class ShowProcesslistStmtTest {
         ctx1.setCurrentUserIdentity(new UserIdentity("test", "%"));
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
+        ctx1.setQueryId(UUID.randomUUID());
 
         ConnectContext ctx2 = new ConnectContext();
         ctx2.setQualifiedUser("test2");
         ctx2.setCurrentUserIdentity(new UserIdentity("test2", "%"));
         ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx2.setConnectionId(2);
+        ctx2.setQueryId(UUID.randomUUID());
 
         ExecuteEnv.setup();
         ExecuteEnv.getInstance().getScheduler().registerConnection(ctx1);
@@ -133,6 +141,8 @@ public class ShowProcesslistStmtTest {
         tConnectionInfo.setIsPending("false");
         tConnectionInfo.setWarehouse("default_warehouse");
         tConnectionInfo.setCngroup(cnGroupName);
+        tConnectionInfo.setCatalog("default_catalog");
+        tConnectionInfo.setQueryId("de516505-fab7-11ef-8063-461f20abc3f0");
         tListConnectionResponse.addToConnections(tConnectionInfo);
 
         try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
@@ -146,6 +156,8 @@ public class ShowProcesslistStmtTest {
             List<List<String>> resultRows = showResultSet.getResultRows();
             Assertions.assertEquals("default_warehouse", resultRows.get(0).get(11));
             Assertions.assertEquals(cnGroupName, resultRows.get(0).get(12));
+            Assertions.assertEquals("default_catalog", resultRows.get(0).get(13));
+            Assertions.assertNotNull(resultRows.get(0).get(14));
         }
     }
 }

@@ -77,6 +77,10 @@ public:
         return join_path(txn_log_root_location(tablet_id), txn_log_filename(tablet_id, txn_id));
     }
 
+    std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const {
+        return join_path(txn_log_root_location(tablet_id), txn_log_filename(tablet_id, txn_id, load_id));
+    }
+
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
         return join_path(txn_log_root_location(tablet_id), txn_slog_filename(tablet_id, txn_id));
     }

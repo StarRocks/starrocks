@@ -23,8 +23,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,18 +37,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
 public class OnlineOptimizeJobV2Test extends DDLTestBase {
-    private static final String TEST_FILE_NAME = OnlineOptimizeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
 
     private static final Logger LOG = LogManager.getLogger(OnlineOptimizeJobV2Test.class);
@@ -62,7 +56,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @AfterEach
-    public void clear() {
+    public void clear() throws Exception {
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
         Config.enable_online_optimize_table = false;
     }
@@ -92,7 +86,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OnlineOptimizeJobV2 optimizeJob = (OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
         // runPendingJob
         optimizeJob.runPendingJob();
@@ -123,7 +118,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OnlineOptimizeJobV2 optimizeJob = (OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
         // runPendingJob
         optimizeJob.runPendingJob();
@@ -170,7 +166,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OnlineOptimizeJobV2 optimizeJob = (OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
         MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
@@ -189,28 +186,6 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testSerializeOfOptimizeJob() throws IOException {
-        // prepare file
-        File file = new File(TEST_FILE_NAME);
-        file.createNewFile();
-        file.deleteOnExit();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        OnlineOptimizeJobV2 optimizeJobV2 = new OnlineOptimizeJobV2(1, 1, 1, "test", 600000);
-        Deencapsulation.setField(optimizeJobV2, "jobState", AlterJobV2.JobState.FINISHED);
-
-        // write schema change job
-        optimizeJobV2.write(out);
-        out.flush();
-        out.close();
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        OnlineOptimizeJobV2 result = (OnlineOptimizeJobV2) AlterJobV2.read(in);
-        Assertions.assertEquals(1, result.getJobId());
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
-    }
-
-    @Test
     public void testOptimizeReplay() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
@@ -220,7 +195,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OnlineOptimizeJobV2 optimizeJob = (OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
         OnlineOptimizeJobV2 replayOptimizeJob = new OnlineOptimizeJobV2(
                     optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
@@ -269,7 +245,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
-        OnlineOptimizeJobV2 optimizeJob = (OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
         OnlineOptimizeJobV2 replayOptimizeJob = new OnlineOptimizeJobV2(
                     optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
@@ -300,5 +277,15 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
 
         replayOptimizeJob.replay(optimizeJob);
         Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
+    }
+
+    private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
+        // Detach the job from schema change handler to prevent background scheduler from changing state
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
+
+        OnlineOptimizeJobV2 spy = Mockito.spy(job);
+        Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        return spy;
     }
 }

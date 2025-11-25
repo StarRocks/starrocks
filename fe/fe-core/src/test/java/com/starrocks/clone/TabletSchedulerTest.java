@@ -14,7 +14,9 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -22,7 +24,11 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -30,8 +36,8 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -44,7 +50,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -55,10 +63,12 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
-import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -284,9 +294,9 @@ public class TabletSchedulerTest {
         backendDisks1.put("/path11", td11);
         backendDisks1.put("/path12", td12);
         Backend be1 = new Backend(1, "192.168.0.1", 9030);
-        be1.setAlive(true);
-        be1.updateDisks(backendDisks1);
         systemInfoService.addBackend(be1);
+        be1.setAlive(true);
+        be1.updateDisks(backendDisks1,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
 
         TDisk td21 = new TDisk("/path21", 1L, 2L, true);
         td21.setPath_hash(21);
@@ -296,9 +306,9 @@ public class TabletSchedulerTest {
         backendDisks2.put("/path21", td21);
         backendDisks2.put("/path22", td22);
         Backend be2 = new Backend(2, "192.168.0.2", 9030);
-        be2.updateDisks(backendDisks2);
-        be2.setAlive(true);
         systemInfoService.addBackend(be2);
+        be2.updateDisks(backendDisks2,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        be2.setAlive(true);
 
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", (Class<?>[]) null);
@@ -422,7 +432,7 @@ public class TabletSchedulerTest {
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumn(new Column("k1", Type.INT))
+                .addColumn(new Column("k1", IntegerType.INT))
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()
@@ -476,5 +486,144 @@ public class TabletSchedulerTest {
         status.setStatus_code(TStatusCode.OK);
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
         Assertions.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
+    }
+
+    @Test
+    public void testScheduleTabletException() {
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long physicalPartitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+
+        Database db = new Database(dbId, "db");
+        OlapTable table = new OlapTable(tblId, "table", null, null, null, null);
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", index, null);
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new Expectations() {
+            {
+                globalStateMgr.getColocateTableIndex();
+                minTimes = 0;
+                result = colocateTableIndex;
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+                minTimes = 0;
+                result = db;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+                minTimes = 0;
+                result = table;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
+                minTimes = 0;
+                result = physicalPartition;
+                globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(table, partitionId);
+                minTimes = 0;
+                result = partition;
+                globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin((PartitionInfo) any, partitionId);
+                minTimes = 0;
+                result = 3;
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId);
+                minTimes = 0;
+                result = new DataProperty(TStorageMedium.HDD);
+            }
+        };
+
+        new MockUp<TabletScheduler>() {
+            @Mock
+            private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+                return false;
+            }
+        };
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId,
+                System.currentTimeMillis());
+        LocalTablet tablet = new LocalTablet(tabletId);
+        ctx.setTablet(tablet);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+        Assertions.assertEquals(1L, tabletScheduler.getPendingNum(TabletSchedCtx.Type.REPAIR));
+
+        Deencapsulation.invoke(tabletScheduler, "schedulePendingTablets");
+        Assertions.assertEquals(TabletSchedCtx.State.UNEXPECTED, ctx.getState());
+        // index.getTablet returns null
+        // failed at Preconditions.checkNotNull(tablet);
+        Assertions.assertEquals(null, ctx.getErrMsg());
+    }
+
+    @Test
+    public void testFinishCloneTaskException() {
+        long beId = 10001L;
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId,
+                System.currentTimeMillis());
+        LocalTablet tablet = new LocalTablet(tabletId);
+        ctx.setTablet(tablet);
+        ctx.setState(TabletSchedCtx.State.RUNNING);
+
+        // taskVersion is VERSION_1
+        CloneTask task = new CloneTask(beId, "127.0.0.1", dbId, tblId, partitionId, indexId, tabletId, 0,
+                Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, 2L, 3600);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
+        Assertions.assertEquals(1L, tabletScheduler.getRunningNum(TabletSchedCtx.Type.REPAIR));
+
+        tabletScheduler.finishCloneTask(task, new TFinishTaskRequest());
+        Assertions.assertEquals(TabletSchedCtx.State.UNEXPECTED, ctx.getState());
+        // failed at Preconditions.checkArgument(cloneTask.getTaskVersion() == CloneTask.VERSION_2);
+        Assertions.assertEquals(null, ctx.getErrMsg());
+    }
+
+    @Test
+    public void testHandleColocateRedundantNoRedundantReplicas() {
+        long beId = 10001L;
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long physicalPartitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+
+        Database db = new Database(dbId, "db");
+        OlapTable table = new OlapTable(tblId, "table", null, null, null, null);
+        Replica replica = new Replica(replicaId, beId, 0, Replica.ReplicaState.NORMAL);
+        LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
+        MaterializedIndex index = new MaterializedIndex(indexId);
+        index.addTablet(tablet, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
+
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+                minTimes = 0;
+                result = db;
+                globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+                minTimes = 0;
+                result = table;
+                globalStateMgr.getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(table, physicalPartitionId);
+                minTimes = 0;
+                result = physicalPartition;
+            }
+        };
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId,
+                System.currentTimeMillis());
+        ctx.setTablet(tablet);
+        ctx.setTabletStatus(LocalTablet.TabletHealthStatus.COLOCATE_REDUNDANT);
+        ctx.setColocateGroupBackendIds(Sets.newHashSet(beId));
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        ExceptionChecker.expectThrowsWithMsg(SchedException.class,
+                "unable to delete any colocate redundant replicas. replicas: 10001:-1/-1/-1/0:NORMAL:NIL,, backend set: [10001]",
+                () -> Deencapsulation.invoke(tabletScheduler, "handleColocateRedundant", ctx));
     }
 }

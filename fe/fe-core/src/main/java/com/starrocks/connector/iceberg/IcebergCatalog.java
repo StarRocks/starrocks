@@ -33,6 +33,7 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
@@ -93,6 +94,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                                 Schema schema,
                                 PartitionSpec partitionSpec,
                                 String location,
+                                SortOrder sortOrder,
                                 Map<String, String> properties) {
         return false;
     }
@@ -205,10 +207,23 @@ public interface IcebergCatalog extends MemoryTrackable {
         throw new StarRocksConnectorException("This catalog doesn't loading iceberg view");
     }
 
+    /**
+     * Register an existing table in the catalog using the given metadata file location.
+     * 
+     * @param context The connect context
+     * @param dbName The database name
+     * @param tableName The table name
+     * @param metadataFileLocation The location of the metadata file
+     * @return true if the table was successfully registered, false otherwise
+     */
+    default boolean registerTable(ConnectContext context, String dbName, String tableName, String metadataFileLocation) {
+        throw new StarRocksConnectorException("This catalog doesn't support registering tables");
+    }
+
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
-    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor) {
     }
 
     default void invalidatePartitionCache(String dbName, String tableName) {
@@ -327,7 +342,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                         PartitionSpec spec = nativeTable.specs().get(specId);
 
                         String partitionName =
-                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
+                                PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
 
                         long lastUpdated = -1;
                         try {
@@ -336,7 +351,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                             logger.error("The table [{}.{}] snapshot [{}] has been expired", nativeTable.name(), partitionName,
                                     snapshotId, e);
                         }
-                        Partition partition = new Partition(lastUpdated);
+                        Partition partition = new Partition(lastUpdated, specId);
                         partitionMap.put(partitionName, partition);
                     }
                 }

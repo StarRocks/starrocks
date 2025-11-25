@@ -14,21 +14,22 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.uber.m3.util.ImmutableMap;
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -211,27 +212,23 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
     }
 
+    /**
+     * Mock up {@link ResourceGroupMgr#chooseResourceGroupByID(long)}.
+     */
     @Test
     public void testSetResourceGroupID() {
         long rg1ID = 1;
         TWorkGroup rg1 = new TWorkGroup();
         rg1.setId(rg1ID);
         ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
-        new Expectations(mgr) {
-            {
-                mgr.chooseResourceGroupByID(rg1ID);
-                result = rg1;
-            }
 
-            {
-                mgr.chooseResourceGroupByID(anyLong);
-                result = null;
-            }
-
-            {
-                mgr.createBuiltinResourceGroupsIfNotExist();
-                result = null;
-                minTimes = 0;
+        new MockUp<ResourceGroupMgr>() {
+            @Mock
+            public TWorkGroup chooseResourceGroupByID(long wgID) {
+                if (wgID == rg1ID) {
+                    return rg1;
+                }
+                return null;
             }
         };
 

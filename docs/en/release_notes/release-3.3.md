@@ -6,11 +6,87 @@ displayed_sidebar: docs
 
 :::warning
 
-After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+- After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.1, or v3.2.2, otherwise it will cause metadata loss. You must downgrade the cluster to v3.2.3 or later to prevent the issue.
+- After upgrading StarRocks to v3.3.9, you can only downgrade it to v3.2.11 or later.
 
 :::
 
-## v3.3.17
+## 3.3.20
+
+Release Date: November 18, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- CVE-2024-47561. [#64193](https://github.com/StarRocks/starrocks/pull/64193)  
+- CVE-2025-59419. [#64142](https://github.com/StarRocks/starrocks/pull/64142)  
+- Incorrect row count for lake Primary Key tables. [#64007](https://github.com/StarRocks/starrocks/pull/64007)  
+- Window function with IGNORE NULLS flags can not be consolidated with its counterpart without IGNORE NULLS flag. [#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- ASAN error in `PartitionedSpillerWriter::_remove_partition`. [#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- Wrong results for sorted aggregation in shared-data clusters. [#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- NPE when creating a partitioned materialized view. [#63830](https://github.com/StarRocks/starrocks/pull/63830)
+- Partitioned Spill crash when removing partitions. [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- NPE when removing expired load jobs in FE. [#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- A potential deadlock during initialization of `ExceptionStackContext`. [#63776](https://github.com/StarRocks/starrocks/pull/63776)  
+- Degraded scan performance caused by the profitless simplification of CASE WHEN with complex functions. [#63732](https://github.com/StarRocks/starrocks/pull/63732)  
+- Materialized view rewrite failures caused by type mismatch. [#63659](https://github.com/StarRocks/starrocks/pull/63659)  
+- Materialized view rewrite throws `IllegalStateException` under certain plans. [#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- LZ4 compression and decompression errors cannot be perceived. [#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- Stability issue caused by incorrect overflow detection when casting LARGEINT to DECIMAL128 at sign-edge cases (for example, INT128_MIN) [#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- `date_trunc` partition pruning with combined predicates that mistakenly produced EMPTYSET. [#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- Incomplete `Left Join` results caused by ARRAY low-cardinality optimization. [#63419](https://github.com/StarRocks/starrocks/pull/63419)
+- An issue caused by the aggregate intermediate type uses `ARRAY<NULL_TYPE>`. [#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- Metadata inconsistency in partial updates based on auto-increment columns. [#63370](https://github.com/StarRocks/starrocks/pull/63370)
+- Incompatible Bitmap index reuse for Fast Schema Evolution in shared-data clusters. [#63315](https://github.com/StarRocks/starrocks/pull/63315)  
+- Unnecessary CN deregistration during pod restart/upgrade. [#63085](https://github.com/StarRocks/starrocks/pull/63085)  
+- Profiles showing SQL as `omit` for returns of the PREPARE/EXECUTE statements. [#62988](https://github.com/StarRocks/starrocks/pull/62988)
+
+## 3.3.19
+
+Release Date: October 14, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- `UserProperty` had lower priority than Session Variables. [#63173](https://github.com/StarRocks/starrocks/pull/63173)
+- Materialized view refresh failures that could occur when the Hive base table was dropped and recreated. [#63072](https://github.com/StarRocks/starrocks/pull/63072)
+- Issues with the aggregation pushdown rewrite rule. [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- Inconsistencies between null columns and data columns in Boolean extraction functions for JSON. [#63054](https://github.com/StarRocks/starrocks/pull/63054)
+- Issues when getting partition columns in Delta Lake format tables. [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- Lack of colocation support for materialized views in shared-data clusters. [#62941](https://github.com/StarRocks/starrocks/pull/62941)
+- Projection mapping errors in view-based materialized view rewrite. [#62918](https://github.com/StarRocks/starrocks/pull/62918)
+- SQL syntax errors in histogram statistics when Most Common Values (MCV) contained single quotes. [#62853](https://github.com/StarRocks/starrocks/pull/62853)
+- `KILL ANALYZE` did not work. [#62842](https://github.com/StarRocks/starrocks/pull/62842)
+- CVE-2025-58056 vulnerability. [#62801](https://github.com/StarRocks/starrocks/pull/62801)
+- Executing `SHOW CREATE ROUTINE LOAD` without specifying a database causes wrong results. [#62745](https://github.com/StarRocks/starrocks/pull/62745)
+- Data loss caused by incorrectly skipping CSV headers in `files()`. [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- Version check failures when Replication and Compaction transactions were committed together. [#62663](https://github.com/StarRocks/starrocks/pull/62663)
+- Materialized view refresh is skipped because the materialized view version map is not cleared after a failed restore job. [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- Issues caused by case-sensitive partition column validation in the materialized view analyzer. [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+
+## 3.3.18
+
+Release Date: August 28, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- BE crashes when `LakePersistentIndex` initialization failed due to cleanup of `_memtable`. [#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- A concurrency issue caused by missing locks when retrieving the maximum Tablet version in the replication transaction manager. [#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- A hang issue in the phased scheduler, which waited indefinitely during synchronous Profile collection (after the fix, the system correctly terminates Profile collection when scheduling errors occur). [#62140](https://github.com/StarRocks/starrocks/pull/62140)
+- Exception handling issues in low-cardinality optimization under the `ALLOW_THROW_EXCEPTION` mode (after the fix, exceptions in expression evaluation are properly caught and returned). [#62098](https://github.com/StarRocks/starrocks/pull/62098)
+- FThe system failed to compute nested CTE statistics outside of the memo during table pruning when `enable_rbo_table_prune` was set to `false`. [#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- CVE-2025-55163 issue. [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- An issue where `split_morsel_queue` nested inside `partition_morsel_queue` failed to correctly receive the Tablet Schema. [#62034](https://github.com/StarRocks/starrocks/pull/62034)
+- Incorrect handling of `NULL` arrays during Parquet writes, which could cause data inconsistency or crashes (after the fix, the system ensures the `split` function can correctly handle `NULL` input strings). [#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- Failure when creating materialized views using `CASE WHEN` expressions due to incompatible return types of VARCHAR (after the fix, the system ensures consistency before and after refresh). [#61996](https://github.com/StarRocks/starrocks/pull/61996)
+- A concurrency safety issue caused by long operations holding shard-level locks while calculating compression scores. [#61899](https://github.com/StarRocks/starrocks/pull/61899)
+- An incomplete table pruning issue in CBO caused by pruning logic not considering all relevant predicates. [#61881](https://github.com/StarRocks/starrocks/pull/61881)
+
+## 3.3.17
 
 Release Date: July 30, 2025
 

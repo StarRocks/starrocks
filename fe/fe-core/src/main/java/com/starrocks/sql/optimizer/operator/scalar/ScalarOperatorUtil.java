@@ -16,15 +16,20 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
@@ -33,7 +38,7 @@ import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT
 public class ScalarOperatorUtil {
     public static CallOperator buildMultiCountDistinct(CallOperator oldFunctionCall) {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
-                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
+                oldFunctionCall.getFunction().getArgs(), InvalidType.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         if (fn == null) {
             return null;
@@ -47,7 +52,7 @@ public class ScalarOperatorUtil {
     }
 
     public static CallOperator buildSum(ColumnRefOperator arg) {
-        Preconditions.checkArgument(arg.getType() == Type.BIGINT);
+        Preconditions.checkArgument(arg.getType() == IntegerType.BIGINT);
         Function searchDesc = new Function(new FunctionName(FunctionSet.SUM),
                 new Type[] {arg.getType()}, arg.getType(), false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
@@ -62,7 +67,7 @@ public class ScalarOperatorUtil {
     }
 
     public static Function findArithmeticFunction(Type[] argsType, String fnName) {
-        return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
+        return ExprUtils.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
     }
 
     public static Function findSumFn(Type[] argTypes) {
@@ -71,7 +76,7 @@ public class ScalarOperatorUtil {
         Function newFn = sumFn.copy();
         if (argTypes[0].isDecimalV3()) {
             newFn.setArgsType(argTypes);
-            newFn.setRetType(ScalarType.createDecimalV3NarrowestType(38,
+            newFn.setRetType(TypeFactory.createDecimalV3NarrowestType(38,
                     ((ScalarType) argTypes[0]).getScalarScale()));
         }
         return newFn;
@@ -89,5 +94,10 @@ public class ScalarOperatorUtil {
         return Utils.downcast(op, CompoundPredicateOperator.class)
                 .map(compOp -> compOp.isNot() && isSimpleLike(compOp.getChild(0)))
                 .orElse(false);
+    }
+
+    public static Stream<ScalarOperator> getStream(ScalarOperator operator) {
+        return Stream.concat(Stream.of(operator),
+                operator.getChildren().stream().flatMap(ScalarOperatorUtil::getStream));
     }
 }

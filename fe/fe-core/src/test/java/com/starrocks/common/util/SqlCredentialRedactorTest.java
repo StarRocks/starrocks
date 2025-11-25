@@ -16,6 +16,7 @@ package com.starrocks.common.util;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 public class SqlCredentialRedactorTest {
 
@@ -44,11 +45,13 @@ public class SqlCredentialRedactorTest {
                 "PROPERTIES (\n" +
                 "    \"path\" = \"abfs://container@account.dfs.core.windows.net/path\",\n" +
                 "    \"azure.blob.shared_key\" = \"base64encodedkey==\",\n" +
+                "    \"azure.blob.oauth2_client_secret\" = \"abcdefg\",\n" +
                 "    \"azure.blob.sas_token\" = \"?sv=2020-08-04&ss=bfqt&srt=sco&sp=rwdlacupx\"\n" +
                 ")";
 
         String redacted = SqlCredentialRedactor.redact(sql);
         Assertions.assertFalse(redacted.contains("base64encodedkey=="), "Shared key should be redacted");
+        Assertions.assertFalse(redacted.contains("abcdefg"), "oauth2_client_secret should be redacted");
         Assertions.assertFalse(redacted.contains("sv=2020-08-04"), "SAS token should be redacted");
         Assertions.assertTrue(redacted.contains("abfs://container@account.dfs.core.windows.net/path"), "Path should remain");
     }
@@ -91,16 +94,47 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactFSCredentials() {
+        String sql = "select * from FILES(\n" +
+                "        \"path\" = \"s3://fs/people.parquet\",\n" +
+                "        \"format\" = \"parquet\"\n" +
+                "        \"fs.s3a.access.key\" = \"aaa\",\n" +
+                "        \"fs.s3a.secret.key\" = \"bbb\",\n" +
+                "        \"fs.ks3.AccessKey\" = \"ccc\",\n" +
+                "        \"fs.ks3.AccessSecret\" = \"ddd\",\n" +
+                "        \"fs.oss.accessKeyId\" = \"eee\",\n" +
+                "        \"fs.oss.accessKeySecret\" = \"fff\",\n" +
+                "        \"fs.cosn.userinfo.secretId\" = \"ggg\",\n" +
+                "        \"fs.cosn.userinfo.secretKey\" = \"hhh\",\n" +
+                "        \"fs.obs.access.key\" = \"iii\",\n" +
+                "        \"fs.obs.secret.key\" = \"jjj\"\n" +
+                ")";
+
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("aaa"), "fs.s3a.access.key should be redacted");
+        Assertions.assertFalse(redacted.contains("bbb"), "fs.s3a.secret.key should be redacted");
+        Assertions.assertFalse(redacted.contains("ccc"), "fs.ks3.AccessKey should be redacted");
+        Assertions.assertFalse(redacted.contains("ddd"), "fs.ks3.AccessSecret should be redacted");
+        Assertions.assertFalse(redacted.contains("eee"), "fs.oss.accessKeyId should be redacted");
+        Assertions.assertFalse(redacted.contains("fff"), "fs.oss.accessKeySecret should be redacted");
+        Assertions.assertFalse(redacted.contains("ggg"), "fs.cosn.userinfo.secretId should be redacted");
+        Assertions.assertFalse(redacted.contains("hhh"), "fs.cosn.userinfo.secretKey should be redacted");
+        Assertions.assertFalse(redacted.contains("iii"), "fs.obs.access.key should be redacted");
+        Assertions.assertFalse(redacted.contains("jjj"), "fs.obs.secret.key should be redacted");
+        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
     public void testRedactWithDifferentFormats() {
         // Test without spaces around equals
         String sql1 = "\"aws.s3.access_key\"=\"AKIAIOSFODNN7EXAMPLE\"";
         String redacted1 = SqlCredentialRedactor.redact(sql1);
         Assertions.assertFalse(redacted1.contains("AKIAIOSFODNN7EXAMPLE"));
 
-        // Test without quotes on key
+        // Test without quotes on key(not supported)
         String sql2 = "aws.s3.secret_key = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\"";
         String redacted2 = SqlCredentialRedactor.redact(sql2);
-        Assertions.assertFalse(redacted2.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+        Assertions.assertTrue(redacted2.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
 
         // Test with extra spaces
         String sql3 = "\"aws.s3.access_key\"   =   \"AKIAIOSFODNN7EXAMPLE\"";
@@ -156,5 +190,39 @@ public class SqlCredentialRedactorTest {
             index += 3;
         }
         Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
+    }
+
+    /**
+     * java.regex uses NFA algorithm, it cannot guarantee O(N) complexity, might run into timeout
+     * when the string is very long.
+     * RE2 is O(n)
+     */
+    @Test
+    @Timeout(10)
+    public void testLongString() {
+        {
+            // long key
+            String longString = "1234567890".repeat(104857);
+            String longSql = "INSERT INTO t1 VALUES(\"" + longString + "\", 1)";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
+        {
+            // long key & value
+            String longString = "a".repeat(104857);
+            String longSql = "ALTER TABLE t1 SET PROPERTIES(\"" + longString + "\"= \"" + longString + "\")";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+            longSql = "ALTER TABLE t1 SET PROPERTIES('" + longString + "'= '" + longString + "')";
+            redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
+        {
+            // long value
+            String longString = '"' + "a".repeat(104857) + '"';
+            String longSql = "ALTER  TABLE t1 SET PROPERTIES('key'= " + longString + ")";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
     }
 }

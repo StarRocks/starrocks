@@ -16,17 +16,22 @@
 
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <utility>
+
+// On macOS, system headers may define a macro named current_task(),
+// which conflicts with the method name below. Undefine to avoid collisions.
+#ifdef __APPLE__
+#ifdef current_task
+#undef current_task
+#endif
+#endif
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "runtime/runtime_state.h"
 #include "util/blocking_queue.hpp"
 #include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class SpillProcessChannel;
@@ -73,7 +78,7 @@ using SpillProcessChannelFactoryPtr = std::shared_ptr<SpillProcessChannelFactory
 // SpillProcessOperator
 class SpillProcessChannel {
 public:
-    SpillProcessChannel() {}
+    SpillProcessChannel() = default;
 
     bool add_spill_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);

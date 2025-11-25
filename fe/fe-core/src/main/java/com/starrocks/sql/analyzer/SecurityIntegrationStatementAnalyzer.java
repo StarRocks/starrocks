@@ -20,7 +20,7 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SecurityIntegrationFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
@@ -35,7 +35,7 @@ public class SecurityIntegrationStatementAnalyzer {
         new SecurityIntegrationStatementAnalyzerVisitor().analyze(statement, context);
     }
 
-    public static class SecurityIntegrationStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class SecurityIntegrationStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         public void analyze(StatementBase statement, ConnectContext context) {
             visit(statement, context);

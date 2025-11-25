@@ -47,6 +47,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+#include "util/runtime_profile.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -69,10 +70,12 @@
 namespace starrocks {
 
 // for ut only
+RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
+
+// for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _unreported_error_idx(0),
-          _obj_pool(new ObjectPool()),
+        : _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
@@ -89,8 +92,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
 
 RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                            const TQueryOptions& query_options, const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _unreported_error_idx(0),
-          _query_id(query_id),
+        : _query_id(query_id),
           _obj_pool(new ObjectPool()),
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
@@ -106,7 +108,7 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
-        : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
+        : _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
@@ -213,9 +215,9 @@ bool RuntimeState::set_timezone(const std::string& tz) {
 void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* parent) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    auto* mem_tracker_counter =
+    RuntimeProfile::Counter* mem_tracker_counter =
             ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-    mem_tracker_counter->set(bytes_limit);
+    COUNTER_SET(mem_tracker_counter, bytes_limit);
 
     if (parent == nullptr) {
         parent = GlobalEnv::GetInstance()->query_pool_mem_tracker();
@@ -231,9 +233,8 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
 void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
     DCHECK(query_mem_tracker != nullptr);
 
-    auto* mem_tracker_counter =
-            ADD_COUNTER_SKIP_MERGE(_profile.get(), "QueryMemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL);
-    mem_tracker_counter->set(query_mem_tracker->limit());
+    COUNTER_SET(ADD_COUNTER_SKIP_MERGE(_profile.get(), "QueryMemoryLimit", TUnit::BYTES, TCounterMergeType::SKIP_ALL),
+                query_mem_tracker->limit());
 
     // all fragment instances in a BE shared a common query_mem_tracker.
     _query_mem_tracker = query_mem_tracker;
@@ -500,6 +501,7 @@ bool RuntimeState::is_jit_enabled() const {
 }
 
 void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+#ifndef __APPLE__
     if (!_query_options.__isset.catalog) {
         return;
     }
@@ -511,26 +513,32 @@ void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_p
     metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
     metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
 
+    TDataCacheMetrics t_metrics{};
+    const auto* mem_cache = DataCache::GetInstance()->local_mem_cache();
+    if (mem_cache != nullptr && mem_cache->is_initialized()) {
+        t_metrics.__set_status(TDataCacheStatus::NORMAL);
+        DataCacheUtils::set_metrics_to_thrift(t_metrics, mem_cache->cache_metrics());
+    }
+
     if (_query_options.catalog == "default_catalog") {
 #ifdef USE_STAROS
         if (config::starlet_use_star_cache) {
-            TDataCacheMetrics t_metrics{};
             starcache::CacheMetrics cache_metrics;
             staros::starlet::fslib::star_cache_get_metrics(&cache_metrics);
-            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache_metrics);
+            DataCacheUtils::set_disk_metrics_to_thrift(t_metrics, cache_metrics);
             metrics.__set_metrics(t_metrics);
             load_params->__set_load_datacache_metrics(metrics);
         }
 #endif // USE_STAROS
     } else {
-        const LocalCacheEngine* cache = DataCache::GetInstance()->local_cache();
-        if (cache != nullptr && cache->is_initialized()) {
-            TDataCacheMetrics t_metrics{};
-            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+        const LocalDiskCacheEngine* disk_cache = DataCache::GetInstance()->local_disk_cache();
+        if (disk_cache != nullptr && disk_cache->is_initialized()) {
+            DataCacheUtils::set_metrics_to_thrift(t_metrics, disk_cache->cache_metrics());
             metrics.__set_metrics(t_metrics);
             load_params->__set_load_datacache_metrics(metrics);
         }
     }
+#endif // __APPLE__
 }
 
 } // end namespace starrocks

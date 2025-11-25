@@ -68,9 +68,11 @@ struct TTupleDescriptor {
 
 enum THdfsFileFormat {
   TEXT = 0,
-  LZO_TEXT = 1,
-  RC_BINARY = 2,
-  RC_TEXT = 3,
+  LZO_TEXT = 1, // Deprecated
+  RC_FILE = 2,
+  // THdfsFileFormat is only used to represent FileFormat, not SerializeFormat,
+  // so there is no need to split it into RC_BINARY and RC_TEXT.
+  RC_TEXT = 3, // Deprecated
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
@@ -187,6 +189,11 @@ enum TSchemaTableType {
 
     SCH_WAREHOUSE_METRICS,
     SCH_WAREHOUSE_QUERIES,
+
+    SCH_DYNAMIC_TABLET_JOBS,
+    SCH_RECYCLEBIN_CATALOGS,
+
+    SCH_FE_THREADS,
 }
 
 enum THdfsCompression {
@@ -240,13 +247,15 @@ struct TColumn {
     21: optional Types.TTypeDesc type_desc         
 }
 
+struct TOlapTableTablet {
+    1: optional i64 id // tablet id
+    2: optional Types.TTabletRange range
+}
+
 struct TOlapTableIndexTablets {
     1: required i64 index_id
-    2: required list<i64> tablets
-
-    // Virtual buckets. There is a tablet id for each virtual bucket,
-    // which means this virtual bucket's data is stored in this tablet.
-    3: optional list<i64> virtual_buckets
+    2: required list<i64> tablet_ids
+    3: optional list<TOlapTableTablet> tablets
 }
 
 // its a closed-open range
@@ -526,6 +535,12 @@ struct TIcebergPartitionInfo {
     4: optional Exprs.TExpr partition_expr
 }
 
+struct TSortOrder {
+    1: optional list<i32> sort_key_idxes
+    2: optional list<bool> is_ascs;
+    3: optional list<bool> is_null_firsts;
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -549,6 +564,9 @@ struct TIcebergTable {
     7: optional TIcebergSchema iceberg_equal_delete_schema
 
     8: optional list<TIcebergPartitionInfo> partition_info
+
+    // Iceberg sort order, used to sort data before writing to Iceberg
+    9: optional TSortOrder sort_order
 }
 
 struct THudiTable {

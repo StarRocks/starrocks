@@ -64,4 +64,33 @@ public class SessionVariableTest {
                     e.getMessage());
         }
     }
+
+    @Test
+    public void testLakeBucketAssignMode() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setLakeBucketAssignMode("balance");
+        Assertions.assertEquals(SessionVariableConstants.BALANCE, sessionVariable.getLakeBucketAssignMode());
+
+        sessionVariable.setLakeBucketAssignMode("elastic");
+        Assertions.assertEquals(SessionVariableConstants.ELASTIC, sessionVariable.getLakeBucketAssignMode());
+
+        try {
+            sessionVariable.setLakeBucketAssignMode("auto");
+            Assertions.fail("cannot set a invalid value");
+        } catch (Exception e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("Legal values of lake_bucket_assign_mode are elastic|balance"),
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSetEnableInsertPartialUpdate() {
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableInsertPartialUpdate(true);
+        Assertions.assertTrue(sessionVariable.isEnableInsertPartialUpdate());
+
+        sessionVariable.setEnableInsertPartialUpdate(false);
+        Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
+    }
 }

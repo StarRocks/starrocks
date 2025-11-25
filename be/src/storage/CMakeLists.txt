@@ -191,8 +191,10 @@ set(STORAGE_FILES
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
+    lake/vacuum_full.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/replication_txn_manager.cpp
     lake/rowset.cpp
@@ -213,9 +215,11 @@ set(STORAGE_FILES
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
-    lake/load_spill_block_manager.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
+    lake/tablet_writer.cpp
+    load_spill_block_manager.cpp
+    load_chunk_spiller.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
@@ -280,6 +284,6 @@ if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
 endif()
 
-add_library(Storage STATIC
+ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )

@@ -1008,6 +1008,10 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
         Columns binary_columns;
         auto tc1 = DoubleColumn::create();
         tc1->append(-0.9);
+        tc1->append(2);
+        tc1->append(2);
+        tc1->append(2);
+        tc1->append(2);
         tc1->append(0.2);
         tc1->append(0.3);
         tc1->append(4.0);
@@ -1015,12 +1019,16 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.8);
+        tc2->append(1);
+        tc2->append(2);
+        tc2->append(-1);
+        tc2->append(0);
         tc2->append(0.2);
         tc2->append(0.3);
         tc2->append(1024.0);
         binary_columns.emplace_back(std::move(tc2));
 
-        std::vector<bool> null_expect = {true, false, false, true};
+        std::vector<bool> null_expect = {true, false, false, false, false, false, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::pow(ctx.get(), binary_columns).value();
         auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);

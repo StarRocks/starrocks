@@ -38,7 +38,6 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobException;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -63,9 +62,11 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -79,7 +80,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class CreateTableTest {
+public class CreateTableTest extends StarRocksTestBase {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -758,7 +759,7 @@ public class CreateTableTest {
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
-        System.out.println("columns = " + columns);
+        logSysInfo("columns = " + columns);
         Assertions.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assertions.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
@@ -921,7 +922,7 @@ public class CreateTableTest {
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -946,7 +947,7 @@ public class CreateTableTest {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), "test_location_no_prop");
         Assertions.assertNotNull(table.getLocation());
-        System.out.println(table.getLocation());
+        logSysInfo(table.getLocation());
         Assertions.assertTrue(table.getLocation().containsKey("*"));
 
         // verify the location property in show create table result, should be "*"
@@ -955,7 +956,7 @@ public class CreateTableTest {
                 connectContext);
 
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
         Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
 
@@ -987,7 +988,7 @@ public class CreateTableTest {
         showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
         showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getResultRows());
         Assertions.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
 
@@ -1006,7 +1007,7 @@ public class CreateTableTest {
 
         for (int i = 0; i < 5; i++) {
             backend = systemInfoService.getBackend(backendIds.get(i));
-            System.out.println("backend " + backend.getId() + " location: " + backend.getLocation());
+            logSysInfo("backend " + backend.getId() + " location: " + backend.getLocation());
         }
 
         // **test create table with valid/invalid location property format
@@ -1018,7 +1019,7 @@ public class CreateTableTest {
                 null, "", null, null, null, null, null};
         for (int i = 0; i < tableLocationProps.length; i++) {
             String tableLocationProp = tableLocationProps[i];
-            System.out.println(tableLocationProp);
+            logSysInfo(tableLocationProp);
             String expectedAnalyzedProp = expectedAnalyzedProps[i];
             String createTableSql = "CREATE TABLE test.`test_location_prop_" + i + "` (\n" +
                     "    k1 int,\n" +
@@ -1051,7 +1052,7 @@ public class CreateTableTest {
                     continue;
                 }
                 Assertions.assertNotNull(table.getLocation());
-                System.out.println(table.getLocation());
+                logSysInfo(table.getLocation());
                 Assertions.assertEquals(PropertyAnalyzer.convertLocationMapToString(table.getLocation()),
                         expectedAnalyzedProp);
 
@@ -1060,7 +1061,7 @@ public class CreateTableTest {
                 showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                         connectContext);
                 showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-                System.out.println(showResultSet.getResultRows());
+                logSysInfo(showResultSet.getResultRows());
                 Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                         PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));
             }
@@ -1078,7 +1079,7 @@ public class CreateTableTest {
     public void testCreateTableLocationPropPersist() throws Exception {
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -1116,7 +1117,7 @@ public class CreateTableTest {
         localMetastoreFollower.replayCreateTable(info);
         OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                 .getTable("test_location_persist_t1");
-        System.out.println(olapTable.getLocation());
+        logSysInfo(olapTable.getLocation());
         Assertions.assertEquals(1, olapTable.getLocation().size());
         Assertions.assertTrue(olapTable.getLocation().containsKey("rack"));
 
@@ -1125,13 +1126,13 @@ public class CreateTableTest {
         localMetastoreLeader.load(finalImage.getMetaBlockReader());
         olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
-        System.out.println(olapTable.getLocation());
+        logSysInfo(olapTable.getLocation());
         Assertions.assertEquals(1, olapTable.getLocation().size());
         Assertions.assertTrue(olapTable.getLocation().containsKey("rack"));
     }
 
     @Test
-    public void testCreateVarBinaryTable() {
+    public void testCreateVarBinaryTable() throws Exception {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.varbinary_tbl\n" +
@@ -1174,20 +1175,16 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.varbinary_tbl0\n"
+        createTable("create table test.varbinary_tbl00\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.varbinary_tbl0 \n"
+                + "properties('replication_num' = '1');");
+        createTable("create table test.varbinary_tbl01 \n"
                         + "(k1 int, k2 varbinary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
+                + "properties('replication_num' = '1');");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
                 () -> createTable("create table test.varbinary_tbl0 \n" +
@@ -1199,7 +1196,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testCreateBinaryTable() {
+    public void testCreateBinaryTable() throws Exception {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.binary_tbl\n" +
@@ -1242,20 +1239,16 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.binary_tbl0\n"
+        createTable("create table test.binary_tbl01\n"
                         + "(k1 int, k2 binary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.binary_tbl0 \n"
+                + "properties('replication_num' = '1');");
+        createTable("create table test.binary_tbl11 \n"
                         + "(k1 int, k2 binary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
+                + "properties('replication_num' = '1');");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
                 () -> createTable("create table test.binary_tbl0 \n" +
@@ -1932,7 +1925,7 @@ public class CreateTableTest {
         starRocksAssert.withTable(sql2);
 
         List<List<String>> result = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
-        System.out.println(result);
+        logSysInfo(result);
         List<String> groupIds = new ArrayList<>();
         for (List<String> e : result) {
             if (e.get(1).contains("ship_id_public")) {
@@ -1940,7 +1933,7 @@ public class CreateTableTest {
             }
         }
         Assertions.assertEquals(2, groupIds.size());
-        System.out.println(groupIds);
+        logSysInfo(groupIds);
         // colocate groups in different db should have same `GroupId.grpId`
         Assertions.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
     }

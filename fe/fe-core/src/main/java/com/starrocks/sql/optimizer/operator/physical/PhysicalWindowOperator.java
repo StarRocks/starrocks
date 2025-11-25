@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;

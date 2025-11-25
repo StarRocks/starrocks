@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;

@@ -21,7 +21,7 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
@@ -459,6 +459,55 @@ TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
     auto st = ColumnReaderFactory::create(options, &field, col_type, nullptr);
     ASSERT_FALSE(st.ok()) << st;
     std::cout << st.status().message() << "\n";
+}
+
+TEST_F(GroupReaderTest, VariantColumnReader) {
+    ParquetField field;
+    field.name = "col_variant";
+    field.type = ColumnType::STRUCT;
+
+    // Create metadata and value children for variant
+    ParquetField metadata_field;
+    metadata_field.name = "metadata";
+    metadata_field.type = ColumnType::SCALAR;
+    metadata_field.physical_type = tparquet::Type::BYTE_ARRAY;
+    metadata_field.physical_column_index = 0;
+
+    ParquetField value_field;
+    value_field.name = "value";
+    value_field.type = ColumnType::SCALAR;
+    value_field.physical_type = tparquet::Type::BYTE_ARRAY;
+    value_field.physical_column_index = 1;
+
+    field.children.push_back(metadata_field);
+    field.children.push_back(value_field);
+
+    TypeDescriptor col_type;
+    col_type.type = LogicalType::TYPE_VARIANT;
+
+    // Create minimal row group metadata with column chunks
+    tparquet::ColumnChunk metadata_chunk;
+    metadata_chunk.__set_file_path("metadata");
+    metadata_chunk.file_offset = 0;
+    metadata_chunk.meta_data.data_page_offset = 4;
+
+    tparquet::ColumnChunk value_chunk;
+    value_chunk.__set_file_path("value");
+    value_chunk.file_offset = 0;
+    value_chunk.meta_data.data_page_offset = 4;
+
+    tparquet::RowGroup row_group;
+    row_group.columns.push_back(metadata_chunk);
+    row_group.columns.push_back(value_chunk);
+    row_group.__set_num_rows(0);
+
+    ColumnReaderOptions options;
+    options.row_group_meta = &row_group;
+    TIcebergSchemaField lake_schema_field;
+    lake_schema_field.name = "col_variant";
+    lake_schema_field.field_id = 1;
+    auto st = ColumnReaderFactory::create(options, &field, col_type, &lake_schema_field);
+    ASSERT_TRUE(st.ok()) << st.status().message();
 }
 
 TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {

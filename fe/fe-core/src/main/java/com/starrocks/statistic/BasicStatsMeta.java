@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
@@ -29,8 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
@@ -118,11 +115,6 @@ public class BasicStatsMeta implements Writable {
         this.updateTime = updateTime;
         this.properties = properties;
         this.totalRows = totalRows;
-    }
-
-    public static BasicStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, BasicStatsMeta.class);
     }
 
     public long getDbId() {

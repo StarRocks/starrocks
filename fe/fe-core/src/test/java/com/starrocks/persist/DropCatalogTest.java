@@ -29,12 +29,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 
 public class DropCatalogTest {
 
@@ -51,25 +46,6 @@ public class DropCatalogTest {
         file.delete();
     }
 
-    @Test
-    public void testNormal() throws IOException {
-        // 1. Write objects to file
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        DropCatalogLog dropCatalogLog =
-                new DropCatalogLog("catalog_name");
-        dropCatalogLog.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        DropCatalogLog readDropCatalogInfo = DropCatalogLog.read(in);
-        Assertions.assertEquals(readDropCatalogInfo.getCatalogName(), "catalog_name");
-        in.close();
-    }
     @Test
     public void testDropCatalog() throws Exception {
         String dropSql = "DROP CATALOG IF EXISTS hive_catalog";

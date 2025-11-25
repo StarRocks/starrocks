@@ -16,12 +16,13 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 package org.apache.iceberg;
 
-import com.google.common.cache.Cache;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.connector.iceberg.DataFileWrapper;
 import com.starrocks.connector.iceberg.DeleteFileWrapper;
-import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.expressions.Evaluator;
@@ -51,7 +52,7 @@ import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.9.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.10.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
@@ -281,11 +282,15 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
 
     // when the identifier field ids is null, it will copy all metrics.
     private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(CloseableIterable<ManifestEntry<F>> entries) {
+        Set<DataFile> tmpDataFiles = Sets.newHashSet();
+        Set<DeleteFile> tmpDeleteFiles = Sets.newHashSet();
         if (dataFileCache != null && content == FileType.DATA_FILES) {
             entries = CloseableIterable.transform(entries,
                     entry -> {
-                        Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
-                        if (dataFiles != null && entry.isLive()) {
+                        // Could not use the getIfpresent result Set to add items, because here is thread-unsafe.
+                        // Be careful to not corrupt the cache.
+                        Set<DataFile> keyExisted = dataFileCache.getIfPresent(file.location());
+                        if (keyExisted != null && entry.isLive()) {
                             Set<Integer> requestedColumnIds = null;
                             if (identifierFieldIds != null && !identifierFieldIds.isEmpty()) {
                                 requestedColumnIds = identifierFieldIds;
@@ -295,32 +300,49 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                             DataFile copiedDataFile = dataFileCacheWithMetrics ?
                                     dataFile.copyWithStats(requestedColumnIds) :
                                     dataFile.copyWithoutStats();
-                            dataFiles.add(DataFileWrapper.wrap(copiedDataFile));
+                            tmpDataFiles.add(DataFileWrapper.wrap(copiedDataFile));
                         }
                         return entry;
                     });
-        }
-
+                }
+                
         if (content == FileType.DELETE_FILES && deleteFileCache != null) {
             entries = CloseableIterable.transform(entries,
                     entry -> {
-                        Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(file.location());
-                        if (deleteFiles != null && entry.isLive()) {
-                            deleteFiles.add(DeleteFileWrapper.wrap((DeleteFile) entry.file().copy()));
+                        Set<DeleteFile> keyExisted = deleteFileCache.getIfPresent(file.location());
+                        if (keyExisted != null && entry.isLive()) {
+                            tmpDeleteFiles.add(DeleteFileWrapper.wrap((DeleteFile) entry.file().copy()));
                         }
                         return entry;
                     });
         }
 
-        return entries;
+        final CloseableIterable<ManifestEntry<F>> transformedEntries = entries;
+        return new CloseableIterable<ManifestEntry<F>>() {
+            @Override
+            public CloseableIterator<ManifestEntry<F>> iterator() {
+                return transformedEntries.iterator();
+            }
+        
+            @Override
+            public void close() throws IOException {
+                if (!tmpDataFiles.isEmpty()) {
+                    dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
+                }
+                if (!tmpDeleteFiles.isEmpty()) {
+                    deleteFileCache.put(file.location(), tmpDeleteFiles); // to recalculate the weight
+                }
+                transformedEntries.close();
+            }
+        };
     }
 
     private boolean hasRowFilter() {
-        return rowFilter != null && rowFilter != Expressions.alwaysTrue();
+        return rowFilter != alwaysTrue();
     }
 
     private boolean hasPartitionFilter() {
-        return partFilter != null && partFilter != Expressions.alwaysTrue();
+        return partFilter != alwaysTrue();
     }
 
     private boolean inPartitionSet(F fileToCheck) {
@@ -400,32 +422,22 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         if (lazyEvaluator == null) {
             Expression projected = Projections.inclusive(spec, caseSensitive).project(rowFilter);
             Expression finalPartFilter = Expressions.and(projected, partFilter);
-            if (finalPartFilter != null) {
-                this.lazyEvaluator = new Evaluator(spec.partitionType(), finalPartFilter, caseSensitive);
-            } else {
-                this.lazyEvaluator =
-                        new Evaluator(spec.partitionType(), Expressions.alwaysTrue(), caseSensitive);
-            }
+            this.lazyEvaluator = new Evaluator(spec.partitionType(), finalPartFilter, caseSensitive);
         }
         return lazyEvaluator;
     }
 
     private InclusiveMetricsEvaluator metricsEvaluator() {
         if (lazyMetricsEvaluator == null) {
-            if (rowFilter != null) {
-                this.lazyMetricsEvaluator =
-                        new InclusiveMetricsEvaluator(spec.schema(), rowFilter, caseSensitive);
-            } else {
-                this.lazyMetricsEvaluator =
-                        new InclusiveMetricsEvaluator(spec.schema(), Expressions.alwaysTrue(), caseSensitive);
-            }
+            this.lazyMetricsEvaluator =
+                    new InclusiveMetricsEvaluator(spec.schema(), rowFilter, caseSensitive);
         }
         return lazyMetricsEvaluator;
     }
 
     private static boolean requireStatsProjection(Expression rowFilter, Collection<String> columns) {
         // Make sure we have all stats columns for metrics evaluator
-        return rowFilter != Expressions.alwaysTrue()
+        return rowFilter != alwaysTrue()
                 && columns != null
                 && !columns.containsAll(ManifestReader.ALL_COLUMNS)
                 && !columns.containsAll(STATS_COLUMNS);

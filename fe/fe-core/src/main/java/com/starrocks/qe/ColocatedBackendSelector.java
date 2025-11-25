@@ -19,6 +19,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
@@ -30,6 +31,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
@@ -75,6 +78,8 @@ public class ColocatedBackendSelector implements BackendSelector {
         for (Integer bucketSeq : bucketSeqs) {
             List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
             if (!bucketSeqToWorkerId.containsKey(bucketSeq)) {
+                // Use the first tablet to represent the locations, calculate the backend assigned to this bucket sequence.
+                // In colocation table, all tablets of a bucket sequence have the same locations.
                 computeExecAddressForBucketSeq(locations.get(0), bucketSeq);
             }
 
@@ -120,19 +125,10 @@ public class ColocatedBackendSelector implements BackendSelector {
         Map<Long, Integer> buckendIdToBucketCountMap = colocatedAssignment.backendIdToBucketCount;
         int minBucketNum = Integer.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;
-        List<TScanRangeLocation> backupLocations = new ArrayList<>();
+        List<Long> unavailableDataNodeIds = new ArrayList<>();
         for (TScanRangeLocation location : seqLocation.locations) {
             if (!workerProvider.isDataNodeAvailable(location.getBackend_id())) {
-                if (workerProvider.allowUsingBackupNode()) {
-                    long backupNodeId = workerProvider.selectBackupWorker(location.getBackend_id());
-                    LOG.debug("Select a backup node:{} for node:{}", backupNodeId, location.getBackend_id());
-                    if (backupNodeId > 0) {
-                        // using the backupNode to generate a new ScanRangeLocation
-                        TScanRangeLocation backupLocation = new TScanRangeLocation();
-                        backupLocation.setBackend_id(backupNodeId);
-                        backupLocations.add(backupLocation);
-                    }
-                }
+                unavailableDataNodeIds.add(location.getBackend_id());
                 continue;
             }
 
@@ -142,13 +138,20 @@ public class ColocatedBackendSelector implements BackendSelector {
                 minBackendId = location.backend_id;
             }
         }
-
-        if (minBackendId == Long.MAX_VALUE && !backupLocations.isEmpty()) {
-            for (TScanRangeLocation location : backupLocations) {
-                Integer bucketNum = buckendIdToBucketCountMap.getOrDefault(location.backend_id, 0);
-                if (bucketNum < minBucketNum) {
-                    minBucketNum = bucketNum;
-                    minBackendId = location.backend_id;
+        if (minBackendId == Long.MAX_VALUE && workerProvider.allowUsingBackupNode() &&
+                !unavailableDataNodeIds.isEmpty()) {
+            // [Shared-Data Only] If all locations are in unavailable nodes, a backup node can be selected on behalf of starmgr.
+            Collections.shuffle(unavailableDataNodeIds);
+            for (long id : unavailableDataNodeIds) {
+                long backupNodeId = workerProvider.selectBackupWorker(id);
+                LOG.debug("Select a backup node:{} for node:{}", backupNodeId, id);
+                if (backupNodeId > 0) {
+                    Integer bucketNum = buckendIdToBucketCountMap.getOrDefault(backupNodeId, 0);
+                    if (bucketNum < minBucketNum) {
+                        minBucketNum = bucketNum;
+                        minBackendId = backupNodeId;
+                    }
+                    break;
                 }
             }
         }
@@ -178,14 +181,14 @@ public class ColocatedBackendSelector implements BackendSelector {
                 new ColocatedBackendSelector.BucketSeqToScanRange();
         private final Map<Long, Integer> backendIdToBucketCount = Maps.newHashMap();
         private final int bucketNum;
+        private final Optional<List<BucketProperty>> bucketProperties;
         private final int numScanNodes;
-        private final ScanRangeType type;
         private final Set<PlanNodeId> assignedScanNodeIds = Sets.newHashSet();
 
-        public Assignment(int bucketNum, int numScanNodes, ScanRangeType type) {
+        public Assignment(int bucketNum, int numScanNodes, Optional<List<BucketProperty>> bucketProperties) {
             this.numScanNodes = numScanNodes;
             this.bucketNum = bucketNum;
-            this.type = type;
+            this.bucketProperties = bucketProperties;
         }
 
         public Map<Integer, Long> getSeqToWorkerId() {
@@ -200,8 +203,12 @@ public class ColocatedBackendSelector implements BackendSelector {
             return bucketNum;
         }
 
+        public Optional<List<BucketProperty>> getBucketProperties() {
+            return bucketProperties;
+        }
+
         public boolean isNative() {
-            return type.equals(ScanRangeType.NATIVE);
+            return bucketProperties.isEmpty();
         }
 
         public void recordAssignedScanNode(ScanNode scanNode) {

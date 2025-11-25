@@ -16,14 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.
@@ -67,40 +60,7 @@ public class ShowProcStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        ProcResult result = null;
-        try {
-            result = node.fetchResult();
-        } catch (AnalysisException e) {
-            return builder.build();
-        }
-
-        for (String col : result.getColumnNames()) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
-            return RedirectStatus.FORWARD_NO_SYNC;
-        } else {
-            if (path.equals("/") || !path.contains("/")) {
-                return RedirectStatus.NO_FORWARD;
-            }
-            String[] pathGroup = path.split("/");
-            if (NEED_FORWARD_PATH_ROOT.contains(pathGroup[1])) {
-                return RedirectStatus.FORWARD_NO_SYNC;
-            }
-            return RedirectStatus.NO_FORWARD;
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowProcStmt(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowProcStmt(this, context);
     }
 }

@@ -36,7 +36,6 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -44,6 +43,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCheckPathExistResponse;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;

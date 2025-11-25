@@ -56,10 +56,12 @@ OBJECT_DATABASE: NULL
 
 | **View**             | **Description**                                                               |
 | -------------------- | ----------------------------------------------------------------------------- |
-| [grants_to_roles](../sys/grants_to_roles.md)         | ユーザー定義ロールに付与された特権の情報を記録します。 |
-| [grants_to_users](../sys/grants_to_users.md)         | ユーザーに付与された特権の情報を記録します。              |
-| [role_edges](../sys/role_edges.md)                   | ロールの被付与者を記録します。                            |
-| [object_dependencies](../sys/object_dependencies.md) | 非同期マテリアライズドビューの依存関係を記録します。       |
+| [grants_to_roles](./grants_to_roles.md)         | ユーザー定義ロールに付与された特権の情報を記録します。      |
+| [grants_to_users](./grants_to_users.md)         | ユーザーに付与された特権の情報を記録します。              |
+| [role_edges](./role_edges.md)                   | ロールの被付与者を記録します。                          |
+| [object_dependencies](./object_dependencies.md) | 非同期マテリアライズドビューの依存関係を記録します。        |
+| [policy_references](./policy_references.md)     | オブジェクトの行アクセスポリシーおよび列マスキングポリシーの参照を記録します。|
+| [fe_locks](./fe_locks.md)                       | StarRocks FE のメタデータロックに関する情報をを記録します。 |
 
 :::note
 

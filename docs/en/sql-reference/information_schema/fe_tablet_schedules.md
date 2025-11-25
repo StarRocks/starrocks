@@ -10,18 +10,28 @@ The following fields are provided in `fe_tablet_schedules`:
 
 | **Field**       | **Description**                                              |
 | --------------- | ------------------------------------------------------------ |
-| TABLE_ID        | ID of the table to which the tablet belongs.                 |
-| PARTITION_ID    | ID of the partition to which the tablet belongs.             |
-| TABLET_ID       | ID of the tablet.                                            |
-| TYPE            | Type of the scheduling task (e.g., `CLONE`, `REPAIR`).       |
-| PRIORITY        | Priority of the scheduling task.                             |
-| STATE           | State of the scheduling task (e.g., `PENDING`, `RUNNING`, `FINISHED`). |
-| TABLET_STATUS   | Status of the tablet.                                        |
-| CREATE_TIME     | Creation time of the scheduling task.                        |
-| SCHEDULE_TIME   | Time when the scheduling task was scheduled.                 |
-| FINISH_TIME     | Finish time of the scheduling task.                          |
-| CLONE_SRC       | Source BE ID for clone tasks.                                |
-| CLONE_DEST      | Destination BE ID for clone tasks.                           |
-| CLONE_BYTES     | Number of bytes cloned for clone tasks.                      |
-| CLONE_DURATION  | Duration of the clone task (in seconds).                     |
-| MSG             | Message related to the scheduling task.                      |
+| TABLET_ID       | The ID of the Tablet.                                        |
+| TABLE_ID        | The ID of the table to which the Tablet belongs.             |
+| PARTITION_ID    | The ID of the partition to which the Tablet belongs.         |
+| TYPE            | The type of the task. Valid values: `REPAIR` and `BALANCE`.  |
+| STATE           | The status of the task.                                      |
+| SCHEDULE_REASON | The reason for the task scheduling.                          |
+| MEDIUM          | The storage medium where the Tablet is located.              |
+| PRIORITY        | The current priority of the task.                            |
+| ORIG_PRIORITY   | The original priority of the task.                           |
+| LAST_PRIORITY_ADJUST_TIME | The time when the task's priority was last adjusted. |
+| VISIBLE_VERSION | The visible data version of the Tablet.                      |
+| COMMITTED_VERSION | The committed data version of the Tablet.                  |
+| SRC_BE_ID       | The ID of the BE where the source replica resides.           |
+| SRC_PATH        | The path where the source replica resides.                   |
+| DEST_BE_ID      | ID of the BE where the target replica is located.            |
+| DEST_PATH       | Path where the target replica is located.                    |
+| CREATE_TIME     | The time when the task was created.                          |
+| SCHEDULE_TIME   | The time when the task starts scheduling execution.          |
+| FINISH_TIME     | The time when the task was finished.                         |
+| CLONE_BYTES     | Size of the file cloned in bytes.                            |
+| CLONE_DURATION  | Time elapsed for Clone in seconds.                           |
+| CLONE_RATE      | Clone rate in MB/s.                                          |
+| FAILED_SCHEDULE_COUNT | The number of task scheduling failures.                |
+| FAILED_RUNNING_COUNT | Number of task execution failures.                      |
+| MSG             | Information on task scheduling and exection.                 |

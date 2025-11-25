@@ -15,12 +15,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -66,7 +68,7 @@ public class SingleListPartitionDescTest {
 
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
-        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
         province.setAggregateType(AggregateType.NONE);
         List<ColumnDef> columnDefLists = Lists.newArrayList(province);
 
@@ -82,10 +84,9 @@ public class SingleListPartitionDescTest {
 
         SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(ifNotExists, partitionName,
                 values, partitionProperties);
-        partitionDesc.analyze(columnDefLists, null);
+        PartitionDescAnalyzer.analyze(partitionDesc, columnDefLists, null);
 
         Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
-        Assertions.assertEquals(PartitionType.LIST, partitionDesc.getType());
         Assertions.assertEquals(1, partitionDesc.getReplicationNum());
         Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
         Assertions.assertEquals(true, partitionDesc.isInMemory());

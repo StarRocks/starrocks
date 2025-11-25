@@ -14,8 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

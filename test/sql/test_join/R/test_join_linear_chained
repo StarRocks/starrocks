@@ -1,0 +1,250 @@
+-- name: test_join_linear_chained @sequential
+set enable_hash_join_range_direct_mapping_opt = false;
+-- result:
+-- !result
+set enable_partition_hash_join = false;
+-- result:
+-- !result
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+insert into __row_util_base select * from __row_util_base; -- 2560000
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 bigint NULL,
+
+    c_int int NULL,
+    c_bigint bigint NULL,
+    c_string STRING
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 96
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 
+select
+    idx,
+    idx, -- c_int
+    idx, -- c_bigint
+    uuid() -- c_string
+from __row_util;
+-- result:
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_int+1=tt2.c_int+1;
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_int+1=tt2.c_int+1 where tt1.k1 % 2 = 0;
+-- result:
+1280000	1280000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_bigint=tt2.c_bigint;
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 using(c_int);
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 using(c_int) where tt1.k1 % 2 = 0;
+-- result:
+1280000	1280000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 using(c_int) where tt1.k1 % 100 = 0;
+-- result:
+25600	25600
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 using(c_bigint);
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 using(c_bigint) where tt1.k1 % 2 = 0;
+-- result:
+1280000	1280000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 using(c_bigint) where tt1.k1 % 100 = 0;
+-- result:
+25600	25600
+-- !result
+select count(tt1.c_string) from t1 tt1 join t1 tt2 using(c_string);
+-- result:
+2560000
+-- !result
+select count(tt1.c_string) from t1 tt1 join t1 tt2 using(c_string) where tt1.k1 % 2 = 0;
+-- result:
+1280000
+-- !result
+select count(tt1.c_string) from t1 tt1 join t1 tt2 using(c_string) where tt1.k1 % 100 = 0;
+-- result:
+25600
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_bigint=tt2.c_bigint and tt1.c_string=tt2.c_string;
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join t1 tt2 on -tt1.c_int=tt2.c_int;
+-- result:
+0	0
+-- !result
+with 
+    w1 as (select k1, c_int from t1 union all select k1, c_int + 2560000 from t1 union all select k1, c_int + 2560000 * 2 from t1)
+select count(tt1.k1), count(tt2.k1) from t1 tt1 join [broadcast] w1 tt2 using(c_int);
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_int+1=tt2.c_int+1;
+-- result:
+2560000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_int+1=tt2.c_int+1 where tt1.k1 % 2 = 0;
+-- result:
+1280000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_bigint=tt2.c_bigint;
+-- result:
+2560000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 using(c_int);
+-- result:
+2560000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 using(c_int) where tt1.k1 % 2 = 0;
+-- result:
+1280000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 using(c_int) where tt1.k1 % 100 = 0;
+-- result:
+25600
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 using(c_bigint);
+-- result:
+2560000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 using(c_bigint) where tt1.k1 % 2 = 0;
+-- result:
+1280000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 using(c_bigint) where tt1.k1 % 100 = 0;
+-- result:
+25600
+-- !result
+select count(tt1.c_string) from t1 tt1 left semi join t1 tt2 using(c_string);
+-- result:
+2560000
+-- !result
+select count(tt1.c_string) from t1 tt1 left semi join t1 tt2 using(c_string) where tt1.k1 % 2 = 0;
+-- result:
+1280000
+-- !result
+select count(tt1.c_string) from t1 tt1 left semi join t1 tt2 using(c_string) where tt1.k1 % 100 = 0;
+-- result:
+25600
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_bigint=tt2.c_bigint and tt1.c_string=tt2.c_string;
+-- result:
+2560000
+-- !result
+select count(tt1.k1) from t1 tt1 left semi join t1 tt2 on -tt1.c_int=tt2.c_int;
+-- result:
+0
+-- !result
+with 
+    w1 as (select k1, c_int from t1 union all select k1, c_int + 2560000 from t1 union all select k1, c_int + 2560000 * 2 from t1)
+select count(tt1.k1) from t1 tt1 left semi join [broadcast] w1 tt2 using(c_int);
+-- result:
+2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_int+1=tt2.c_int+1;
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_int+1=tt2.c_int+1 where tt1.k1 % 2 = 0;
+-- result:
+1280000	1280000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_bigint=tt2.c_bigint;
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 using(c_int);
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 using(c_int) where tt1.k1 % 2 = 0;
+-- result:
+1280000	1280000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 using(c_int) where tt1.k1 % 100 = 0;
+-- result:
+25600	25600
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 using(c_bigint);
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 using(c_bigint) where tt1.k1 % 2 = 0;
+-- result:
+1280000	1280000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 using(c_bigint) where tt1.k1 % 100 = 0;
+-- result:
+25600	25600
+-- !result
+select count(tt1.c_string) from t1 tt1 left outer join t1 tt2 using(c_string);
+-- result:
+2560000
+-- !result
+select count(tt1.c_string) from t1 tt1 left outer join t1 tt2 using(c_string) where tt1.k1 % 2 = 0;
+-- result:
+1280000
+-- !result
+select count(tt1.c_string) from t1 tt1 left outer join t1 tt2 using(c_string) where tt1.k1 % 100 = 0;
+-- result:
+25600
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 on tt1.c_int=tt2.c_int and tt1.c_bigint=tt2.c_bigint and tt1.c_string=tt2.c_string;
+-- result:
+2560000	2560000
+-- !result
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join t1 tt2 on -tt1.c_int=tt2.c_int;
+-- result:
+2560000	0
+-- !result
+with 
+    w1 as (select k1, c_int from t1 union all select k1, c_int + 2560000 from t1 union all select k1, c_int + 2560000 * 2 from t1)
+select count(tt1.k1), count(tt2.k1) from t1 tt1 left outer join [broadcast] w1 tt2 using(c_int);
+-- result:
+2560000	2560000
+-- !result

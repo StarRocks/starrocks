@@ -18,14 +18,15 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -41,8 +42,6 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static com.starrocks.common.MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED;
 
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
@@ -63,7 +62,8 @@ public class MVActiveChecker extends FrontendDaemon {
     // mv's data behind which is not expected.
     private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
             MV_BACKUP_INACTIVE_REASON,
-            INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES
     );
 
     @Override

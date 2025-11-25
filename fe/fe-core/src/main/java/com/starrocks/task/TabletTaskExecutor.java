@@ -35,7 +35,6 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TAgentTaskRequest;
@@ -215,6 +214,11 @@ public class TabletTaskExecutor {
                                                                    CreateTabletOption option)
             throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
+        // TabletCreationOptimization must ensure that the schemas of all tablets under a partition are consistent. 
+        // If multiple indexes exist in the partition, disable TabletCreationOptimization.
+        if (physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
+            option.setEnableTabletCreationOptimization(false);
+        }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
@@ -402,7 +406,11 @@ public class TabletTaskExecutor {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(mark.getKey());
+                    ComputeNode backend = GlobalStateMgr.
+                            getCurrentState().
+                            getNodeMgr().
+                            getClusterInfo().
+                            getBackendOrComputeNode(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -462,7 +470,7 @@ public class TabletTaskExecutor {
                                 batchTaskMap.put(backendId, batchTask);
                             }
                             batchTask.addTask(dropTask);
-                            LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                            LOG.debug("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
                                     tabletId, backendId, olapTable.getId(), olapTable.getName());
                         } // end for replicas
                     } // end for tablets

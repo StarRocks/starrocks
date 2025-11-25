@@ -18,12 +18,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.CharType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -107,14 +109,14 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
-                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.INT), new Column("d", Type.INT));
+                return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
+                        new Column("c", IntegerType.INT), new Column("d", IntegerType.INT));
             } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.INT), new Column("d", Type.CHAR));
+                return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
+                        new Column("c", IntegerType.INT), new Column("d", CharType.CHAR));
             } else {
-                return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                        new Column("c", Type.INT), new Column("d", Type.VARCHAR));
+                return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
+                        new Column("c", IntegerType.INT), new Column("d", VarcharType.VARCHAR));
             }
         } finally {
             readUnlock();
@@ -125,12 +127,12 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
-                return Arrays.asList(new Column("d", Type.INT));
+                return Arrays.asList(new Column("d", IntegerType.INT));
             }
             if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList(new Column("d", Type.CHAR));
+                return Arrays.asList(new Column("d", CharType.CHAR));
             } else {
-                return Arrays.asList(new Column("d", Type.VARCHAR));
+                return Arrays.asList(new Column("d", VarcharType.VARCHAR));
             }
         } finally {
             readUnlock();

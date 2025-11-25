@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -40,7 +39,7 @@ public class DropFieldClause extends AlterTableColumnClause {
 
     public DropFieldClause(String colName, String fieldName, List<String> nestedParentFieldNames, 
                           Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE, null, properties, NodePosition.ZERO);
+        super(null, properties, NodePosition.ZERO);
         this.colName = colName;
         this.fieldName = fieldName;
         this.nestedParentFieldNames = nestedParentFieldNames;
@@ -48,6 +47,6 @@ public class DropFieldClause extends AlterTableColumnClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropFieldClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropFieldClause(this, context);
     }
 }

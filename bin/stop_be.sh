@@ -31,8 +31,6 @@ curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 export PID_DIR=`cd "$curdir"; pwd`
 
 source $STARROCKS_HOME/bin/common.sh
@@ -87,6 +85,26 @@ find "${UDF_RUNTIME_DIR}" -maxdepth 1 -name 'pyworker*' -print0 | while IFS= rea
     fi
 done
 
+
+# Stop profile collection daemon first
+profile_pidfile=$STARROCKS_HOME/bin/collect_be_profile.pid
+if [ -f $profile_pidfile ]; then
+    profile_pid=`cat $profile_pidfile`
+    if kill -0 $profile_pid > /dev/null 2>&1; then
+        # Check if the process is actually a profile collection daemon
+        profile_comm=`ps -p $profile_pid -o comm= 2>/dev/null`
+        if [[ "$profile_comm" == *"collect_be_prof"* ]]; then
+            kill -9 $profile_pid > /dev/null 2>&1
+            rm -f $profile_pidfile
+            echo "Profile collection daemon stopped"
+        else
+            echo "WARNING: Process with PID $profile_pid is not a profile collection daemon (command: $profile_comm), skipping..."
+            rm -f $profile_pidfile
+        fi
+    else
+        rm -f $profile_pidfile
+    fi
+fi
 
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`

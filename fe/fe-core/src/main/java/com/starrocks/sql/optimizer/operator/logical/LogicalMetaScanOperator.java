@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class LogicalMetaScanOperator extends LogicalScanOperator {
+    private long selectedIndexId = -1;
     private Map<Integer, String> aggColumnIdToNames = ImmutableMap.of();
     private List<String> selectPartitionNames = Collections.emptyList();
 
@@ -37,6 +39,10 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
     public List<String> getSelectPartitionNames() {
         return selectPartitionNames;
+    }
+
+    public long getSelectedIndexId() {
+        return selectedIndexId;
     }
 
     @Override
@@ -57,7 +63,8 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         }
         LogicalMetaScanOperator that = (LogicalMetaScanOperator) o;
         return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
-                Objects.equals(selectPartitionNames, that.selectPartitionNames);
+                Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
+                selectedIndexId == that.selectedIndexId;
     }
 
     @Override
@@ -82,6 +89,7 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             super.withOperator(operator);
             builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
             builder.selectPartitionNames = operator.selectPartitionNames;
+            builder.columnAccessPaths = ImmutableList.copyOf(operator.columnAccessPaths);
             return this;
         }
 
@@ -92,6 +100,11 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
         public LogicalMetaScanOperator.Builder setSelectPartitionNames(List<String> selectPartitionNames) {
             builder.selectPartitionNames = selectPartitionNames;
+            return this;
+        }
+
+        public LogicalMetaScanOperator.Builder setSelectedIndexId(long selectedIndexId) {
+            builder.selectedIndexId = selectedIndexId;
             return this;
         }
     }

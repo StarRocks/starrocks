@@ -119,8 +119,8 @@ inline uint64_t ALWAYS_INLINE UnpackValue(const uint8_t* __restrict__ in_buf) {
     constexpr int WORDS_TO_READ = LAST_WORD_IDX - FIRST_WORD_IDX;
 
     constexpr int FIRST_BIT_OFFSET = FIRST_BIT_IDX - FIRST_WORD_IDX * 32;
-    constexpr uint64_t mask = BIT_WIDTH == 64 ? ~0L : (1UL << BIT_WIDTH) - 1;
-    const auto* const in = reinterpret_cast<const uint32_t*>(in_buf);
+    constexpr uint64_t mask = (BIT_WIDTH == 64) ? ~0ULL : (1ULL << BIT_WIDTH) - 1;
+    const auto* in = reinterpret_cast<const uint32_t*>(in_buf);
 
     // Avoid reading past the end of the buffer. We can safely read 64 bits if we know that
     // this is a full batch read (so the input buffer is 32 * BIT_WIDTH long) and there is

@@ -22,17 +22,18 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,16 +45,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 public class CachingMvPlanContextBuilder {
     private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
 
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private static final Executor MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
+    private static final ExecutorService MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
             Config.mv_plan_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
@@ -96,7 +99,7 @@ public class CachingMvPlanContextBuilder {
          * Create a AstKey with parseNode(sub parse node)
          */
         public AstKey(ParseNode parseNode) {
-            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false, true).visit(parseNode);
+            this.sql = AST2SQLVisitor.withOptions(FormatOptions.allEnable().setEnableDigest(false)).visit(parseNode);
         }
 
         @Override
@@ -199,10 +202,10 @@ public class CachingMvPlanContextBuilder {
         try {
             result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            LOG.warn("get mv plan cache timeout: {}", mv.getName());
+            LOG.warn("get mv plan cache timeout: {}, timeout(ms):{}", mv.getName(), timeoutMs);
             return null;
         } catch (Throwable e) {
-            LOG.warn("get mv plan cache failed: {}", mv.getName(), e);
+            LOG.warn("get mv plan cache failed: {}, timeout(ms):{}", mv.getName(), timeoutMs, e);
             return null;
         }
         if (LOG.isDebugEnabled()) {
@@ -377,5 +380,23 @@ public class CachingMvPlanContextBuilder {
             keys.add(cacheKey);
         }
         return keys;
+    }
+
+    /**
+     * Submit an async task to be executed in MV plan cache executor.
+     * @param taskName: the name of the task.
+     * @param task: the task to be executed.
+     */
+    public static void submitAsyncTask(String taskName, Supplier<Void> task) {
+        CompletableFuture<?> future = CompletableFuture.supplyAsync(task, MV_PLAN_CACHE_EXECUTOR);
+        long startTime = System.currentTimeMillis();
+        future.whenComplete((result, e) -> {
+            long duration = System.currentTimeMillis() - startTime;
+            if (e == null) {
+                LOG.info("async task {} finished successfully, cost: {}ms", taskName, duration);
+            } else {
+                LOG.warn("async task {} failed: {}, cost: {}ms", taskName, e.getMessage(), duration, e);
+            }
+        });
     }
 }

@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
@@ -35,7 +36,6 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.utframe.UtFrameUtils;
@@ -124,7 +124,7 @@ public class AuthenticationManagerTest {
                 masterManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         PlainPasswordAuthenticationProvider provider = new PlainPasswordAuthenticationProvider(entry.getValue().getPassword());
         Assertions.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry.getKey(), scramble));
+                provider.authenticate(ctx.getAccessControlContext(), entry.getKey(), scramble));
 
         // start to replay
         AuthenticationMgr followerManager = new AuthenticationMgr();
@@ -168,7 +168,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry1 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assertions.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry1.getKey(), scramble));
+                provider.authenticate(ctx.getAccessControlContext(), entry1.getKey(), scramble));
 
         // purely loaded from image
         AuthenticationMgr imageManager = new AuthenticationMgr();
@@ -181,7 +181,7 @@ public class AuthenticationManagerTest {
         Map.Entry<UserIdentity, UserAuthenticationInfo> entry2 =
                 followerManager.getBestMatchedUserIdentity(testUser.getUser(), "10.1.1.2");
         Assertions.assertThrows(AuthenticationException.class, () ->
-                provider.authenticate(ctx, entry2.getKey(), scramble));
+                provider.authenticate(ctx.getAccessControlContext(), entry2.getKey(), scramble));
     }
 
     @Test
@@ -502,7 +502,9 @@ public class AuthenticationManagerTest {
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo(), null);
+        UserIdentity userIdentity = new UserIdentity(alterUserStmt.getUser().getUser(), alterUserStmt.getUser().getHost());
+        masterManager.alterUser(userIdentity, new UserAuthenticationInfo(alterUserStmt.getUser(),
+                alterUserStmt.getAuthOption()), null);
         Assertions.assertEquals(testUser, AuthenticationHandler.authenticate(ctx,
                 testUser.getUser(), "10.1.1.1", scramble));
 

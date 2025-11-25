@@ -14,6 +14,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
+
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
@@ -22,7 +25,8 @@
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
-#include "gtest/gtest.h"
+#include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
@@ -32,6 +36,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/options.h"
+#include "storage/replication_txn_manager.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -41,10 +46,14 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/await.h"
 #include "util/cpu_info.h"
 #include "util/disk_info.h"
+#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/threadpool.h"
+#include "util/time.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -236,14 +245,14 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         ASSERT_TRUE(st.ok()) << st.to_string();
     }
 
-    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 3;
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
-        const RowsetSharedPtr& rowset = tablet_rs.second;
+        const RowsetSharedPtr& rowset = tablet_rs.second.first;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok()) << st.to_string();
@@ -384,6 +393,380 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         ASSERT_EQ(12345, finish_task_request.tablet_versions[0].tablet_id);
         ASSERT_EQ(0, affected_dirs.size());
     }
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
+    // Prepare a transaction with data (similar to previous tests)
+    DeltaWriterOptions writer_options;
+    writer_options.tablet_id = 12345;
+    writer_options.schema_hash = 1111;
+    writer_options.txn_id = 4445;
+    writer_options.partition_id = 10;
+    writer_options.load_id.set_hi(3000);
+    writer_options.load_id.set_lo(4445);
+    writer_options.replica_state = Primary;
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    writer_options.slots = &tuple_desc->slots();
+
+    {
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok()) << writer_status.status().to_string();
+        auto delta_writer = std::move(writer_status.value());
+        ASSERT_TRUE(delta_writer != nullptr);
+
+        std::vector<std::string> test_data;
+        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 128);
+        std::vector<uint32_t> indexes;
+        indexes.reserve(128);
+        for (size_t i = 0; i < 128; ++i) {
+            indexes.push_back(i);
+            test_data.push_back("well" + std::to_string(i));
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            Slice field_1(test_data[i]);
+            cols[1]->append_datum(Datum(field_1));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
+        }
+        auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = delta_writer->close();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        st = delta_writer->commit();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+    }
+
+    // Build a dedicated thread pool with a single worker
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_TRUE(ThreadPoolBuilder("publish-cancel-test")
+                        .set_min_threads(1)
+                        .set_max_threads(1)
+                        .set_max_queue_size(128)
+                        .build(&pool)
+                        .ok());
+
+    // Submit a blocking task to occupy the only worker thread so that publish tasks queue up
+    std::mutex mu;
+    std::condition_variable cv;
+    bool release_blocker = false;
+    std::atomic<bool> blocker_started{false};
+    auto blocker = std::make_shared<CancellableRunnable>(
+            [&]() {
+                blocker_started.store(true, std::memory_order_release);
+                std::unique_lock<std::mutex> lk(mu);
+                cv.wait(lk, [&] { return release_blocker; });
+            },
+            [&]() {
+                // Cancel is a no-op since the blocker task is released via condition variable, not by cancellation.
+            });
+    ASSERT_TRUE(pool->submit(std::move(blocker)).ok());
+
+    // Prepare publish request
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 4445;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = 10;
+    pvinfo.version = 3;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+    publish_version_req.enable_sync_publish = true;
+
+    // Ensure the blocker has started running before submitting publish tasks
+    ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&]() {
+        return blocker_started.load(std::memory_order_acquire);
+    }));
+
+    // Run publish in a separate thread so we can shutdown the pool to trigger cancellation
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::thread t([&]() {
+        run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+    });
+
+    // Wait until at least one publish task is queued behind the blocker (or timeout)
+    ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&]() { return pool->num_queued_tasks() > 0; }));
+
+    // Shutdown the pool in a separate thread, then release the blocker so shutdown can complete
+    std::thread shutdown_th([&]() { pool->shutdown(); });
+    // Wait until the token has been shutdown
+    ASSERT_TRUE(token->wait_for(MonoDelta::FromSeconds(60)));
+    {
+        std::lock_guard<std::mutex> lk(mu);
+        release_blocker = true;
+    }
+    cv.notify_one();
+
+    shutdown_th.join();
+    t.join();
+
+    // Expect that publish reports error for the tablet due to cancellation
+    ASSERT_EQ(finish_task_request.error_tablet_ids.size(), 1);
+    ASSERT_EQ(finish_task_request.error_tablet_ids[0], 12345);
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_rowset_missing) {
+    // Prepare a txn entry without committing a rowset so that rowset is nullptr
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    auto tablet = tablet_manager->get_tablet(12345);
+    ASSERT_TRUE(tablet != nullptr);
+
+    PUniqueId load_id;
+    load_id.set_hi(5555);
+    load_id.set_lo(5555);
+    auto st = StorageEngine::instance()->txn_manager()->prepare_txn(10, tablet, 5555, load_id);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // Use the standard publish thread pool
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 5555;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = 10;
+    pvinfo.version = 4;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+
+    // Expect the rowset-not-found branch to report the tablet as error
+    ASSERT_EQ(1, finish_task_request.error_tablet_ids.size());
+    ASSERT_EQ(12345, finish_task_request.error_tablet_ids[0]);
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_overwrite_failed) {
+    // Create a PRIMARY_KEYS tablet to enter updates() path for overwrite
+    const int64_t pk_tablet_id = 223344;
+    const int64_t pk_partition_id = 30;
+    const int32_t pk_schema_hash = 3333;
+
+    TCreateTabletReq request;
+    set_default_create_tablet_request(&request);
+    request.tablet_id = pk_tablet_id;
+    request.__set_partition_id(pk_partition_id);
+    request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    request.tablet_schema.schema_hash = pk_schema_hash;
+    ASSERT_TRUE(StorageEngine::instance()->create_tablet(request).ok());
+
+    // Write one small txn via DeltaWriter
+    DeltaWriterOptions writer_options;
+    writer_options.tablet_id = pk_tablet_id;
+    writer_options.schema_hash = pk_schema_hash;
+    writer_options.txn_id = 777001;
+    writer_options.partition_id = pk_partition_id;
+    writer_options.load_id.set_hi(777001);
+    writer_options.load_id.set_lo(777001);
+    writer_options.replica_state = Primary;
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    writer_options.slots = &tuple_desc->slots();
+    {
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok());
+        auto delta_writer = std::move(writer_status.value());
+        ASSERT_TRUE(delta_writer != nullptr);
+        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 8);
+        std::vector<uint32_t> indexes;
+        indexes.reserve(8);
+        for (size_t i = 0; i < 8; ++i) {
+            indexes.push_back(i);
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            std::string s_str = std::string("owf") + std::to_string(i);
+            Slice s(s_str);
+            cols[1]->append_datum(Datum(s));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(i)));
+        }
+        ASSERT_TRUE(delta_writer->write(*chunk, indexes.data(), 0, indexes.size()).ok());
+        ASSERT_TRUE(delta_writer->close().ok());
+        ASSERT_TRUE(delta_writer->commit().ok());
+    }
+
+    // Put tablet updates into error state so rowset_commit returns error
+    {
+        auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+        auto tablet = tablet_manager->get_tablet(pk_tablet_id);
+        ASSERT_TRUE(tablet != nullptr);
+        ASSERT_TRUE(tablet->updates() != nullptr);
+        tablet->updates()->set_error("inject overwrite failure for testing");
+    }
+
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 777001;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = pk_partition_id;
+    pvinfo.version = 6;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+    publish_version_req.__set_is_version_overwrite(true);
+
+    // No wait needed; rowset_commit will fail immediately due to error state
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+
+    // Expect overwrite failure reported for the PK tablet
+    ASSERT_EQ(1, finish_task_request.error_tablet_ids.size());
+    ASSERT_EQ(pk_tablet_id, finish_task_request.error_tablet_ids[0]);
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_submit_failure) {
+    // Prepare a txn entry without committing a rowset (any task will do)
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    auto tablet = tablet_manager->get_tablet(12345);
+    ASSERT_TRUE(tablet != nullptr);
+    PUniqueId load_id;
+    load_id.set_hi(7777);
+    load_id.set_lo(7777);
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->prepare_txn(10, tablet, 7777, load_id).ok());
+
+    // Build a dedicated pool and shut it down to force submit() to fail
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_TRUE(ThreadPoolBuilder("publish-submit-fail-test").set_min_threads(1).set_max_threads(1).build(&pool).ok());
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    pool->shutdown();
+
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 7777;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = 10;
+    pvinfo.version = 5;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+
+    // Expect an error reported because tasks couldn't be submitted
+    ASSERT_EQ(1, finish_task_request.error_tablet_ids.size());
+    ASSERT_EQ(12345, finish_task_request.error_tablet_ids[0]);
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_tablet_dropped) {
+    // Create an isolated tablet in a different partition and commit a rowset to a txn
+    const int64_t new_tablet_id = 54321;
+    const int64_t new_partition_id = 20;
+    const int32_t new_schema_hash = 2222;
+
+    TCreateTabletReq request;
+    set_default_create_tablet_request(&request);
+    request.tablet_id = new_tablet_id;
+    request.__set_partition_id(new_partition_id);
+    request.tablet_schema.schema_hash = new_schema_hash;
+    ASSERT_TRUE(StorageEngine::instance()->create_tablet(request).ok());
+
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    auto new_tablet = tablet_manager->get_tablet(new_tablet_id);
+    ASSERT_TRUE(new_tablet != nullptr);
+
+    // Write a small rowset into txn 8889 for the new tablet
+    DeltaWriterOptions writer_options;
+    writer_options.tablet_id = new_tablet_id;
+    writer_options.schema_hash = new_schema_hash;
+    writer_options.txn_id = 8889;
+    writer_options.partition_id = new_partition_id;
+    writer_options.load_id.set_hi(8889);
+    writer_options.load_id.set_lo(8889);
+    writer_options.replica_state = Primary;
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    writer_options.slots = &tuple_desc->slots();
+    {
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok());
+        auto delta_writer = std::move(writer_status.value());
+        ASSERT_TRUE(delta_writer != nullptr);
+        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 8);
+        std::vector<uint32_t> indexes;
+        indexes.reserve(8);
+        for (size_t i = 0; i < 8; ++i) {
+            indexes.push_back(i);
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            std::string s_str = std::string("dropped") + std::to_string(i);
+            Slice s(s_str);
+            cols[1]->append_datum(Datum(s));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(i)));
+        }
+        ASSERT_TRUE(delta_writer->write(*chunk, indexes.data(), 0, indexes.size()).ok());
+        ASSERT_TRUE(delta_writer->close().ok());
+        ASSERT_TRUE(delta_writer->commit().ok());
+    }
+
+    // Drop the tablet before publishing so that get_tablet returns nullptr inside publish
+    ASSERT_TRUE(tablet_manager->drop_tablet(new_tablet_id, kDeleteFiles).ok());
+    (void)tablet_manager->delete_shutdown_tablet(new_tablet_id);
+
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 8889;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = new_partition_id;
+    pvinfo.version = 5;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+
+    // Tablet was dropped; publish should skip it without reporting error
+    ASSERT_EQ(0, finish_task_request.error_tablet_ids.size());
+}
+
+TEST_F(PublishVersionTaskTest, test_publish_version_replication_failed) {
+    // Prepare a replication txn via remote_snapshot so that publish on replication path fails
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(9090);
+    remote_snapshot_request.__set_table_id(1);
+    remote_snapshot_request.__set_partition_id(10);
+    remote_snapshot_request.__set_tablet_id(12345);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_schema_hash(1111);
+    // current tablet visible version is at least 3 in previous tests
+    remote_snapshot_request.__set_visible_version(3);
+    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_tablet_id(12345);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(1111);
+    remote_snapshot_request.__set_src_visible_version(4);
+    remote_snapshot_request.__set_src_backends(std::vector<TBackend>{TBackend()});
+
+    TSnapshotInfo remote_snapshot_info;
+    (void)StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                &remote_snapshot_info);
+
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = 9090;
+    publish_version_req.__set_txn_type(TTxnType::TXN_REPLICATION);
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = 10;
+    pvinfo.version = 4;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+
+    // Expect replication publish failure to be reported for tablet 12345
+    ASSERT_EQ(1, finish_task_request.error_tablet_ids.size());
+    ASSERT_EQ(12345, finish_task_request.error_tablet_ids[0]);
 }
 
 } // namespace starrocks

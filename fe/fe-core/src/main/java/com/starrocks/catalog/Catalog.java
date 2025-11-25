@@ -12,19 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.persist.gson.GsonUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Map;
 
 public class Catalog implements Writable {
@@ -92,11 +87,5 @@ public class Catalog implements Writable {
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(this.getName(), StringUtils.capitalize(config.get(CATALOG_TYPE)), this.getComment()));
     }
-
-    public static Catalog read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Catalog.class);
-    }
-
 
 }

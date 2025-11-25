@@ -1,10 +1,12 @@
 ---
 sidebar_position: 1
+sidebar_label: '概述'
+keywords: ['nei cun', 'S3 API', 'reduce cost', 'efficiency', 'efficient', 'performance']
 ---
 
-# 概述
+# 最佳实践
 
-这些最佳实践由经验丰富的数据库工程师撰写。
+这些最佳实践由经验丰富的数据库工程师撰写。高效设计不仅能提高查询速度，还能通过减少存储、CPU 和对象存储（如 S3）API 成本来降低费用。
 
 ## 常规表设计
 

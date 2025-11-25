@@ -15,14 +15,10 @@
 package com.starrocks.load.streamload;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
-
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implements Writable {
     @SerializedName(value = "trackingURL")
@@ -109,11 +105,8 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
         return numLoadBytesTotal;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
+
 
     @Override
     public String toString() {

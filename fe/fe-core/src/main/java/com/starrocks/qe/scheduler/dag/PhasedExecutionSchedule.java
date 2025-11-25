@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
@@ -223,6 +224,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
             return;
         }
         List<DeployState> deployState = deployStates.poll();
+        int deployRound = 1;
         Preconditions.checkState(deployState != null);
         for (DeployState state : deployState) {
             deployer.deployFragments(state);
@@ -233,10 +235,12 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
             if (deployState.isEmpty()) {
                 break;
             }
+            deployRound += 1;
             for (DeployState state : deployState) {
                 deployer.deployFragments(state);
             }
         }
+        Tracers.count(Tracers.Module.SCHEDULER, "DeployRound", deployRound);
     }
 
     public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {

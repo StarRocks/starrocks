@@ -106,7 +106,6 @@ public class TaskRunManagerTest {
             // no matter whether force is true or not, we always clear running and pending task run
             taskRunManager.killTaskRun(taskId, force);
 
-            System.out.println("force:" + force);
             Assertions.assertTrue(CollectionUtils.isEmpty(scheduler.getPendingTaskRunsByTaskId(taskId)));
             if (force) {
                 Assertions.assertTrue(scheduler.getRunningTaskRun(taskId) == null);

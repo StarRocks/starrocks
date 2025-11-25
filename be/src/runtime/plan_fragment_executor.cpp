@@ -68,6 +68,7 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _prepared(false),
           _closed(false),
           enable_profile(true),
+          _start_time_ms(MonotonicMillis()),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
           _is_runtime_filter_merge_node(false) {}
@@ -123,6 +124,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params,
                                                        false);
     }
+    _exec_env->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
 
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
@@ -310,9 +312,10 @@ void PlanFragmentExecutor::send_report(bool done) {
         return;
     }
 
-    auto start_timestamp = _runtime_state->timestamp_ms() / 1000;
-    auto now = std::time(nullptr);
-    if (load_profile_collect_second != -1 && now - start_timestamp < load_profile_collect_second) {
+    auto elapsed_second = (MonotonicMillis() - _start_time_ms) / 1000;
+    if (load_profile_collect_second != -1 && elapsed_second < load_profile_collect_second) {
+        VLOG(1) << "skip profile report, fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id())
+                << ", threshold_second=" << load_profile_collect_second << ", elapsed_second=" << elapsed_second;
         return;
     }
 
@@ -434,6 +437,7 @@ void PlanFragmentExecutor::close() {
     if (_is_runtime_filter_merge_node) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {

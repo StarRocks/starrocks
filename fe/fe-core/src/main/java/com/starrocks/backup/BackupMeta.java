@@ -47,7 +47,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -112,7 +111,7 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     public static BackupMeta fromFile(String filePath, int starrocksMetaVersion) throws IOException {
         File file = new File(filePath);
         try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
-            BackupMeta backupMeta = BackupMeta.read(dis);
+            BackupMeta backupMeta = GsonUtils.GSON.fromJson(Text.readString(dis), BackupMeta.class);
             return backupMeta;
         }
     }
@@ -120,7 +119,7 @@ public class BackupMeta implements Writable, GsonPostProcessable {
     public void writeToFile(File metaInfoFile) throws IOException {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(metaInfoFile));
         try {
-            write(dos);
+            Text.writeString(dos, GsonUtils.GSON.toJson(this));
             dos.flush();
         } finally {
             dos.close();
@@ -131,12 +130,6 @@ public class BackupMeta implements Writable, GsonPostProcessable {
         // TODO
         return false;
     }
-
-    public static BackupMeta read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), BackupMeta.class);
-    }
-
-
 
     @Override
     public void gsonPostProcess() throws IOException {

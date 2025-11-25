@@ -19,7 +19,25 @@
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
-OPTS=$(getopt \
+# macOS compatibility: use GNU getopt
+GETOPT_BIN="getopt"
+if [[ "$OSTYPE" == darwin* ]]; then
+    # Try to detect gnu-getopt path dynamically
+    if command -v brew &> /dev/null; then
+        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
+        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
+            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
+        else
+            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
+            exit 1
+        fi
+    else
+        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
+        exit 1
+    fi
+fi
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
   -o '' \
   -l 'daemon' \
@@ -58,9 +76,6 @@ done
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
-
 source $STARROCKS_HOME/bin/common.sh
 
 check_and_update_max_processes
@@ -78,13 +93,39 @@ if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh
 fi
 
+# Helper function for readlink -f (macOS compatibility)
+readlink_f() {
+    local target="$1"
+    cd "$(dirname "$target")" || return 1
+    target=$(basename "$target")
+
+    # Iterate down symlinks
+    while [ -L "$target" ]; do
+        target=$(readlink "$target")
+        cd "$(dirname "$target")" || return 1
+        target=$(basename "$target")
+    done
+
+    # Compute the absolute path
+    local phys_dir=$(pwd -P)
+    echo "$phys_dir/$target"
+}
+
 # java
 if [[ -z ${JAVA_HOME} ]]; then
     if command -v javac &> /dev/null; then
-        export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
+        if [[ "$OSTYPE" == darwin* ]]; then
+            export JAVA_HOME="$(dirname $(dirname $(readlink_f $(which javac))))"
+        else
+            export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
+        fi
         echo "Infered JAVA_HOME=$JAVA_HOME"
     elif command -v java &> /dev/null; then
-        export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which java))))"
+        if [[ "$OSTYPE" == darwin* ]]; then
+            export JAVA_HOME="$(dirname $(dirname $(readlink_f $(which java))))"
+        else
+            export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which java))))"
+        fi
     else
       cat << EOF
 Error: The environment variable JAVA_HOME is not set, and neither JDK or JRE is found.
@@ -173,14 +214,25 @@ mkdir -p ${meta_dir:-"$STARROCKS_HOME/meta"}
 for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
 done
-export CLASSPATH=${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
+# Explicitly put fe-core-main.jar at the front of classpath to ensure StarRocks' 
+# customized classes (e.g., HiveMetaStoreClient) are loaded before the original 
+# ones from third-party JARs (e.g., hive-apache-3.1.2-22.jar).
+# This prevents ClassLoader conflicts where the original HiveMetaStoreClient 
+# (which uses old thrift paths like org.apache.thrift.transport.TFramedTransport)
+# might be loaded instead of StarRocks' version (which uses the correct new paths
+# like org.apache.thrift.transport.layered.TFramedTransport).
+export CLASSPATH=${STARROCKS_HOME}/lib/fe-core-main.jar:${STARROCKS_HOME}/lib/starrocks-hadoop-ext.jar:${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
 
 pidfile=$PID_DIR/fe.pid
 
 if [ -f $pidfile ]; then
   oldpid=$(cat $pidfile)
-  # get the full command
-  pscmd=$(ps -q $oldpid -o cmd=)
+  # get the full command (macOS ps doesn't support -q option)
+  if [[ "$OSTYPE" == darwin* ]]; then
+    pscmd=$(ps -p $oldpid -o command= 2>/dev/null)
+  else
+    pscmd=$(ps -q $oldpid -o cmd=)
+  fi
   if echo "$pscmd" | grep -q -w StarRocksFE &>/dev/null ; then
     echo Frontend running as process $oldpid. Stop it first.
     exit 1

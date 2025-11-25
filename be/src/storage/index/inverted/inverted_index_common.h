@@ -61,6 +61,7 @@ enum class InvertedIndexQueryType {
     MATCH_FUZZY_QUERY = 6,
     MATCH_ALL_QUERY = 7,
     MATCH_PHRASE_QUERY = 8,
+    MATCH_ANY_QUERY = 9
 };
 
 } // namespace starrocks

@@ -139,7 +139,7 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
     public void testManyJoins(String name, String query, boolean expectHitMv) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
         // Make sure it's not empty
-        String plan = getFragmentPlan(query, "MV");
+        String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "OlapScanNode");
         if (expectHitMv) {
             PlanTestBase.assertContains(plan, "MaterializedView: true");

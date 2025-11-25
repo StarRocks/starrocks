@@ -24,7 +24,7 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "exec/exec_node.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"

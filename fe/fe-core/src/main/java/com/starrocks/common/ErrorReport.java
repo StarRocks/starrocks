@@ -129,6 +129,14 @@ public class ErrorReport {
         report(null, errorCode, objs);
     }
 
+    public static void report(ErrorCode errorCode, String errMsg) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            ctx.getState().setError(errMsg);
+            ctx.getState().setErrorCode(errorCode);
+        }
+    }
+
     public static void report(String pattern, ErrorCode errorCode, Object... objs) {
         reportCommon(pattern, errorCode, objs);
     }

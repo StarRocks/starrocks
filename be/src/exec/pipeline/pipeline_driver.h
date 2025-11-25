@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/runtime_filter_bank.h"
@@ -269,22 +270,22 @@ public:
         switch (_state) {
         case DriverState::INPUT_EMPTY: {
             auto elapsed_time = _input_empty_timer_sw->elapsed_time();
-            if (_first_input_empty_timer->value() == 0) {
-                _first_input_empty_timer->update(elapsed_time);
+            if (COUNTER_VALUE(_first_input_empty_timer) == 0) {
+                COUNTER_UPDATE(_first_input_empty_timer, elapsed_time);
             } else {
-                _followup_input_empty_timer->update(elapsed_time);
+                COUNTER_UPDATE(_followup_input_empty_timer, elapsed_time);
             }
-            _input_empty_timer->update(elapsed_time);
+            COUNTER_UPDATE(_input_empty_timer, elapsed_time);
             break;
         }
         case DriverState::OUTPUT_FULL:
-            _output_full_timer->update(_output_full_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_output_full_timer, _output_full_timer_sw->elapsed_time());
             break;
         case DriverState::PRECONDITION_BLOCK:
-            _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_precondition_block_timer, _precondition_block_timer_sw->elapsed_time());
             break;
         case DriverState::PENDING_FINISH:
-            _pending_finish_timer->update(_pending_finish_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_pending_finish_timer, _pending_finish_timer_sw->elapsed_time());
             break;
         default:
             break;
@@ -330,7 +331,7 @@ public:
     bool precondition_prepared() const { return _precondition_prepared; }
     void start_timers();
     void stop_timers();
-    int64_t get_active_time() const { return _active_timer->value(); }
+    int64_t get_active_time() const { return COUNTER_VALUE(_active_timer); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
@@ -360,16 +361,26 @@ public:
         return !_all_local_rf_ready;
     }
 
-    bool global_rf_block() {
+    bool global_rf_block(std::string* rf_waiting_set = nullptr) {
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout =
-                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
-                }); // or all the remote RFs are ready.
+        _all_global_rf_ready_or_timeout = true;
 
+        // timeout check
+        if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
+            return false;
+        }
+        // check if all the remote RFs are ready.
+        for (auto* rf_desc : _global_rf_descriptors) {
+            if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
+                continue;
+            }
+            if (rf_waiting_set != nullptr) {
+                rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
+            }
+            _all_global_rf_ready_or_timeout = false;
+        }
         return !_all_global_rf_ready_or_timeout;
     }
 
@@ -402,8 +413,9 @@ public:
 
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
+            std::string rf_waiting_set;
             return std::string(dependencies_block() ? "(dependencies," : "(") +
-                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(global_rf_block(&rf_waiting_set) ? "global runtime filter:" + rf_waiting_set : "") +
                    std::string(local_rf_block() ? "local runtime filter)" : ")");
         } else {
             return "";

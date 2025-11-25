@@ -16,6 +16,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -42,9 +44,9 @@ public class ShowCreateRoutineLoadStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("testJob", stmt.getName());
         Assertions.assertEquals("testDb", stmt.getDbFullName());
-        Assertions.assertEquals(2, stmt.getMetaData().getColumnCount());
-        Assertions.assertEquals("Job", stmt.getMetaData().getColumn(0).getName());
-        Assertions.assertEquals("Create Job", stmt.getMetaData().getColumn(1).getName());
+        Assertions.assertEquals(2, new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+        Assertions.assertEquals("Job", new ShowResultMetaFactory().getMetadata(stmt).getColumn(0).getName());
+        Assertions.assertEquals("Create Job", new ShowResultMetaFactory().getMetadata(stmt).getColumn(1).getName());
     }
 
     @Test
@@ -55,5 +57,15 @@ public class ShowCreateRoutineLoadStmtTest {
         ShowCreateRoutineLoadStmt stmt = (ShowCreateRoutineLoadStmt) stmts.get(0);
         Assertions.assertEquals("testDb", stmt.getDbFullName());
         Assertions.assertEquals("rl_test", stmt.getName());
+    }
+
+    @Test
+    public void testNoDb() {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setDatabase("testDb2");
+        ShowCreateRoutineLoadStmt stmt = new ShowCreateRoutineLoadStmt(new LabelName(null, "testJob2"));
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assertions.assertEquals("testJob2", stmt.getName());
+        Assertions.assertEquals("testDb2", stmt.getDbFullName());
     }
 }

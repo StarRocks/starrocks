@@ -17,15 +17,14 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -34,6 +33,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.sql.ast.LoadStmt.MERGE_CONDITION;
 
 /**
  * Insert into is performed to load data from the result of query stmt.
@@ -96,6 +96,9 @@ public class InsertStmt extends DmlStmt {
     private final Map<String, String> tableFunctionProperties;
 
     private boolean isVersionOverwrite = false;
+
+    // hint in each part of ast. used to ast to sql
+    protected List<HintNode> hintNodes;
 
     // column match by position or name
     public enum ColumnMatchPolicy {
@@ -257,7 +260,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isSpecifyPartitionNames() {
-        return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
+        return targetPartitionNames != null && !targetPartitionNames.isKeyPartitionNames();
     }
 
     public void setTargetColumnNames(List<String> targetColumnNames) {
@@ -266,6 +269,10 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public String getMergingCondition() {
+        return this.properties.get(MERGE_CONDITION);
     }
 
     public void setAutoIncrementPartialUpdate() {
@@ -310,7 +317,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isStaticKeyPartitionInsert() {
-        return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
+        return targetPartitionNames != null && targetPartitionNames.isKeyPartitionNames();
     }
 
     public boolean isPartitionNotSpecifiedInOverwrite() {
@@ -321,21 +328,12 @@ public class InsertStmt extends DmlStmt {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
     }
 
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(getExplainLevel())) {
-            return RedirectStatus.NO_FORWARD;
-        } else {
-            return RedirectStatus.FORWARD_WITH_SYNC;
-        }
-    }
-
     public boolean isForCTAS() {
         return forCTAS;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitInsertStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitInsertStatement(this, context);
     }
 
     public boolean useTableFunctionAsTargetTable() {
@@ -379,5 +377,13 @@ public class InsertStmt extends DmlStmt {
 
     public void setColumnMatchPolicy(ColumnMatchPolicy columnMatchPolicy) {
         this.columnMatchPolicy = columnMatchPolicy;
+    }
+
+    public List<HintNode> getHintNodes() {
+        return hintNodes;
+    }
+
+    public void setHintNodes(List<HintNode> hintNodes) {
+        this.hintNodes = hintNodes;
     }
 }

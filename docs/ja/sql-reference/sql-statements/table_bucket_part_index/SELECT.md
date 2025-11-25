@@ -205,6 +205,68 @@ StarRocks がサポートするさまざまなジョインは、指定された�
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+## ASOF Join
+
+ASOF Join は、時系列分析でよく利用される時間型または範囲型の結合方式です。これは、特定のキーに対する等値条件と、時間やシーケンスフィールドに対する非等値条件（例: `t1.time >= t2.time`）を組み合わせてテーブルを結合します。実行時には、左側テーブルの各行に対して、右側テーブルから「直近でかつ指定時間を超えない」行を選択します。v4.0 以降でサポートされています。
+
+実際の時系列データ分析では、以下のような課題がよく発生します：
+- データ収集タイミングのずれ（例: センサーごとのサンプリング間隔の違い）
+- イベント発生時刻と記録時刻のわずかな差異
+- ある時刻に最も近い過去の記録を検索する必要
+
+従来の等値結合（INNER JOIN）はこのようなデータを扱うと大きなデータ損失につながりやすく、不等値結合は性能上の問題を引き起こしやすいです。ASOF Join はこれらの課題を解決するために設計されています。
+
+ASOF Join がよく利用されるケース：
+
+- **金融市場分析**
+  - 株価と取引量の対応付け
+  - 異なる市場のデータを揃える
+  - デリバティブ価格決定用の参照データマッチング
+- **IoT データ処理**
+  - 複数センサーのデータストリームの同期
+  - デバイス状態変化との相関付け
+  - 時系列データの補間処理
+- **ログ分析**
+  - システムイベントとユーザー操作の対応付け
+  - 異なるサービスのログを照合
+  - 障害解析と問題追跡
+
+### 構文
+
+```SQL
+SELECT [select_list]
+FROM left_table [AS left_alias]
+ASOF LEFT JOIN right_table [AS right_alias]
+    ON equality_condition
+    AND asof_condition
+[WHERE ...]
+[ORDER BY ...]
+```
+
+- `ASOF LEFT JOIN`：時間やシーケンスに基づき、最も近い行を選択する非等値結合。左テーブルのすべての行を返し、右テーブルで未一致の場合は NULL を返します。
+- `equality_condition`：通常の等値条件（例: 銘柄コードや ID の一致）。
+- `asof_condition`：範囲条件で、通常は `left.time >= right.time` と記述し、`left.time` を超えない最新の `right.time` を検索します。
+
+:::note
+`asof_condition`では、DATE型とDATETIME型のみがサポートされています。また、`asof_condition`は1つだけサポートされています。
+:::
+
+### 例
+
+```SQL
+SELECT *
+FROM holdings h ASOF LEFT JOIN prices p             
+ON h.ticker = p.ticker            
+AND h.when >= p.when
+ORDER BY ALL;
+```
+
+### 制限事項
+
+- 現在サポートされるのは Inner Join（デフォルト）と Left Outer Join のみ。
+- `asof_condition` では DATE 型と DATETIME 型のみ利用可能。
+- `asof_condition` は 1 つのみ指定可能。
+
 ### ORDER BY
 
 SELECT 文の ORDER BY 句は、1 つ以上の列からの値を比較して結果セットをソートします。
@@ -1117,9 +1179,9 @@ GROUP BY c0;
 
 ### EXCLUDE
 
-この機能はバージョン4.0からサポートされています。
+この機能は v4.0 からサポートされています。
 
-この機能は、クエリ結果から指定した列を除外し、特定の列を無視する必要がある場合のクエリ文を簡略化します。多数の列を含むテーブルを扱う際に特に便利で、明示的に保持する列名を全て列挙する手間を省けます。
+EXCLUDE キーワードは、クエリ結果から指定した列を除外するために使用され、特定の列を無視できる場合に SQL ステートメントを簡素化します。特に、多くの列を含むテーブルを扱う際に便利で、保持するすべての列を明示的に列挙する必要がなくなります。
 
 #### 構文
 
@@ -1144,7 +1206,7 @@ FROM ...
 ##### 基本使用法
 
 ```sql
--- テストテーブルの作成
+-- test_table の作成。
 CREATE TABLE test_table (
   id INT,
   name VARCHAR(50),
@@ -1152,17 +1214,17 @@ CREATE TABLE test_table (
   email VARCHAR(100)
 ) DUPLICATE KEY(id);
 
--- 単一列を除外 (age)
+-- 単一列を除外 (age)。
 SELECT * EXCLUDE (age) FROM test_table;
 -- 以下のクエリと同等：
 SELECT id, name, email FROM test_table;
 
--- 複数列を除外 (name, email)
+-- 複数列を除外 (name, email)。
 SELECT * EXCLUDE (name, email) FROM test_table;
 -- 以下のクエリと同等：
 SELECT id, age FROM test_table;
 
--- テーブルエイリアスを使用して列を除外
+-- テーブルエイリアスを使用して列を除外。
 SELECT test_table.* EXCLUDE (email) FROM test_table;
 -- 以下のクエリと同等：
 SELECT id, name, age FROM test_table;

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -321,6 +322,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
             builder.vectorSearchOptions = operator.vectorSearchOptions;
             builder.sample = operator.getSample();
+            builder.columnAccessPaths = operator.columnAccessPaths;
             return this;
         }
 
@@ -336,6 +338,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
             builder.prunedPartitionPredicates = prunedPartitionPredicates;
+            return this;
+        }
+
+        public Builder setColumnAccessPath(List<ColumnAccessPath> accessPaths) {
+            builder.setColumnAccessPaths(accessPaths);
             return this;
         }
     }

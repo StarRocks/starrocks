@@ -34,3 +34,7 @@ select max_by(k1,k1) from primary_table_with_null_partition;
 -- result:
 None
 -- !result
+select max_by(named_struct("k",k1,"v", "v1"),k1) from primary_table_with_null_partition;
+-- result:
+None
+-- !result

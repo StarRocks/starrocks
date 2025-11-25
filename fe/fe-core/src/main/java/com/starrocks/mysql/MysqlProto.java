@@ -41,16 +41,18 @@ import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.service.ExecuteEnv;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -247,6 +249,7 @@ public class MysqlProto {
         }
         // set database
         String db = changeUserPacket.getDb();
+        String originalDb = context.getDatabase();
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 context.changeCatalogDb(db);
@@ -264,6 +267,30 @@ public class MysqlProto {
                 return false;
             }
         }
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        Pair<Boolean, String> userChangeResult = connectScheduler.onUserChanged(
+                context, previousQualifiedUser, context.getQualifiedUser());
+        if (!userChangeResult.first) {
+            context.getState().setErrorCode(ErrorCode.ERR_TOO_MANY_USER_CONNECTIONS);
+            context.getState().setError(userChangeResult.second);
+            sendResponsePacket(context);
+            context.getSerializer().setCapability(context.getCapability());
+            context.getSessionVariable().setResourceGroup(previousResourceGroup);
+            context.setCurrentUserIdentity(previousUserIdentity);
+            context.setCurrentRoleIds(previousRoleIds);
+            context.setQualifiedUser(previousQualifiedUser);
+
+            if (!context.getDatabase().equals(originalDb)) {
+                try {
+                    context.changeCatalogDb(originalDb);
+                } catch (DdlException e) {
+                    LOG.error("recover original database fail", e);
+                    return false;
+                }
+            }
+            return false;
+        }
+
         LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", previousQualifiedUser,
                 context.getQualifiedUser());
         return true;
@@ -301,7 +328,7 @@ public class MysqlProto {
             provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin(), authInfo.getAuthString());
         } else {
             for (String authMechanism : Config.authentication_chain) {
-                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                if (authMechanism.equals(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
                     continue;
                 }
 
@@ -325,14 +352,16 @@ public class MysqlProto {
             MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
 
             byte[] authSwitchRequestPacket =
-                    provider.authSwitchRequestPacket(context, user, context.getMysqlChannel().getRemoteIp());
+                    provider.authSwitchRequestPacket(context.getAccessControlContext(), user,
+                            context.getMysqlChannel().getRemoteIp());
             if (authSwitchRequestPacket != null) {
                 MysqlCodec.writeBytes(outputStream, authSwitchRequestPacket);
             }
             MysqlCodec.writeInt1(outputStream, 0);
         } else {
             // AuthMoreData Packet
-            byte[] authMoreDataPacket = provider.authMoreDataPacket(context, user, context.getMysqlChannel().getRemoteIp());
+            byte[] authMoreDataPacket = provider.authMoreDataPacket(context.getAccessControlContext(), user,
+                    context.getMysqlChannel().getRemoteIp());
             if (authMoreDataPacket != null) {
                 MysqlCodec.writeInt1(outputStream, (byte) 0x01);
                 MysqlCodec.writeBytes(outputStream, authMoreDataPacket);

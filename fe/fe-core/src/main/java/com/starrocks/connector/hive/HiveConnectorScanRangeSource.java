@@ -16,8 +16,6 @@ package com.starrocks.connector.hive;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorScanRangeSource;
@@ -30,10 +28,13 @@ import com.starrocks.datacache.DataCacheExprRewriter;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.datacache.DataCacheRule;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -181,7 +182,7 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
                     dataCacheOptions.add(null);
                     if (!op.isConstantRef()) {
                         LOG.warn(String.format("ConstFolding failed for expr: %s, rewrite scalarOperator is %s",
-                                rewritedExpr.toMySql(), op.debugString()));
+                                ExprToSql.toMySql(rewritedExpr), op.debugString()));
                     }
                 }
             }

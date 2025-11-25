@@ -56,10 +56,4 @@ public class CancelLoadStmtTest {
         analyzeFail("CANCEL LOAD WHERE LABEL = ''", failMessage);
         analyzeFail("CANCEL LOAD WHERE LABEL LIKE 'abc' AND true", failMessage);
     }
-
-    @Test
-    public void testGetRedirectStatus() {
-        CancelLoadStmt stmt = new CancelLoadStmt(null, null);
-        Assertions.assertEquals(stmt.getRedirectStatus(), RedirectStatus.FORWARD_WITH_SYNC);
-    }
 }

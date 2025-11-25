@@ -14,8 +14,9 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
 public abstract class AlterPipeClause implements ParseNode {
@@ -33,6 +34,6 @@ public abstract class AlterPipeClause implements ParseNode {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterPipeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterPipeClause(this, context);
     }
 }

@@ -38,8 +38,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ShowStmtToSelectStmtConverter;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -88,7 +91,8 @@ public class ShowMaterializedViewTest {
 
         stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
-        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
+        QueryStatement queryStatement = ShowStmtToSelectStmtConverter.toSelectStmt(stmt);
+        Preconditions.notNull(queryStatement.getOrigStmt(), "stmt's original stmt should not be null");
 
         Assertions.assertEquals("abc", stmt.getDb());
         Assertions.assertEquals(
@@ -125,28 +129,28 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
                         "(information_schema.materialized_views.TABLE_NAME = 'mv1')",
-                AstToStringBuilder.toString(stmt.toSelectStmt()));
+                AstToStringBuilder.toString(queryStatement));
         checkShowMaterializedViewsStmt(stmt);
     }
 
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
         Table schemaMVTable = MaterializedViewsSystemTable.create();
-        Assertions.assertEquals(schemaMVTable.getBaseSchema().size(), stmt.getMetaData().getColumnCount());
+        Assertions.assertEquals(schemaMVTable.getBaseSchema().size(), new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
 
         List<Column> schemaCols = schemaMVTable.getFullSchema();
         for (int i = 0; i < schemaCols.size(); i++) {
             if (schemaCols.get(i).getName().equalsIgnoreCase("MATERIALIZED_VIEW_ID")) {
-                Assertions.assertEquals("id", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("id", new ShowResultMetaFactory().getMetadata(stmt).getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_SCHEMA")) {
-                Assertions.assertEquals("database_name", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("database_name", new ShowResultMetaFactory().getMetadata(stmt).getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_NAME")) {
-                Assertions.assertEquals("name", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("name", new ShowResultMetaFactory().getMetadata(stmt).getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("MATERIALIZED_VIEW_DEFINITION")) {
-                Assertions.assertEquals("text", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("text", new ShowResultMetaFactory().getMetadata(stmt).getColumn(i).getName());
             } else if (schemaCols.get(i).getName().equalsIgnoreCase("TABLE_ROWS")) {
-                Assertions.assertEquals("rows", stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals("rows", new ShowResultMetaFactory().getMetadata(stmt).getColumn(i).getName());
             } else {
-                Assertions.assertEquals(schemaCols.get(i).getName().toLowerCase(), stmt.getMetaData().getColumn(i).getName());
+                Assertions.assertEquals(schemaCols.get(i).getName().toLowerCase(), new ShowResultMetaFactory().getMetadata(stmt).getColumn(i).getName());
             }
         }
     }

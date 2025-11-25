@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowPrivilegesStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -34,7 +35,7 @@ public class ShowPrivilegesStmtTest {
     public void testNormal() throws Exception {
         ShowPrivilegesStmt stmt = (ShowPrivilegesStmt)
                 UtFrameUtils.parseStmtWithNewParser("show privileges", connectContext);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
     }
 }

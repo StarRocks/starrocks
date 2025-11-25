@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.OutFileClause;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

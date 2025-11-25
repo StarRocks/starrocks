@@ -126,7 +126,6 @@ jobs:
     runs-on: [self-hosted, normal]
     needs:
       - info
-    timeout-minutes: 90
     name: BE UT
     continue-on-error: true
     env:
@@ -141,7 +140,7 @@ jobs:
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
-        timeout-minutes: 90
+        timeout-minutes: 150
         if: matrix.build_type == 'Release' || needs.info.outputs.WITH_FEATURE_COV != 'true'
         env:
           build_type: ${{ matrix.build_type }}

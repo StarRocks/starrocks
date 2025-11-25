@@ -107,8 +107,8 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 | Parameter        | Required | Description                                                  |
 | ---------------- | -------- | ------------------------------------------------------------ |
-| column_separator | No       | The characters that are used in the data file to separate fields. If you do not specify this parameter, this parameter defaults to `\t`, which indicates tab.<br/>Make sure that the column separator you specify by using this parameter is the same as the column separator used in the data file.<br/>**NOTE**<br/>For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (\|), whose length does not exceed 50 bytes as a text delimiter. |
-| row_delimiter    | No       | The characters that are used in the data file to separate rows. If you do not specify this parameter, this parameter defaults to `\n`. |
+| column_separator | No       | The characters that are used in the data file to separate fields. If you do not specify this parameter, this parameter defaults to `\t`, which indicates tab.<br/>Make sure that the column separator you specify by using this parameter is the same as the column separator used in the data file.<br/>**NOTE**<br/>- For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (\|), whose length does not exceed 50 bytes as a text delimiter.<br />- If the data file uses consecutive non-printable characters (for example, `\r\n`) as the column separator, you must set this parameter as `\\x0D0A`. |
+| row_delimiter    | No       | The characters that are used in the data file to separate rows. If you do not specify this parameter, this parameter defaults to `\n`.<br />**NOTE**<br />If the data file uses consecutive non-printable characters (for example, `\r\n`) as the row delimiter, you must set this parameter as `\\x0D0A`. |
 | skip_header      | No       | Specifies whether to skip the first few rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br />In some CSV-formatted data files, the first few rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first few rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.<br />The first few rows at the beginning in the data file must be separated by using the row separator that you specify in the load command. |
 | trim_space       | No       | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br /><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br /><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br />If you set `trim_space` to `true`, StarRocks processes the preceding field values as follows:<br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br /><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
 | enclose          | No       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
@@ -464,6 +464,23 @@ curl --location-trusted -u <username>:<password> -H "label:3875" \
     -H "columns: col2, col1, col3" \
     -T example9.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl9/_stream_load
+```
+
+#### Set `column_separator` and `row_delimiter`
+
+Your StarRocks database `test_db` contains a table named `table10`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example10.csv` also consists of three columns, which can be mapped in sequence onto `col1`, `col2`, and `col3` of `table10`. The columns in a data row are separated by commas (`,`), and data rows are separated by two consecutive non-printable characters `\r\n`.
+
+If you want to load all data from `example10.csv` into `table10`, run the following command:
+
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:label10" \
+    -H "Expect:100-continue" \
+    -H "column_separator:," \
+    -H "row_delimiter:\\x0D0A" \
+    -T example10.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table10/_stream_load
 ```
 
 ### Load JSON data

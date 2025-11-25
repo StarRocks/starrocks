@@ -38,10 +38,9 @@
 #include <cstring>
 #include <string>
 
-#include "gutil/dynamic_annotations.h"
-#include "gutil/macros.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
+#include "util/posion.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -61,11 +60,11 @@ public:
             data_ = new uint8_t[capacity];
             capacity_ = capacity;
         }
-        ASAN_POISON_MEMORY_REGION(data_, capacity_);
+        SR_ASAN_POISON_MEMORY_REGION(data_, capacity_);
     }
 
     ~faststring() {
-        ASAN_UNPOISON_MEMORY_REGION(initial_data_, arraysize(initial_data_));
+        SR_ASAN_UNPOISON_MEMORY_REGION(initial_data_, arraysize(initial_data_));
         if (data_ != initial_data_) {
             delete[] data_;
         }
@@ -76,7 +75,7 @@ public:
     // This does not free up any memory. The capacity of the string remains unchanged.
     void clear() {
         resize(0);
-        ASAN_POISON_MEMORY_REGION(data_, capacity_);
+        SR_ASAN_POISON_MEMORY_REGION(data_, capacity_);
     }
 
     // Resize the string to the given length.
@@ -89,8 +88,8 @@ public:
             reserve(newsize);
         }
         len_ = newsize;
-        ASAN_POISON_MEMORY_REGION(data_ + len_, capacity_ - len_);
-        ASAN_UNPOISON_MEMORY_REGION(data_, len_);
+        SR_ASAN_POISON_MEMORY_REGION(data_ + len_, capacity_ - len_);
+        SR_ASAN_UNPOISON_MEMORY_REGION(data_, len_);
     }
 
     // Return the buffer built so far and reset `this` to the initial status (size() == 0).
@@ -105,7 +104,7 @@ public:
         len_ = 0;
         capacity_ = kInitialCapacity;
         data_ = initial_data_;
-        ASAN_POISON_MEMORY_REGION(data_, capacity_);
+        SR_ASAN_POISON_MEMORY_REGION(data_, capacity_);
         return result;
     }
 
@@ -123,7 +122,7 @@ public:
     void append(const void* src_v, size_t count) {
         const auto* src = reinterpret_cast<const uint8_t*>(src_v);
         EnsureRoomForAppend(count);
-        ASAN_UNPOISON_MEMORY_REGION(data_ + len_, count);
+        SR_ASAN_UNPOISON_MEMORY_REGION(data_ + len_, count);
 
         // appending short values is common enough that this
         // actually helps, according to benchmarks. In theory
@@ -147,7 +146,7 @@ public:
     // Append the given character to this string.
     void push_back(const char byte) {
         EnsureRoomForAppend(1);
-        ASAN_UNPOISON_MEMORY_REGION(data_ + len_, 1);
+        SR_ASAN_UNPOISON_MEMORY_REGION(data_ + len_, 1);
         data_[len_] = byte;
         len_++;
     }
@@ -213,8 +212,8 @@ public:
         if (data_ == initial_data_ && rhs.data_ == rhs.initial_data_) {
             assert(capacity_ == kInitialCapacity);
             assert(rhs.capacity_ == kInitialCapacity);
-            ASAN_UNPOISON_MEMORY_REGION(initial_data_, kInitialCapacity);
-            ASAN_UNPOISON_MEMORY_REGION(rhs.initial_data_, kInitialCapacity);
+            SR_ASAN_UNPOISON_MEMORY_REGION(initial_data_, kInitialCapacity);
+            SR_ASAN_UNPOISON_MEMORY_REGION(rhs.initial_data_, kInitialCapacity);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
             memcpy(tmp_buff, initial_data_, kInitialCapacity);
@@ -224,7 +223,7 @@ public:
             std::swap(len_, rhs.len_);
         } else if (data_ == initial_data_) {
             assert(capacity_ == kInitialCapacity);
-            ASAN_UNPOISON_MEMORY_REGION(rhs.initial_data_, len_);
+            SR_ASAN_UNPOISON_MEMORY_REGION(rhs.initial_data_, len_);
             strings::memcpy_inlined(rhs.initial_data_, initial_data_, len_);
             std::swap(len_, rhs.len_);
             data_ = rhs.data_;
@@ -233,7 +232,7 @@ public:
             rhs.capacity_ = kInitialCapacity;
         } else if (rhs.data_ == rhs.initial_data_) {
             assert(rhs.capacity_ == kInitialCapacity);
-            ASAN_UNPOISON_MEMORY_REGION(initial_data_, rhs.len_);
+            SR_ASAN_UNPOISON_MEMORY_REGION(initial_data_, rhs.len_);
             strings::memcpy_inlined(initial_data_, rhs.initial_data_, rhs.len_);
             std::swap(len_, rhs.len_);
             rhs.data_ = data_;
@@ -245,20 +244,20 @@ public:
             std::swap(len_, rhs.len_);
             std::swap(capacity_, rhs.capacity_);
         }
-        ASAN_POISON_MEMORY_REGION(data_ + len_, capacity_ - len_);
-        ASAN_POISON_MEMORY_REGION(rhs.data_ + rhs.len_, rhs.capacity_ - rhs.len_);
+        SR_ASAN_POISON_MEMORY_REGION(data_ + len_, capacity_ - len_);
+        SR_ASAN_POISON_MEMORY_REGION(rhs.data_ + rhs.len_, rhs.capacity_ - rhs.len_);
     }
 
     void advance(size_t count) {
         EnsureRoomForAppend(count);
-        ASAN_UNPOISON_MEMORY_REGION(data_ + len_, count);
+        SR_ASAN_UNPOISON_MEMORY_REGION(data_ + len_, count);
         len_ += count;
     }
 
-private:
     faststring(const faststring&) = delete;
     const faststring& operator=(const faststring&) = delete;
 
+private:
     // If necessary, expand the buffer to fit at least 'count' more bytes.
     // If the array has to be grown, it is grown by at least 50%.
     void EnsureRoomForAppend(size_t count) {

@@ -123,6 +123,30 @@ SELECT * FROM <mv_name> [_SYNC_MV_];
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
 
+除了上述函数外，从 StarRocks v3.4.0 开始，同步物化视图还支持通用聚合函数。有关通用聚合函数的更多信息，请参见[通用聚合函数状态](../../../table_design/table_types/aggregate_table.md#use-generic-aggregate-states-in-materialized-views)。
+
+```SQL
+-- Create a synchronous materialized view test_mv1 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv1 
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+```
+
 ## 异步物化视图
 
 ### 语法
@@ -269,6 +293,11 @@ AS
 **order_by_expression**（选填）
 
 异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
+
+> **注意**
+> 物化视图中有两种不同的 `ORDER BY` 用法：
+> - CREATE MATERIALIZED VIEW 语句中的 `ORDER BY` 定义物化视图的排序键，有助于基于排序键加速查询。这不会影响物化视图的基于 SPJG 的透明加速能力，但不保证物化视图查询结果的全局排序。
+> - 物化视图查询定义中的 `ORDER BY` 保证查询结果的全局排序，但会阻止物化视图用于基于 SPJG 的透明查询改写。因此，如果物化视图用于查询改写，则不应在物化视图的查询定义中使用 `ORDER BY`。
 
 **INDEX**（选填）
 
@@ -781,8 +810,10 @@ PROPERTIES (
 示例一：从源表创建非分区物化视图
 
 ```SQL
+-- 创建一个按 lo_custkey 排序的非分区物化视图
 CREATE MATERIALIZED VIEW lo_mv1
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC
 AS
 select
@@ -792,16 +823,17 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_custkey 
-order by lo_orderkey;
+group by lo_orderkey, lo_custkey;
 ```
 
 示例二：从源表创建分区物化视图
 
 ```SQL
+-- 创建一个按 `lo_orderdate` 分区并按 `lo_custkey` 排序的分区物化视图
 CREATE MATERIALIZED VIEW lo_mv2
 PARTITION BY `lo_orderdate`
 DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
 REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
 AS
 select
@@ -812,8 +844,8 @@ select
     sum(lo_revenue) as total_revenue, 
     count(lo_shipmode) as shipmode_count
 from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey
-order by lo_orderkey;
+group by lo_orderkey, lo_orderdate, lo_custkey;
+```
 
 # 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区。
 CREATE MATERIALIZED VIEW order_mv1
@@ -983,6 +1015,25 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS SELECT * from t1;
+```
+
+示例七：创建具有特定排序键的分区物化视图：
+```SQL
+CREATE MATERIALIZED VIEW lo_mv2
+PARTITION BY `lo_orderdate`
+DISTRIBUTED BY HASH(`lo_orderkey`)
+ORDER BY `lo_custkey`
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    lo_orderkey,
+    lo_orderdate,
+    lo_custkey, 
+    sum(lo_quantity) as total_quantity, 
+    sum(lo_revenue) as total_revenue, 
+    count(lo_shipmode) as shipmode_count
+from lineorder 
+group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
 

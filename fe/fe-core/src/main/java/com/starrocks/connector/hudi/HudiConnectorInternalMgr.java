@@ -146,7 +146,7 @@ public class HudiConnectorInternalMgr {
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getRefreshMaxThreadNum()),
                     remoteFileConf.getCacheTtlSec(),
                     remoteFileConf.getCacheRefreshIntervalSec(),
-                    remoteFileConf.getCacheMaxSize());
+                    remoteFileConf.getMemSizeRatio());
         }
 
         return baseRemoteFileIO;

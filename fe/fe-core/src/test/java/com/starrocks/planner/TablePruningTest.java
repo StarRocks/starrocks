@@ -27,7 +27,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -38,11 +37,12 @@ import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.
 public class TablePruningTest extends TablePruningTestBase {
     @BeforeAll
     public static void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
-        FeConstants.runningUnitTest = true;
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
                 .useDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -208,6 +208,66 @@ public class TablePruningTest extends TablePruningTestBase {
             String createTableSql = res.get(0).get(1);
             Assertions.assertTrue(createTableSql.contains(showAndResult[1]), createTableSql);
         }
+
+        String tableA = "CREATE TABLE table_a (\n" +
+                "    col_a BIGINT,\n" +
+                "    col_tenant BIGINT NOT NULL,\n" +
+                "    col_x BIGINT,\n" +
+                "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n" +
+                "    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+                ") PRIMARY KEY(`col_a`, `col_tenant`)\n" +
+                "DISTRIBUTED BY HASH(col_a, `col_tenant`) BUCKETS 1\n" +
+                "PROPERTIES(\n" +
+                "  \"replication_num\" = \"1\"\n" +
+                ");";
+        String tableB = "CREATE TABLE table_b (\n" +
+                "    col_a BIGINT NOT NULL,\n" +
+                "    col_tenant BIGINT NOT NULL,\n" +
+                "    col_score DECIMAL(10,4),\n" +
+                "    col_version VARCHAR(50),\n" +
+                "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(col_tenant, col_a) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"unique_constraints\" = \"col_a,col_tenant\",\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+
+        String tableC = "CREATE TABLE table_c (\n" +
+                "    col_a BIGINT NOT NULL,\n" +
+                "    col_tenant BIGINT NOT NULL,\n" +
+                "    col_x BIGINT,\n" +
+                "    col_conf DECIMAL(5,4),\n" +
+                "    created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+                ")\n" +
+                "PRIMARY KEY(`col_a`, `col_tenant`)\n" +
+                "DISTRIBUTED BY HASH(col_tenant, col_a) BUCKETS 1\n" +
+                "PROPERTIES(\n" +
+                "  \"replication_num\" = \"1\"\n" +
+                ");";
+        String viewA = "CREATE OR REPLACE VIEW view_a (\n" +
+                "        col_a,\n" +
+                "        col_tenant,\n" +
+                "        col_x,\n" +
+                "        col_score\n" +
+                ")\n" +
+                "AS SELECT\n" +
+                "  table_a.col_a,\n" +
+                "  table_a.col_tenant,\n" +
+                "  COALESCE(table_c.col_x, table_a.col_x) AS col_x,\n" +
+                "  table_b.col_score\n" +
+                "FROM\n" +
+                "    table_a\n" +
+                "LEFT JOIN\n" +
+                "    table_b ON table_b.col_a = table_a.col_a\n" +
+                "    AND table_b.col_tenant = table_a.col_tenant\n" +
+                "LEFT JOIN \n" +
+                "    table_c ON table_a.col_a = table_c.col_a\n" +
+                "    AND table_c.col_tenant = table_a.col_tenant;";
+        starRocksAssert.withTable(tableA);
+        starRocksAssert.withTable(tableB);
+        starRocksAssert.withTable(tableC);
+        starRocksAssert.withView(viewA);
         FeConstants.runningUnitTest = true;
     }
 
@@ -383,27 +443,38 @@ public class TablePruningTest extends TablePruningTestBase {
                 "E",
                 "FI",
                 "FII");
-        List<String> predicates = Lists.newArrayList(
-                "A0.a_pk = A1.a_pk",
-                "A0.a_pk = A2.a_pk",
-                "A2.a_pk = D0.d_pk",
-                "D0.d_pk = D1.d_pk",
-                "D0.d_pk = D2.d_pk",
-                "A0.a_b_fk = B.b_pk",
-                "B.b_ci_fk = CI.ci_pk",
-                "B.b_cii_fk0 = CII.cii_pk0",
-                "B.b_cii_fk1 = CII.cii_pk1",
-                "D0.d_e_fk = E.e_pk",
-                "E.e_fi_fk = FI.fi_pk",
-                "E.e_fii_fk0 = FII.fii_pk0",
-                "E.e_fii_fk1 = FII.fii_pk1",
-                "D2.d_c3>100"
-        );
+
         Object[][] testCases = new Object[][] {
                 {"avg(A0.a_c0+A1.a_c1), sum(A2.a_c2), max(B.b_pk), min(D0.d_c0), min(D1.d_c1)", "", 1, 1},
                 {"A0.a_c0+A1.a_c1, A2.a_c2, B.b_pk, D0.d_c0, D1.d_c1", "limit 1", 1, 1},
                 {"sum(FII.fii_c0), sum(FII.fii_c0+1)", "limit 1", 1, 1},
                 {"sum(FII.fii_c0), sum(CII.cii_c0)", "limit 1", 1, 1, 1},
+        };
+        String[] whereClauses = new String[] {
+                "A0.a_pk = A2.a_pk AND A0.a_pk = A1.a_pk AND E.e_fii_fk1 = FII.fii_pk1 AND D0.d_e_fk = E.e_pk " +
+                        "AND D0.d_pk = D2.d_pk AND A2.a_pk = D0.d_pk AND D0.d_pk = D1.d_pk AND A0.a_b_fk = B.b_pk " +
+                        "AND B.b_cii_fk1 = CII.cii_pk1 AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk0 = CII.cii_pk0 " +
+                        "AND D2.d_c3>100 AND E.e_fi_fk = FI.fi_pk AND E.e_fii_fk0 = FII.fii_pk0",
+                "A0.a_pk = A1.a_pk AND D0.d_pk = D1.d_pk AND A0.a_pk = A2.a_pk AND D0.d_pk = D2.d_pk " +
+                        "AND D0.d_e_fk = E.e_pk AND A2.a_pk = D0.d_pk AND D2.d_c3>100 AND A0.a_b_fk = B.b_pk " +
+                        "AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk1 = CII.cii_pk1 AND B.b_cii_fk0 = CII.cii_pk0 " +
+                        "AND E.e_fii_fk0 = FII.fii_pk0 AND E.e_fi_fk = FI.fi_pk AND E.e_fii_fk1 = FII.fii_pk1",
+                "A0.a_pk = A1.a_pk AND E.e_fii_fk0 = FII.fii_pk0 AND A0.a_b_fk = B.b_pk AND A0.a_pk = A2.a_pk " +
+                        "AND B.b_cii_fk0 = CII.cii_pk0 AND B.b_cii_fk1 = CII.cii_pk1 AND D2.d_c3>100 " +
+                        "AND B.b_ci_fk = CI.ci_pk AND D0.d_pk = D1.d_pk AND A2.a_pk = D0.d_pk " +
+                        "AND E.e_fi_fk = FI.fi_pk AND D0.d_pk = D2.d_pk AND D0.d_e_fk = E.e_pk " +
+                        "AND E.e_fii_fk1 = FII.fii_pk1",
+                "A0.a_pk = A1.a_pk AND A0.a_pk = A2.a_pk AND D2.d_c3>100 AND A2.a_pk = D0.d_pk " +
+                        "AND D0.d_pk = D1.d_pk AND D0.d_e_fk = E.e_pk AND E.e_fi_fk = FI.fi_pk " +
+                        "AND D0.d_pk = D2.d_pk AND E.e_fii_fk0 = FII.fii_pk0 AND A0.a_b_fk = B.b_pk " +
+                        "AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk1 = CII.cii_pk1 AND B.b_cii_fk0 = CII.cii_pk0 " +
+                        "AND E.e_fii_fk1 = FII.fii_pk1",
+                "A0.a_pk = A1.a_pk AND A0.a_pk = A2.a_pk AND D0.d_pk = D1.d_pk AND D2.d_c3>100 " +
+                        "AND A2.a_pk = D0.d_pk AND A0.a_b_fk = B.b_pk AND D0.d_pk = D2.d_pk " +
+                        "AND B.b_ci_fk = CI.ci_pk AND B.b_cii_fk0 = CII.cii_pk0 AND D0.d_e_fk = E.e_pk " +
+                        "AND B.b_cii_fk1 = CII.cii_pk1 AND E.e_fi_fk = FI.fi_pk AND E.e_fii_fk0 = FII.fii_pk0 " +
+                        "AND E.e_fii_fk1 = FII.fii_pk1",
+
         };
         String sqlFmt = "select %s from %s where %s %s";
         for (Object[] tc : testCases) {
@@ -412,12 +483,8 @@ public class TablePruningTest extends TablePruningTestBase {
             int rboNumHashJoins = (Integer) tc[2];
             int finalNmHashJoins = (Integer) tc[3];
 
-            for (int i = 0; i < 10; ++i) {
-                String fromClause =
-                        tables.stream().sorted((a, b) -> new Random().nextInt(3) - 1)
-                                .collect(Collectors.joining(",\n"));
-                String whereClause = predicates.stream().sorted((a, b) -> new Random().nextInt(3) - 1)
-                        .collect(Collectors.joining("\nAND "));
+            for (String whereClause : whereClauses) {
+                String fromClause = tables.stream().collect(Collectors.joining(",\n"));
                 String sql = String.format(sqlFmt, selectItems, fromClause, whereClause, extraLimit);
                 checkHashJoinCountWithBothRBOAndCBOLessThan(sql, 12);
             }
@@ -946,5 +1013,39 @@ public class TablePruningTest extends TablePruningTestBase {
         starRocksAssert.dropTable("s1");
         starRocksAssert.dropTable("s2");
         starRocksAssert.dropTable("s3");
+    }
+
+    @Test
+    public void testJoinMissingOtherConjuncts() throws Exception {
+        String sql = "SELECT COUNT(col_a)\n" +
+                "FROM view_a\n" +
+                "WHERE col_x = 1002 AND col_tenant = 1001\n" +
+                "LIMIT 10;";
+        checkHashJoinCountWithBothRBOAndCBO(sql, 1);
+        ctx.getSessionVariable().setEnableRboTablePrune(true);
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        Assertions.assertTrue(plan.contains("  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: col_a = 11: col_a\n" +
+                "  |  equal join conjunct: 2: col_tenant = 12: col_tenant\n" +
+                "  |  other predicates: coalesce(13: col_x, 3: col_x) = 1002"));
+    }
+
+    @Test
+    public void testSelfInnerJoinWithOtherConjuncts() throws Exception {
+        String sql = "select count(1) from \n" +
+                "table_a a1 inner join table_a a2 \n" +
+                "\ton a1.col_a = a2.col_a and \n" +
+                "\ta1.col_tenant = a2.col_tenant and \n" +
+                "\ta1.created_at < a2.updated_at;";
+        checkHashJoinCountWithOnlyCBO(sql, 0);
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: table_a\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: created_at < 5: updated_at"));
     }
 }

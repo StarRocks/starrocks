@@ -68,57 +68,6 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
 #define CONCAT_IMPL(x, y) x##y
 #define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
 
-#if ENABLE_COUNTERS
-#define ADD_COUNTER(profile, name, type) \
-    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type))
-#define ADD_COUNTER_SKIP_MERGE(profile, name, type, merge_type) \
-    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
-#define ADD_TIMER(profile, name) \
-    (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
-#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
-    (profile)->add_counter(                                \
-            name, TUnit::TIME_NS,                          \
-            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
-#define ADD_PEAK_COUNTER(profile, name, type) \
-    (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
-#define ADD_CHILD_COUNTER(profile, name, type, parent) \
-    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
-#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
-    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
-#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
-    (profile)->add_child_counter(                                                                                      \
-            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
-            parent)
-#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
-    (profile)->add_child_counter(                                  \
-            name, TUnit::TIME_NS,                                  \
-            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
-#define ADD_CHILD_TIMER(profile, name, parent) \
-    (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
-#define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
-#define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
-    ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
-#define SCOPED_RAW_TIMER(c) ScopedRawTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_RAW_TIMER, __COUNTER__)(c)
-#define COUNTER_UPDATE(c, v) (c)->update(v)
-#define COUNTER_SET(c, v) (c)->set(v)
-// this is only used for HighWaterMarkCounter
-#define COUNTER_ADD(c, v) (c)->add(v)
-#define ADD_THREAD_COUNTERS(profile, prefix) (profile)->add_thread_counters(prefix)
-#define SCOPED_THREAD_COUNTER_MEASUREMENT(c) \
-    /*ThreadCounterMeasurement                                        \
-      MACRO_CONCAT(SCOPED_THREAD_COUNTER_MEASUREMENT, __COUNTER__)(c)*/
-#else
-#define ADD_COUNTER(profile, name, type) NULL
-#define ADD_TIMER(profile, name) NULL
-#define SCOPED_TIMER(c)
-#define SCOPED_RAW_TIMER(c)
-#define COUNTER_UPDATE(c, v)
-#define COUNTER_SET(c, v)
-#define COUNTER_ADD(c, v)
-#define ADD_THREADCOUNTERS(profile, prefix) NULL
-#define SCOPED_THREAD_COUNTER_MEASUREMENT(c)
-#endif
-
 class ObjectPool;
 
 // Runtime profile is a group of profiling counters.  It supports adding named counters
@@ -129,6 +78,26 @@ class ObjectPool;
 // corresponding rate based counter.  This thread wakes up at fixed intervals and updates
 // all of the rate counters.
 // Thread-safe.
+template <class Counter>
+class CounterAccesser {
+public:
+    CounterAccesser(Counter* counter) : accessor(counter) {}
+
+    template <typename T>
+    void set(T value) {
+        accessor->set(value);
+    }
+
+    void update(int64_t value) { accessor->update(value); }
+
+    void add(int64_t delta) { accessor->add(delta); }
+
+    int64_t value() const { return accessor->value(); }
+
+private:
+    Counter* accessor;
+};
+
 class RuntimeProfile {
 public:
     inline static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
@@ -163,8 +132,6 @@ public:
 
         virtual ~Counter() = default;
 
-        virtual void update(int64_t delta) { _value.fetch_add(delta, std::memory_order_relaxed); }
-
         // Use this to update if the counter is a bitmap
         void bit_or(int64_t delta) {
             int64_t old;
@@ -173,12 +140,6 @@ public:
                 if (LIKELY((old | delta) == old)) return; // Bits already set, avoid atomic.
             } while (UNLIKELY(!_value.compare_exchange_strong(old, old | delta, std::memory_order_relaxed)));
         }
-
-        virtual void set(int64_t value) { _value.store(value, std::memory_order_relaxed); }
-
-        virtual void set(double value) { _value.store(bit_cast<int64_t>(value), std::memory_order_relaxed); }
-
-        virtual int64_t value() const { return _value.load(std::memory_order_relaxed); }
 
         virtual double double_value() const { return bit_cast<double>(_value.load(std::memory_order_relaxed)); }
 
@@ -213,8 +174,18 @@ public:
             return threshold == 0 || value() > threshold;
         }
 
+    protected:
+        virtual void set(int64_t value) { _value.store(value, std::memory_order_relaxed); }
+
+        virtual void set(double value) { _value.store(bit_cast<int64_t>(value), std::memory_order_relaxed); }
+
+        virtual void update(int64_t delta) { _value.fetch_add(delta, std::memory_order_relaxed); }
+
+        virtual int64_t value() const { return _value.load(std::memory_order_relaxed); }
+
     private:
         friend class RuntimeProfile;
+        friend class CounterAccesser<Counter>;
 
         std::atomic<int64_t> _value;
         const TUnit::type _type;
@@ -233,13 +204,14 @@ public:
     /// A counter that keeps track of the highest/lowest value seen (reporting that
     /// as value()) and the current value.
     template <bool is_high>
-    class WaterMarkCounter : public Counter {
+    class WaterMarkCounter final : public Counter {
     public:
         explicit WaterMarkCounter(TUnit::type type, int64_t value = 0) : Counter(type, value) { _set_init_value(); }
         explicit WaterMarkCounter(TUnit::type type, const TCounterStrategy& strategy, int64_t value = 0)
                 : Counter(type, strategy, value) {
             _set_init_value();
         }
+        ~WaterMarkCounter() override = default;
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
@@ -268,6 +240,8 @@ public:
         int64_t current_value() const { return current_value_.load(std::memory_order_relaxed); }
 
     private:
+        friend class CounterAccesser<WaterMarkCounter>;
+
         void _set_init_value() {
             if constexpr (is_high) {
                 _value.store(0, std::memory_order_relaxed);
@@ -702,13 +676,13 @@ public:
             return;
         }
 
-        _counter->update(-1L * _val);
+        CounterAccesser(_counter).update(-1L * _val);
     }
 
     // Increment the counter when object is destroyed
     ~ScopedCounter() {
         if (_counter != nullptr) {
-            _counter->update(_val);
+            CounterAccesser(_counter).update(_val);
         }
     }
 
@@ -750,7 +724,7 @@ public:
 
     void UpdateCounter() {
         if (_counter != nullptr && !is_cancelled()) {
-            _counter->update(_sw.elapsed_time());
+            CounterAccesser(_counter).update(_sw.elapsed_time());
         }
     }
 
@@ -786,3 +760,66 @@ private:
 };
 
 } // namespace starrocks
+
+#if ENABLE_COUNTERS
+#define ADD_COUNTER(profile, name, type) \
+    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type))
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type, merge_type) \
+    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
+#define ADD_TIMER(profile, name) \
+    (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
+    (profile)->add_counter(                                \
+            name, TUnit::TIME_NS,                          \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
+#define ADD_PEAK_COUNTER(profile, name, type) \
+    (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
+#define ADD_CHILD_COUNTER(profile, name, type, parent) \
+    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
+    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
+    (profile)->add_child_counter(                                                                                      \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            parent)
+#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
+    (profile)->add_child_counter(                                  \
+            name, TUnit::TIME_NS,                                  \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
+#define ADD_CHILD_TIMER(profile, name, parent) \
+    (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
+#define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
+#define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
+    ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
+#define SCOPED_RAW_TIMER(c) ScopedRawTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_RAW_TIMER, __COUNTER__)(c)
+#define COUNTER_UPDATE(c, v) CounterAccesser(c).update(v)
+#define COUNTER_SET(c, v) CounterAccesser(c).set(v)
+// this is only used for HighWaterMarkCounter
+#define COUNTER_ADD(c, v) CounterAccesser(c).add(v)
+#define COUNTER_VALUE(c) CounterAccesser(c).value()
+#define COUNTER_CURRENT_VALUE(c) (c)->current_value()
+#define ADD_THREAD_COUNTERS(profile, prefix) (profile)->add_thread_counters(prefix)
+#define SCOPED_THREAD_COUNTER_MEASUREMENT(c) \
+    /*ThreadCounterMeasurement                                        \
+      MACRO_CONCAT(SCOPED_THREAD_COUNTER_MEASUREMENT, __COUNTER__)(c)*/
+#else
+#define ADD_COUNTER(profile, name, type) (RuntimeProfile::Counter*)NULL
+#define ADD_TIMER(profile, name) (RuntimeProfile::Counter*)NULL
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) (RuntimeProfile::Counter*)NULL
+#define SCOPED_TIMER(c)
+#define SCOPED_RAW_TIMER(c)
+#define COUNTER_UPDATE(c, v)
+#define COUNTER_SET(c, v)
+#define COUNTER_ADD(c, v)
+#define COUNTER_VALUE(c) 0
+#define COUNTER_CURRENT_VALUE(c) 0
+#define ADD_PEAK_COUNTER(profile, name, type) (RuntimeProfile::HighWaterMarkCounter*)NULL
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type, merge_type) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_COUNTER(profile, name, type, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_TIMER(profile, name, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_THREAD_COUNTERS(profile, prefix) (RuntimeProfile::ThreadCounters*)NULL
+#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) (RuntimeProfile::Counter*)NULL
+#define SCOPED_THREAD_COUNTER_MEASUREMENT(c)
+#endif

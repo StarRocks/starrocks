@@ -270,8 +270,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
             auto column = chunk->get_column_by_slot_id(0);
             ColumnViewer<TYPE_INT> viewer(column);
             ASSERT_TRUE(viewer.is_null(0));
-            const auto& container = viewer.column()->get_data();
-            const auto& null_container = viewer.null_column()->get_data();
+            const auto container = viewer.column()->immutable_data();
+            const auto null_container = viewer.null_column()->immutable_data();
             ASSERT_TRUE(std::all_of(null_container.begin() + 1, null_container.end(), [](auto v) { return !v; }));
             ASSERT_TRUE(std::is_sorted(container.begin() + 1, container.end()));
         }
@@ -296,8 +296,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
             auto column = chunk->get_column_by_slot_id(0);
             ColumnViewer<TYPE_INT> viewer(column);
             ASSERT_TRUE(viewer.is_null(viewer.size() - 1));
-            const auto& container = viewer.column()->get_data();
-            const auto& null_container = viewer.null_column()->get_data();
+            const auto container = viewer.column()->immutable_data();
+            const auto null_container = viewer.null_column()->immutable_data();
             ASSERT_TRUE(std::all_of(null_container.begin(), null_container.end() - 1, [](auto v) { return !v; }));
             ASSERT_TRUE(std::is_sorted(container.begin(), container.end() - 1));
         }
@@ -323,8 +323,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
             auto column = chunk->get_column_by_slot_id(0);
             ColumnViewer<TYPE_INT> viewer(column);
             ASSERT_TRUE(viewer.is_null(0));
-            const auto& container = viewer.column()->get_data();
-            const auto& null_container = viewer.null_column()->get_data();
+            const auto container = viewer.column()->immutable_data();
+            const auto null_container = viewer.null_column()->immutable_data();
             ASSERT_TRUE(std::all_of(null_container.begin() + 1, null_container.end(), [](auto v) { return !v; }));
             ASSERT_TRUE(std::is_sorted(container.begin() + 1, container.end(), std::greater<int32_t>()));
         }

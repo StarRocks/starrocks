@@ -15,24 +15,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
-import java.util.List;
 import java.util.Map;
 
 public class PartitionDesc implements ParseNode {
-
-    protected PartitionType type;
 
     protected final NodePosition pos;
     protected boolean isSystem = false;
@@ -45,14 +36,6 @@ public class PartitionDesc implements ParseNode {
         this.pos = pos;
     }
 
-    public PartitionType getType() {
-        return type;
-    }
-
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
-        throw new NotImplementedException();
-    }
-
     public String toSql() {
         throw new NotImplementedException();
     }
@@ -60,13 +43,6 @@ public class PartitionDesc implements ParseNode {
     @Override
     public NodePosition getPos() {
         return pos;
-    }
-
-    // Currently, RANGE is used for materialized view ExpressionRangePartitionInfo, which is isExprPartition=false,
-    // and EXPR_RANGE is used for ordinary table ExpressionRangePartitionInfo, which is isExprPartition=true
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
-            throws DdlException {
-        throw new NotImplementedException();
     }
 
     public String getPartitionName() throws NotImplementedException {

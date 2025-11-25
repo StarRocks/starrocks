@@ -14,48 +14,18 @@
 
 #pragma once
 
-#include "exec/spill/block_manager.h"
-#include "exec/spill/data_stream.h"
-#include "exec/spill/spiller_factory.h"
+#include "storage/load_chunk_spiller.h"
 #include "storage/memtable_sink.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 
 class RuntimeState;
+class LoadSpillBlockManager;
 
 namespace lake {
 
-class LoadSpillBlockManager;
 class TabletWriter;
-
-class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
-public:
-    LoadSpillOutputDataStream(LoadSpillBlockManager* block_manager) : _block_manager(block_manager) {}
-
-    Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
-                  size_t write_num_rows) override;
-
-    Status flush() override;
-
-    bool is_remote() const override;
-
-    int64_t append_bytes() const { return _append_bytes; }
-
-private:
-    Status _preallocate(size_t block_size);
-
-    // Freeze current block and append it to block container
-    Status _freeze_current_block();
-
-    // Switch to remote block when local disk is full
-    Status _switch_to_remote_block(size_t block_size);
-
-private:
-    LoadSpillBlockManager* _block_manager = nullptr;
-    spill::BlockPtr _block;
-    int64_t _append_bytes = 0;
-};
 
 class SpillMemTableSink : public MemTableSink {
 public:
@@ -71,28 +41,16 @@ public:
 
     Status merge_blocks_to_segments();
 
-    spill::Spiller* get_spiller() { return _spiller.get(); }
+    spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }
 
     int64_t txn_id() override;
     int64_t tablet_id() override;
 
 private:
-    Status _prepare(const ChunkPtr& chunk_ptr);
-    Status _do_spill(const Chunk& chunk, const spill::SpillOutputDataStreamPtr& output);
-
-private:
-    LoadSpillBlockManager* _block_manager = nullptr;
     TabletWriter* _writer;
-    // destroy spiller before runtime_state
-    std::shared_ptr<RuntimeState> _runtime_state;
-    // used when input profile is nullptr
-    std::unique_ptr<RuntimeProfile> _dummy_profile;
-    RuntimeProfile* _profile = nullptr;
-    spill::SpillerFactoryPtr _spiller_factory;
-    std::shared_ptr<spill::Spiller> _spiller;
-    SchemaPtr _schema;
     // used for spill merge, parent trakcer is compaction tracker
     std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
+    std::unique_ptr<LoadChunkSpiller> _load_chunk_spiller = nullptr;
 };
 
 } // namespace lake

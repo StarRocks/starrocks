@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverTableStmt;
 

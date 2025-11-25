@@ -20,7 +20,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
@@ -40,7 +40,7 @@ public class WarehouseAnalyzer {
         new WarehouseAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class WarehouseAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class WarehouseAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

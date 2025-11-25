@@ -22,7 +22,7 @@
 
 #include "common/compiler_util.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/load_spill_block_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/stack_trace_mutex.h"
@@ -423,6 +423,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_profile(_profile)
                                           .set_bundle_writable_file_context(_bundle_writable_file_context)
                                           .set_global_dicts(_global_dicts)
+                                          .set_is_multi_statements_txn(_is_multi_statements_txn)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

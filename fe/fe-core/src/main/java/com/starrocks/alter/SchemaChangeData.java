@@ -42,10 +42,12 @@ class SchemaChangeData {
     private final double bloomFilterFpp;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexShortKeyCount;
+    private final boolean shortKeyChanged;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
     private final long warehouseId;
     private final ComputeResource computeResource;
+    private final boolean disableReplicatedStorageForGIN;
 
     static Builder newBuilder() {
         return new Builder();
@@ -98,6 +100,10 @@ class SchemaChangeData {
         return Collections.unmodifiableMap(newIndexShortKeyCount);
     }
 
+    boolean isShortKeyChanged() {
+        return shortKeyChanged;
+    }
+
     @Nullable
     List<Integer> getSortKeyIdxes() {
         return sortKeyIdxes;
@@ -113,6 +119,10 @@ class SchemaChangeData {
         return computeResource;
     }
 
+    boolean isDisableReplicatedStorageForGIN() {
+        return disableReplicatedStorageForGIN;
+    }
+
     private SchemaChangeData(Builder builder) {
         this.database = Objects.requireNonNull(builder.database, "database is null");
         this.table = Objects.requireNonNull(builder.table, "table is null");
@@ -124,10 +134,12 @@ class SchemaChangeData {
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.hasIndexChanged = builder.hasIndexChanged;
         this.newIndexShortKeyCount = Objects.requireNonNull(builder.newIndexShortKeyCount, "newIndexShortKeyCount is null");
+        this.shortKeyChanged = builder.shortKeyChanged;
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
         this.computeResource = builder.computeResource;
+        this.disableReplicatedStorageForGIN = builder.disableReplicatedStorageForGIN;
     }
 
     static class Builder {
@@ -141,10 +153,12 @@ class SchemaChangeData {
         private double bloomFilterFpp;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
+        private boolean shortKeyChanged = false;
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
         private long warehouseId;
         private ComputeResource computeResource;
+        private boolean disableReplicatedStorageForGIN = false;
 
         private Builder() {
         }
@@ -181,8 +195,9 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withNewIndexShortKeyCount(long indexId, short shortKeyCount) {
+        Builder withNewIndexShortKeyCount(long indexId, short shortKeyCount, boolean shortKeyChanged) {
             this.newIndexShortKeyCount.put(indexId, shortKeyCount);
+            this.shortKeyChanged |= shortKeyChanged;
             return this;
         }
 
@@ -204,6 +219,11 @@ class SchemaChangeData {
         Builder withComputeResource(ComputeResource computeResource) {
             this.computeResource = computeResource;
             this.warehouseId = computeResource.getWarehouseId();
+            return this;
+        }
+
+        Builder withDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+            this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
             return this;
         }
 

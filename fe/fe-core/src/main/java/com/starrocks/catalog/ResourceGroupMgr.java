@@ -24,11 +24,9 @@ import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -36,6 +34,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
@@ -50,8 +49,6 @@ import com.starrocks.thrift.TWorkGroupType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -110,7 +107,7 @@ public class ResourceGroupMgr implements Writable {
     public void createResourceGroup(CreateResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
-            ResourceGroup wg = stmt.getResourceGroup();
+            ResourceGroup wg = ResourceGroupBuilder.buildFromStmt(stmt);
             boolean needReplace = false;
             if (resourceGroupMap.containsKey(wg.getName())) {
                 if (stmt.isReplaceIfExists()) {
@@ -165,6 +162,12 @@ public class ResourceGroupMgr implements Writable {
                 classifier.setResourceGroupId(wg.getId());
                 classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
+
+            if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
+                throw new DdlException(
+                        "Property `mem_limit` must be equal for all resource groups using the mem_pool [" + wg.getMemPool() +
+                                "].");
+            }
             addResourceGroupInternal(wg);
 
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
@@ -196,6 +199,14 @@ public class ResourceGroupMgr implements Writable {
         } finally {
             readUnlock();
         }
+    }
+
+    private boolean resourceGroupInMemPoolHaveSameMemLimit(ResourceGroup wg) {
+        if (wg.getMemPool() == null) {
+            return true;
+        }
+        return resourceGroupMap.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+                wg.getMemLimit().equals(entry.getValue().getMemLimit()));
     }
 
     private String getUnqualifiedUser(ConnectContext ctx) {
@@ -280,27 +291,6 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        List<ResourceGroup> resourceGroups = new ArrayList<>(resourceGroupMap.values());
-        SerializeData data = new SerializeData();
-        data.resourceGroups = resourceGroups;
-
-        String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(out, s);
-    }
-
-    public void readFields(DataInputStream dis) throws IOException {
-        String s = Text.readString(dis);
-        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
-        if (null != data && null != data.resourceGroups) {
-            data.resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
-            for (ResourceGroup workgroup : data.resourceGroups) {
-                replayAddResourceGroup(workgroup);
-            }
-        }
-    }
-
     private void replayAddResourceGroup(ResourceGroup workgroup) {
         addResourceGroupInternal(workgroup);
         ResourceGroupOpEntry op = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, workgroup);
@@ -340,7 +330,13 @@ public class ResourceGroupMgr implements Writable {
             }
 
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
-                List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
+                // Build new classifiers using ResourceGroupBuilder instead of getting from stmt
+                List<ResourceGroupClassifier> newAddedClassifiers;
+                try {
+                    newAddedClassifiers = ResourceGroupBuilder.buildAddedClassifiersFromStmt(stmt);
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage());
+                }
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
                     classifier.setResourceGroupId(wg.getId());
                     classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
@@ -348,7 +344,13 @@ public class ResourceGroupMgr implements Writable {
                 }
                 wg.getClassifiers().addAll(newAddedClassifiers);
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
-                ResourceGroup changedProperties = stmt.getChangedProperties();
+                // Build changed properties using ResourceGroupBuilder instead of getting from stmt
+                ResourceGroup changedProperties;
+                try {
+                    changedProperties = ResourceGroupBuilder.buildChangedPropertiesFromStmt(stmt);
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage());
+                }
 
                 Integer cpuWeight = changedProperties.getRawCpuWeight();
                 if (cpuWeight == null) {
@@ -389,6 +391,16 @@ public class ResourceGroupMgr implements Writable {
                 if (maxCpuCores != null) {
                     wg.setMaxCpuCores(maxCpuCores);
                 }
+                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(wg.getMemPool())) {
+                    throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
+                }
+                if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) &&
+                        changedProperties.getMemLimit() != null &&
+                        !wg.getMemLimit().equals(changedProperties.getMemLimit())) {
+                    throw new DdlException(
+                            "Property `mem_limit` cannot be altered for resource groups with mem_pool [" +
+                                    wg.getMemPool() + "].");
+                }
                 Double memLimit = changedProperties.getMemLimit();
                 if (memLimit != null) {
                     wg.setMemLimit(memLimit);
@@ -422,8 +434,8 @@ public class ResourceGroupMgr implements Writable {
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
-            } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
-                Set<Long> classifierToDrop = new HashSet<>(stmt.getClassifiersToDrop());
+            } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers dropClassifiers) {
+                Set<Long> classifierToDrop = new HashSet<>(dropClassifiers.getClassifierIds());
                 wg.getClassifiers().removeIf(classifier -> classifierToDrop.contains(classifier.getId()));
                 for (Long classifierId : classifierToDrop) {
                     classifierMap.remove(classifierId);
@@ -664,7 +676,7 @@ public class ResourceGroupMgr implements Writable {
             );
             CreateResourceGroupStmt defaultWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME,
                     true, false, Collections.emptyList(), defaultWgProperties);
-            defaultWgStmt.analyze();
+            ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(defaultWgStmt);
             createResourceGroup(defaultWgStmt);
 
             Map<String, String> defaultMvWgProperties = ImmutableMap.of(
@@ -674,7 +686,7 @@ public class ResourceGroupMgr implements Writable {
             );
             CreateResourceGroupStmt defaultMvWgStmt = new CreateResourceGroupStmt(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME,
                     true, false, Collections.emptyList(), defaultMvWgProperties);
-            defaultMvWgStmt.analyze();
+            ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(defaultMvWgStmt);
             createResourceGroup(defaultMvWgStmt);
         } catch (Exception e) {
             LOG.warn("failed to create builtin resource groups", e);

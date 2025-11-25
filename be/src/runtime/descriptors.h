@@ -174,14 +174,17 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
+    const std::vector<TExpr>& thrift_partition_key_exprs() const { return _thrift_partition_key_exprs; }
     Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool);
+    std::string debug_string() const;
 
 private:
     int64_t _id = 0;
     THdfsFileFormat::type _file_format;
     std::string _location;
 
-    const std::vector<TExpr>& _thrift_partition_key_exprs;
+    // holding thrift exprs for partition keys for duplication check during runtime
+    const std::vector<TExpr> _thrift_partition_key_exprs;
     std::vector<ExprContext*> _partition_key_value_evals;
 };
 
@@ -251,6 +254,7 @@ public:
     const std::vector<std::string> full_column_names();
     std::vector<int32_t> partition_source_index_in_schema();
     bool has_base_path() const override { return true; }
+    const TSortOrder& sort_order() const { return _t_sort_order; }
 
     Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
 
@@ -260,6 +264,7 @@ private:
     std::vector<std::string> _partition_column_names;
     std::vector<std::string> _transform_exprs;
     std::vector<TExpr> _partition_exprs;
+    TSortOrder _t_sort_order;
 };
 
 class FileTableDescriptor : public HiveTableDescriptor {

@@ -41,6 +41,8 @@ import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
+import com.starrocks.http.action.ProcProfileAction;
+import com.starrocks.http.action.ProcProfileFileAction;
 import com.starrocks.http.action.QueryAction;
 import com.starrocks.http.action.QueryProfileAction;
 import com.starrocks.http.action.SessionAction;
@@ -98,6 +100,10 @@ import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+import com.starrocks.http.rest.v2.BackendActionV2;
+import com.starrocks.http.rest.v2.ComputeNodeActionV2;
+import com.starrocks.http.rest.v2.ProfileActionV2;
+import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.http.rest.v2.TablePartitionAction;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -223,8 +229,10 @@ public class HttpServer {
         ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
+        ProfileActionV2.registerAction(controller);
         QueryProgressAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
+        QueryDetailActionV2.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
@@ -233,6 +241,12 @@ public class HttpServer {
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
+        BackendActionV2.registerAction(controller);
+        ComputeNodeActionV2.registerAction(controller);
+
+        // proc profile actions
+        ProcProfileAction.registerAction(controller);
+        ProcProfileFileAction.registerAction(controller);
 
         // meta service action
         ImageAction.registerAction(controller);
@@ -353,7 +367,7 @@ public class HttpServer {
 
         GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
                 HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
-        httpWorkersNum.setValue(0L);
+        httpWorkersNum.setValue((long) workerGroup.executorCount());
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
         GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,

@@ -16,14 +16,11 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -33,6 +30,10 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
@@ -266,8 +267,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                     }
                 });
 
-        String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
-        String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+        String maxInt = IntLiteral.createMaxValue(IntegerType.INT).getStringValue();
+        String maxDate = DateLiteral.createMaxValue(DateType.DATE).getStringValue();
 
         ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
         if (partitions.isEmpty()) {

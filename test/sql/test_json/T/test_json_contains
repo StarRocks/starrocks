@@ -1,0 +1,76 @@
+-- name: test_json_contains
+CREATE DATABASE test_json_contains;
+USE test_json_contains;
+
+-- Test basic scalar containment
+SELECT json_contains(parse_json('"hello"'), parse_json('"hello"')) as scalar_equal;
+SELECT json_contains(parse_json('"hello"'), parse_json('"world"')) as scalar_not_equal;
+SELECT json_contains(parse_json('123'), parse_json('123')) as number_equal;
+SELECT json_contains(parse_json('123'), parse_json('456')) as number_not_equal;
+SELECT json_contains(parse_json('true'), parse_json('true')) as boolean_equal;
+SELECT json_contains(parse_json('true'), parse_json('false')) as boolean_not_equal;
+SELECT json_contains(parse_json('null'), parse_json('null')) as null_equal;
+
+-- Test object containment
+SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"a": 1}')) as object_contains_subset;
+SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"b": 2}')) as object_contains_subset2;
+SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"a": 1, "b": 2}')) as object_contains_exact;
+SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"c": 3}')) as object_not_contains;
+SELECT json_contains(parse_json('{"a": 1, "b": 2}'), parse_json('{"a": 2}')) as object_wrong_value;
+
+-- Test array containment
+SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('[1, 2]')) as array_contains_subset;
+SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('[2, 3]')) as array_contains_subset2;
+SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('[1, 2, 3]')) as array_contains_exact;
+SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('[4, 5]')) as array_not_contains;
+SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('2')) as array_contains_scalar;
+SELECT json_contains(parse_json('[1, 2, 3]'), parse_json('4')) as array_not_contains_scalar;
+
+-- Test nested structure containment
+SELECT json_contains(parse_json('{"a": [1, 2], "b": {"c": 3}}'), parse_json('{"b": {"c": 3}}')) as nested_object_contains;
+SELECT json_contains(parse_json('{"a": [1, 2], "b": {"c": 3}}'), parse_json('{"a": [1, 2]}')) as nested_array_contains;
+SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('[{"a": 1}]')) as array_of_objects_contains;
+SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1}')) as array_contains_object;
+SELECT json_contains(parse_json('[{"a": 1}, {"b": 2}]'), parse_json('{"a": 1, "b": 2}')) as array_contains_distributed_object;
+
+-- Test edge cases
+SELECT json_contains(parse_json('{}'), parse_json('{}')) as empty_object_contains_empty;
+SELECT json_contains(parse_json('[]'), parse_json('[]')) as empty_array_contains_empty;
+SELECT json_contains(parse_json('{"a": 1}'), parse_json('{}')) as object_contains_empty;
+SELECT json_contains(parse_json('[1, 2]'), parse_json('[]')) as array_contains_empty;
+
+-- Test with table data
+CREATE TABLE json_test_data (
+  id int,
+  target_json json,
+  candidate_json json
+);
+
+INSERT INTO json_test_data VALUES
+(1, parse_json('{"name": "John", "age": 30, "city": "New York"}'), parse_json('{"name": "John"}')),
+(2, parse_json('{"products": ["apple", "banana", "orange"]}'), parse_json('["apple", "banana"]')),
+(3, parse_json('[1, 2, 3, 4, 5]'), parse_json('3')),
+(4, parse_json('{"users": [{"id": 1, "active": true}, {"id": 2, "active": false}]}'), parse_json('{"users": [{"id": 1}]}')),
+(5, parse_json('null'), parse_json('null'));
+
+SELECT id, json_contains(target_json, candidate_json) as contains_result FROM json_test_data ORDER BY id;
+
+-- Test NULL handling
+SELECT json_contains(NULL, parse_json('{"a": 1}')) as null_target;
+SELECT json_contains(parse_json('{"a": 1}'), NULL) as null_candidate;
+SELECT json_contains(NULL, NULL) as both_null;
+
+-- Test complex nested cases
+SELECT json_contains(
+  parse_json('{"company": {"employees": [{"name": "Alice", "dept": "Engineering"}, {"name": "Bob", "dept": "Sales"}], "location": "San Francisco"}}'),
+  parse_json('{"company": {"location": "San Francisco"}}')
+) as complex_nested_contains;
+
+SELECT json_contains(
+  parse_json('[{"type": "fruit", "items": ["apple", "banana"]}, {"type": "vegetable", "items": ["carrot", "broccoli"]}]'),
+  parse_json('[{"type": "fruit"}]')
+) as complex_array_contains;
+
+-- Cleanup
+DROP TABLE json_test_data;
+DROP DATABASE test_json_contains;

@@ -1,0 +1,18 @@
+-- name: test_be_reject_transaction_type_header
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table dummy_table (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -H "label:test_multi_${uuid0}" -H "db:db_${uuid0}" -H "table:dummy_table" -H "transaction_type:multi" -XPOST "http://$(${mysql_cmd} -e "show backends;" | tail -n +2 | head -n 1 | cut -f2):$(${mysql_cmd} -e "show backends;" | tail -n +2 | head -n 1 | cut -f5)/api/transaction/begin"
+-- result:
+0
+{
+    "Status": "INVALID_ARGUMENT",
+    "Message": "Multi-statement transaction requests can only be sent to FE nodes, not BE nodes"
+}
+-- !result

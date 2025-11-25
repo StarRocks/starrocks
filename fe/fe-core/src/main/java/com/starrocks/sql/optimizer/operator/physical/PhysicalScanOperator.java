@@ -20,7 +20,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -49,7 +50,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimizeOption scanOptimizeOption;
-    protected TableVersionRange tableVersionRange;
+    protected TvrVersionRange tvrVersionRange;
     protected DataCacheOptions dataCacheOptions = null;
 
     protected PhysicalScanOperator(OperatorType type) {
@@ -61,7 +62,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                                 long limit,
                                 ScalarOperator predicate,
                                 Projection projection) {
-        this(type, table, colRefToColumnMetaMap, limit, predicate, projection, TableVersionRange.empty());
+        this(type, table, colRefToColumnMetaMap, limit, predicate, projection, TvrTableSnapshot.empty());
     }
 
     public PhysicalScanOperator(OperatorType type, Table table,
@@ -69,7 +70,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                                 long limit,
                                 ScalarOperator predicate,
                                 Projection projection,
-                                TableVersionRange tableVersionRange) {
+                                TvrVersionRange tvrVersionRange) {
         super(type);
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
@@ -78,7 +79,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.projection = projection;
         this.columnAccessPaths = ImmutableList.of();
         this.scanOptimizeOption = new ScanOptimizeOption();
-        this.tableVersionRange = tableVersionRange;
+        this.tvrVersionRange = tvrVersionRange;
 
         updateOutputColumns();
     }
@@ -107,8 +108,9 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public PhysicalScanOperator(OperatorType type, LogicalScanOperator scanOperator) {
         this(type, scanOperator.getTable(), scanOperator.getColRefToColumnMetaMap(), scanOperator.getLimit(),
-                scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTableVersionRange());
+                scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTvrVersionRange());
         this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
+        this.columnAccessPaths = ImmutableList.copyOf(scanOperator.getColumnAccessPaths());
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -135,8 +137,8 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.scanOptimizeOption = opt.copy();
     }
 
-    public TableVersionRange getTableVersionRange() {
-        return tableVersionRange;
+    public TvrVersionRange getTvrVersionRange() {
+        return tvrVersionRange;
     }
 
     public Table getTable() {
@@ -210,12 +212,25 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             builder.colRefToColumnMetaMap = operator.colRefToColumnMetaMap;
             builder.columnAccessPaths = operator.columnAccessPaths;
             builder.scanOptimizeOption = operator.scanOptimizeOption;
-            builder.tableVersionRange = operator.tableVersionRange;
+            builder.tvrVersionRange = operator.tvrVersionRange;
             return (B) this;
         }
 
         public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
             builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+            return (B) this;
+        }
+
+        public B setColumnAccessPath(List<ColumnAccessPath> accessPaths) {
+            builder.setColumnAccessPaths(accessPaths);
+            return (B) this;
+        }
+
+        public B addColumnAccessPaths(List<ColumnAccessPath> accessPaths) {
+            ImmutableList.Builder<ColumnAccessPath> builder = ImmutableList.<ColumnAccessPath>builder()
+                    .addAll(this.builder.columnAccessPaths)
+                    .addAll(accessPaths);
+            this.builder.setColumnAccessPaths(builder.build());
             return (B) this;
         }
 

@@ -220,10 +220,8 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     }
 }
 
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                           ChunkPassThroughVectorPtr chunks, Metrics& metrics,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                            ::google::protobuf::Closure** done) {
-    DCHECK(!chunks);
     return add_chunks<false>(request, metrics, done);
 }
 
@@ -505,7 +503,6 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     auto& chunk_queue = _chunk_queues[0];
     auto& chunk_queue_state = _chunk_queue_states[0];
     auto& metrics = _recvr->get_metrics_round_robin();
-
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         return false;
@@ -525,16 +522,15 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     return true;
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                        ChunkPassThroughVectorPtr chunks, Metrics& metrics,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
-    return add_chunks<false>(request, std::move(chunks), metrics, done);
+    return add_chunks<false>(request, metrics, done);
 }
 
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                        Metrics& metrics,
                                                                        ::google::protobuf::Closure** done) {
-    return add_chunks<true>(request, nullptr, metrics, done);
+    return add_chunks<true>(request, metrics, done);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
@@ -636,7 +632,7 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
     // We only need to build chunk meta on first chunk and not use_pass_through
     // By using pass through, chunks are transmitted in shared memory without ser/deser
     // So there is no need to build chunk meta.
-    if (request.has_use_pass_through() && request.use_pass_through()) {
+    if (request.use_pass_through()) {
         return Status::OK();
     }
     if (_is_chunk_meta_built) {
@@ -660,17 +656,23 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
 }
 
 StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList>
-DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(ChunkPassThroughVectorPtr& pass_through_chunks,
-                                                                   size_t& total_chunk_bytes) {
+DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sender_id, size_t& total_chunk_bytes) {
+    ChunkUniquePtrVector swap_chunks;
+    std::vector<size_t> swap_bytes;
+    _recvr->_pass_through_context.pull_chunks(sender_id, &swap_chunks, &swap_bytes);
+    DCHECK(swap_chunks.size() == swap_bytes.size());
     ChunkList chunks;
-    if (pass_through_chunks != nullptr) {
-        for (auto& chunk_item : *pass_through_chunks) {
-            // Consume physical bytes in current MemTracker, since later it would be released.
-            CurrentThread::current().mem_consume(chunk_item.physical_bytes);
-            chunks.emplace_back(chunk_item.chunk_bytes, chunk_item.driver_sequence, nullptr,
-                                std::move(chunk_item.chunk));
-            total_chunk_bytes += chunk_item.chunk_bytes;
-        }
+    for (size_t i = 0; i < swap_chunks.size(); i++) {
+        // The sending and receiving of chunks from _pass_through_context may out of order, and
+        // considering the following sequences:
+        // 1. add chunk_1 to _pass_through_context and send request_1
+        // 2. add chunk_2 to _pass_through_context and send request_2
+        // 3. receive request_1 and get both chunk_1 and chunk_2
+        // 4. receive request_2 and get nothing
+        // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
+        // but not the request's driver_sequence
+        chunks.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
+        total_chunk_bytes += swap_bytes[i];
     }
     return chunks;
 }
@@ -697,8 +699,7 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
 }
 
 template <bool keep_order>
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                        ChunkPassThroughVectorPtr pass_through_chunks, Metrics& metrics,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
@@ -723,7 +724,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     ChunkList chunks;
     ASSIGN_OR_RETURN(chunks,
                      use_pass_through
-                             ? get_chunks_from_pass_through(pass_through_chunks, total_chunk_bytes)
+                             ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
                              : (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
                                            : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
     COUNTER_UPDATE(use_pass_through ? metrics.bytes_pass_through_counter : metrics.bytes_received_counter,

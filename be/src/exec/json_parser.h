@@ -23,7 +23,7 @@ namespace starrocks {
 
 class JsonParser {
 public:
-    JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
+    explicit JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
     virtual ~JsonParser() = default;
     // parse initiates the parser. The inner iterator would point to the first object to be returned.
     virtual Status parse(char* data, size_t len, size_t allocated) noexcept = 0;
@@ -45,11 +45,12 @@ protected:
 // input: {"key":1} {"key":2}
 class JsonDocumentStreamParser : public JsonParser {
 public:
-    JsonDocumentStreamParser(simdjson::ondemand::parser* parser);
+    explicit JsonDocumentStreamParser(simdjson::ondemand::parser* parser);
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
+    size_t truncated_bytes() const noexcept;
 
 private:
     Status _get_current_impl(simdjson::ondemand::object* row);
@@ -99,7 +100,7 @@ private:
 // input: [{"key": 1}, {"key": 2}].
 class JsonArrayParser : public JsonParser {
 public:
-    JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
+    explicit JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
@@ -128,7 +129,7 @@ private:
 // eg:
 // input: {"data": {"key":1}} {"data": {"key":2}}
 // json root: $.data
-class JsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
+class JsonDocumentStreamParserWithRoot final : public JsonDocumentStreamParser {
 public:
     JsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath>& root_paths)
             : JsonDocumentStreamParser(parser), _root_paths(root_paths) {}
@@ -153,7 +154,7 @@ private:
 // eg:
 // input: [{"data": {"key":1}}, {"data": {"key":2}}]
 // json root: $.data
-class JsonArrayParserWithRoot : public JsonArrayParser {
+class JsonArrayParserWithRoot final : public JsonArrayParser {
 public:
     JsonArrayParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonArrayParser(parser), _root_paths(std::move(root_paths)) {}
@@ -178,7 +179,7 @@ private:
 // eg:
 // input: {"data": [{"key":1}, {"key":2}]} {"data": [{"key":3}, {"key":4}]}
 // json root: $.data
-class ExpandedJsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser {
+class ExpandedJsonDocumentStreamParserWithRoot final : public JsonDocumentStreamParser {
 public:
     ExpandedJsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonDocumentStreamParser(parser), _root_paths(std::move(root_paths)) {}
@@ -213,7 +214,7 @@ private:
 // eg:
 // input: [{"data": [{"key":1}, {"key":2}]}, {"data": [{"key":3}, {"key":4}]}]
 // json root: $.data
-class ExpandedJsonArrayParserWithRoot : public JsonArrayParser {
+class ExpandedJsonArrayParserWithRoot final : public JsonArrayParser {
 public:
     ExpandedJsonArrayParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonArrayParser(parser), _root_paths(std::move(root_paths)) {}

@@ -18,7 +18,6 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
-import com.starrocks.sql.ast.ShowResourcesStmt;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -64,15 +63,6 @@ public class ResourceStmtTest {
         analyzeFail("create external resource 'hudi01'");
         analyzeFail("create external resource 'hudi01' PROPERTIES(\"amory\"  =  \"test\")");
         analyzeFail("create external resource 'hudi01' PROPERTIES(\"type\" = \"amory\")");
-    }
-
-    @Test
-    public void testShowResourcesTest() {
-        ShowResourcesStmt stmt = (ShowResourcesStmt) analyzeSuccess("Show Resources");
-        Assertions.assertNotNull(stmt.getMetaData());
-        Assertions.assertNotNull(stmt.getRedirectStatus());
-
-        analyzeFail("show resource");
     }
 
     @Test

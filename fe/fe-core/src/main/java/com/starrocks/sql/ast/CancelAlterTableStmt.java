@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -73,7 +73,7 @@ public class CancelAlterTableStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelAlterTableStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelAlterTableStatement(this, context);
     }
 
     @Override

@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -129,12 +128,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUpdateFailPointStatusStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.NO_FORWARD;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitUpdateFailPointStatusStatement(this, context);
     }
 
     @Override

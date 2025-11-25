@@ -14,66 +14,38 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 
 import java.util.Arrays;
 
 public class UserAuthOptionAnalyzer {
-    public static UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
-        try {
-            String authPluginUsing;
-            if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
-                authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
-            } else {
-                authPluginUsing = userAuthOption.getAuthPlugin();
-            }
-
-            try {
-                AuthPlugin.Server.valueOf(authPluginUsing);
-            } catch (IllegalArgumentException e) {
-                throw new SemanticException(
-                        "Cannot find " + authPluginUsing + " from " + Arrays.toString(AuthPlugin.Client.values()));
-            }
-
-            UserAuthenticationInfo info = new UserAuthenticationInfo();
-            info.setAuthPlugin(authPluginUsing);
-            if (authPluginUsing.equalsIgnoreCase(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString())) {
-                byte[] passwordScrambled = MysqlPassword.EMPTY_PASSWORD;
-                if (userAuthOption != null) {
-                    passwordScrambled = scramblePassword(userAuthOption.getAuthString(), userAuthOption.isPasswordPlain());
-                }
-                info.setPassword(passwordScrambled);
-                info.setAuthString(null);
-            } else {
-                info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-                info.setAuthString(userAuthOption == null ? null : userAuthOption.getAuthString());
-            }
-
-            info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
-
-            return info;
-        } catch (AuthenticationException e) {
-            throw new SemanticException(e.getMessage());
-        }
-    }
-
-    /**
-     * Get scrambled password from plain password
-     */
-    private static byte[] scramblePassword(String originalPassword, boolean isPasswordPlain) {
-        if (Strings.isNullOrEmpty(originalPassword)) {
-            return MysqlPassword.EMPTY_PASSWORD;
-        }
-        if (isPasswordPlain) {
-            return MysqlPassword.makeScrambledPassword(originalPassword);
+    public static void analyzeAuthOption(UserRef user, UserAuthOption userAuthOption) {
+        String authPluginUsing;
+        if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
+            authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
         } else {
-            return MysqlPassword.checkPassword(originalPassword);
+            authPluginUsing = userAuthOption.getAuthPlugin();
         }
+
+        try {
+            AuthPlugin.Server.valueOf(authPluginUsing);
+        } catch (IllegalArgumentException e) {
+            throw new SemanticException(
+                    "Cannot find " + authPluginUsing + " from " + Arrays.toString(AuthPlugin.Client.values()));
+        }
+
+        if (authPluginUsing.equalsIgnoreCase(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString())) {
+            if (userAuthOption != null && !userAuthOption.isPasswordPlain()) {
+                MysqlPassword.checkPassword(userAuthOption.getAuthString());
+            }
+        }
+
+        PatternMatcher.createMysqlPattern(user.getUser(), CaseSensibility.USER.getCaseSensibility());
+        PatternMatcher.createMysqlPattern(user.getHost(), CaseSensibility.HOST.getCaseSensibility());
     }
 }

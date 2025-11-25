@@ -38,7 +38,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -48,7 +47,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Constants;
@@ -71,7 +69,6 @@ import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -508,7 +505,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (OptimizeTask rewriteTask : rewriteTasks) {
             try {
-                taskManager.createTask(rewriteTask, false);
+                taskManager.createTask(rewriteTask);
                 taskManager.executeTask(rewriteTask.getName());
                 LOG.info("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
@@ -549,7 +546,9 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         // wait insert tasks finished
         boolean allFinished = true;
-        int progress = 0;
+        // Use double to avoid integer division precision loss when task count > 100
+        double progressAcc = 0.0;
+        int taskCount = Math.max(1, rewriteTasks.size());
         TaskRunManager taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
 
@@ -564,14 +563,14 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         for (OptimizeTask rewriteTask : rewriteTasks) {
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
                         || rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.SUCCESS) {
-                progress += 100 / rewriteTasks.size();
+                progressAcc += 100.0 / taskCount;
                 continue;
             }
 
             TaskRun taskRun = taskRunScheduler.getRunnableTaskRun(rewriteTask.getId());
             if (taskRun != null) {
                 if (taskRun.getStatus() != null) {
-                    progress += taskRun.getStatus().getProgress() / rewriteTasks.size();
+                    progressAcc += (double) taskRun.getStatus().getProgress() / taskCount;
                 }
                 allFinished = false;
                 continue;
@@ -594,12 +593,13 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
             }
-            progress += 100 / rewriteTasks.size();
+            progressAcc += 100.0 / taskCount;
         }
 
         if (!allFinished) {
             LOG.info("wait insert tasks to be finished, merge partition job: {}", jobId);
-            this.progress = progress;
+            // Cap progress at 99 until all tasks are fully finished
+            this.progress = Math.min(99, (int) Math.floor(progressAcc));
             return;
         }
 
@@ -625,6 +625,11 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     @Override
     protected void runFinishedRewritingJob() {
         // nothing to do
+    }
+
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .existCommittedTxns(dbId, tableId, partitionId);
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -663,6 +668,30 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                         errMsg += rewriteTask.getTempPartitionName() + " rewrite task execute failed, ";
                     } else {
                         errMsg += rewriteTask.getTempPartitionName() + " has ingestion during optimize, ";
+                    }
+                }
+            }
+
+            for (String tempPartitionName : Lists.newArrayList(tempPartitionNameToSourcePartitionNames.keySet())) {
+                Partition tempPartition = targetTable.getPartition(tempPartitionName, true);
+                if (tempPartition == null) {
+                    LOG.warn("merge partitions job {} temp partition {} missing before replace", jobId, tempPartitionName);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    hasFailedTask = true;
+                    errMsg += tempPartitionName + " temp partition missing, ";
+                    continue;
+                }
+                if (hasCommittedNotVisible(tempPartition.getId())) {
+                    LOG.warn("merge partitions job {} temp partition {} has committed transactions not visible, drop it",
+                            jobId, tempPartitionName);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    targetTable.dropTempPartition(tempPartitionName, true);
+                    hasFailedTask = true;
+                    errMsg += tempPartitionName + " rewrite task not visible, ";
+                    for (OptimizeTask task : rewriteTasks) {
+                        if (tempPartitionName.equals(task.getTempPartitionName())) {
+                            task.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                        }
                     }
                 }
             }
@@ -974,11 +1003,8 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         this.jobState = jobState;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, MergePartitionJob.class);
-        Text.writeString(out, json);
-    }
+
+
 
     @Override
     public void gsonPostProcess() throws IOException {

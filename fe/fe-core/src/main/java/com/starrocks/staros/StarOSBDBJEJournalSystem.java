@@ -200,6 +200,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
         long startReplayId = replayedJournalId.get();
         long startTime = System.currentTimeMillis();
         while (true) {
+            long innerStartTime = System.currentTimeMillis();
             JournalEntity entity = cursor.next();
 
             // EOF or aggressive retry
@@ -209,16 +210,19 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
             editLog.loadJournal(null /* GlobalStateMgr */, entity);
             replayedJournalId.incrementAndGet();
+            long innerEndTime = System.currentTimeMillis();
 
             LOG.debug("star mgr journal {} replayed.", replayedJournalId);
+            if (innerEndTime - innerStartTime > 3000) {
+                LOG.info("star mgr journal replay id:{} op:{} cost {}ms.", replayedJournalId, entity.opCode(),
+                        innerEndTime - innerStartTime);
+            }
         }
         long cost = System.currentTimeMillis() - startTime;
-        if (cost >= 1000) {
-            LOG.warn("star mgr replay journal cost too much time: {} replayedJournalId: {}.", cost, replayedJournalId);
-        }
-
-        if (replayedJournalId.get() - startReplayId > 0) {
-            LOG.info("star mgr replayed journal from {} to {}.", startReplayId, replayedJournalId);
+        long count = replayedJournalId.get() - startReplayId;
+        if (count > 0) {
+            LOG.info("star mgr replayed journal from {} to {}, count {}, cost {}ms.", startReplayId, replayedJournalId,
+                    count, cost);
             return true;
         }
         return false;

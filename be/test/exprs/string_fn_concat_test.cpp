@@ -305,7 +305,7 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
     auto init_row = row_num > limit ? row_num - limit : size_t(0);
     for (auto i = init_row; i < row_num; ++i) {
         if (i % 3 == 0) {
-            ASSERT_EQ(null_col->get_data()[i], 1);
+            ASSERT_EQ(null_col->immutable_data()[i], 1);
             ASSERT_TRUE(result->is_null(i));
             continue;
         }

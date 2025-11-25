@@ -59,8 +59,8 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/dictionary_cache_manager.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -235,7 +235,7 @@ Status StorageEngine::_open(const EngineOptions& options) {
             async_delta_writer,
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
-    _load_spill_block_merge_executor = std::make_unique<lake::LoadSpillBlockMergeExecutor>();
+    _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
     RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
     REGISTER_THREAD_POOL_METRICS(load_spill_block_merge, _load_spill_block_merge_executor->get_thread_pool());
 
@@ -415,6 +415,9 @@ void StorageEngine::_start_disk_stat_monitor() {
 
 // TODO(lingbin): Should be in EnvPosix?
 Status StorageEngine::_check_file_descriptor_number() {
+#ifdef __APPLE__
+    LOG(INFO) << "File descriptor check skipped on macOS";
+#else
     struct rlimit l;
     int ret = getrlimit(RLIMIT_NOFILE, &l);
     if (ret != 0) {
@@ -427,6 +430,7 @@ Status StorageEngine::_check_file_descriptor_number() {
                    << config::min_file_descriptor_number;
         return Status::InternalError("file descriptors limit is too small");
     }
+#endif
     return Status::OK();
 }
 
@@ -673,6 +677,12 @@ void StorageEngine::stop() {
     if (_compaction_manager) {
         _compaction_manager->stop();
     }
+
+#ifdef USE_STAROS
+    if (_local_pk_index_manager) {
+        _local_pk_index_manager->stop();
+    }
+#endif
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -687,7 +697,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
     LOG(INFO) << "Clearing transaction task txn_id: " << transaction_id;
 
     for (const TPartitionId& partition_id : partition_ids) {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_infos;
         StorageEngine::instance()->txn_manager()->get_txn_related_tablets(transaction_id, partition_id, &tablet_infos);
 
         // each tablet
@@ -734,7 +744,11 @@ void StorageEngine::compaction_check() {
 // Compaction checker will check whether to schedule base compaction for tablets
 size_t StorageEngine::_compaction_check_one_round() {
     size_t batch_size = _compaction_manager->max_task_num();
+#ifdef BE_TEST
+    int batch_sleep_time_ms = 1; // 1ms
+#else
     int batch_sleep_time_ms = 1000;
+#endif
     std::vector<TabletSharedPtr> tablets;
     tablets.reserve(batch_size);
     size_t tablets_num_checked = 0;

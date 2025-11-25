@@ -361,9 +361,9 @@ group by user_id, time;
 -- result:
 -- !result
 refresh materialized view agg_mv1 with sync mode;
-function: check_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
 -- result:
-None
+True
 -- !result
 select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
 -- result:
@@ -371,9 +371,9 @@ select user_id, time, sum(tag_id) as total from user_tags group by user_id, time
 2	2023-04-13	5
 3	2023-04-13	6
 -- !result
-function: check_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+function: print_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
 -- result:
-None
+True
 -- !result
 select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 -- result:
@@ -384,9 +384,9 @@ select user_id, sum(tag_id) as total from user_tags  group by user_id having sum
 set enable_materialized_view_rewrite = off;
 -- result:
 -- !result
-function: check_no_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
+function: print_hit_materialized_view("select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time", "agg_mv1")
 -- result:
-None
+True
 -- !result
 select user_id, time, sum(tag_id) as total from user_tags group by user_id, time having sum(tag_id) > 2 order by user_id, time;
 -- result:
@@ -394,9 +394,9 @@ select user_id, time, sum(tag_id) as total from user_tags group by user_id, time
 2	2023-04-13	5
 3	2023-04-13	6
 -- !result
-function: check_no_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
+function: print_hit_materialized_view("select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id", "agg_mv1")
 -- result:
-None
+True
 -- !result
 select user_id, sum(tag_id) as total from user_tags  group by user_id having sum(tag_id) > 2 order by user_id;
 -- result:
@@ -470,14 +470,14 @@ create materialized view mv_right_outer
 distributed by hash(`empid`) buckets 10
 refresh manual
 as
-select empid, depts.deptno
+select empid, deptno
 from emps right outer join depts using (deptno);
 -- result:
 -- !result
 refresh materialized view mv_right_outer with sync mode;
-explain logical select empid, depts.deptno
+explain logical select empid, deptno
 from emps right outer join depts using (deptno);
-select empid, depts.deptno
+select empid, deptno
 from emps right outer join depts using (deptno) order by empid;
 -- result:
 None	2
@@ -492,14 +492,14 @@ create materialized view mv_full_outer
 distributed by hash(`empid`) buckets 10
 refresh manual
 as
-select empid, depts.deptno 
+select empid, deptno
 from emps full outer join depts using (deptno);
 -- result:
 -- !result
 refresh materialized view mv_full_outer with sync mode;
-explain logical select empid, depts.deptno 
+explain logical select empid, deptno
 from emps full outer join depts using (deptno);
-select empid, depts.deptno 
+select empid, deptno
 from emps full outer join depts using (deptno) order by empid;
 -- result:
 None	2
@@ -560,6 +560,44 @@ from emps right semi join depts using (deptno);
 refresh materialized view mv_right_semi with sync mode;
 [UC]explain select deptno
 from emps right semi join depts using (deptno);
+-- result:
+PLAN COST
+  CPU: 8.0
+  Memory: 0.0
+
+PLAN FRAGMENT 0(F01)
+  Output Exprs:7: deptno
+  Input Partition: UNPARTITIONED
+  RESULT SINK
+
+  2:EXCHANGE
+     cardinality: 1
+
+PLAN FRAGMENT 1(F00)
+
+  Input Partition: RANDOM
+  OutPut Partition: UNPARTITIONED
+  OutPut Exchange Id: 02
+
+  1:Project
+  |  output columns:
+  |  7 <-> [10: deptno, INT, false]
+  |  cardinality: 1
+  |  column statistics: 
+  |  * deptno-->[1.0, 1.0, 0.0, 4.0, 1.0] ESTIMATE
+  |  
+  0:OlapScanNode
+     table: mv_right_semi, rollup: mv_right_semi
+     preAggregation: on
+     partitionsRatio=1/1, tabletsRatio=10/10
+     tabletList=51896,51898,51900,51902,51904,51906,51908,51910,51912,51914
+     actualRows=0, avgRowSize=8.0
+     MaterializedView: true
+     cardinality: 1
+     column statistics: 
+     * deptno-->[1.0, 1.0, 0.0, 4.0, 1.0] ESTIMATE
+     * deptno-->[1.0, 1.0, 0.0, 4.0, 1.0] ESTIMATE
+-- !result
 select deptno 
 from emps right semi join depts using (deptno) order by deptno;
 -- result:
@@ -577,9 +615,47 @@ from emps right anti join depts using (deptno);
 -- result:
 -- !result
 refresh materialized view mv_right_anti with sync mode;
-[UC]explain select depts.deptno
+[UC]explain select deptno
 from emps right anti join depts using (deptno);
-select depts.deptno 
+-- result:
+PLAN COST
+  CPU: 8.0
+  Memory: 0.0
+
+PLAN FRAGMENT 0(F01)
+  Output Exprs:7: deptno
+  Input Partition: UNPARTITIONED
+  RESULT SINK
+
+  2:EXCHANGE
+     cardinality: 1
+
+PLAN FRAGMENT 1(F00)
+
+  Input Partition: RANDOM
+  OutPut Partition: UNPARTITIONED
+  OutPut Exchange Id: 02
+
+  1:Project
+  |  output columns:
+  |  7 <-> [10: deptno, INT, false]
+  |  cardinality: 1
+  |  column statistics: 
+  |  * deptno-->[2.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE
+  |  
+  0:OlapScanNode
+     table: mv_right_anti, rollup: mv_right_anti
+     preAggregation: on
+     partitionsRatio=1/1, tabletsRatio=10/10
+     tabletList=51998,52000,52003,52005,52008,52010,52013,52016,52019,52021
+     actualRows=0, avgRowSize=8.0
+     MaterializedView: true
+     cardinality: 1
+     column statistics: 
+     * deptno-->[2.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE
+     * deptno-->[2.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE
+-- !result
+select deptno
 from emps right anti join depts using (deptno);
 -- result:
 2
@@ -624,6 +700,48 @@ refresh materialized view agg_count_mv2 with sync mode;
 [UC]explain select user_id, count(1) as cnt
 from user_tags
 group by user_id;
+-- result:
+PLAN COST
+  CPU: 24.0
+  Memory: 0.0
+
+PLAN FRAGMENT 0(F01)
+  Output Exprs:2: user_id | 5: count
+  Input Partition: UNPARTITIONED
+  RESULT SINK
+
+  2:EXCHANGE
+     cardinality: 1
+
+PLAN FRAGMENT 1(F00)
+
+  Input Partition: RANDOM
+  OutPut Partition: UNPARTITIONED
+  OutPut Exchange Id: 02
+
+  1:Project
+  |  output columns:
+  |  2 <-> [11: user_id, INT, true]
+  |  5 <-> [12: cnt, BIGINT, false]
+  |  cardinality: 1
+  |  column statistics: 
+  |  * user_id-->[1.0, 1.0, 0.0, 4.0, 1.0] ESTIMATE
+  |  * count-->[5.0, 5.0, 0.0, 8.0, 1.0] ESTIMATE
+  |  
+  0:OlapScanNode
+     table: agg_count_mv1, rollup: agg_count_mv1
+     preAggregation: on
+     partitionsRatio=1/1, tabletsRatio=2/2
+     tabletList=51414,51416
+     actualRows=0, avgRowSize=24.0
+     MaterializedView: true
+     cardinality: 1
+     column statistics: 
+     * user_id-->[1.0, 1.0, 0.0, 4.0, 1.0] ESTIMATE
+     * count-->[5.0, 5.0, 0.0, 8.0, 1.0] ESTIMATE
+     * user_id-->[1.0, 1.0, 0.0, 4.0, 1.0] ESTIMATE
+     * cnt-->[5.0, 5.0, 0.0, 8.0, 1.0] ESTIMATE
+-- !result
 CREATE TABLE `user_tags_2` (
   `time` date NULL COMMENT "",
   `user_id` int(11) NULL COMMENT "",
@@ -678,6 +796,48 @@ refresh materialized view agg_count_mv4 with sync mode;
 [UC]explain select user_id, count(1) as cnt
 from user_tags_2
 group by user_id;
+-- result:
+PLAN COST
+  CPU: 120.0
+  Memory: 0.0
+
+PLAN FRAGMENT 0(F01)
+  Output Exprs:2: user_id | 5: count
+  Input Partition: UNPARTITIONED
+  RESULT SINK
+
+  2:EXCHANGE
+     cardinality: 5
+
+PLAN FRAGMENT 1(F00)
+
+  Input Partition: RANDOM
+  OutPut Partition: UNPARTITIONED
+  OutPut Exchange Id: 02
+
+  1:Project
+  |  output columns:
+  |  2 <-> [11: user_id, INT, true]
+  |  5 <-> [12: cnt, BIGINT, false]
+  |  cardinality: 5
+  |  column statistics: 
+  |  * user_id-->[1.0, 5.0, 0.0, 4.0, 5.0] ESTIMATE
+  |  * count-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+  |  
+  0:OlapScanNode
+     table: agg_count_mv3, rollup: agg_count_mv3
+     preAggregation: on
+     partitionsRatio=1/1, tabletsRatio=2/2
+     tabletList=51668,51670
+     actualRows=0, avgRowSize=24.0
+     MaterializedView: true
+     cardinality: 5
+     column statistics: 
+     * user_id-->[1.0, 5.0, 0.0, 4.0, 5.0] ESTIMATE
+     * count-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+     * user_id-->[1.0, 5.0, 0.0, 4.0, 5.0] ESTIMATE
+     * cnt-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+-- !result
 create materialized view agg_count_mv5
 distributed by hash(user_id)
 as
@@ -690,19 +850,94 @@ refresh materialized view agg_count_mv5 with sync mode;
 [UC]explain select user_id, user_name, count(1) as cnt
 from user_tags_2
 group by user_id, user_name;
+-- result:
+PLAN COST
+  CPU: 130.0
+  Memory: 0.0
+
+PLAN FRAGMENT 0(F01)
+  Output Exprs:2: user_id | 3: user_name | 5: count
+  Input Partition: UNPARTITIONED
+  RESULT SINK
+
+  2:EXCHANGE
+     cardinality: 5
+
+PLAN FRAGMENT 1(F00)
+
+  Input Partition: RANDOM
+  OutPut Partition: UNPARTITIONED
+  OutPut Exchange Id: 02
+
+  1:Project
+  |  output columns:
+  |  2 <-> [15: user_id, INT, true]
+  |  3 <-> [16: user_name, VARCHAR(1048576), true]
+  |  5 <-> [17: cnt, BIGINT, false]
+  |  cardinality: 5
+  |  column statistics: 
+  |  * user_id-->[1.0, 5.0, 0.0, 4.0, 5.0] ESTIMATE
+  |  * user_name-->[-Infinity, Infinity, 0.0, 1.0, 5.0] ESTIMATE
+  |  * count-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+  |  
+  0:OlapScanNode
+     table: agg_count_mv4, rollup: agg_count_mv4
+     preAggregation: on
+     partitionsRatio=1/1, tabletsRatio=2/2
+     tabletList=51796,51798
+     actualRows=0, avgRowSize=26.0
+     MaterializedView: true
+     cardinality: 5
+     column statistics: 
+     * user_id-->[1.0, 5.0, 0.0, 4.0, 5.0] ESTIMATE
+     * user_name-->[-Infinity, Infinity, 0.0, 1.0, 5.0] ESTIMATE
+     * count-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+     * user_id-->[1.0, 5.0, 0.0, 4.0, 5.0] ESTIMATE
+     * user_name-->[-Infinity, Infinity, 0.0, 1.0, 5.0] ESTIMATE
+     * cnt-->[1.0, 1.0, 0.0, 8.0, 1.0] ESTIMATE
+-- !result
 -- name: test_count_rollup_with_empty_table
-create table empty_tbl(time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+create table empty_tbl(time date, user_id int not null, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
 -- result:
 -- !result
 create materialized view empty_tbl_with_mv distributed by hash(user_id) 
-as select user_id, count(tag_id) from empty_tbl group by user_id, time;
+as select user_id, time, count(tag_id) from empty_tbl group by user_id, time;
 -- result:
+-- !result
+select count() from empty_tbl;
+-- result:
+0
 -- !result
 select user_id, count(tag_id) from empty_tbl group by user_id, time;
 -- result:
 -- !result
 select user_id, count(tag_id) from empty_tbl group by user_id;
 -- result:
+-- !result
+insert into empty_tbl values('2023-04-13', 1, 'a', 1);
+-- result:
+-- !result
+refresh materialized view empty_tbl_with_mv with sync mode;
+select count() from empty_tbl where user_id > 2;
+-- result:
+0
+-- !result
+select user_id, count(tag_id) from empty_tbl where user_id = 2 group by user_id, time;
+-- result:
+-- !result
+select user_id, count(tag_id) from empty_tbl where user_id > 2 group by user_id;
+-- result:
+-- !result
+select user_id, count(tag_id) from empty_tbl group by user_id;
+-- result:
+1	1
+-- !result
+select count(user_id) from empty_tbl where user_id > 2 group by user_id;
+-- result:
+-- !result
+select count(user_id) from empty_tbl where user_id > 2;
+-- result:
+0
 -- !result
 drop table empty_tbl;
 -- result:
@@ -734,7 +969,6 @@ PROPERTIES (
 );
 -- result:
 -- !result
-            
 CREATE MATERIALIZED VIEW order_mv2
 PARTITION BY date_trunc('MONTH', dt)
 DISTRIBUTED BY HASH(order_id) BUCKETS 10

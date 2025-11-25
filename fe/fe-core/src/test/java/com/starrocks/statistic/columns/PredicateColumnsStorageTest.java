@@ -14,10 +14,10 @@
 
 package com.starrocks.statistic.columns;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
@@ -40,13 +40,13 @@ import java.util.List;
 
 class PredicateColumnsStorageTest extends PlanTestBase {
 
-    private static String feName;
+    private static int feName;
 
     @BeforeAll
     public static void beforeAll() throws Exception {
         StatisticsMetaManager m = new StatisticsMetaManager();
         m.createStatisticsTablesForTest();
-        feName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        feName = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid();
     }
 
     @Test
@@ -99,7 +99,7 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         // TODO: vacuum
         instance.vacuum(lastPersist);
         Mockito.verify(repo).executeDML("DELETE FROM _statistics_.predicate_columns " +
-                "WHERE fe_id=" + Strings.quote(feName) +
+                "WHERE fe_id=" + Strings.quote(Integer.toString(feName)) +
                 " AND last_used < '2024-11-10 01:00:00'");
 
         guard.close();
@@ -144,6 +144,35 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         Assertions.assertEquals(2, result.size());
         Assertions.assertEquals(usage1, result.get(0));
         Assertions.assertEquals(usage2, result.get(1));
+
+        // column not found
+        String rowNotFound = String.format("{\"data\": ['%s',%d,%d,%d,'%s','%s','%s']}",
+                feName,
+                db.getId(),
+                t1.getId(),
+                99999L,
+                "predicate",
+                DateUtils.formatDateTimeUnix(LocalDateTime.now()),
+                DateUtils.formatDateTimeUnix(LocalDateTime.now())
+        );
+        TResultBatch batchWithNotFound = new TResultBatch();
+        batchWithNotFound.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(rowNotFound.getBytes()),
+                ByteBuffer.wrap(row2.getBytes())));
+        List<ColumnUsage> resultWithNotFound = PredicateColumnsStorage.resultToColumnUsage(List.of(batchWithNotFound));
+        Assertions.assertEquals(2, resultWithNotFound.size());
+        Assertions.assertEquals(usage1, resultWithNotFound.get(0));
+        Assertions.assertEquals(usage2, resultWithNotFound.get(1));
+
+        // corrupted json
+        String corruptedJson = "{\"data\": [invalid json}";
+        TResultBatch batchWithCorrupted = new TResultBatch();
+        batchWithCorrupted.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(corruptedJson.getBytes()),
+                ByteBuffer.wrap(row2.getBytes())));
+        List<ColumnUsage> resultWithCorrupted =
+                PredicateColumnsStorage.resultToColumnUsage(List.of(batchWithCorrupted));
+        Assertions.assertEquals(2, resultWithCorrupted.size());
+        Assertions.assertEquals(usage1, resultWithCorrupted.get(0));
+        Assertions.assertEquals(usage2, resultWithCorrupted.get(1));
     }
 
     @Test

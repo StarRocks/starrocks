@@ -20,6 +20,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_scan_node.h"
+#include "runtime/current_thread.h"
+#include "service/backend_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
@@ -396,21 +398,21 @@ void TabletScanner::update_counter() {
     if (_reader->stats().flat_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");
 
-        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+        for (const auto& [k, v] : _reader->stats().flat_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("FlatJsonUnhits");
-        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+        for (const auto& [k, v] : _reader->stats().dynamic_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
     }
     if (_reader->stats().merge_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("MergeJsonUnhits");
-        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+        for (const auto& [k, v] : _reader->stats().merge_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }

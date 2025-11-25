@@ -19,10 +19,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
@@ -59,8 +59,8 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
-import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.type.IntegerType.INT;
 import static org.apache.iceberg.catalog.SessionCatalog.SessionContext;
 
 public class IcebergRESTCatalogTest {
@@ -346,7 +346,7 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to create table using REST Catalog",
                 () -> icebergRESTCatalog.createTable(connectContext, "db", "tbl", null, null, null,
-                        Maps.newHashMap()));
+                        null, Maps.newHashMap()));
 
         new Expectations() {
             {

@@ -14,17 +14,18 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.ArrayType;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -161,9 +162,11 @@ public class StructFieldDesc implements ParseNode {
                     }
                 }
             }
-            typeDef.analyze();
+            TypeDefAnalyzer.analyze(typeDef);
             if (fieldPos != null) {
-                fieldPos.analyze();
+                if (fieldPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(fieldPos.getLastCol())) {
+                    throw new SemanticException("Column is empty.");
+                }
             }
         }
     }

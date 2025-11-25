@@ -43,8 +43,8 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge_path.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
-#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
+#include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
@@ -159,11 +159,11 @@ private:
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
-                    bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
+                    bool is_pipeline, int32_t degree_of_parallelism, bool keep_order,
+                    PassThroughChunkBuffer* pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
-    Status add_chunks(const PTransmitChunkParams& request, ChunkPassThroughVectorPtr chunks,
-                      ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     // Indicate that a particular sender is done. Delegated to the appropriate
     // sender queue. Called from DataStreamMgr.
@@ -267,6 +267,7 @@ private:
     // Pipeline will send packets out-of-order
     // if _keep_order is set to true, then receiver will keep the order according sequence
     bool _keep_order;
+    PassThroughContext _pass_through_context;
 
     int _encode_level;
     bool _closed = false;

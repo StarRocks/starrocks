@@ -12,17 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class OptimizeTask extends Task {
@@ -96,13 +91,6 @@ public class OptimizeTask extends Task {
     public void setOptimizeTaskState(Constants.TaskRunState state) {
         this.optimizeTaskState = state;
     }
-
-    public static Task read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, OptimizeTask.class);
-    }
-
-
 
     @Override
     public String toString() {

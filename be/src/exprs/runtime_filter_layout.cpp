@@ -33,6 +33,9 @@ void RuntimeFilterLayout::init(const TRuntimeFilterLayout& layout) {
     if (layout.__isset.bucketseq_to_partition) {
         this->_bucketseq_to_partition = layout.bucketseq_to_partition;
     }
+    if (layout.__isset.bucket_properties) {
+        this->_bucket_properties = layout.bucket_properties;
+    }
 }
 
 void RuntimeFilterLayout::init(int filter_id, const std::vector<int32_t>& bucketseq_to_instance) {

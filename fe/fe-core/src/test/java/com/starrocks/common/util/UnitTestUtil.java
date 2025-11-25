@@ -54,21 +54,19 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.system.Backend;
-import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 // for unit test
 public class UnitTestUtil {
@@ -135,19 +133,19 @@ public class UnitTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -212,19 +210,19 @@ public class UnitTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -302,17 +300,6 @@ public class UnitTestUtil {
         return backend;
     }
 
-    public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort,
-                                        long totalCapacityB, long availableCapacityB) {
-        Backend backend = createBackend(id, host, heartPort, bePort, httpPort);
-        Map<String, TDisk> backendDisks = new HashMap<String, TDisk>();
-        String rootPath = "root_path";
-        TDisk disk = new TDisk(rootPath, totalCapacityB, availableCapacityB, true);
-        backendDisks.put(rootPath, disk);
-        backend.updateDisks(backendDisks);
-        return backend;
-    }
-
     public static Method getPrivateMethod(Class c, String methodName, Class[] params) {
         Method method = null;
         try {
@@ -337,10 +324,10 @@ public class UnitTestUtil {
 
     public static View createTestView(long tableId) {
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(false);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(false);
         columns.add(temp);
 

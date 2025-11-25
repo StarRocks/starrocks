@@ -19,6 +19,7 @@
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/txn_log.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -35,7 +36,9 @@ public:
 
     virtual Status init() { return Status::OK(); }
 
-    virtual Status apply(const TxnLogPB& tnx_log) = 0;
+    virtual Status apply(const TxnLogPB& txn_log) = 0;
+
+    virtual Status apply(const TxnLogVector& txn_logs) = 0;
 
     virtual Status finish() = 0;
 

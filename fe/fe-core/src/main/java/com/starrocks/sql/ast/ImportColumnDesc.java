@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ImportColumnDesc implements ParseNode {
@@ -80,7 +80,7 @@ public class ImportColumnDesc implements ParseNode {
         StringBuilder sb = new StringBuilder();
         sb.append(columnName);
         if (expr != null) {
-            sb.append("=").append(expr.toSql());
+            sb.append("=").append(ExprToSql.toSql(expr));
         }
         return sb.toString();
     }

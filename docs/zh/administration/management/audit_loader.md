@@ -21,35 +21,34 @@ displayed_sidebar: docs
 CREATE DATABASE starrocks_audit_db__;
 
 CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
-  `queryId`           VARCHAR(64)                COMMENT "查询的唯一ID",
-  `timestamp`         DATETIME         NOT NULL  COMMENT "查询开始时间",
-  `queryType`         VARCHAR(12)                COMMENT "查询类型（query, slow_query, connection）",
-  `clientIp`          VARCHAR(32)                COMMENT "客户端IP",
-  `user`              VARCHAR(64)                COMMENT "查询用户名",
-  `authorizedUser`    VARCHAR(64)                COMMENT "用户唯一标识，既user_identity",
-  `resourceGroup`     VARCHAR(64)                COMMENT "资源组名",
-  `catalog`           VARCHAR(32)                COMMENT "Catalog名",
-  `db`                VARCHAR(96)                COMMENT "查询所在数据库",
-  `state`             VARCHAR(8)                 COMMENT "查询状态（EOF，ERR，OK）",
-  `errorCode`         VARCHAR(512)               COMMENT "错误码",
-  `queryTime`         BIGINT                     COMMENT "查询执行时间（毫秒）",
-  `scanBytes`         BIGINT                     COMMENT "查询扫描的字节数",
-  `scanRows`          BIGINT                     COMMENT "查询扫描的记录行数",
-  `returnRows`        BIGINT                     COMMENT "查询返回的结果行数",
-  `cpuCostNs`         BIGINT                     COMMENT "查询CPU耗时（纳秒）",
-  `memCostBytes`      BIGINT                     COMMENT "查询消耗内存（字节）",
-  `stmtId`            INT                        COMMENT "SQL语句增量ID",
-  `isQuery`           TINYINT                    COMMENT "SQL是否为查询（1或0）",
-  `feIp`              VARCHAR(128)               COMMENT "执行该语句的FE IP",
-  `stmt`              VARCHAR(1048576)           COMMENT "原始SQL语句",
-  `digest`            VARCHAR(32)                COMMENT "慢SQL指纹",
-  `planCpuCosts`      DOUBLE                     COMMENT "查询规划阶段CPU占用（纳秒）",
-  `planMemCosts`      DOUBLE                     COMMENT "查询规划阶段内存占用（字节）",
-  `pendingTimeMs`     BIGINT                     COMMENT "查询在队列中等待的时间（毫秒）",
-  `candidateMVs`      VARCHAR(65533)             COMMENT "候选MV列表",
-  `hitMvs`            VARCHAR(65533)             COMMENT "命中MV列表",
-  `warehouse`         VARCHAR(128)               COMMENT "仓库名称",
-  `cngroup`           STRING                     COMMENT "CNGroup名称"
+  `queryId` VARCHAR(64) COMMENT "查询的唯一ID",
+  `timestamp` DATETIME NOT NULL COMMENT "查询开始时间",
+  `queryType` VARCHAR(12) COMMENT "查询类型（query, slow_query, connection）",
+  `clientIp` VARCHAR(32) COMMENT "客户端IP",
+  `user` VARCHAR(64) COMMENT "查询用户名",
+  `authorizedUser` VARCHAR(64) COMMENT "用户唯一标识，既user_identity",
+  `resourceGroup` VARCHAR(64) COMMENT "资源组名",
+  `catalog` VARCHAR(32) COMMENT "数据目录名",
+  `db` VARCHAR(96) COMMENT "查询所在数据库",
+  `state` VARCHAR(8) COMMENT "查询状态（EOF，ERR，OK）",
+  `errorCode` VARCHAR(512) COMMENT "错误码",
+  `queryTime` BIGINT COMMENT "查询执行时间（毫秒）",
+  `scanBytes` BIGINT COMMENT "查询扫描的字节数",
+  `scanRows` BIGINT COMMENT "查询扫描的记录行数",
+  `returnRows` BIGINT COMMENT "查询返回的结果行数",
+  `cpuCostNs` BIGINT COMMENT "查询CPU耗时（纳秒）",
+  `memCostBytes` BIGINT COMMENT "查询消耗内存（字节）",
+  `stmtId` INT COMMENT "SQL语句增量ID",
+  `isQuery` TINYINT COMMENT "SQL是否为查询（1或0）",
+  `feIp` VARCHAR(128) COMMENT "执行该语句的FE IP",
+  `stmt` VARCHAR(1048576) COMMENT "SQL原始语句",
+  `digest` VARCHAR(32) COMMENT "慢SQL指纹",
+  `planCpuCosts` DOUBLE COMMENT "查询规划阶段CPU占用（纳秒）",
+  `planMemCosts` DOUBLE COMMENT "查询规划阶段内存占用（字节）",
+  `pendingTimeMs` BIGINT COMMENT "查询在队列中等待的时间（毫秒）",
+  `candidateMVs` VARCHAR(65533) NULL COMMENT "候选物化视图列表",
+  `hitMvs` VARCHAR(65533) NULL COMMENT "命中MV列表",
+  `warehouse` VARCHAR(32) NULL COMMENT "Warehouse 名"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
 COMMENT "审计日志表"
@@ -70,7 +69,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 
 ## 下载并配置 AuditLoader
 
-1. [下载](https://releases.mirrorship.cn/resources/AuditLoader.zip) AuditLoader 安装包。该插件兼容目前在维护的所有 StarRocks 版本。
+1. [下载](https://releases.mirrorship.cn/resources/auditloader.zip) AuditLoader 安装包。该插件兼容目前在维护的所有 StarRocks 版本。
 
 2. 解压安装包。
 
@@ -92,7 +91,6 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     - `user`：集群用户名。该用户必须具有对应表的 INSERT 权限。
     - `password`：集群用户密码。
     - `secret_key`：用于加密密码的 Key（字符串，长度不得超过 16 个字节）。如果该参数为空，则表示不对 **plugin.conf** 中的密码进行加解密，您只需在 `password` 处直接配置明文密码。如果该参数不为空，表示需要通过该 Key 对密码进行加解密，您需要在 `password` 处配置加密后的字符串。加密后的密码可在 StarRocks 中通过 `AES_ENCRYPT` 函数生成：`SELECT TO_BASE64(AES_ENCRYPT('password','secret_key'));`。
-    - `enable_compute_all_query_digest`：是否对所有查询都生成 Hash SQL 指纹（StarRocks 默认只为慢查询开启 SQL 指纹）。需注意插件中的指纹计算方法与 FE 内部的方法不一致，FE 会对 SQL 语句[规范化处理](../../best_practices/query_tuning/query_planning.md#%E6%9F%A5%E7%9C%8B-sql-%E6%8C%87%E7%BA%B9)，而插件不会，且如果开启该参数，指纹计算会额外占用集群内的计算资源。
     - `filter`：审计信息入库的过滤条件。该参数基于 Stream Load 中的 [WHERE 参数](../../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#opt_properties) 实现，即 `-H "where: <condition>"`，默认值为空字符串。示例：`filter=isQuery=1 and clientIp like '127.0.0.1%' and user='root'`。
 
 4. 重新打包以上文件。
@@ -151,9 +149,9 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
     *************************** 2. row ***************************
         Name: AuditLoader
         Type: AUDIT
-    Description: Available for versions 2.5+. Load audit log to starrocks, and user can view the statistic of queries
-        Version: 4.2.1
-    JavaVersion: 1.8.0
+    Description: Available for versions 3.3.11+. Load audit log to starrocks, and user can view the statistic of queries
+        Version: 5.0.0
+    JavaVersion: 11
     ClassName: com.starrocks.plugin.audit.AuditLoaderPlugin
         SoName: NULL
         Sources: /x/xx/xxx/xxxxx/auditloader.zip
@@ -199,9 +197,7 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
           digest:
     planCpuCosts: 0
     planMemCosts: 0
-       warehouse: default_warehouse
-         cngroup: 
-    1 row in set (0.01 sec)
+    …………
     ```
 
 ## 故障排除
@@ -212,4 +208,4 @@ INSTALL PLUGIN FROM "http://xx.xx.xxx.xxx/extra/auditloader.zip" PROPERTIES("md5
 UNINSTALL PLUGIN AuditLoader;
 ```
 
-AuditLoader 的日志会打印在各个 FE 的 **fe.log** 中。您可以在 **fe.log** 中检索关键字 `audit`，用排查 Stream Load 任务的思路来定位问题。所有配置设置正确后，您可以按照上述步骤重新安装。
+AuditLoader 的日志会打印在 FE 的 **fe.log** 中。您可以在 **fe.log** 中检索关键字 `audit`，用排查 Stream Load 任务的思路来定位问题。所有配置设置正确后，您可以按照上述步骤重新安装。

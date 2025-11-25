@@ -59,5 +59,7 @@ function: wait_load_finish("label_${uuid2}")
 select instr(error_msg, '[E1008]Reached timeout=2000ms') > 0 from information_schema.loads where label="label_${uuid2}";
 shell: env mysql_cmd="${mysql_cmd} -Ddb_${uuid0}" label="label_${uuid2}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
 
-admin disable failpoint "node_channel_set_brpc_timeout";
-admin disable failpoint "tablets_channel_add_chunk_wait_write_block";
+CLEANUP {
+    admin disable failpoint "node_channel_set_brpc_timeout";
+    admin disable failpoint "tablets_channel_add_chunk_wait_write_block";
+} END CLEANUP

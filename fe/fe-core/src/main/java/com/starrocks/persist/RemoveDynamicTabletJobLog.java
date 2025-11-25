@@ -15,12 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.IOException;
 
 public class RemoveDynamicTabletJobLog implements Writable {
     @SerializedName("jobId")
@@ -34,7 +29,4 @@ public class RemoveDynamicTabletJobLog implements Writable {
         return jobId;
     }
 
-    public static RemoveDynamicTabletJobLog read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), RemoveDynamicTabletJobLog.class);
-    }
 }

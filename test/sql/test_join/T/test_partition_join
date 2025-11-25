@@ -1,0 +1,49 @@
+-- name: test_partition_join
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  1100000));
+insert into t1 select * from t0;
+
+-- basic case
+select count(l1),count(l2), count(l3), count(l4) from (select l.c0 l1,r.c1 l2,r.c2 l3,r.c3 l4 from t0 l join [broadcast]t1 r on l.c0=r.c0 and l.c1=r.c1 group by 1,2,3,4)t;
+
+-- test partition join with query cache
+set enable_query_cache = true;
+
+select count(l1),count(l2), count(l3), count(l4) from (select l.c0 l1,r.c1 l2,r.c2 l3,r.c3 l4 from t0 l join [broadcast]t1 r on l.c0=r.c0 and l.c1=r.c1 group by 1,2,3,4)t;
+select count(l1),count(l2), count(l3), count(l4) from (select l.c0 l1,r.c1 l2,r.c2 l3,r.c3 l4 from t0 l join [broadcast]t1 r on l.c0=r.c0 and l.c1=r.c1 group by 1,2,3,4)t;

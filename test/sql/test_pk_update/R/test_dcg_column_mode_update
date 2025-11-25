@@ -1,0 +1,50 @@
+-- name: test_dcg_column_mode_update_data_accuracy
+-- Test DCG mode partial update followed by row mode insert
+-- This verifies that DCG data is not lost during row mode operations
+-- Enhanced to cover various DCG error handling paths and edge cases
+
+-- Test 1: Basic DCG functionality
+CREATE TABLE t1(id int, os string, version string) PRIMARY KEY (id) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+INSERT INTO t1(id, os, version) VALUES (1, '1', '1');
+-- result:
+-- !result
+
+SELECT * FROM t1;
+-- result:
+1	1	1
+-- !result
+
+SET partial_update_mode = 'column';
+-- result:
+-- !result
+
+UPDATE t1 SET os = '2' WHERE id = 1;
+-- result:
+-- !result
+
+SELECT * FROM t1;
+-- result:
+1	2	1
+-- !result
+
+-- Switch to row mode - triggers get_column_values with DCG loading
+SET partial_update_mode = 'auto';
+-- result:
+-- !result
+
+INSERT INTO t1 (id, version) VALUES (1, '2');
+-- result:
+-- !result
+
+SELECT * FROM t1;
+-- result:
+1	2	2
+-- !result
+
+-- Clean up
+DROP TABLE t1;
+-- result:
+-- !result

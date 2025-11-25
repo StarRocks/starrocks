@@ -48,6 +48,7 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
+#include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
@@ -168,6 +169,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         const bool enable_dup_zone_map =
                 _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
         opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map || column.is_sort_key();
+        // Create prefix zonemap for string type, but only truncate it for non-key columns
+        opts.need_zone_map |= config::enable_string_prefix_zonemap && is_string_type(column.type());
+        opts.zone_map_truncate_string =
+                config::enable_string_prefix_zonemap && is_string_type(column.type()) && !column.is_key();
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
@@ -204,6 +209,20 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             if (iter != _opts.global_dicts->end()) {
                 opts.global_dict = &iter->second.dict;
                 _global_dict_columns_valid_info[iter->first] = true;
+            }
+        }
+        if (column.type() == LogicalType::TYPE_JSON && _opts.global_dicts != nullptr) {
+            opts.field_name = column.name();
+            std::string_view col_name = column.name();
+            for (auto& [k, dict_v] : *_opts.global_dicts) {
+                // k can be a.b.c, we must check the first token matches column.name()
+                size_t dot_pos = k.find('.');
+                std::string first_token = (dot_pos == std::string::npos) ? k : k.substr(0, dot_pos);
+                if (first_token == col_name) {
+                    opts.flat_json_dicts.emplace(k, dict_v.dict);
+                    _global_dict_columns_valid_info[k] = true;
+                    VLOG(2) << "set global dict for json column: " << k;
+                }
             }
         }
 
@@ -317,11 +336,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         *index_size += _wfile->size() - index_offset + standalone_index_size;
 
         // check global dict valid
-        const auto& column = _tablet_schema->column(column_index);
-        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
-            std::string col_name(column.name());
-            _global_dict_columns_valid_info[col_name] = false;
-        }
+        _check_column_global_dict_valid(column_writer.get(), column_index);
 
         // reset to release memory
         column_writer.reset();
@@ -447,6 +462,28 @@ int64_t SegmentWriter::bundle_file_offset() const {
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> SegmentWriter::get_numeric_statistics() {
     return _wfile->get_numeric_statistics();
+}
+
+void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index) {
+    const auto& column = _tablet_schema->column(column_index);
+
+    // Check global dict valid for string types
+    if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+        std::string col_name(column.name());
+        _global_dict_columns_valid_info[col_name] = false;
+    }
+
+    // Check global dict valid for JSON type and collect sub-column dict info
+    if (column.type() == LogicalType::TYPE_JSON) {
+        auto* flat_json_writer = dynamic_cast<FlatJsonColumnWriter*>(column_writer);
+        if (flat_json_writer != nullptr) {
+            // Collect dict validity for each sub-column
+            const auto& subcolumn_dict_valid = flat_json_writer->get_subcolumn_dict_valid();
+            for (const auto& kv : subcolumn_dict_valid) {
+                _global_dict_columns_valid_info[kv.first] = kv.second;
+            }
+        }
+    }
 }
 
 } // namespace starrocks

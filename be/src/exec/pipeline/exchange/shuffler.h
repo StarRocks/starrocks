@@ -104,6 +104,6 @@ private:
     const TPartitionType::type _part_type = TPartitionType::UNPARTITIONED;
     const size_t _num_channels;
     const size_t _num_shuffles_per_channel;
-    bool _bucket_aware;
+    const bool _bucket_aware;
 };
 } // namespace starrocks::pipeline

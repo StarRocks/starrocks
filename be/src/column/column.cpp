@@ -20,6 +20,19 @@
 
 namespace starrocks {
 
+size_t Column::serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                           uint32_t max_row_size, size_t start, size_t count,
+                                                           const uint8_t* null_masks) const {
+    for (size_t i = start; i < start + count; i++) {
+        if (null_masks[i] == 0) {
+            serialize(i, dst + (i - start) * byte_interval + byte_offset + 1);
+        } else {
+            serialize_default(dst + (i - start) * byte_interval + byte_offset + 1);
+        }
+    }
+    return type_size();
+}
+
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                              uint32_t max_one_row_size, const uint8_t* null_masks,
                                              bool has_null) const {
@@ -67,7 +80,7 @@ StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
     }
 }
 
-bool Column::empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets) {
+bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
     DCHECK_EQ(null_data.size(), this->size());
     if (!is_array() && !is_map()) {
         throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");

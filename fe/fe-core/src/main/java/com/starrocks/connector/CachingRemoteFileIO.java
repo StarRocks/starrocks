@@ -14,9 +14,9 @@
 
 package com.starrocks.connector;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.util.List;
@@ -32,7 +33,6 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Throwables.throwIfInstanceOf;
-import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -48,30 +48,44 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                                   Executor executor,
                                   long expireAfterWriteSec,
                                   long refreshIntervalSec,
-                                  long maxSize) {
+                                  double cacheMemorySizeRatio) {
         this.fileIO = fileIO;
-        this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
-                .build(asyncReloading(new CacheLoader<RemotePathKey, List<RemoteFileDesc>>() {
-                    @Override
-                    public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
-                        List<RemoteFileDesc> res = loadRemoteFiles(key);
-                        return res;
+        long cacheMemSize = Math.round(Runtime.getRuntime().maxMemory() * cacheMemorySizeRatio);
+        this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec)
+                .executor(executor)
+                .maximumWeight(cacheMemSize)
+                .weigher((RemotePathKey key, List<RemoteFileDesc> value) -> {
+                    long size = Math.toIntExact(SizeEstimator.estimate(key));
+                    if (!value.isEmpty()) {
+                        size += 1L * SizeEstimator.estimate(value.get(0)) * value.size();
                     }
-                }, executor));
+                    if (size > Integer.MAX_VALUE) {
+                        size = Integer.MAX_VALUE;
+                        LOG.debug("size is larger than max integer, use max integer as weight");
+                    }
+                    return (int) size;
+                })
+                .removalListener((RemotePathKey key, List<RemoteFileDesc> value, RemovalCause cause) -> {
+                    LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
+                            key,
+                            value != null ? value.size() : 0,
+                            cause));
+                })
+                .build(key -> fileIO.getRemoteFiles(key).get(key));
     }
 
     public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
-                                                                 long expireAfterWrite, long refreshInterval, long maxSize) {
-        return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
+                                                        long expireAfterWrite, long refreshInterval, double memSizeRatio) {
+        return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, memSizeRatio);
     }
 
-    public static CachingRemoteFileIO createQueryLevelInstance(RemoteFileIO fileIO, long maxSize) {
+    public static CachingRemoteFileIO createQueryLevelInstance(RemoteFileIO fileIO, double memSizeRatio) {
         return new CachingRemoteFileIO(
                 fileIO,
                 newDirectExecutorService(),
                 NEVER_EVICT,
                 NEVER_REFRESH,
-                maxSize);
+                memSizeRatio);
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
@@ -83,7 +97,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
             if (!useCache) {
                 invalidatePartition(pathKey);
             }
-            return ImmutableMap.of(pathKey, cache.getUnchecked(pathKey));
+            return ImmutableMap.of(pathKey, cache.get(pathKey));
         } catch (UncheckedExecutionException e) {
             LOG.error("Error occurred when getting remote files from cache", e);
             throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
@@ -132,8 +146,8 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         }
     }
 
-    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
-        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+    private static Caffeine<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec) {
+        Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder();
         if (expiresAfterWriteSec >= 0) {
             cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
         }
@@ -142,7 +156,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
             cacheBuilder.refreshAfterWrite(refreshSec, SECONDS);
         }
 
-        cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
     }
 

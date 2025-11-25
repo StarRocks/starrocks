@@ -14,7 +14,6 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
@@ -33,13 +32,13 @@ public class HdfsFileSystemWrap implements FileSystem {
 
     @Override
     public List<FileStatus> globList(String path, boolean skipDir) throws StarRocksException {
-        return HdfsUtil.listFileMeta(path, new BrokerDesc(properties), skipDir);
+        return HdfsUtil.listFileMeta(path, properties, skipDir);
     }
 
     @Override
     public THdfsProperties getHdfsProperties(String path) throws StarRocksException {
         THdfsProperties hdfsProperties = new THdfsProperties();
-        HdfsUtil.getTProperties(path, new BrokerDesc(properties), hdfsProperties);
+        HdfsUtil.getTProperties(path, properties, hdfsProperties);
         return hdfsProperties;
     }
 }

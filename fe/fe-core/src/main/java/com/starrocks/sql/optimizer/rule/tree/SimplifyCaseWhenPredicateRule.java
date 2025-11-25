@@ -70,7 +70,7 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
             if (predicate == null) {
                 return Optional.empty();
             }
-            ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate);
+            ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, true);
             if (newPredicate == predicate) {
                 return Optional.empty();
             }
@@ -88,12 +88,12 @@ public class SimplifyCaseWhenPredicateRule implements TreeRewriteRule {
             }
             Optional<ScalarOperator> optNewOnPredicate =
                     Optional.ofNullable(joinOperator.getOnPredicate()).map(predicate -> {
-                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate);
+                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, true);
                         return newPredicate == predicate ? null : newPredicate;
                     });
             Optional<ScalarOperator> optNewPredicate =
                     Optional.ofNullable(joinOperator.getPredicate()).map(predicate -> {
-                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate);
+                        ScalarOperator newPredicate = ScalarOperatorRewriter.simplifyCaseWhen(predicate, true);
                         return newPredicate == predicate ? null : newPredicate;
                     });
             Operator newOperator = LogicalJoinOperator.builder().withOperator(joinOperator)

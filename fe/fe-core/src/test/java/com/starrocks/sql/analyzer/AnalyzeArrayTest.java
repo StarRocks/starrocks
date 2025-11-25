@@ -82,4 +82,13 @@ public class AnalyzeArrayTest {
         analyzeFail("select array_flatten([1, 2, 3])");
         analyzeSuccess("select array_flatten([[1, 2], [1, 4]])");
     }
+
+    @Test
+    public void testNullOrEmpty() {
+        analyzeFail("select null_or_empty()");
+        analyzeSuccess("select null_or_empty('abc')");
+        analyzeSuccess("select null_or_empty([])");
+        analyzeSuccess("select null_or_empty([1, 2, 3])");
+        analyzeSuccess("select null_or_empty([[1, 2], [1, 4]])");
+    }
 }

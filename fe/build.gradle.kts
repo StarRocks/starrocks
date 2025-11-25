@@ -19,7 +19,7 @@ plugins {
 
 allprojects {
     group = "com.starrocks"
-    version = "3.4.0"
+    version = "main"
 
     repositories {
         mavenCentral()
@@ -58,8 +58,8 @@ subprojects {
         set("hikaricp.version", "3.4.5")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
-        set("iceberg.version", "1.9.0")
-        set("io.netty.version", "4.1.118.Final")
+        set("iceberg.version", "1.10.0")
+        set("io.netty.version", "4.1.128.Final")
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
@@ -68,12 +68,12 @@ subprojects {
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
-        set("paimon.version", "1.0.1")
+        set("paimon.version", "1.2.0")
         set("parquet.version", "1.15.2")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.5")
-        set("staros.version", "3.5-rc2")
+        set("staros.version", "4.0.0")
         set("tomcat.version", "8.5.70")
         // var sync end
     }
@@ -119,11 +119,11 @@ subprojects {
             implementation("com.qcloud:chdfs_hadoop_plugin_network:3.2")
             implementation("com.squareup.okhttp3:okhttp:4.10.0")
             implementation("com.squareup.okio:okio:3.4.0")
-            implementation("com.starrocks:fe-common:1.0.0")
-            implementation("com.starrocks:hive-udf:1.0.0")
+            implementation("com.starrocks:fe-testing:${project.version}")
+            implementation("com.starrocks:hive-udf:${project.version}")
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
-            implementation("com.starrocks:plugin-common:1.0.0")
-            implementation("com.starrocks:spark-dpp:1.0.0")
+            implementation("com.starrocks:fe-utils:${project.version}")
+            implementation("com.starrocks:spark-dpp:${project.version}")
             implementation("com.starrocks:starclient:${project.ext["staros.version"]}")
             implementation("com.starrocks:starmanager:${project.ext["staros.version"]}")
             implementation("com.starrocks:starrocks-bdb-je:18.3.20")

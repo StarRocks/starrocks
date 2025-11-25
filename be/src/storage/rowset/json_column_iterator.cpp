@@ -83,7 +83,7 @@ public:
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation) override;
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
 
     std::string name() const override { return "JsonFlatColumnIterator"; }
 
@@ -222,7 +222,9 @@ Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
-    return _read(json_column, read);
+    auto ret = _read(json_column, read);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
@@ -246,7 +248,9 @@ Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* ds
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
-    return _read(json_column, read);
+    auto ret = _read(json_column, read);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
@@ -266,7 +270,9 @@ Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
 
-    return _read(json_column, read);
+    auto ret = _read(json_column, read);
+    values->check_or_die();
+    return ret;
 }
 
 Status JsonFlatColumnIterator::seek_to_first() {
@@ -291,7 +297,8 @@ Status JsonFlatColumnIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                           const ColumnPredicate* del_predicate,
-                                                          SparseRange<>* row_ranges, CompoundNodeType pred_relation) {
+                                                          SparseRange<>* row_ranges, CompoundNodeType pred_relation,
+                                                          const Range<>* src_range) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
@@ -326,7 +333,7 @@ public:
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation) override;
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -398,6 +405,7 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     _flattener->flatten(proxy.get());
     auto result = _flattener->mutable_result();
     json_data->set_flat_columns(_target_paths, _target_types, std::move(result));
+    output->check_or_die();
     return Status::OK();
 }
 
@@ -426,8 +434,9 @@ Status JsonDynamicFlatIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                            const ColumnPredicate* del_predicate,
-                                                           SparseRange<>* row_ranges, CompoundNodeType pred_relation) {
-    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation);
+                                                           SparseRange<>* row_ranges, CompoundNodeType pred_relation,
+                                                           const Range<>* src_range) {
+    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, src_range);
 }
 
 class JsonMergeIterator final : public ColumnIterator {
@@ -460,7 +469,8 @@ public:
     /// for vectorized engine
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                                    CompoundNodeType pred_relation) override;
+                                                    CompoundNodeType pred_relation,
+                                                    const Range<>* src_range = nullptr) override;
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -552,7 +562,9 @@ Status JsonMergeIterator::next_batch(size_t* n, Column* dst) {
     }
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
-    return _merge(json_column, func);
+    auto ret = _merge(json_column, func);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
@@ -575,7 +587,9 @@ Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
     }
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
-    return _merge(json_column, func);
+    auto ret = _merge(json_column, func);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* dst) {
@@ -598,7 +612,9 @@ Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     }
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
-    return _merge(json_column, func);
+    auto ret = _merge(json_column, func);
+    dst->check_or_die();
+    return ret;
 }
 
 Status JsonMergeIterator::seek_to_first() {
@@ -625,7 +641,7 @@ Status JsonMergeIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                                     CompoundNodeType pred_relation) {
+                                                     CompoundNodeType pred_relation, const Range<>* src_range) {
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
@@ -647,7 +663,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> JsonMergeIterator::get_io_ran
 
 class JsonExtractIterator final : public ColumnIteratorDecorator {
 public:
-    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, JsonPath path, LogicalType type)
+    explicit JsonExtractIterator(ColumnIteratorUPtr source_iter, bool source_nullable, JsonPath path, LogicalType type)
             : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
               _path(std::move(path)),
               _type(type),
@@ -655,7 +671,7 @@ public:
               _mem_pool(),
               _source_chunk() {
         // prepare the source chunk
-        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), true);
+        auto column = ColumnHelper::create_column(TypeDescriptor::create_json_type(), source_nullable);
         _source_chunk.append_column(std::move(column), SlotId(0));
         auto path_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
         _source_chunk.append_column(std::move(path_column), SlotId(1));
@@ -664,6 +680,8 @@ public:
         TypeDescriptor return_type(_type);
         std::vector<TypeDescriptor> arg_types = {TypeDescriptor::create_json_type(), TypeDescriptor(TYPE_VARCHAR)};
         _fn_context.reset(FunctionContext::create_context(&_state, &_mem_pool, return_type, arg_types));
+        auto const_path = ColumnHelper::create_const_column<TYPE_VARCHAR>(_path.to_string(), 1);
+        _fn_context->set_constant_columns(Columns{nullptr, const_path});
     }
 
     ~JsonExtractIterator() override {
@@ -796,16 +814,17 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
         const std::vector<LogicalType>& merge_types) {
-    VLOG(2) << fmt::format("create_json_merge_iterator: merge_paths={}", fmt::join(merge_paths, ","));
+    VLOG(2) << fmt::format("create_json_merge_iterator: null={} merge_paths={}", null_iter != nullptr,
+                           fmt::join(merge_paths, ","));
     return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
                                                merge_types);
 }
 
-StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, const std::string& path,
-                                                          LogicalType type) {
+StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, bool source_nullable,
+                                                          const std::string& path, LogicalType type) {
     VLOG(2) << fmt::format("create_json_extract_iterator: path={} type={}", path, type);
     ASSIGN_OR_RETURN(auto normalized_path, JsonPath::parse(path));
-    return std::make_unique<JsonExtractIterator>(std::move(source_iter), normalized_path, type);
+    return std::make_unique<JsonExtractIterator>(std::move(source_iter), source_nullable, normalized_path, type);
 }
 
 } // namespace starrocks

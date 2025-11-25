@@ -5,7 +5,7 @@ displayed_sidebar: docs
 
 # ALTER ROUTINE LOAD
 
-import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.md'
+import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadPrivNote.mdx'
 
 ## 功能
 

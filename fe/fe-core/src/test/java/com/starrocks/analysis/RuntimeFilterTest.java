@@ -100,20 +100,20 @@ public class RuntimeFilterTest {
                         "where d.k5 is null\n" +
                         ") tbl order by 1 desc limit 15";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assertions.assertTrue(plan.contains("7:Project\n" +
-                "  |  output columns:\n" +
-                "  |  39 <-> [39: k13, DECIMAL128(27,9), true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  6:OlapScanNode\n" +
-                "     table: duplicate_par_tbl, rollup: duplicate_par_tbl\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: [39: k13, DECIMAL128(27,9), true] > 60, 31: k5 IS NULL\n" +
-                "     partitionsRatio=1/3, tabletsRatio=3/3\n" +
-                "     tabletList=10015,10017,10019\n" +
-                "     actualRows=0, avgRowSize=2.0\n" +
-                "     cardinality: 1\n" +
-                "     probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (39: k13)"), plan);
+        Assertions.assertTrue(plan.contains("7:Project\n"
+                + "  |  output columns:\n"
+                + "  |  39 <-> [39: k13, DECIMAL128(27,9), true]\n"
+                + "  |  cardinality: 1\n"
+                + "  |  \n"
+                + "  6:OlapScanNode\n"
+                + "     table: duplicate_par_tbl, rollup: duplicate_par_tbl\n"
+                + "     preAggregation: on\n"
+                + "     Predicates: [39: k13, DECIMAL128(27,9), true] > 60, [31: k5, BOOLEAN, true] IS NULL\n"
+                + "     partitionsRatio=1/3, tabletsRatio=3/3\n"
+                + "     tabletList=10015,10017,10019\n"
+                + "     actualRows=0, avgRowSize=2.0\n"
+                + "     cardinality: 1\n"
+                + "     probe runtime filters:\n"
+                + "     - filter_id = 1, probe_expr = (39: k13)"), plan);
     }
 }

@@ -2,13 +2,11 @@
 displayed_sidebar: docs
 ---
 
-# DELETE BACKEND BLACKLIST
+# DELETE BACKEND/COMPUTE NOT BLACKLIST
 
-## 説明
+BE/CN ノードを BE ブラックリストから削除します。StarRocks は、ユーザーによって手動でブラックリストに登録された BE/CN ノードを削除しないことに注意してください。
 
-BE ノードを BE ブラックリストから削除します。StarRocks は、ユーザーによって手動でブラックリストに登録された BE ノードを削除しないことに注意してください。
-
-この機能は v3.3.0 以降でサポートされています。詳細については、[Manage BE Blacklist](../../../../administration/management/BE_blacklist.md) を参照してください。
+BE ブラックリストは v3.3.0 以降でサポートされ、CN ブラックリストは v4.0 以降でサポートされています。詳細については、[Manage BE and CN Blacklist](../../../../administration/management/BE_blacklist.md) を参照してください。
 
 :::note
 
@@ -16,24 +14,25 @@ BE ノードを BE ブラックリストから削除します。StarRocks は、
 
 :::
 
-## 構文
+## Syntax
 
 ```SQL
-DELETE BACKEND BLACKLIST <be_id>[, ...]
+DELETE { BACKEND | COMPUTE NODE } BLACKLIST { <be_id>[, ...] | <cn_id>[, ...] }
 ```
 
-## パラメータ
+## Parameters
 
-`be_id`: ブラックリストから削除する BE ノードの ID。ブラックリストに登録された BE の ID は、[SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md) を実行することで取得できます。
+`be_id` または `cn_id`: ブラックリストから削除する BE または CN ノードの ID。ブラックリストに登録された BE/CN の ID は、[SHOW BACKEND/COMPUTE NODE BLACKLIST](./SHOW_BACKEND_BLACKLIST.md) を実行して取得できます。
 
-## 例
+## Examples
 
 ```SQL
 DELETE BACKEND BLACKLIST 10001;
 ```
 
-## 関連 SQL
+## Relevant SQLs
 
-- [ADD BACKEND BLACKLIST](./ADD_BACKEND_BLACKLIST.md)
-- [SHOW BACKEND BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
-- [SHOW BACKENDS](SHOW_BACKENDS.md)
+- [ADD BACKEND/COMPUTE NODE BLACKLIST](./ADD_BACKEND_BLACKLIST.md)
+- [SHOW BACKEND/COMPUTE NODE BLACKLIST](./SHOW_BACKEND_BLACKLIST.md)
+- [SHOW BACKENDS](./SHOW_BACKENDS.md)
+- [SHOW COMPUTE NODES](./SHOW_COMPUTE_NODES.md)

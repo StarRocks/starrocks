@@ -14,7 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;

@@ -60,8 +60,8 @@ OutPut Exchange Id: 07
 5:Project
 |  output columns:
 |  25 <-> [25: L_SHIPMODE, VARCHAR, false]
-|  28 <-> if[((6: O_ORDERPRIORITY = '1-URGENT') OR (6: O_ORDERPRIORITY = '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
-|  29 <-> if[((6: O_ORDERPRIORITY != '1-URGENT') AND (6: O_ORDERPRIORITY != '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
+|  28 <-> if[(([6: O_ORDERPRIORITY, CHAR, false] = '1-URGENT') OR ([6: O_ORDERPRIORITY, CHAR, false] = '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
+|  29 <-> if[(([6: O_ORDERPRIORITY, CHAR, false] != '1-URGENT') AND ([6: O_ORDERPRIORITY, CHAR, false] != '2-HIGH'), 1, 0); args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]
 |  cardinality: 5055334
 |  column statistics:
 |  * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
@@ -118,7 +118,7 @@ OutPut Exchange Id: 03
 1:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: 25: L_SHIPMODE IN ('REG AIR', 'MAIL'), [22: L_COMMITDATE, DATE, false] < [23: L_RECEIPTDATE, DATE, false], [21: L_SHIPDATE, DATE, false] < [22: L_COMMITDATE, DATE, false], [23: L_RECEIPTDATE, DATE, false] >= '1997-01-01', [23: L_RECEIPTDATE, DATE, false] < '1998-01-01', [22: L_COMMITDATE, DATE, false] < '1998-01-01', [21: L_SHIPDATE, DATE, false] < '1998-01-01'
+Predicates: [25: L_SHIPMODE, CHAR, false] IN ('REG AIR', 'MAIL'), [22: L_COMMITDATE, DATE, false] < [23: L_RECEIPTDATE, DATE, false], [21: L_SHIPDATE, DATE, false] < [22: L_COMMITDATE, DATE, false], [23: L_RECEIPTDATE, DATE, false] >= '1997-01-01', [23: L_RECEIPTDATE, DATE, false] < '1998-01-01', [22: L_COMMITDATE, DATE, false] < '1998-01-01', [21: L_SHIPDATE, DATE, false] < '1998-01-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=30.0
 cardinality: 5055334
@@ -129,4 +129,3 @@ column statistics:
 * L_RECEIPTDATE-->[8.52048E8, 8.83584E8, 0.0, 4.0, 2554.0] MCV: [[1997-08-08:266100][1997-06-05:266000][1997-01-01:263800][1997-07-31:261800][1997-07-09:261400]] ESTIMATE
 * L_SHIPMODE-->[-Infinity, Infinity, 0.0, 10.0, 2.0] ESTIMATE
 [end]
-

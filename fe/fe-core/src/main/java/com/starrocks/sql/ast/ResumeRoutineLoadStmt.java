@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LabelName;
 import com.starrocks.sql.parser.NodePosition;
 
 /*
@@ -51,6 +50,6 @@ public class ResumeRoutineLoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitResumeRoutineLoadStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitResumeRoutineLoadStatement(this, context);
     }
 }

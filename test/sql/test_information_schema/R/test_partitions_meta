@@ -50,6 +50,15 @@ partitions_meta_test2	p3	1	TXN_NORMAL	0	0
 admin set frontend config("max_get_partitions_meta_result_count"="100000");
 -- result:
 -- !result
+
+create table partitions_meta_test3 (k1 int, k2 int) distributed by hash(k1) buckets 1;
+-- result:
+-- !result
+select TABLET_BALANCED from INFORMATION_SCHEMA.PARTITIONS_META where table_name = "partitions_meta_test3";
+-- result:
+1
+-- !result
+
 drop database db_${uuid0};
 -- result:
 -- !result

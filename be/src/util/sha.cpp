@@ -29,15 +29,15 @@ void SHA224Digest::update(const void* data, size_t length) {
 }
 
 void SHA224Digest::digest() {
-    unsigned char hash[SHA224_DIGEST_LENGTH];
-    SHA224_Final(hash, &_sha224_ctx);
+    SHA224_Final(_hash, &_sha224_ctx);
+}
 
+std::string SHA224Digest::hex() const {
     std::stringstream ss;
-    for (unsigned char i : hash) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
+    for (int i = 0; i < SHA224_DIGEST_LENGTH; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)_hash[i];
     }
-
-    _hex.assign(ss.str());
+    return ss.str();
 }
 
 SHA256Digest::SHA256Digest() {
@@ -49,15 +49,15 @@ void SHA256Digest::update(const void* data, size_t length) {
 }
 
 void SHA256Digest::digest() {
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256_Final(hash, &_sha256_ctx);
+    SHA256_Final(_hash, &_sha256_ctx);
+}
 
+std::string SHA256Digest::hex() const {
     std::stringstream ss;
-    for (unsigned char i : hash) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)_hash[i];
     }
-
-    _hex.assign(ss.str());
+    return ss.str();
 }
 
 SHA384Digest::SHA384Digest() {
@@ -69,15 +69,15 @@ void SHA384Digest::update(const void* data, size_t length) {
 }
 
 void SHA384Digest::digest() {
-    unsigned char hash[SHA384_DIGEST_LENGTH];
-    SHA384_Final(hash, &_sha384_ctx);
+    SHA384_Final(_hash, &_sha384_ctx);
+}
 
+std::string SHA384Digest::hex() const {
     std::stringstream ss;
-    for (unsigned char i : hash) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
+    for (int i = 0; i < SHA384_DIGEST_LENGTH; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)_hash[i];
     }
-
-    _hex.assign(ss.str());
+    return ss.str();
 }
 
 SHA512Digest::SHA512Digest() {
@@ -89,15 +89,15 @@ void SHA512Digest::update(const void* data, size_t length) {
 }
 
 void SHA512Digest::digest() {
-    unsigned char hash[SHA512_DIGEST_LENGTH];
-    SHA512_Final(hash, &_sha512_ctx);
+    SHA512_Final(_hash, &_sha512_ctx);
+}
 
+std::string SHA512Digest::hex() const {
     std::stringstream ss;
-    for (unsigned char i : hash) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
+    for (int i = 0; i < SHA512_DIGEST_LENGTH; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)_hash[i];
     }
-
-    _hex.assign(ss.str());
+    return ss.str();
 }
 
 } // namespace starrocks

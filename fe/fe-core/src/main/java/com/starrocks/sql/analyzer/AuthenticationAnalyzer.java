@@ -14,46 +14,71 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
         new AuthenticationAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class AuthenticationAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
-        private AuthenticationMgr authenticationManager = null;
+    public static void analyzeUser(UserRef userIdent) {
+        String user = userIdent.getUser();
+        String host = userIdent.getHost();
+
+        if (Strings.isNullOrEmpty(user)) {
+            throw new SemanticException("Does not support anonymous user");
+        }
+
+        FeNameFormat.checkUserName(user);
+
+        // reuse createMysqlPattern to validate host pattern
+        PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
+    }
+
+    public static void checkUserExist(UserRef user, boolean checkExist) {
+        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        UserIdentity userIdent = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
+            throw new SemanticException("cannot find user " + userIdent + "!");
+        }
+    }
+
+    public static void checkUserNotExist(UserRef user, boolean checkNotExist) {
+        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        UserIdentity userIdent = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        if (!checkNotExist && authenticationManager.doesUserExist(userIdent)) {
+            throw new SemanticException("user " + userIdent + " already exists!");
+        }
+    }
+
+    public static boolean needProtectAdminUser(UserRef user, ConnectContext context) {
+        return Config.authorization_enable_admin_user_protection &&
+                user.getUser().equalsIgnoreCase("admin") &&
+                !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
+    }
+
+    public static class AuthenticationAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private AuthorizationMgr authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
-            authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
             authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             visit(statement, session);
-        }
-
-        /**
-         * analyse user identity + check if user exists in UserPrivTable
-         */
-        private void analyseUser(UserIdentity userIdent, boolean checkExist) {
-            userIdent.analyze();
-
-            // check if user exists
-            if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
-                throw new SemanticException("cannot find user " + userIdent + "!");
-            }
         }
 
         /**
@@ -70,56 +95,37 @@ public class AuthenticationAnalyzer {
 
         @Override
         public Void visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
-            stmt.getUserIdentity().analyze();
-            if (authenticationManager.doesUserExist(stmt.getUserIdentity()) && !stmt.isIfNotExists()) {
-                throw new SemanticException("Operation CREATE USER failed for " + stmt.getUserIdentity()
-                        + " : user already exists");
-            }
+            analyzeUser(stmt.getUser());
+            checkUserNotExist(stmt.getUser(), stmt.isIfNotExists());
             if (!stmt.getDefaultRoles().isEmpty()) {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
             }
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;
         }
 
         @Override
         public Void visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
-            stmt.getUserIdentity().analyze();
-            if (!authenticationManager.doesUserExist(stmt.getUserIdentity()) && !stmt.isIfExists()) {
-                throw new SemanticException("Operation ALTER USER failed for " + stmt.getUserIdentity()
-                        + " : user not exists");
-            }
+            analyzeUser(stmt.getUser());
+            checkUserExist(stmt.getUser(), !stmt.isIfExists());
 
-            UserAuthenticationInfo userAuthenticationInfo =
-                    UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUserIdentity(), stmt.getAuthOption());
-            stmt.setAuthenticationInfo(userAuthenticationInfo);
+            UserAuthOptionAnalyzer.analyzeAuthOption(stmt.getUser(), stmt.getAuthOption());
             return null;
-        }
-
-        private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
-            return Config.authorization_enable_admin_user_protection &&
-                    userIdentity.getUser().equalsIgnoreCase("admin") &&
-                    !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
         }
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            UserIdentity userIdentity = stmt.getUserIdentity();
-            userIdentity.analyze();
+            UserRef user = stmt.getUser();
+            analyzeUser(user);
+            checkUserExist(user, !stmt.isIfExists());
 
-            if (needProtectAdminUser(userIdentity, session)) {
+            if (needProtectAdminUser(user, session)) {
                 throw new SemanticException("'admin' user cannot be dropped because of " +
                         "'authorization_enable_admin_user_protection' configuration is enabled");
             }
 
-            if (!authenticationManager.doesUserExist(userIdentity) && !stmt.isIfExists()) {
-                throw new SemanticException("Operation DROP USER failed for " + userIdentity + " : user not exists");
-            }
-
-            if (stmt.getUserIdentity().equals(UserIdentity.ROOT)) {
+            if (stmt.getUser().equals(UserRef.ROOT)) {
                 throw new SemanticException("Operation DROP USER failed for " + UserIdentity.ROOT +
                         " : cannot drop user " + UserIdentity.ROOT);
             }
@@ -128,11 +134,14 @@ public class AuthenticationAnalyzer {
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            UserIdentity user = statement.getUserIdent();
+            UserRef user = statement.getUser();
             if (user != null) {
-                analyseUser(user, true);
+                analyzeUser(user);
+                checkUserExist(user, true);
             } else if (!statement.isAll()) {
-                statement.setUserIdent(context.getCurrentUserIdentity());
+                statement.setUser(new UserRef(context.getCurrentUserIdentity().getUser(),
+                        context.getCurrentUserIdentity().getHost(),
+                        context.getCurrentUserIdentity().isDomain()));
             }
             return null;
         }
@@ -142,7 +151,8 @@ public class AuthenticationAnalyzer {
             if (stmt.isAllowRevert()) {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
-            analyseUser(stmt.getToUser(), true);
+            analyzeUser(stmt.getToUser());
+            checkUserExist(stmt.getToUser(), true);
             return null;
         }
     }

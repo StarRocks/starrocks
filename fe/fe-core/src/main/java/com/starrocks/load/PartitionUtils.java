@@ -16,8 +16,6 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -40,6 +38,8 @@ import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -65,7 +65,7 @@ public class PartitionUtils {
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, computeResource);
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, targetTable.getId(), LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;
@@ -151,7 +151,7 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), targetTable.getId(), LockType.WRITE);
         }
     }
 

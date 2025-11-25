@@ -1,0 +1,19 @@
+-- name: test_parquet_array_check
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_array_check/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+
+insert into files
+(
+"path" = "oss://${oss_bucket}/test_parquet_array_check/${uuid0}/000/",
+"format" = "parquet"
+) 
+with tt  (tme_mv_id, fid,  fsinger_id_max) as ((select 10, "10", null) union all (select 20, "20", "aaa")),
+tt2 (tme_mv_id, fid, fsinger_ids, fsinger_id_max) as (select tme_mv_id, fid, split(fsinger_id_max, '|') as fsinger_ids, fsinger_id_max from tt)
+select * from tt2;
+
+-- expect [10, nul], [20, ["aaa"]]
+select * from 
+files("path" = "oss://${oss_bucket}/test_parquet_array_check/${uuid0}/000/*",
+"format" = "parquet") order by tme_mv_id;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_parquet_array_check/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null

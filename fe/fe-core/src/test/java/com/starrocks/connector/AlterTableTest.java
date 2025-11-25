@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -76,7 +75,6 @@ public class AlterTableTest extends TableTestBase {
         CreateOrReplaceBranchClause clause = (CreateOrReplaceBranchClause) stmt.getAlterClauseList().get(0);
         Assertions.assertTrue(clause.isCreate());
         Assertions.assertEquals(clause.getBranchName(), "test_branch_1");
-        Assertions.assertEquals(clause.getOpType(), AlterOpType.ALTER_BRANCH);
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
         Assertions.assertEquals(mockedNativeTableB.refs().size(), 1);
@@ -159,7 +157,6 @@ public class AlterTableTest extends TableTestBase {
         CreateOrReplaceTagClause clause = (CreateOrReplaceTagClause) stmt.getAlterClauseList().get(0);
         Assertions.assertTrue(clause.isCreate());
         Assertions.assertEquals(clause.getTagName(), "test_tag_1");
-        Assertions.assertEquals(clause.getOpType(), AlterOpType.ALTER_TAG);
         connectContext.getGlobalStateMgr().getMetadataMgr().alterTable(connectContext, stmt);
         mockedNativeTableB.refresh();
         Assertions.assertEquals(mockedNativeTableB.refs().size(), 2);

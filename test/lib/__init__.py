@@ -44,6 +44,10 @@ PROPERTY_FLAG = "PROPERTY: "
 CONCURRENCY_FLAG = "CONCURRENCY"
 END_CONCURRENCY_FLAG = "END CONCURRENCY"
 
+# cleanup -- end cleanup
+CLEANUP_FLAG = "CLEANUP"
+END_CLEANUP_FLAG = "END CLEANUP"
+
 
 def close_conn(conn, conn_type):
     log.info(f"Try to close {conn_type} connection...")

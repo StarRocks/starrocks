@@ -34,13 +34,13 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const InputColumnType*>(columns[0]);
-        auto value = col->get_data()[row_num];
+        auto value = col->immutable_data()[row_num];
         if (value >= 0 && value <= std::numeric_limits<uint64_t>::max()) {
             this->data(state).add(value);
         }
     }
 
-    bool check_valid(const Buffer<InputCppType>& values, size_t count) const {
+    bool check_valid(const ImmBuffer<InputCppType>& values, size_t count) const {
         for (size_t i = 0; i < count; i++) {
             auto value = values[i];
             if (!(value >= 0 && value <= std::numeric_limits<uint64_t>::max())) {
@@ -53,7 +53,7 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto& col = down_cast<const InputColumnType&>(*columns[0]);
-        const auto& values = col.get_data();
+        const auto values = col.immutable_data();
         if constexpr (LT == TYPE_INT) {
             if (check_valid(values, chunk_size)) {
                 // All the values is unsigned, can be safely converted to unsigned int.
@@ -86,7 +86,7 @@ public:
         auto* dest_column = down_cast<BitmapColumn*>(dst->get());
         for (size_t i = 0; i < chunk_size; i++) {
             BitmapValue bitmap;
-            auto v = src_column.get_data()[i];
+            auto v = src_column.immutable_data()[i];
             if (v >= 0 && v <= std::numeric_limits<uint64_t>::max()) {
                 bitmap.add(v);
             }

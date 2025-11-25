@@ -729,6 +729,11 @@ std::string int256_t::to_string() const {
         return "0";
     }
 
+    // Handle INT256_MIN special case directly
+    if (*this == INT256_MIN) {
+        return "-57896044618658097711785492504343953926634992332820282019728792003956564819968";
+    }
+
     int256_t temp = *this;
     bool negative = false;
     if (temp.high < 0) {

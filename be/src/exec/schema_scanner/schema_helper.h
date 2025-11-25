@@ -101,6 +101,9 @@ public:
     static Status get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
                                        TGetTabletScheduleResponse* response);
 
+    static Status get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                 TGetFeThreadsResponse* response);
+
     static Status get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
                                  TGetRoleEdgesResponse* response);
 
@@ -109,6 +112,9 @@ public:
 
     static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
                                       TGetPartitionsMetaResponse* var_result);
+
+    static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                         TListRecycleBinCatalogsResult* res);
 
     static Status get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
                                          TColumnStatsUsageRes* var_result);
@@ -134,6 +140,9 @@ public:
 
     static Status get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
                                         TGetWarehouseQueriesResponse* response);
+
+    static Status get_dynamic_tablet_jobs_info(const SchemaScannerState& state, const TDynamicTabletJobsRequest& req,
+                                               TDynamicTabletJobsResponse* res);
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,
