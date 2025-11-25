@@ -31,11 +31,20 @@ namespace starrocks::pipeline {
 
 // Synchronization context for parallel driver preparation
 // Use shared_ptr to manage lifecycle and avoid use-after-free
+// Use raw pointer with atomic to avoid std::atomic<std::shared_ptr<T>> compilation issue in Clang 14
 struct DriverPrepareSyncContext {
     std::mutex mutex;
     std::condition_variable cv;
-    std::atomic<std::shared_ptr<Status>> first_error{nullptr};
+    std::atomic<Status*> first_error{nullptr};
     std::atomic<int> pending_tasks{0};
+
+    ~DriverPrepareSyncContext() {
+        // Clean up the dynamically allocated Status object
+        Status* error = first_error.load();
+        if (error != nullptr) {
+            delete error;
+        }
+    }
 };
 
 // execution group is a collection of pipelines

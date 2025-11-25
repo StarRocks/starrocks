@@ -493,9 +493,10 @@ Status FragmentContext::prepare_active_drivers() {
         sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
     }
 
-    Status* error = sync_ctx->first_error.load().get();
+    Status* error = sync_ctx->first_error.load();
     if (error != nullptr) {
-        return *error;
+        Status ret = *error;
+        return *ret;
     }
 
     RETURN_IF_ERROR(submit_all_timer());
