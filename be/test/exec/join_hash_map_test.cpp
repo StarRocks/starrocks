@@ -19,6 +19,7 @@
 #include "exec/join/join_hash_map.hpp"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_map_method.h"
+#include "exec/join/join_hash_map_method.hpp"
 #include "exec/join/join_hash_table.h"
 #include "exec/join/join_key_constructor.h"
 #include "runtime/descriptor_helper.h"
