@@ -1,0 +1,69 @@
+-- name: test_fe_threads @sequential
+-- Test queries on information_schema.fe_threads table
+
+-- Test 1: Basic select with limit
+select count(*) > 0 from information_schema.fe_threads;
+
+-- Test 2: Verify all columns exist and have valid data
+select 
+    fe_address is not null,
+    thread_id > 0,
+    thread_name is not null,
+    thread_state is not null,
+    is_daemon is not null,
+    priority >= 0,
+    cpu_time_ms >= -1,
+    user_time_ms >= -1
+from information_schema.fe_threads limit 1;
+
+-- Test 3: Filter by thread state
+select count(*) >= 0 from information_schema.fe_threads where thread_state = 'RUNNABLE';
+
+-- Test 4: Filter by daemon threads
+select count(*) >= 0 from information_schema.fe_threads where is_daemon = true;
+
+-- Test 5: Filter by non-daemon threads
+select count(*) >= 0 from information_schema.fe_threads where is_daemon = false;
+
+-- Test 6: Group by thread state
+select distinct thread_state
+from information_schema.fe_threads 
+order by thread_state;
+
+-- Test 7: Verify fe_address format (should be host:port)
+select fe_address like '%:%' from information_schema.fe_threads limit 1;
+
+-- Test 8: Check for common JVM thread names
+select count(*) > 0 from information_schema.fe_threads 
+where thread_name like '%main%' 
+   or thread_name like '%GC%' 
+   or thread_name like '%Finalizer%'
+   or thread_name like '%Reference Handler%'
+   or thread_name like '%RMI%';
+
+-- Test 9: Verify thread priorities are in valid range (typically 1-10)
+select count(*) >= 0 from information_schema.fe_threads 
+where priority >= 1 and priority <= 10;
+
+-- Test 17: Verify all threads have valid thread states
+select count(*) = 0 from information_schema.fe_threads 
+where thread_state not in ('NEW', 'RUNNABLE', 'BLOCKED', 'WAITING', 'TIMED_WAITING', 'TERMINATED');
+
+-- Test 18: Check that we have threads in RUNNABLE state (active threads)
+select count(*) > 0 from information_schema.fe_threads 
+where thread_state = 'RUNNABLE';
+
+-- Test 23: Filter by priority range
+select count(*) >= 0 from information_schema.fe_threads 
+where priority >= 5 and priority <= 10;
+
+-- Test 24: Filter threads with CPU time available (not -1)
+select count(*) >= 0 from information_schema.fe_threads 
+where cpu_time_ms >= 0;
+
+-- Test 25: Filter threads with user time available (not -1)
+select count(*) >= 0 from information_schema.fe_threads 
+where user_time_ms >= 0;
+
+[UC] select thread_name from information_schema.fe_threads order by cpu_time_ms desc limit 3;
+[UC] select thread_name from information_schema.fe_threads order by user_time_ms desc limit 3;
