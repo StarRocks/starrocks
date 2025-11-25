@@ -162,7 +162,7 @@ jobs:
               echo $info
               break
             else
-              0
+              sleep 30
             fi
           done
           
