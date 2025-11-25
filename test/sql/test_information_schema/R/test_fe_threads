@@ -1,0 +1,93 @@
+-- name: test_fe_threads @sequential
+select count(*) > 0 from information_schema.fe_threads;
+-- result:
+1
+-- !result
+select 
+    fe_address is not null,
+    thread_id > 0,
+    thread_name is not null,
+    thread_state is not null,
+    is_daemon is not null,
+    priority >= 0,
+    cpu_time_ms >= -1,
+    user_time_ms >= -1
+from information_schema.fe_threads limit 1;
+-- result:
+1	1	1	1	1	1	1	1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads where thread_state = 'RUNNABLE';
+-- result:
+1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads where is_daemon = true;
+-- result:
+1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads where is_daemon = false;
+-- result:
+1
+-- !result
+select distinct thread_state
+from information_schema.fe_threads 
+order by thread_state;
+-- result:
+RUNNABLE
+TIMED_WAITING
+WAITING
+-- !result
+select fe_address like '%:%' from information_schema.fe_threads limit 1;
+-- result:
+1
+-- !result
+select count(*) > 0 from information_schema.fe_threads 
+where thread_name like '%main%' 
+   or thread_name like '%GC%' 
+   or thread_name like '%Finalizer%'
+   or thread_name like '%Reference Handler%'
+   or thread_name like '%RMI%';
+-- result:
+1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads 
+where priority >= 1 and priority <= 10;
+-- result:
+1
+-- !result
+select count(*) = 0 from information_schema.fe_threads 
+where thread_state not in ('NEW', 'RUNNABLE', 'BLOCKED', 'WAITING', 'TIMED_WAITING', 'TERMINATED');
+-- result:
+1
+-- !result
+select count(*) > 0 from information_schema.fe_threads 
+where thread_state = 'RUNNABLE';
+-- result:
+1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads 
+where priority >= 5 and priority <= 10;
+-- result:
+1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads 
+where cpu_time_ms >= 0;
+-- result:
+1
+-- !result
+select count(*) >= 0 from information_schema.fe_threads 
+where user_time_ms >= 0;
+-- result:
+1
+-- !result
+[UC] select thread_name from information_schema.fe_threads order by cpu_time_ms desc limit 3;
+-- result:
+UNKNOWN 172.26.92.227_8034_1709578860161(-1)
+ReportHandler
+AutoStatistic
+-- !result
+[UC] select thread_name from information_schema.fe_threads order by user_time_ms desc limit 3;
+-- result:
+UNKNOWN 172.26.92.227_8034_1709578860161(-1)
+ReportHandler
+AutoStatistic
+-- !result
