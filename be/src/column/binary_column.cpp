@@ -851,8 +851,9 @@ void BinaryColumnBase<T>::fnv_hash_selective(uint32_t* hashes, uint16_t* sel, ui
 
 template <typename T>
 void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
+    // keep hash if _bytes is empty
     const uint8_t* base = _data_base();
-    for (uint32_t i = from; i < to; ++i) {
+    for (uint32_t i = from; i < to && size() > 0; ++i) {
         hashes[i] = HashUtil::zlib_crc_hash(base + _offsets[i], static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]),
                                             hashes[i]);
     }
@@ -862,7 +863,7 @@ template <typename T>
 void BinaryColumnBase<T>::crc32_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
                                                     uint16_t to) const {
     const uint8_t* base = _data_base();
-    for (uint32_t i = from; i < to; ++i) {
+    for (uint32_t i = from; i < to && size() > 0; ++i) {
         if (!selection[i]) {
             continue;
         }
