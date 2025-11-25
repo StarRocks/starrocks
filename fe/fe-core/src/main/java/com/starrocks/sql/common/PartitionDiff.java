@@ -76,7 +76,7 @@ public class PartitionDiff {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("PartitionDiff{");
+        sb.append("{");
         sb.append("adds=").append(adds);
         sb.append(", deletes=").append(deletes);
         sb.append('}');

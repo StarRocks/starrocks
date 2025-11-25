@@ -171,13 +171,14 @@ public class MvUtils {
         Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
             Set<MvId> mvIds = table.getRelatedMaterializedViews();
+            String tableOrMaterializedView = table.isMaterializedView() ? "MaterializedView" : "Table";
             if (mvIds != null && !mvIds.isEmpty()) {
-                logMVPrepare("Table/MaterializedView {} has related materialized views: {}",
-                        table.getName(), mvIds);
+                logMVPrepare("{} {} has related materialized views: {}",
+                        tableOrMaterializedView, table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
             } else if (currentLevel == 0) {
-                logMVPrepare("Table/MaterializedView {} has no related materialized views, " +
-                        "identifier:{}", table.getName(), table.getTableIdentifier());
+                logMVPrepare("{} {} has no related materialized views, " +
+                        "identifier:{}", tableOrMaterializedView, table.getName(), table.getTableIdentifier());
             }
         }
         if (newMvIds.isEmpty()) {
