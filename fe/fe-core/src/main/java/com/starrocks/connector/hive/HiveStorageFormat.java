@@ -146,7 +146,7 @@ public enum HiveStorageFormat {
         return switch (this) {
             case PARQUET -> THdfsFileFormat.PARQUET;
             case ORC -> THdfsFileFormat.ORC;
-            case TEXTFILE -> THdfsFileFormat.TEXT;
+            case TEXTFILE, OPENXJSON -> THdfsFileFormat.TEXT;
             case AVRO -> THdfsFileFormat.AVRO;
             case RCBINARY, RCTEXT -> THdfsFileFormat.RC_FILE;
             case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
