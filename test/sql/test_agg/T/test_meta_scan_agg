@@ -20,6 +20,8 @@ select count(c0) from t0[_META_];
 select count(c1) from t0[_META_];
 select count(c2) from t0[_META_];
 select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0[_META_];
+select count(1) from t0[_META_];
+select count(*) from t0[_META_];
 
 create table t1 (
     c0 DATE,
