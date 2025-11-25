@@ -31,11 +31,6 @@ public class AddPartitionColumnClause extends AlterTableClause {
     }
 
     @Override
-    public NodePosition getPos() {
-        return pos;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitAddPartitionColumnClause(this, context);
     }
