@@ -249,7 +249,7 @@ From v3.4.0, the system supports merging multiple Stream Load requests.
 
 :::warning
 
-Note that the Merge Commit optimization only supports **concurrent** Stream Load jobs. Enabling this feature for **single or serial** Stream Load jobs may cause load performance degradation.
+Note that the Merge Commit optimization is suitable for the scenario with **concurrent** Stream Load jobs on a single table. It is not recommended if the concurrency is one. Meanwhile, think twice before setting `merge_commit_async` to `true` and `merge_commit_interval_ms` to a large value because they may cause load performance degradation.
 
 :::
 
