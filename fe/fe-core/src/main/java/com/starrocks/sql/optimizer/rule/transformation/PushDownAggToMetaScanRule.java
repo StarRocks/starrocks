@@ -34,9 +34,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -59,9 +61,21 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             return false;
         }
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
-            if (!entry.getKey().equals(entry.getValue())) {
-                return false;
+            if (entry.getKey().equals(entry.getValue())) {
+                continue;
             }
+            // Allow constant columns for count(*) and count(constant), e.g., count(1)
+            // When count(1), Project outputs a constant column
+            // If there's any count aggregation, allow the constant column to pass
+            if (entry.getValue() instanceof ConstantOperator) {
+                boolean hasCountAgg = agg.getAggregations().values().stream()
+                        .anyMatch(aggCall -> aggCall.getFnName().equals(FunctionSet.COUNT));
+                if (hasCountAgg) {
+                    continue;
+                }
+            }
+
+            return false;
         }
 
         for (CallOperator aggCall : agg.getAggregations().values()) {
@@ -81,6 +95,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        LogicalProjectOperator project = (LogicalProjectOperator) input.inputAt(0).getOp();
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
 
@@ -97,9 +112,25 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             ColumnRefOperator usedColumn;
 
             String metaColumnName;
-            if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getChildren().isEmpty()) {
+            // For count(*) and count(constant), use rows_<column> meta column
+            // getUsedColumns().isEmpty() returns true for both count(*) and count(constant)
+            // because constants don't produce column references
+            if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getUsedColumns().isEmpty()) {
                 usedColumn = metaScan.getOutputColumns().get(0);
                 metaColumnName = "rows_" + usedColumn.getName();
+            } else if (MapUtils.isNotEmpty(project.getColumnRefMap())) {
+                ColumnRefSet usedColumns = aggCall.getUsedColumns();
+                Preconditions.checkArgument(usedColumns.cardinality() == 1);
+                List<ColumnRefOperator> columnRefOperators = usedColumns.getColumnRefOperators(columnRefFactory);
+                ScalarOperator projectValue = project.getColumnRefMap().get(columnRefOperators.get(0));
+                // If Project outputs a constant (e.g., count(1)), treat it as count(*) and use rows_ meta column
+                if (aggCall.getFnName().equals(FunctionSet.COUNT) && projectValue instanceof ConstantOperator) {
+                    usedColumn = metaScan.getOutputColumns().get(0);
+                    metaColumnName = "rows_" + usedColumn.getName();
+                } else {
+                    usedColumn = (ColumnRefOperator) projectValue;
+                    metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
+                }
             } else {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
