@@ -22,6 +22,7 @@
 
 #include <cstring>
 
+#include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -286,15 +287,23 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
             return true;
         }
 
-        // Append selected data to output column using append_with_filter
         auto data_column = ColumnHelper::get_data_column(dst);
-        data_column->append_with_filter(*temp_data_column, selection, num_rows);
+        Status status = append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows);
+        if (UNLIKELY(!status.ok())) {
+            LOG(WARNING) << "append_with_mask failed: " << status;
+            return false;
+        }
 
         // Append null flags for selected rows if null_data is provided
         if (null != nullptr) {
             auto* nullable_column = down_cast<NullableColumn*>(dst);
             auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column.get());
-            nullable_column->null_column()->append_with_filter(*temp_nullable->null_column(), selection, num_rows);
+            status = append_with_mask</*PositiveSelect=*/true>(nullable_column->null_column().get(),
+                                                               *temp_nullable->null_column(), selection, num_rows);
+            if (UNLIKELY(!status.ok())) {
+                LOG(WARNING) << "append_with_mask failed: " << status;
+                return false;
+            }
             nullable_column->update_has_null();
         }
 
