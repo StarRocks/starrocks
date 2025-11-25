@@ -17,11 +17,6 @@ package com.starrocks.connector.iceberg;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Weigher;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -62,7 +57,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
-import static com.google.common.cache.CacheLoader.asyncReloading;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingIcebergCatalog implements IcebergCatalog {
@@ -73,8 +67,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final int MEMORY_FILE_SAMPLES = 100;
     private final String catalogName;
     private final IcebergCatalog delegate;
-    private final LoadingCache<IcebergTableName, Table> tables;
-    private final Cache<String, Database> databases;
+    private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableCacheKey, Table> tables;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
     private final IcebergCatalogProperties icebergProperties;
@@ -84,7 +78,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
 
-    private final LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
+    private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
 
     public CachingIcebergCatalog(String catalogName, IcebergCatalog delegate, IcebergCatalogProperties icebergProperties,
                                  ExecutorService executorService) {
@@ -94,29 +88,39 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         boolean enableCache = icebergProperties.isEnableIcebergMetadataCache();
         this.databases = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
-        this.tables = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
+        this.tables = newCacheBuilder(
+                icebergProperties.getIcebergMetaCacheTtlSec(),
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE)
-                .removalListener((RemovalNotification<IcebergTableName, Table> n) -> {
-                    LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
-                            n.getKey().dbName, n.getKey().tableName,
-                            n.getCause(), n.wasEvicted());
+                .executor(executorService)
+                .removalListener((IcebergTableCacheKey key, Table value, RemovalCause cause) -> {
+                    if (key != null) {
+                        LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
+                                key.icebergTableName.dbName, key.icebergTableName.tableName,
+                                cause, cause.wasEvicted());
+                    }
                 })
-                .build(asyncReloading(CacheLoader.from(key -> {
-                    LOG.debug("Loading iceberg table {}.{} from remote catalog",
-                                    key.dbName, key.tableName);
-                    return delegate.getTable(key.dbName, key.tableName);
-                }), executorService));  
+                .build(new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableCacheKey, Table>() {
+                    @Override
+                    public Table load(IcebergTableCacheKey key) throws Exception {
+                        LOG.debug("Loading iceberg table {}.{} from remote catalog",
+                                key.icebergTableName.dbName, key.icebergTableName.tableName);
+                        return delegate.getTable(key.connectContext, key.icebergTableName.dbName,
+                                key.icebergTableName.tableName);
+                    }
+                });
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
-                CacheLoader.from(key -> {
-                    Table nativeTable = getTable(key.dbName, key.tableName);
-                    IcebergTable icebergTable =
-                            IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
-                                    .setNativeTable(nativeTable).build();
-                    return delegate.getPartitions(icebergTable, key.snapshotId, null);
-                }));
-
+                    new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
+                        @Override
+                        public Map<String, Partition> load(IcebergTableName key) throws Exception {
+                            Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
+                            IcebergTable icebergTable =
+                                    IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
+                                            .setNativeTable(nativeTable).build();
+                            return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                        }
+                    });
         long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
                 icebergProperties.getIcebergDataFileCacheMemoryUsageRatio());
         long deleteFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
@@ -203,6 +207,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
             tableLatestAccessTime.put(icebergTableName, System.currentTimeMillis());
         }
+
+        if (!icebergProperties.isEnableIcebergTableCache()) {
+            return delegate.getTable(dbName, tableName);
+        }
+        
+        IcebergTableCacheKey key = new IcebergTableCacheKey(icebergTableName, connectContext);
         try {
             return tables.get(icebergTableName);
         } catch (Exception e) {
@@ -266,7 +276,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                                 ExecutorService executorService) {
         IcebergTableName key =
                 new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
-        return partitionCache.getUnchecked(key);
+        return partitionCache.get(key);
     }
 
     @Override
@@ -342,17 +352,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
+        IcebergTableName keyWithoutSnap = new IcebergTableName(dbName, tableName);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
         // update tables before refresh partition cache
         // so when refreshing partition cache, `getTables` can return the latest one.
         // another way to fix is to call `delegate.getTables` when refreshing partition cache.
         synchronized (this) {
-            tables.put(updatedIcebergTableName, updatedTable);
+            tables.put(keyWithoutSnap, updatedTable);
         }
 
         partitionCache.invalidate(baseIcebergTableName);
-        partitionCache.getUnchecked(updatedIcebergTableName);
+        partitionCache.get(updatedIcebergTableName);
 
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
         List<ManifestFile> manifestFiles = updatedTable.currentSnapshot().dataManifests(updatedTable.io()).stream()
@@ -414,16 +425,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     private void invalidateCache(IcebergTableName key) {
-        if (key.ignoreSnapshotId) {
-            // invalidate all snapshots of this table if snapshotId is not specified
-            tables.asMap().keySet().stream()
-                    .filter(k -> k.dbName.equals(key.dbName) &&
-                            k.tableName.equals(key.tableName))
-                    .forEach(tables::invalidate);
-        } else {
-            // only invalidate the specified snapshot
-            tables.invalidate(key);
-        }
+        tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
         Set<String> paths = metaFileCacheMap.get(key);
@@ -446,8 +448,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.getTableScan(table, scanContext);
     }
 
-    private CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshInterval, long maximumSize) {
-        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+    private Caffeine<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshInterval,
+                                                         long maximumSize) {
+        Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder();
         if (expiresAfterWriteSec >= 0) {
             cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
         }
@@ -522,7 +525,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         .stream()
                         .limit(MEMORY_META_SAMPLES)
                         .collect(Collectors.toList()),
-                databases.size());
+                databases.estimatedSize());
 
         List<List<String>> partitionNames = getAllCachedPartitionNames();
         List<Object> partitions = partitionNames
@@ -563,8 +566,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
         List<List<String>> partitionNames = getAllCachedPartitionNames();
-        counter.put("Database", databases.size());
-        counter.put("Table", tables.size());
+        counter.put("Database", databases.estimatedSize());
+        counter.put("Table", tables.estimatedSize());
         counter.put("PartitionNames", partitionNames
                 .stream()
                 .mapToLong(List::size)
