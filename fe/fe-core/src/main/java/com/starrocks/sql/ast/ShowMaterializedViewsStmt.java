@@ -47,8 +47,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     public ShowMaterializedViewsStmt(String catalogName, String db, String pattern, Expr where, NodePosition pos) {
         super(pos);
-        this.catalogName = normalizeName(catalogName);
-        this.db = normalizeName(db);
+        this.catalogName = catalogName;
+        this.db = db;
         this.pattern = pattern;
         this.where = where;
     }

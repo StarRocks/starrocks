@@ -66,19 +66,9 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    default R visitPrepareStatement(PrepareStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitExecuteStatement(ExecuteStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
-    default R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -241,22 +231,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitAlterLoadStatement(AlterLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
     default R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -329,17 +303,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
 
-    default R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     // ---------------------------------------- External Resource Statement---------------------------------------------
 
@@ -379,9 +342,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitCancelCompactionStatement(CancelCompactionStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
@@ -445,9 +405,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowFailPointStatement(ShowFailPointStatement statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitShowProcedureStatement(ShowProcedureStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -465,13 +422,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 
-    default R visitShowBackupStatement(ShowBackupStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowRestoreStatement(ShowRestoreStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitCancelBackupStatement(CancelBackupStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -481,14 +431,8 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     // ------------------------------- DataCache Management Statement -------------------------------------------------
-    default R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitDataCacheSelectStatement(DataCacheSelectStatement statement, C context) {
         return visitDDLStatement(statement, context);
@@ -548,13 +492,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
-    default R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     // -------------------------------------------- Pipe Statement -----------------------------------------------------
     default R visitPipeName(PipeName statement, C context) {
@@ -591,31 +529,8 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     // ------------------------------------------- Dictionary Statement ---------------------------------------------------------
-    default R visitCreateDictionaryStatement(CreateDictionaryStmt clause, C context) {
-        return visitDDLStatement(clause, context);
-    }
-
-    default R visitRefreshDictionaryStatement(RefreshDictionaryStmt clause, C context) {
-        return visitDDLStatement(clause, context);
-    }
 
     //Alter table clause
-
-    default R visitTableRenameClause(TableRenameClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitAlterTableCommentClause(AlterTableCommentClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitSwapTableClause(SwapTableClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitOptimizeClause(OptimizeClause clause, C context) {
         return visitNode(clause, context);
@@ -641,21 +556,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitColumnRenameClause(ColumnRenameClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
         return visitNode(clause, context);
     }
 
-    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitCompactionClause(CompactionClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, C context) {
         return visitNode(clause, context);
@@ -675,9 +580,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     //Alter partition clause
 
-    default R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitAddPartitionClause(AddPartitionClause clause, C context) {
         return visitNode(clause, context);
@@ -695,9 +597,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     // Alter View
     default R visitAlterViewClause(AlterViewClause clause, C context) {
@@ -709,18 +608,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
     // ------------------------------------------- Branch/Tag ----------------------------------==------------------------
-    default R visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     // ------------------------------------------- Table Operation ----------------------------------==-----------------
     default R visitAlterTableOperationClause(AlterTableOperationClause clause, C context) {
