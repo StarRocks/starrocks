@@ -54,7 +54,7 @@ Status HdfsJsonReader::next_record(Chunk* chunk, int32_t rows_to_read) {
                 if (truncated_bytes == _buf->limit) {
                     // TODO: support later
                     return Status::NotSupported(fmt::format(
-                            "Currently one json record size larger then buf size {} is not support", _buf->capacity));
+                            "Currently one json record size larger than buf size {} is not supported", _buf->capacity));
                 }
                 _buf->pos = _buf->limit - truncated_bytes;
                 _buf->flip_to_write();
