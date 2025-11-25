@@ -11,7 +11,6 @@ import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
-import com.starrocks.persist.Storage;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -21,9 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -85,17 +82,13 @@ public class SecondaryHelper {
     public static boolean pullImage(String token, String httpHost, int httpPort, long imageVersion,
             String imageSubDir) {
         String url = "http://" + NetUtils.getHostPortInAccessibleFormat(httpHost, httpPort) +
-                "/image?version=" + imageVersion + "&token=" + token;
-        String filename = Storage.IMAGE + "." + imageVersion;
-        String realDir = GlobalStateMgr.getImageDirPath() + imageSubDir;
+                "/image?version=" + imageVersion + "&token=" + token + "&image_format_version=v2";
+        String realDir = GlobalStateMgr.getImageDirPath() + imageSubDir + "/v2";
         File dir = new File(realDir);
+        dir.mkdirs();
         try {
-            OutputStream out = MetaHelper.getOutputStream(filename, dir);
-            MetaHelper.getRemoteFile(url, Config.failover_group_pull_image_timeout_sec * 1000, out);
-            MetaHelper.complete(filename, dir);
-        } catch (FileNotFoundException e) {
-            LOG.warn("File not found. dir: {}, file: {}", realDir, filename, e);
-            return false;
+            MetaHelper.downloadImageFile(
+                    url,  Config.failover_group_pull_image_timeout_sec * 1000, String.valueOf(imageVersion), dir);
         } catch (IOException e) {
             LOG.warn("Failed to get remote file. url: {}", url, e);
             return false;
