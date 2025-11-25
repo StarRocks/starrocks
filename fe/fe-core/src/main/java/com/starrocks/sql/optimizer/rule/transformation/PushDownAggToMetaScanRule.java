@@ -64,10 +64,6 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             if (entry.getKey().equals(entry.getValue())) {
                 continue;
             }
-            // select dict_merge(get_json_string(c1)) from tbl [_META_]
-            if (entry.getValue().getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT)) {
-                continue;
-            }
             // Allow constant columns for count(*) and count(constant), e.g., count(1)
             // When count(1), Project outputs a constant column
             // If there's any count aggregation, allow the constant column to pass
