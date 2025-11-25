@@ -337,7 +337,8 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
     _dict_decoder->get_offsets_for_zero_copy(temp_offsets);
 
     // Create zero-copy BinaryColumn directly from decoder's data
-    auto dict_column = BinaryColumn::create(data_ptr, data_length, std::move(temp_offsets));
+    ContainerResource container(_page_handle, data_ptr, data_length);
+    auto dict_column = BinaryColumn::create(std::move(container), std::move(temp_offsets));
 
     // Apply predicates to dictionary
     std::vector<uint8_t> dict_selection(dict_size, 0);

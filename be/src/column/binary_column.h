@@ -67,9 +67,6 @@ public:
         }
     }
 
-    explicit BinaryColumnBase(const void* data, size_t length, Offsets offsets)
-            : BinaryColumnBase(ContainerResource(std::shared_ptr<PageHandle>(), data, length), std::move(offsets)) {}
-
     explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
             : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)), _immuable_container(*this) {
         if (_offsets.empty()) {
