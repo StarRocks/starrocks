@@ -65,13 +65,15 @@ public:
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
 
     void count_down_pipeline(RuntimeState* state) {
-        if (++_num_finished_pipelines == _num_pipelines) {
+        size_t num_pipelines = _num_pipelines;
+        if (++_num_finished_pipelines == num_pipelines) {
             state->fragment_ctx()->count_down_execution_group();
         }
     }
 
     void count_down_epoch_pipeline(RuntimeState* state) {
-        if (++_num_epoch_finished_pipelines == _num_pipelines) {
+        size_t num_pipelines = _num_pipelines;
+        if (++_num_epoch_finished_pipelines == num_pipelines) {
             state->fragment_ctx()->count_down_epoch_pipeline(state);
         }
     }
