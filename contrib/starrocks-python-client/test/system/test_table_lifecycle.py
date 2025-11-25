@@ -147,7 +147,7 @@ def wait_for_alter_table_column_or_optimization(engine: Engine, table_name: str,
                 engine, table_name, alter_type, schema, 1, 0, state=state)
             logger.debug(f"show alter table {state}(round={i+1}) for table: {table_name}, schema: {schema}. done: {done}")
             if not done:
-                break
+                break  # continue to another state check if the previous one is done
         if done:
             break
         time.sleep(sleep_time)
@@ -162,13 +162,14 @@ def _wait_for_alter_table_column_or_optimization(engine: Engine, table_name: str
     """
     with engine.connect() as conn:
         for i in range(max_round):
-            show_alter_table_row = StarRocksDialect.get_show_alter_table(conn, table_name, alter_type, schema, state=state)
-            logger.debug(f"show_alter_table_row: {show_alter_table_row}")
+            show_alter_table_row = StarRocksDialect.get_show_alter_table(
+                conn, table_name, alter_type, schema, state=state)
+            logger.debug(f"show_alter_table_row for table: {table_name}, state: {state}. row: {show_alter_table_row}")
             if not show_alter_table_row:  # no running alter table
                 break
             time.sleep(sleep_time)
         if show_alter_table_row:
-            logger.warning("ALTER TABLE is still running for table: %s", table_name)
+            logger.warning("ALTER TABLE is still running for table: %s, state: %s", table_name, state)
     return not show_alter_table_row
 
 
@@ -220,8 +221,8 @@ def test_create_table_simple(database: str, alembic_env: AlembicTestEnv, sr_engi
         is_true(inspector.has_table("user"))
         table_opts = inspector.get_table_options("user")
         logger.info("table_opts: %s", table_opts)
-        eq_(table_opts["starrocks_PRIMARY_KEY"], "id")
-        eq_(table_opts["starrocks_DISTRIBUTED_BY"], "HASH(`id`)")
+        eq_(table_opts[TableInfoKeyWithPrefix.PRIMARY_KEY], "id")
+        eq_(table_opts[TableInfoKeyWithPrefix.DISTRIBUTED_BY], "HASH(`id`)")
 
 
 def test_idempotency_comprehensive(database: str, alembic_env: AlembicTestEnv, sr_engine: Engine):
@@ -403,8 +404,9 @@ def test_add_agg_table_key_column(database: str, alembic_env: AlembicTestEnv, sr
     alembic_env.harness.upgrade("head")
 
     # 4. Verify in DB and then downgrade
-    inspector = inspect(sr_engine)
     wait_for_alter_table_column_or_optimization(sr_engine, "t_agg_add_key", "COLUMN", None, 20, 3)
+    inspector = inspect(sr_engine)
+    inspector.clear_cache()
     columns = inspector.get_columns("t_agg_add_key")
     col_names = [c['name'] for c in columns]
     logger.debug(f"columns after adding key column: {col_names}")
@@ -698,6 +700,7 @@ def test_alter_table_column_only(database: str, alembic_env: AlembicTestEnv, sr_
     wait_for_alter_table_column_or_optimization(sr_engine, "t_alter_only", "COLUMN")
     # 4. Verify in DB and then downgrade
     inspector = inspect(sr_engine)
+    inspector.clear_cache()
     columns = inspector.get_columns("t_alter_only")
     for col in columns:
         if col['name'] == 'col_to_modify':

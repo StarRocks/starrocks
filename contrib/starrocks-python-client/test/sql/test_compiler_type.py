@@ -43,7 +43,7 @@ from starrocks.datatype import (
     VARBINARY,
     VARCHAR,
 )
-from test.unit.test_utils import normalize_sql
+from test.test_utils import normalize_sql
 
 
 # Test data for different type categories

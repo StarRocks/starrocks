@@ -31,9 +31,8 @@ from alembic.ddl.mysql import (
     MySQLModifyColumn,
 )
 import pytest
-from sqlalchemy import Integer, String
 
-from starrocks.datatype import INTEGER
+from starrocks.datatype import INTEGER, STRING
 from starrocks.dialect import (
     StarRocksDDLCompiler,
     StarRocksDialect,
@@ -58,7 +57,7 @@ class TestAlterColumnModify:
                 't',
                 'c',
                 schema=None,
-                type_=Integer(),
+                type_=INTEGER(),
                 nullable=False,
                 default=False,
                 autoincrement=None,
@@ -80,15 +79,15 @@ class TestAlterColumnModify:
                 't',
                 'c',
                 schema=None,
-                type_=String(20),
+                type_=STRING,
                 nullable=True,
                 default="abc",
                 autoincrement=None,
                 comment='greeting',
             )
 
-            sql = self.compiler.process(element)
-            assert sql == 'ALTER TABLE `t` MODIFY COLUMN `c` VARCHAR(20) NULL DEFAULT ' \
+            compiled_sql = self.compiler.process(element)
+            assert compiled_sql == 'ALTER TABLE `t` MODIFY COLUMN `c` STRING NULL DEFAULT ' \
                            + "'abc' COMMENT 'greeting'"
 
     def test_modify_schema_qualified(self):
@@ -101,7 +100,7 @@ class TestAlterColumnModify:
                 't',
                 'c',
                 schema='s',
-                type_=Integer(),
+                type_=INTEGER(),
                 nullable=True,
                 default=False,
                 autoincrement=None,
@@ -155,7 +154,7 @@ class TestAlterColumnChange:
                 'old',
                 schema=None,
                 newname='new',
-                type_=Integer(),
+                type_=INTEGER(),
                 nullable=False,
                 default=0,
                 autoincrement=None,
@@ -193,12 +192,12 @@ class TestAlterDefault:
             assert sql == 'ALTER TABLE `t` MODIFY COLUMN `c` DEFAULT CURRENT_TIMESTAMP'
 
 
-class TestAlterColumnErrors:
+class TestAlterColumnAutoincrement:
     def setup_method(self):
         self.dialect = StarRocksDialect()
         self.compiler = StarRocksDDLCompiler(self.dialect, None)
 
-    def test_modify_autoincrement_not_supported(self):
+    def test_modify_autoincrement(self):
         with patch('starrocks.dialect.alter_table') as mock_alter_table, \
              patch('starrocks.dialect.format_column_name') as mock_format_col:
             mock_alter_table.return_value = 'ALTER TABLE `t`'
@@ -208,12 +207,20 @@ class TestAlterColumnErrors:
                 't',
                 'c',
                 schema=None,
-                type_=Integer(),
+                type_=INTEGER(),
                 nullable=False,
                 default=False,
                 autoincrement=True,
                 comment=False,
             )
 
-            with pytest.raises(Exception):
-                _ = self.compiler.process(element)
+            compiled_sql = self.compiler.process(element)
+            logger.debug(f"compiled_sql: {compiled_sql}")
+            expected_sql = 'ALTER TABLE `t` MODIFY COLUMN `c` INTEGER NOT NULL AUTO_INCREMENT'
+            assert compiled_sql == expected_sql
+
+
+class TestAlterColumnErrors:
+    def setup_method(self):
+        self.dialect = StarRocksDialect()
+        self.compiler = StarRocksDDLCompiler(self.dialect, None)

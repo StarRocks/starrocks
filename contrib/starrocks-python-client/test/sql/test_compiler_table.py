@@ -21,7 +21,7 @@ from sqlalchemy.schema import CreateTable
 
 from starrocks.common.params import ColumnAggInfoKeyWithPrefix
 from starrocks.common.types import ColumnAggType
-from test.unit.test_utils import normalize_sql
+from test.test_utils import normalize_sql
 
 
 class TestCreateTableCompiler:
@@ -133,7 +133,7 @@ class TestCreateTableCompiler:
                     Column('k1', Integer),
                     Column('v1', Integer, **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.SUM}),
                     Column('v2', String(50), **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: ColumnAggType.REPLACE}),
-                    starrocks_aggregate_key='k1')
+                    starrocks_AGGREGATE_KEY='k1')
         sql = self._compile_table(tbl)
         expected = """
             CREATE TABLE agg_tbl(

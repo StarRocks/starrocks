@@ -49,8 +49,7 @@ from starrocks.common.params import AlterTableEnablement, TableInfoKeyWithPrefix
 from starrocks.common.types import PartitionType
 from starrocks.engine.interfaces import ReflectedPartitionInfo
 from test.conftest_sr import create_test_engine, test_default_schema
-from test.unit import test_utils
-
+from test import test_utils
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +141,7 @@ class TestAlterTableIntegration:
                     Column('id', Integer),
                     comment='new comment',
                     schema=self.test_schema,
-                    starrocks_PROPERTIES={"replication_num": "1"}
+                    starrocks_properties={"replication_num": "1"}
                 )
 
                 autogen_context = self._setup_autogen_context()
@@ -192,7 +191,7 @@ class TestAlterTableIntegration:
                     Column('id', Integer),
                     comment='new comment',
                     schema=self.test_schema,
-                    starrocks_PROPERTIES={"replication_num": "1"}
+                    starrocks_properties={"replication_num": "1"}
                 )
 
                 autogen_context = self._setup_autogen_context()
@@ -244,7 +243,7 @@ class TestAlterTableIntegration:
                     Column('id', Integer),
                     comment=None,
                     schema=self.test_schema,
-                    starrocks_PROPERTIES={"replication_num": "1"}
+                    starrocks_properties={"replication_num": "1"}
                 )
 
                 autogen_context = self._setup_autogen_context()
@@ -423,7 +422,7 @@ class TestAlterTableIntegration:
                 assert partition_info.type == PartitionType.RANGE
                 assert test_utils.normalize_sql(partition_info.partition_method) == "RANGE(from_unixtime(dt))"
                 assert test_utils.normalize_sql(partition_info.pre_created_partitions) \
-                        == test_utils.normalize_sql("(PARTITION p1 VALUES [('2023-01-01 00:00:00'), ('2023-02-01 00:00:00')))")
+                    == test_utils.normalize_sql("(PARTITION p1 VALUES [('2023-01-01 00:00:00'), ('2023-02-01 00:00:00')))")
 
                 # Target: add RANGE partition
                 metadata_target = MetaData()
@@ -432,9 +431,9 @@ class TestAlterTableIntegration:
                     Column('id', Integer),
                     Column('dt', Integer), # Use int for date column in metadata for simplicity
                     **{
-                        "starrocks_PARTITION_BY": "RANGE(dt) (PARTITION p1 VALUES [('2025-01-01'), ('2025-02-01')))",
-                        "starrocks_DISTRIBUTED_BY": "HASH(id) BUCKETS 4",
-                        "starrocks_PROPERTIES": {"replication_num": "1"},
+                        "starrocks_partition_by": "RANGE(dt) (PARTITION p1 VALUES [('2025-01-01'), ('2025-02-01')))",
+                        "starrocks_distributed_by": "HASH(id) BUCKETS 4",
+                        "starrocks_properties": {"replication_num": "1"},
                     },
                     schema=self.test_schema
                 )
@@ -499,9 +498,9 @@ class TestAlterTableIntegration:
                     Column('id', Integer),
                     Column('created_at', String),  # Simplified type for test
                     **{
-                        "starrocks_DISTRIBUTED_BY": "HASH(id)",
-                        "starrocks_ORDER_BY": "created_at",
-                        "starrocks_PROPERTIES": {"replication_num": "1"}
+                        "starrocks_distributed_by": "HASH(id)",
+                        "starrocks_order_by": "created_at",
+                        "starrocks_properties": {"replication_num": "1"}
                     },
                     schema=self.test_schema
                 )
@@ -565,9 +564,9 @@ class TestAlterTableIntegration:
                     Column('id', Integer),
                     Column('name', String(50)),
                     **{
-                        "starrocks_DISTRIBUTED_BY": "HASH(id)",
-                        "starrocks_ORDER_BY": ["id", "name"],
-                        "starrocks_PROPERTIES": {
+                        "starrocks_distributed_by": "HASH(id)",
+                        "starrocks_order_by": ["id", "name"],
+                        "starrocks_properties": {
                             "replication_num": "2",  # Changed
                             "storage_medium": "SSD"  # Added
                         }
@@ -655,9 +654,9 @@ class TestAlterTableIntegration:
                     Column('name', String(50)),
                     **{
                         # Use normalized format (without backticks) - should be equivalent
-                        "starrocks_DISTRIBUTED_BY": "HASH(id)   BUCKETS    8",
+                        "starrocks_distributed_by": "HASH(id)   BUCKETS    8",
                         # Only specify non-default properties that user cares about
-                        "starrocks_PROPERTIES": {"replication_num": "1"}
+                        "starrocks_properties": {"replication_num": "1"}
                     },
                     schema=self.test_schema
                 )

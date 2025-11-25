@@ -15,32 +15,45 @@
 import decimal
 import logging
 
+from sqlalchemy import (
+    Integer,
+    MetaData,
+    String,
+    Table,
+    and_,
+    cast,
+    column,
+    literal,
+    schema,
+    select,
+    table,
+    testing,
+    text,
+    type_coerce,
+    union,
+)
+from sqlalchemy.engine import ObjectKind, ObjectScope
+from sqlalchemy.sql.sqltypes import CHAR, Float
+from sqlalchemy.testing import config, fixtures
+from sqlalchemy.testing.assertions import AssertsCompiledSQL, eq_
+from sqlalchemy.testing.schema import Column
 from sqlalchemy.testing.suite import *  # noqa: F403, I001
 from sqlalchemy.testing.suite import (
     ComponentReflectionTest as _ComponentReflectionTest,
-    FetchLimitOffsetTest as _FetchLimitOffsetTest,
-    NumericTest as _NumericTest,
-    StringTest as _StringTest,
     CTETest as _CTETest,
+    CompositeKeyReflectionTest,
+    EnumTest,
+    FetchLimitOffsetTest as _FetchLimitOffsetTest,
     JSONTest as _JSONTest,
+    LongNameBlowoutTest,
+    NumericTest as _NumericTest,
     ServerSideCursorsTest as _ServerSideCursorsTest,
+    StringTest as _StringTest,
 )
+from sqlalchemy.testing.util import mock
 
-from sqlalchemy.testing.assertions import AssertsCompiledSQL
-from sqlalchemy import Table, Integer, MetaData, select
-from sqlalchemy import schema, type_coerce, and_, cast
-
-from sqlalchemy.testing import fixtures, config
-from sqlalchemy.testing.schema import Column
-from sqlalchemy import testing, literal
-from sqlalchemy.testing.assertions import eq_
-from sqlalchemy.sql.sqltypes import Float, CHAR
-from sqlalchemy.engine import ObjectKind
-from sqlalchemy.engine import ObjectScope
-from sqlalchemy.engine import Inspector
-
-from starrocks.datatype import INTEGER, VARCHAR
-from test.unit import test_utils
+from starrocks.datatype import INTEGER
+from test import test_utils
 
 
 logger = logging.getLogger(__name__)
@@ -138,6 +151,14 @@ class StarrocksMogrifyTest(fixtures.TablesTest, AssertsCompiledSQL):
     #     eq_(result.fetchall(), [("d4",)])
 
 class ComponentReflectionTest(_ComponentReflectionTest):
+    # Updated to allow tests to run when Starrocks does not support default autoincrement on single primary key columns
+    @classmethod
+    def define_tables(cls, metadata):
+        super().define_tables(metadata)
+        for t_name, t in metadata.tables.items():
+            if t.autoincrement_column is not None:
+                t.autoincrement_column.autoincrement = True
+
     # Updated because Starrocks does not currently support column comments
     def exp_columns(
             self,
@@ -421,6 +442,18 @@ class CTETest(_CTETest):
         pass
 
 class JSONTest(_JSONTest):
+    # Override define_tables to specify autoincrement=True explicitly for test on Starrocks
+    @classmethod
+    def define_tables(cls, metadata):
+        Table(
+            "data_table",
+            metadata,
+            Column("id", Integer, primary_key=True, autoincrement=True),
+            Column("name", String(30), nullable=False),
+            Column("data", cls.datatype, nullable=False),
+            Column("nulldata", cls.datatype(none_as_null=True)),
+        )
+
     @testing.skip('starrocks', 'Seems to return "null", not sure why')
     def test_round_trip_json_null_as_json_null(self, connection):
         pass

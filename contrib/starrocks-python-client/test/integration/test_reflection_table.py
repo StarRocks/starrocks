@@ -64,7 +64,7 @@ class TestReflectionTablesIntegration:
                 table_options = inspector.get_table_options(table_name)
                 logger.info("table_options: %s", table_options)
 
-                from test.unit.test_utils import normalize_sql
+                from test.test_utils import normalize_sql
                 # Assertions for all expected StarRocks table options
                 assert table_options[TableInfoKeyWithPrefix.ENGINE] == 'OLAP'
                 assert normalize_sql(table_options[TableInfoKeyWithPrefix.PRIMARY_KEY]) == 'id'

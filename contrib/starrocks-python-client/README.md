@@ -63,7 +63,7 @@ Connect to your database and do a query.
 ```python
 from sqlalchemy import create_engine, text
 
-engine = create_engine('starrocks://myname:pswd1234@localhost:9030/mydatabase')
+engine = create_engine('starrocks://root@localhost:9030/mydatabase')
 
 # make sure you have create a table `mytable` in `mydatabase`.
 
@@ -127,11 +127,61 @@ my_core_table = Table(
 metadata.create_all(engine)
 ```
 
-> For a complete guide on defining tables (Core and ORM), executing queries, and using advanced features, please see the **[SQLAlchemy Usage Guide](./docs/usage_guide/sqlalchemy.md)**.
+For a complete guide on defining tables (Core and ORM), executing queries, and using advanced features, please see the **[SQLAlchemy Usage Guide](./docs/usage_guide/sqlalchemy.md)**.
+
+For a detailed reference on all StarRocks-specific table attributes and data types, please see the **[Table Definition Reference](./docs/usage_guide/tables.md)**.
+
+### Example: Views and Materialized Views
+
+Create a View and a Materialized View using the StarRocks helpers. These behave like SQLAlchemy `Table` objects and are created with `metadata.create_all(engine)`.
+
+```python
+from sqlalchemy import MetaData, text
+from starrocks.sql.schema import View, MaterializedView
+
+metadata = MetaData()
+
+# Create a simple View (columns inferred from SELECT)
+user_view = View(
+    'user_view',
+    metadata,
+    definition='SELECT id, name FROM my_core_table WHERE name IS NOT NULL',
+    comment='Active users'
+)
+
+# Create a simple Materialized View (asynchronous refresh)
+user_stats_mv = MaterializedView(
+    'user_stats_mv',
+    metadata,
+    definition='SELECT id, COUNT(*) AS cnt FROM my_core_table GROUP BY id',
+    starrocks_refresh='ASYNC'
+)
+
+# Create the view and MV in the database
+metadata.create_all(engine)
+
+# Query the view or MV like normal tables
+with engine.connect() as conn:
+    rows = conn.execute(text("SELECT * FROM user_view LIMIT 5")).fetchall()
+    print(rows)
+```
+
+You can refer to **[Views Definition Reference](./docs/usage_guide/views.md)** and **[Materialized View Definition Reference](./docs/usage_guide/materialized_views.md)** for more detailed information.
 
 ### Alembic Integration for Schema Migrations
 
 This dialect integrates with Alembic to support automated schema migrations. Here’s a quick-start guide to get you up and running.
+
+#### Generate models from an existing database (Optional)
+
+If you already have tables/views/materialized views in your StarRocks database, you can generate `models.py` (or a consolidated models file) using `sqlacodegen`.
+
+```bash
+sqlacodegen --options include-dialect-options,keep-dialect-types \
+  starrocks://root@localhost:9030 > models.py
+```
+
+Refer to [generating models](./docs/usage_guide/alembic.md#Generating-models-from-an-existing-database-using-sqlacodegen) and [`sqlacodegen`](https://github.com/agronholm/sqlacodegen) for more options and features.
 
 #### 1. Install and Initialize Alembic
 
@@ -140,13 +190,30 @@ pip install "alembic>=1.16"
 alembic init alembic
 ```
 
-#### 2. Configure your Database URL
+#### 2. Configure your Database URL, Logging Info
 
 In `alembic.ini`, set the `sqlalchemy.url` to your StarRocks connection string.
 
 ```ini
 # alembic.ini
-sqlalchemy.url = starrocks://myname:pswd1234@localhost:9030/mydatabase
+sqlalchemy.url = starrocks://root@localhost:9030/mydatabase
+```
+
+It's better to print the log from this `starrocks-sqlalchemy` when runing alembic command. You can add following logging configration in the `alembic.ini` file.
+
+```ini
+# alembic.ini
+[loggers]
+# Append starrocks model at the following line
+# keys = root,sqlalchemy,alembic
+keys = root,sqlalchemy,alembic,starrocks
+
+
+# Add following lines after `[logger_alembic]` section
+[logger_starrocks]
+level = INFO
+handlers =
+qualname = starrocks
 ```
 
 #### 3. Configure your Models for Autogeneration
@@ -157,7 +224,7 @@ In `alembic/env.py`, import your models' metadata and assign it to `target_metad
 # alembic/env.py
 # Add these imports
 from myapp.models import Base  # Adjust to your models' location
-from starrocks.alembic import render
+from starrocks.alembic import render_column_type, include_object_for_view_mv
 
 # ...
 # And set the target_metadata
@@ -167,10 +234,13 @@ def run_migrations_online() -> None:
     # ... inside this function
     context.configure(
         # ...
-        render_item=render.render_column_type # Add this line
+        render_item=render_column_type,            # Add this line (required for column comparison)
+        include_object=include_object_for_view_mv  # Add this line (required for View/MV support)
     )
     # ...
 ```
+
+> **Note**: For advanced filtering options (e.g., excluding temporary tables), see the [Alembic Integration Guide](./docs/usage_guide/alembic.md#Advanced-Custom-Object-Filtering).
 
 #### 4. Generate and Apply Your First Migration
 
@@ -185,8 +255,6 @@ alembic upgrade head
 ```
 
 For a full tutorial on advanced topics like data migrations, handling complex types, and managing views, please refer to the **[Alembic Integration Guide](./docs/usage_guide/alembic.md)**.
-
-For a detailed reference on all StarRocks-specific table attributes and data types, please see the **[Table Definition Reference](./docs/usage_guide/tables.md)**.
 
 ## Contributing
 
@@ -225,10 +293,13 @@ log_cli_format = %(levelname)-5.5s [%(name)s] %(message)s
 To run the integration and system tests, you must have a running StarRocks cluster. The tests require a connection URL to be provided via the `STARROCKS_URL` environment variable.
 
 1. **Set up your StarRocks database:**
-   Ensure your StarRocks instance is running and you have a database available for testing (e.g., `test`).
+   Ensure your StarRocks instance is running and you have a database available for testing (e.g., `test_sqla`).
 
    ```SQL
-   CREATE DATABASE IF NOT EXISTS test;
+   CREATE DATABASE IF NOT EXISTS test_sqla;
+
+   -- set it if you're testing cases on small shared-nothing clusters
+   ADMIN SET FRONTEND CONFIG ("default_replication_num" = "1");
    ```
 
 2. **Configure the connection URL:**
@@ -241,7 +312,7 @@ To run the integration and system tests, you must have a running StarRocks clust
    For example (the default url will be this if you don't set it):
 
    ```bash
-   export STARROCKS_URL="starrocks://myname:pswd1234@127.0.0.1:9030/test"
+   export STARROCKS_URL="starrocks://root@127.0.0.1:9030/test_sqla"
    ```
 
 3. **Run the tests:**

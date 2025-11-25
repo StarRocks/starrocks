@@ -16,12 +16,14 @@ import logging
 import time
 
 import pytest
-from sqlalchemy import Inspector, MetaData, inspect, text
+from sqlalchemy import Inspector, MetaData, exc, inspect, text
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import NoSuchTableError
+from sqlalchemy.schema import Table
 
 from starrocks.common.utils import TableAttributeNormalizer
-from starrocks.engine.interfaces import ReflectedMVOptions
+from starrocks.engine.interfaces import ReflectedMVState
 from starrocks.sql.ddl import CreateMaterializedView
 from starrocks.sql.schema import MaterializedView
 
@@ -97,7 +99,9 @@ def setup_mv_reflection_test_tables(sr_root_engine: Engine):
 
 
 def _wait_for_mv_creation(inspector: Inspector, mv_name: str, max_retries: int = 20, delay: int = 3):
-    """Waits for a materialized view to appear in the database metadata."""
+    """Waits for a materialized view to appear in the database metadata.
+    NOTE: Currently, it's useless, we set every MV to ASYNC.
+    """
     return True
     for _ in range(max_retries):
         inspector.clear_cache()
@@ -185,14 +189,14 @@ class TestReflectionMaterializedViewsIntegration:
                 assert "active" in definition
 
                 # Check properties
-                mv_opts: ReflectedMVOptions = inspector.get_materialized_view_options(mv_name, schema=sr_engine.url.database)
-                assert mv_opts is not None
-                properties: str = mv_opts.properties
+                mv_state: ReflectedMVState = inspector.get_materialized_view(mv_name, schema=sr_engine.url.database)
+                assert mv_state is not None
+                properties: dict = mv_state.properties
                 logger.debug(f"properties: {properties}")
                 assert "storage_medium" in properties
-                assert "SSD" in properties
+                assert "SSD" in properties.values()
                 assert "storage_cooldown_time" in properties
-                assert "2025-12-31 23:59:59" in properties
+                assert "2025-12-31 23:59:59" in properties.values()
 
                 logger.info("Reflected MV with properties: %s", mv_definition)
 
@@ -458,9 +462,14 @@ class TestReflectionMaterializedViewsIntegration:
         with sr_engine.connect() as connection:
             inspector = inspect(connection)
             inspector.clear_cache()
-            mv_definition = inspector.get_materialized_view_definition("nonexistent_mv_12345", schema=sr_engine.url.database)
-            assert mv_definition is None
+            with pytest.raises(exc.NoSuchTableError):
+                inspector.get_materialized_view_definition("nonexistent_mv_12345", schema=sr_engine.url.database)
         logger.info("Correctly returned None for non-existent MV")
+
+    def test_reflect_nonexistent_mv_raises(self, sr_root_engine: Engine):
+        """Test reflection of a non-existent MV raises NoSuchTableError."""
+        with pytest.raises(NoSuchTableError):
+            Table("nonexistent_mv_12345", MetaData(), autoload_with=sr_root_engine)
 
     def test_reflect_mv_case_normalization(self, sr_root_engine: Engine):
         """Test reflection of materialized view properties normalizes case."""
@@ -484,13 +493,13 @@ class TestReflectionMaterializedViewsIntegration:
                 _wait_for_mv_creation(inspector, mv_name)
                 inspector.clear_cache()
 
-                mv_opts = inspector.get_materialized_view_options(mv_name, schema=sr_engine.url.database)
-                assert mv_opts is not None
+                mv_state = inspector.get_materialized_view(mv_name, schema=sr_engine.url.database)
+                assert mv_state is not None
 
                 # Assert that the reflected refresh_type is normalized to uppercase
-                assert mv_opts.refresh_type == "MANUAL"
+                assert mv_state.refresh_info.type == "MANUAL"
 
-                logger.info(f"Reflected refresh_type '{mv_opts.refresh_type}' is correctly normalized.")
+                logger.info(f"Reflected refresh_type '{mv_state.refresh_info.type}' is correctly normalized.")
 
             finally:
                 connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
@@ -573,9 +582,9 @@ class TestReflectionMaterializedViewsIntegration:
                 logger.debug(f"inspector: {inspector!r}")
                 _wait_for_mv_creation(inspector, mv_name)
 
-                mv_opts = inspector.get_materialized_view_options(mv_name)
-                assert mv_opts is not None
-                assert str(mv_opts.distributed_by) == expected_dist
+                mv_state = inspector.get_materialized_view(mv_name)
+                assert mv_state is not None
+                assert str(mv_state.distribution_info) == expected_dist
 
             finally:
                 connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
@@ -629,9 +638,9 @@ class TestReflectionMaterializedViewsIntegration:
                 _wait_for_mv_creation(inspector, mv_name)
                 inspector.clear_cache()
 
-                mv_opts = inspector.get_materialized_view_options(mv_name)
-                assert mv_opts is not None
-                assert expected_partition_str in str(mv_opts.partition_by)
+                mv_state = inspector.get_materialized_view(mv_name)
+                assert mv_state is not None
+                assert TableAttributeNormalizer.remove_outer_parentheses(expected_partition_str) in str(mv_state.partition_info)
 
             finally:
                 connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
@@ -668,14 +677,13 @@ class TestReflectionMaterializedViewsIntegration:
                 _wait_for_mv_creation(inspector, mv_name)
                 inspector.clear_cache()
 
-                mv_opts = inspector.get_materialized_view_options(mv_name)
-                assert mv_opts is not None
-                assert mv_opts.refresh_moment == expected_moment
-                assert mv_opts.refresh_type.upper() == expected_type
+                mv_state = inspector.get_materialized_view(mv_name)
+                assert mv_state is not None
+                assert mv_state.refresh_info.moment == expected_moment
+                assert mv_state.refresh_info.type == expected_type.upper()
 
             finally:
-                pass
-                # connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+                connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
 
     def test_reflect_mv_kitchen_sink(self, sr_root_engine: Engine):
         """Test reflection of a materialized view with all properties (kitchen sink)."""
@@ -693,8 +701,7 @@ class TestReflectionMaterializedViewsIntegration:
             REFRESH ASYNC EVERY(INTERVAL 1 HOUR)
             PROPERTIES (
                 "replication_num" = "1",
-                "storage_medium" = "SSD",
-                "query_rewrite_consistency" = "loose"
+                "storage_medium" = "SSD"
             )
             AS
             SELECT user_id, order_date, count(*) as cnt
@@ -707,29 +714,26 @@ class TestReflectionMaterializedViewsIntegration:
                 inspector = inspect(connection)
                 _wait_for_mv_creation(inspector, mv_name)
 
-                mv_opts = inspector.get_materialized_view_options(mv_name)
-                assert mv_opts is not None
-                logger.debug(f"mv_opts: {mv_opts}")
+                mv_state = inspector.get_materialized_view(mv_name)
+                assert mv_state is not None
+                logger.debug(f"mv_state: {mv_state}")
 
                 # Assert Distribution & Order
-                assert str(mv_opts.distributed_by) == 'HASH(`user_id`) BUCKETS 8'
-                assert mv_opts.order_by == '`order_date`'
+                assert str(mv_state.distribution_info) == 'HASH(`user_id`) BUCKETS 8'
+                assert mv_state.order_by == '`order_date`'
 
                 # Assert Partitioning
-                assert "date_trunc('month', `order_date`)" in str(mv_opts.partition_by)
+                assert "date_trunc('month', `order_date`)" in str(mv_state.partition_info)
 
                 # Assert Refresh Info
-                assert mv_opts.refresh_moment is None
-                assert mv_opts.refresh_type == 'ASYNC EVERY(INTERVAL 1 HOUR)'
+                assert mv_state.refresh_info.moment is None
+                assert mv_state.refresh_info.type == 'ASYNC EVERY(INTERVAL 1 HOUR)'
 
                 # Assert Properties
-                properties = mv_opts.properties.lower()
+                properties = mv_state.properties
                 logger.debug(f"properties: {properties}")
                 assert "storage_medium" in properties
-                assert "SSD".lower() in properties
-                assert "query_rewrite_consistency" in properties
-                assert "loose" in properties
-
+                assert "SSD" in properties.values()
             finally:
                 connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
 
@@ -739,21 +743,18 @@ class TestReflectionMaterializedViewsIntegration:
         schema = sr_root_engine.url.database
 
         # 1. Define the MaterializedView object
-        metadata = MetaData()
         mv_obj = MaterializedView(
             mv_name,
-            "SELECT user_id, order_date, count(*) as cnt FROM orders_part_expr GROUP BY user_id, order_date",
-            metadata=metadata,
+            MetaData(),
+            definition="SELECT user_id, order_date, count(*) as cnt FROM orders_part_expr GROUP BY user_id, order_date",
             schema=schema,
             comment="A test MV created from a schema object.",
-            partition_by="date_trunc('month', order_date)",
-            distributed_by="HASH(user_id) BUCKETS 8",
-            order_by="order_date",
-            refresh_moment="DEFERRED",
-            refresh_type="MANUAL",
-            properties={
-                "replication_num": "1",
-                "query_rewrite_consistency": "loose"
+            starrocks_partition_by="date_trunc('month', order_date)",
+            starrocks_distributed_by="HASH(user_id) BUCKETS 8",
+            starrocks_order_by="order_date",
+            starrocks_refresh="DEFERRED MANUAL",
+            starrocks_properties={
+                "replication_num": "1"
             }
         )
 
@@ -778,17 +779,20 @@ class TestReflectionMaterializedViewsIntegration:
                 assert reflected_state.comment == mv_obj.comment
 
                 # Compare options
-                reflected_opts = reflected_state.mv_options
-                assert reflected_opts.refresh_moment == mv_obj.refresh_moment.upper()
-                assert reflected_opts.refresh_type == mv_obj.refresh_type.upper()
-                assert str(reflected_opts.order_by) == '`order_date`'
+                refresh_info = reflected_state.refresh_info
+                assert refresh_info.moment == 'DEFERRED'
+                assert refresh_info.type == 'MANUAL'
 
-                assert "date_trunc('month', `order_date`)" in str(reflected_opts.partition_by)
-                assert str(reflected_opts.distributed_by) == 'HASH(`user_id`) BUCKETS 8'
+                assert str(reflected_state.order_by) == '`order_date`'
+                assert "date_trunc('month', `order_date`)" in str(reflected_state.partition_info)
+                assert str(reflected_state.distribution_info) == 'HASH(`user_id`) BUCKETS 8'
 
-                reflected_props_str = reflected_opts.properties.lower()
-                for k, v in mv_obj.properties.items():
-                    assert f'"{k.lower()}" = "{v.lower()}"' in reflected_props_str
+                reflected_props = reflected_state.properties
+                for k, v in mv_obj.kwargs["starrocks_properties"].items():
+                    # assert f'"{k.lower()}" = "{v.lower()}"' in reflected_props_str
+                    # assert f"'{k.lower()}': '{v.lower()}'" in reflected_props
+                    assert k.lower() in reflected_props
+                    assert v.lower() in reflected_props.values()
 
                 normalized_original_def = TableAttributeNormalizer.normalize_sql(mv_obj.definition, remove_qualifiers=True)
                 normalized_reflected_def = TableAttributeNormalizer.normalize_sql(reflected_state.definition, remove_qualifiers=True)

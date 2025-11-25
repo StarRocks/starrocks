@@ -14,7 +14,7 @@
 
 from typing import Any, Dict, Optional
 
-from sqlalchemy.sql.ddl import DDLElement
+from sqlalchemy.sql.ddl import ExecutableDDLElement
 
 from .schema import MaterializedView, View
 
@@ -24,14 +24,14 @@ from .schema import MaterializedView, View
 # we can use the `compiles` method to identify the DDL statement.
 
 
-class AlterView(DDLElement):
+class AlterView(ExecutableDDLElement):
     """Represents an ALTER VIEW DDL statement."""
     __visit_name__ = "alter_view"
     def __init__(self, element: View) -> None:
         self.element = element
 
 
-class CreateView(DDLElement):
+class CreateView(ExecutableDDLElement):
     """Represents a CREATE VIEW DDL statement."""
     __visit_name__ = "create_view"
     def __init__(self, element: View, or_replace: bool = False, if_not_exists: bool = False) -> None:
@@ -41,7 +41,7 @@ class CreateView(DDLElement):
         self.security = element.security
 
 
-class DropView(DDLElement):
+class DropView(ExecutableDDLElement):
     """Represents a DROP VIEW DDL statement."""
     __visit_name__ = "drop_view"
     def __init__(self, element: View, if_exists: bool = False) -> None:
@@ -49,22 +49,39 @@ class DropView(DDLElement):
         self.if_exists = if_exists
 
 
-class AlterMaterializedView(DDLElement):
-    """Represents an ALTER MATERIALIZED VIEW DDL statement."""
+class AlterMaterializedView(ExecutableDDLElement):
+    """Represents an ALTER MATERIALIZED VIEW statement."""
+
     __visit_name__ = "alter_materialized_view"
-    def __init__(self, element: MaterializedView) -> None:
-        self.element = element
+
+    def __init__(
+        self,
+        mv_name: str,
+        schema: Optional[str] = None,
+        refresh: Optional[str] = None,
+        properties: Optional[Dict[str, str]] = None,
+    ):
+        """
+        Only supports altering mutable attributes:
+        - refresh: ALTER MATERIALIZED VIEW ... REFRESH <new_scheme>
+        - properties: ALTER MATERIALIZED VIEW ... SET ("<key>" = "<value>")
+        """
+        self.mv_name = mv_name
+        self.schema = schema
+        self.refresh = refresh
+        self.properties = properties
 
 
-class CreateMaterializedView(DDLElement):
+class CreateMaterializedView(ExecutableDDLElement):
     """Represents a CREATE MATERIALIZED VIEW DDL statement."""
     __visit_name__ = "create_materialized_view"
-    def __init__(self, element: MaterializedView, if_not_exists: bool = False) -> None:
+    def __init__(self, element: MaterializedView, or_replace: bool = False, if_not_exists: bool = False) -> None:
         self.element = element
+        self.or_replace = or_replace
         self.if_not_exists = if_not_exists
 
 
-class DropMaterializedView(DDLElement):
+class DropMaterializedView(ExecutableDDLElement):
     """Represents a DROP MATERIALIZED VIEW DDL statement."""
     __visit_name__ = "drop_materialized_view"
     def __init__(self, element: MaterializedView, if_exists: bool = False) -> None:
@@ -74,7 +91,7 @@ class DropMaterializedView(DDLElement):
 
 # DDL classes ordered according to StarRocks grammar:
 # engine → key → (comment) → partition → distribution → order by → properties
-class AlterTableEngine(DDLElement):
+class AlterTableEngine(ExecutableDDLElement):
     """Represent an ALTER TABLE ENGINE statement for StarRocks."""
 
     __visit_name__ = "alter_table_engine"
@@ -90,7 +107,7 @@ class AlterTableEngine(DDLElement):
         self.engine = engine
 
 
-class AlterTableKey(DDLElement):
+class AlterTableKey(ExecutableDDLElement):
     """Represent an ALTER TABLE KEY statement for StarRocks."""
 
     __visit_name__ = "alter_table_key"
@@ -108,7 +125,7 @@ class AlterTableKey(DDLElement):
         self.key_columns = key_columns
 
 
-class AlterTablePartition(DDLElement):
+class AlterTablePartition(ExecutableDDLElement):
     """Represent an ALTER TABLE PARTITION BY statement for StarRocks."""
 
     __visit_name__ = "alter_table_partition"
@@ -124,7 +141,7 @@ class AlterTablePartition(DDLElement):
         self.partition_by = partition_by
 
 
-class AlterTableDistribution(DDLElement):
+class AlterTableDistribution(ExecutableDDLElement):
     """Represent an ALTER TABLE DISTRIBUTED BY statement for StarRocks."""
 
     __visit_name__ = "alter_table_distribution"
@@ -150,7 +167,7 @@ class AlterTableDistribution(DDLElement):
         self.buckets = buckets
 
 
-class AlterTableOrder(DDLElement):
+class AlterTableOrder(ExecutableDDLElement):
     """Represent an ALTER TABLE ORDER BY statement for StarRocks."""
 
     __visit_name__ = "alter_table_order"
@@ -166,7 +183,7 @@ class AlterTableOrder(DDLElement):
         self.order_by = order_by
 
 
-class AlterTableProperties(DDLElement):
+class AlterTableProperties(ExecutableDDLElement):
     """Represent an ALTER TABLE SET (...) statement for StarRocks properties."""
 
     __visit_name__ = "alter_table_properties"

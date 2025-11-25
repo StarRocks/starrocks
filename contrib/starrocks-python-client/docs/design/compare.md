@@ -1,6 +1,6 @@
 # Alembic Schema Comparison Design
 
-This document outlines the design of the schema comparison (or "diffing") process used by Alembic's `autogenerate` feature, focusing on the dispatch mechanism and how the `sqlalchemy-starrocks` dialect extends it.
+This document outlines the design of the schema comparison (or "diffing") process used by Alembic's `autogenerate` feature, focusing on the dispatch mechanism and how the `starrocks-sqlalchemy` dialect extends it.
 
 ## Alembic's `autogenerate` Workflow
 
@@ -22,7 +22,7 @@ This makes it critical for a dialect's comparator to first check if it's operati
 
 ### The `comparators_dispatch_for_starrocks` Decorator
 
-To solve this, the `sqlalchemy-starrocks` dialect uses a custom decorator, `comparators_dispatch_for_starrocks`. This is a wrapper around Alembic's standard `@comparators.dispatch_for` that adds a crucial check at the beginning of each comparator function:
+To solve this, the `starrocks-sqlalchemy` dialect uses a custom decorator, `comparators_dispatch_for_starrocks`. This is a wrapper around Alembic's standard `@comparators.dispatch_for` that adds a crucial check at the beginning of each comparator function:
 
 ```python
 if autogen_context.dialect.name != "starrocks":
@@ -81,13 +81,13 @@ Here is a flowchart illustrating the nested dispatch process:
 
 ## StarRocks Dialect Extensions
 
-The `sqlalchemy-starrocks` dialect hooks into this dispatch process by registering its own set of comparators in the `starrocks.alembic.compare` module.
+The `starrocks-sqlalchemy` dialect hooks into this dispatch process by registering its own set of comparators in the `starrocks.alembic.compare` module.
 
 > To remove the impaction on other type of databases when there are several Alembic plugins be use, we use a custom decorator, which will only handle for StarRocks dialect.
 
 ### Accessing Dialect-Specific Options
 
-A key implementation detail is how SQLAlchemy handles dialect-specific keyword arguments (like `starrocks_PARTITION_BY`). Whether a `Table` object is created by the user (e.g., `Table('my_table', metadata, starrocks_PARTITION_BY=...)`, or ORM style) or reflected from the database by the inspector, SQLAlchemy normalizes these options.
+A key implementation detail is how SQLAlchemy handles dialect-specific keyword arguments (like `starrocks_partition_by`). Whether a `Table` object is created by the user (e.g., `Table('my_table', metadata, starrocks_partition_by=...)`, or ORM style) or reflected from the database by the inspector, SQLAlchemy normalizes these options.
 
 All `starrocks_` prefixed arguments are collected and stored in a dictionary accessible via `table.dialect_options['starrocks']`.
 
@@ -112,6 +112,6 @@ This provides the custom comparator functions with a single, consistent location
 
 - **`compare_view(...)`**: Registered for the `"view"` type. It compares the `SELECT` definition of views.
 - **`compare_mv(...)`**: Registered for the `"materialized_view"` type.
-- **`compare_starrocks_column(...)`**: Registered for the `"column"` type. It retrieves StarRocks-specific column-level attributes from the `column.dialect_options['starrocks']` dictionary, like `starrocks_AGG_TYPE` (aggregate type) for `AGGREGATE KEY` tables. Other column properties are still handled by Alembic's generic comparator.
+- **`compare_starrocks_column(...)`**: Registered for the `"column"` type. It retrieves StarRocks-specific column-level attributes from the `column.dialect_options['starrocks']` dictionary, like `starrocks_agg_type` (aggregate type) for `AGGREGATE KEY` tables. Other column properties are still handled by Alembic's generic comparator.
 
 By implementing these functions, the dialect ensures that StarRocks-specific schema features are correctly compared during the `autogenerate` process.
