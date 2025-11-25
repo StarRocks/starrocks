@@ -104,7 +104,148 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         return sum;
     }
 
+<<<<<<< HEAD
     HashSet<T> set;
+=======
+    MyHashSet set;
+};
+
+struct AdaptiveSliceHashSet {
+    using KeyType = typename SliceHashSet::key_type;
+
+    AdaptiveSliceHashSet() { set = std::make_shared<SliceHashSetWithAggStateAllocator>(); }
+
+    void try_convert_to_two_level(MemPool* mem_pool) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold) {
+            two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
+            two_level_set->reserve(set->capacity());
+            two_level_set->insert(set->begin(), set->end());
+            set.reset();
+        }
+    }
+
+    void emplace(MemPool* mem_pool, Slice raw_key) {
+        KeyType key(raw_key);
+        if (set != nullptr) {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set->lazy_emplace(key, [&](const auto& ctor) {
+#else
+            set->template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+                try_convert_to_two_level(mem_pool);
+            });
+        } else {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            two_level_set->lazy_emplace(key, [&](const auto& ctor) {
+#else
+            two_level_set->template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+            });
+        }
+    }
+
+    void lazy_emplace_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
+        KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
+        if (set != nullptr) {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
+            set->template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+                try_convert_to_two_level(mem_pool);
+            });
+        } else {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            two_level_set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
+            two_level_set->template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+            });
+        }
+    }
+
+    void prefetch_hash(size_t hash_value) {
+        if (set != nullptr) {
+            set->prefetch_hash(hash_value);
+        } else {
+            two_level_set->prefetch_hash(hash_value);
+        }
+    }
+
+    int64_t serialize_size() const {
+        size_t size = 0;
+        if (set != nullptr) {
+            for (auto& key : *set) {
+                size += key.size + sizeof(uint32_t);
+            }
+        } else {
+            for (auto& key : *two_level_set) {
+                size += key.size + sizeof(uint32_t);
+            }
+        }
+        return size;
+    }
+
+    void serialize(uint8_t* dst) const {
+        if (set != nullptr) {
+            for (auto& key : *set) {
+                auto size = (uint32_t)key.size;
+                memcpy(dst, &size, sizeof(uint32_t));
+                dst += sizeof(uint32_t);
+                memcpy(dst, key.data, key.size);
+                dst += key.size;
+            }
+        } else {
+            for (auto& key : *two_level_set) {
+                auto size = (uint32_t)key.size;
+                memcpy(dst, &size, sizeof(uint32_t));
+                dst += sizeof(uint32_t);
+                memcpy(dst, key.data, key.size);
+                dst += key.size;
+            }
+        }
+    }
+
+    void fill_vector(std::vector<std::string>& values) const {
+        if (set != nullptr) {
+            for (const auto& v : *set) {
+                values.emplace_back(v.data, v.size);
+            }
+        } else {
+            for (const auto& v : *two_level_set) {
+                values.emplace_back(v.data, v.size);
+            }
+        }
+    }
+
+    int64_t size() const { return distinct_size; }
+
+    std::shared_ptr<SliceHashSetWithAggStateAllocator> set;
+    std::shared_ptr<SliceTwoLevelHashSetWithAggStateAllocator> two_level_set;
+    int64_t distinct_size = 0;
+
+    HashOnSliceWithHash hash_function() const { return HashOnSliceWithHash(); }
+>>>>>>> 5b3695ab6b ([BugFix] Multi_distinct_count using Two-level hashset misses updating distinct_size (#65916))
 };
 
 template <LogicalType LT, LogicalType SumLT>
