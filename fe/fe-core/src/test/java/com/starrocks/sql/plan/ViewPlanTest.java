@@ -1803,7 +1803,6 @@ public class ViewPlanTest extends PlanTestBase {
     /**
      * Test that querying a view still works after the source table has new columns added.
      * Previously, this would throw IllegalStateException when enable_view_based_mv_rewrite=true.
-     * See: https://github.com/StarRocks/starrocks/issues/xxx
      */
     @Test
     public void testViewWithAlteredSourceTable() throws Exception {
