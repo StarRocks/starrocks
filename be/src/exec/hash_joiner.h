@@ -22,7 +22,7 @@
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/spill_process_channel.h"
