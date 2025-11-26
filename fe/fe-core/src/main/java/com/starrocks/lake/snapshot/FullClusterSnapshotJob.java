@@ -18,12 +18,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeAggregator;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -34,6 +38,7 @@ import com.starrocks.thrift.TBackend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -160,7 +165,39 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
         // send delete expire partition tasks
     }
 
+    private long getVirtualTabletId() throws StarRocksException {
+        String svName = getStorageVolumeName();
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(svName);
+        if (sv == null) {
+            throw new StarRocksException("storage volume not found: " + svName);
+        }
+        if (sv.getVTabletId() == -1) {
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            FilePathInfo pathInfo = null;
+            try {
+                pathInfo = starOSAgent.allocateFilePath(sv.getId());
+            } catch (Exception e) {
+                throw new StarRocksException("failed to allocate file path for storage volume: " + svName, e);
+            }
+            FileCacheInfo cacheInfo =
+                    FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
+            
+            long shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
+            Map<String, String> properties = new HashMap<>();
+            // create a new id as tablet id
+            long vTabletId = GlobalStateMgr.getCurrentState().getNextId();
+            starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
+                            WarehouseManager.DEFAULT_RESOURCE);
+            sv.setVTabletGroupId(shardGroupId);
+            sv.setVTabletId(vTabletId);
+            return vTabletId;
+        } else {
+            return sv.getVTabletId();
+        }
+    }
+
     private void createClusterSnapshotTasks() throws StarRocksException {
+        long vTabletId = getVirtualTabletId();
         for (PartitionVersionInfo partition : snapshotDiff.getAddedPartitions()) {
             Map<TBackend, List<Long>> nodeToTablets = Maps.newHashMap();
             long aggregatorNodeId = 0;
@@ -171,7 +208,7 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
             PartitionKey partitionKey = partition.getPartitionKey();
             ClusterSnapshotTask task = new ClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(), 
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), -1, 
-                    partition.getVersion(), 0);
+                    partition.getVersion(), vTabletId);
             task.setNodeToTablets(nodeToTablets);
             lakeSnapshotBatchTask.addTask(task);
         }
@@ -187,7 +224,7 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
             PartitionKey partitionKey = partition.getCurrentPartitionInfo().getPartitionKey();
             ClusterSnapshotTask task = new ClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(), 
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(),
-                    getId(), partition.getPrevVersion(), partition.getCurrentPartitionInfo().getVersion(), 0);
+                    getId(), partition.getPrevVersion(), partition.getCurrentPartitionInfo().getVersion(), vTabletId);
             task.setNodeToTablets(nodeToTablets);
             lakeSnapshotBatchTask.addTask(task);
         }

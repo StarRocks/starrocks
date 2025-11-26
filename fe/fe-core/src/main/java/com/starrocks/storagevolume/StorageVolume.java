@@ -81,6 +81,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("e")
     private boolean enabled;
 
+    @SerializedName("vt")
+    private long vTabletId = -1L;
+
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
+
     public static String CREDENTIAL_MASK = "******";
 
     private String dumpMaskedParams(Map<String, String> params) {
@@ -166,6 +172,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public Boolean getEnabled() {
         return enabled;
+    }
+
+    public long getVTabletId() {
+        return vTabletId;
+    }
+
+    public void setVTabletId(long vTabletId) {
+        this.vTabletId = vTabletId;
+    }
+
+    public long getVTabletGroupId() {
+        return vTabletGroupId;
+    }
+
+    public void setVTabletGroupId(long vTabletGroupId) {
+        this.vTabletGroupId = vTabletGroupId;
     }
 
     public void setComment(String comment) {

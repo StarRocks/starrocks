@@ -266,6 +266,17 @@ public class StarOSAgent {
         }
     }
 
+    public FilePathInfo allocateFilePath(String storageVolumeId) throws DdlException {
+        prepare();
+        try {
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, "");
+            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate file path from StarMgr, error: " + e.getMessage());
+        }
+    }
+
     public boolean registerAndBootstrapService() {
         try {
             client.registerService("starrocks");
@@ -591,6 +602,49 @@ public class StarOSAgent {
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
+    }
+
+    public long createShardGroupForVirtualTablet() throws DdlException {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfos;
+        try {
+            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
+                    .setPolicy(PlacementPolicy.SPREAD)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build());
+            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
+        }
+        return shardGroupInfos.get(0).getGroupId();
+    }
+
+    public void createShardWithVirtualTabletId(FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                               @NotNull Map<String, String> properties, long vTabletId,
+                                              ComputeResource computeResource) throws DdlException {
+        prepare();  
+        Preconditions.checkState(vTabletId != 0);
+        long workerGroupId = computeResource.getWorkerGroupId();
+        List<ShardInfo> shardInfos = null;
+        try {
+            List<CreateShardInfo> createShardInfoList = new ArrayList<>(1);
+            CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+            builder.setReplicaCount(1)
+                    .addGroupIds(groupId)
+                    .setPathInfo(pathInfo)
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties)
+                    .setScheduleToWorkerGroup(workerGroupId);
+            builder.setShardId(vTabletId);
+            createShardInfoList.add(builder.build());
+            shardInfos = client.createShard(serviceId, createShardInfoList);
+            LOG.debug("Create fake shards success. shard infos: {}", shardInfos);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard with virtual tablet id. error: " + e.getMessage());
+        }
+        Preconditions.checkState(shardInfos.size() == 1);
     }
 
     public List<Long> listShard(long groupId) throws DdlException {

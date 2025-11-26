@@ -140,7 +140,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
         String snapshotName = AUTOMATED_NAME_PREFIX + String.valueOf(createTimeMs);
-        ClusterSnapshotJob job = new MetaClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
+        ClusterSnapshotJob job = new FullClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
         job.logJob();
 
         addSnapshotJob(job);
