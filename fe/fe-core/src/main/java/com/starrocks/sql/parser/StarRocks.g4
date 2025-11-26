@@ -945,6 +945,8 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | addPartitionColumnClause
+    | dropPartitionColumnClause
     | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
@@ -1091,12 +1093,20 @@ addColumnClause
     : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
     ;
 
+addPartitionColumnClause
+    : ADD PARTITION COLUMN expressionList
+    ;
+
 addColumnsClause
     : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
     ;
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+dropPartitionColumnClause
+    : DROP PARTITION COLUMN expressionList
     ;
 
 modifyColumnClause
