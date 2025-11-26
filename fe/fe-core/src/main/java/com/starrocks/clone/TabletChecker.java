@@ -151,7 +151,7 @@ public class TabletChecker extends FrontendDaemon {
     }
 
     public TabletChecker(TabletScheduler tabletScheduler, TabletSchedulerStat stat) {
-        super("tablet checker", Config.tablet_sched_checker_interval_seconds * 1000L);
+        super("tablet-checker", Config.tablet_sched_checker_interval_seconds * 1000L);
         this.tabletScheduler = tabletScheduler;
         this.stat = stat;
     }

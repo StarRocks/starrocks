@@ -39,7 +39,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController,
             CheckpointController starMgrController) {
-        super("cluster_snapshot_checkpoint_scheduler", 10L);
+        super("cluster-snapshot-checkpoint-scheduler", 10L);
         this.feController = feController;
         this.starMgrController = starMgrController;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();

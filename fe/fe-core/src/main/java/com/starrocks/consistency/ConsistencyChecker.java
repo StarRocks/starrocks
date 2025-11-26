@@ -111,7 +111,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     private final Map<Long, Integer> creatingTableCounters = new ConcurrentHashMap<>();
 
     public ConsistencyChecker() {
-        super("consistency checker");
+        super("consistency-checker");
 
         jobs = Maps.newHashMap();
         jobsLock = new ReentrantReadWriteLock();

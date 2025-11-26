@@ -29,7 +29,7 @@ public class SafeModeChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(SafeModeChecker.class);
 
     public SafeModeChecker() {
-        super("safe mode checker", Config.safe_mode_checker_interval_sec * 1000);
+        super("safe-mode-checker", Config.safe_mode_checker_interval_sec * 1000);
     }
 
     @Override

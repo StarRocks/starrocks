@@ -89,7 +89,7 @@ public class HeartbeatMgr extends FrontendDaemon {
     private final ExecutorService executor;
 
     public HeartbeatMgr(boolean needRegisterMetric) {
-        super("heartbeat mgr", Config.heartbeat_timeout_second * 1000L);
+        super("heartbeat-mgr", Config.heartbeat_timeout_second * 1000L);
         this.executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
     }

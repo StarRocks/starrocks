@@ -51,7 +51,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
     private ConnectContext connect;
 
     public SPMAutoCapturer() {
-        super("SPMAutoCapturer");
+        super("spm-auto-capturer");
     }
 
     @Override

@@ -50,7 +50,7 @@ public class DynamicTabletJobMgr extends FrontendDaemon implements GsonPostProce
     protected final Map<Long, DynamicTabletContext> dynamicTabletContexts = Maps.newConcurrentMap();
 
     public DynamicTabletJobMgr() {
-        super("DynamicTabletJobMgr", Config.dynamic_tablet_job_scheduler_interval_ms);
+        super("dynamic-tablet-job-mgr", Config.dynamic_tablet_job_scheduler_interval_ms);
     }
 
     public DynamicTabletJob getDynamicTabletJob(long dynamicJobId) {

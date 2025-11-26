@@ -32,7 +32,7 @@ public class LoadEtlChecker extends FrontendDaemon {
     private LoadMgr loadManager;
 
     public LoadEtlChecker(LoadMgr loadManager) {
-        super("Load etl checker", Config.load_checker_interval_second * 1000L);
+        super("load-etl-checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }
 

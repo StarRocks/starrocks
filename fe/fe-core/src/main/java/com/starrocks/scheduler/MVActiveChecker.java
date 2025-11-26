@@ -53,7 +53,7 @@ public class MVActiveChecker extends FrontendDaemon {
     private static final Map<MvId, MvActiveInfo> MV_ACTIVE_INFO = Maps.newConcurrentMap();
 
     public MVActiveChecker() {
-        super("MVActiveChecker", Config.mv_active_checker_interval_seconds * 1000);
+        super("mv-active-checker", Config.mv_active_checker_interval_seconds * 1000);
     }
 
     public static final String MV_BACKUP_INACTIVE_REASON = "it's in backup and will be activated after restore if possible";

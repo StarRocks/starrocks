@@ -41,7 +41,7 @@ public class TabletCollector extends FrontendDaemon {
     private final Set<Long> queuedBeIds;
 
     public TabletCollector() {
-        super("TabletCollector", CHECK_INTERVAL_MS);
+        super("tablet-collector", CHECK_INTERVAL_MS);
         collectQueue = new PriorityQueue<>();
         queuedBeIds = new HashSet<>();
     }

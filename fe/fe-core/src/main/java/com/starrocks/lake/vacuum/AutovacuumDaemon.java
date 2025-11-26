@@ -72,7 +72,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
 
     public AutovacuumDaemon() {
-        super("autovacuum", 2000);
+        super("auto-vacuum", 2000);
     }
 
     @Override

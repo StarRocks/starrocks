@@ -90,7 +90,7 @@ public class CompactionScheduler extends Daemon {
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
                         @NotNull String disableIdsStr) {
-        super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
+        super("compaction-dispatch", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;
         this.systemInfoService = systemInfoService;
         this.transactionMgr = transactionMgr;

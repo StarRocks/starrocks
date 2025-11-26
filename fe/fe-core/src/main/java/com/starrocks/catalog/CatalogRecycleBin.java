@@ -119,7 +119,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     protected Set<Long> enableEraseLater;
 
     public CatalogRecycleBin() {
-        super("recycle bin");
+        super("recycle-bin");
         idToDatabase = Maps.newHashMap();
         idToTableInfo = HashBasedTable.create();
         nameToTableInfo = HashBasedTable.create();

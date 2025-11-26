@@ -48,7 +48,7 @@ public class PortConnectivityChecker extends FrontendDaemon {
     }
 
     public PortConnectivityChecker() {
-        super("PortConnectivityChecker");
+        super("port-connectivity-checker");
         executor = ThreadPoolManager.newDaemonFixedThreadPool(4,
                 64, "port-connectivity-checker", true);
     }
