@@ -32,7 +32,7 @@ public class DatabaseQuotaRefresher extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(DatabaseQuotaRefresher.class);
 
     public DatabaseQuotaRefresher() {
-        super("DatabaseQuotaRefresher", Config.db_used_data_quota_update_interval_secs * 1000L);
+        super("database-quota-refresher", Config.db_used_data_quota_update_interval_secs * 1000L);
     }
 
     @Override

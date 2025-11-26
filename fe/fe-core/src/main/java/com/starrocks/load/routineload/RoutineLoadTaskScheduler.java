@@ -90,12 +90,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
-        super("Routine load task scheduler", 0);
+        super("routine-load-task-scheduler", 0);
         this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
     public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
-        super("Routine load task scheduler", 0);
+        super("routine-load-task-scheduler", 0);
         this.routineLoadManager = routineLoadManager;
     }
 

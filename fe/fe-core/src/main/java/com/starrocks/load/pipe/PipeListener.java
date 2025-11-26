@@ -33,7 +33,7 @@ public class PipeListener extends FrontendDaemon {
     private PipeManager pipeManager;
 
     public PipeListener(PipeManager pm) {
-        super("PipeListener", Config.pipe_listener_interval_millis);
+        super("pipe-listener", Config.pipe_listener_interval_millis);
         this.pipeManager = pm;
     }
 
