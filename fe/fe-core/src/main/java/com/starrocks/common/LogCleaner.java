@@ -53,7 +53,8 @@ public class LogCleaner extends FrontendDaemon {
             "fe.dump.log",
             "fe.big_query.log",
             "fe.profile.log",
-            "fe.features.log"
+            "fe.features.log",
+            "fe.gc.log"
     };
 
     /**
@@ -155,78 +156,49 @@ public class LogCleaner extends FrontendDaemon {
 
     private int cleanLogsInDirectory(LogDirectory logDir, File dir) {
         int cleanedCount = 0;
-        int maxIterations = 1000; // Safety limit to prevent infinite loop
-        int iteration = 0;
-        
-        double diskUsagePercent = getDiskUsagePercent(dir);
-        
-        while (diskUsagePercent >= Config.log_cleaner_disk_usage_target && iteration < maxIterations) {
-            iteration++;
+
+        List<LogFileInfo> logFiles = collectLogFilesInDirectory(dir);
             
-            // Collect all log files in this directory (scan all log types)
-            List<LogFileInfo> logFiles = collectLogFilesInDirectory(dir);
-            
-            if (logFiles.isEmpty()) {
-                LOG.debug("No log files found in directory: {}", logDir.getDirPath());
-                break;
-            }
-
-            // Sort by modification time (oldest first)
-            logFiles.sort(Comparator.comparingLong(LogFileInfo::getModificationTime));
-
-            boolean deletedAny = false;
-
-            // Delete the oldest file
-            for (LogFileInfo fileInfo : logFiles) {
-                File fileToDelete = fileInfo.getFile();
-                
-                // Verify file still exists (may have been deleted externally)
-                if (!fileToDelete.exists()) {
-                    continue;
-                }
-
-                // Check audit log retention policy (for any audit log file, regardless of directory)
-                if (isAuditLogFile(fileToDelete.getName()) && !canDeleteAuditLog(fileInfo)) {
-                    LOG.debug("Skipping audit log file {} (within retention period)",
-                            fileToDelete.getName());
-                    continue;
-                }
-
-                // Delete the file
-                long fileSize = fileToDelete.length();
-                if (fileToDelete.delete()) {
-                    LOG.info("Deleted log file: {} (size: {} bytes)", 
-                            fileToDelete.getAbsolutePath(), fileSize);
-                    deletedAny = true;
-                    cleanedCount++;
-                    break; // Only delete one file per iteration
-                } else {
-                    LOG.warn("Failed to delete log file: {}", fileToDelete.getAbsolutePath());
-                }
-            }
-
-            if (!deletedAny) {
-                // No more files can be deleted (all are protected or empty)
-                LOG.warn("Cannot delete more log files in directory {}. Disk usage: {}%, Target: {}%",
-                        logDir.getDirPath(), String.format("%.2f", diskUsagePercent), 
-                        Config.log_cleaner_disk_usage_target);
-                break;
-            }
-
-            // Recheck disk usage for this directory
-            diskUsagePercent = getDiskUsagePercent(dir);
-            LOG.debug("Disk usage after cleanup iteration {} for directory {}: {}%", 
-                    iteration, logDir.getDirPath(), String.format("%.2f", diskUsagePercent));
+        if (logFiles.isEmpty()) {
+            LOG.debug("No log files found in directory: {}", logDir.getDirPath());
         }
-        
-        if (iteration >= maxIterations) {
-            LOG.warn("Reached maximum iterations ({}) in log cleanup for directory {}", 
-                    maxIterations, logDir.getDirPath());
+
+        // Sort by modification time (oldest first)
+        logFiles.sort(Comparator.comparingLong(LogFileInfo::getModificationTime));
+        for (LogFileInfo fileInfo : logFiles) {
+            File fileToDelete = fileInfo.getFile();
+            
+            // Verify file still exists (may have been deleted externally)
+            if (!fileToDelete.exists()) {
+                continue;
+            }
+
+            // Check audit log retention policy (for any audit log file, regardless of directory)
+            if (isAuditLogFile(fileToDelete.getName()) && !canDeleteAuditLog(fileInfo)) {
+                LOG.debug("Skipping audit log file {} (within retention period)",
+                        fileToDelete.getName());
+                continue;
+            }
+
+            // Delete the file
+            long fileSize = fileToDelete.length();
+            if (fileToDelete.delete()) {
+                LOG.info("Deleted log file: {} (size: {} bytes)", 
+                        fileToDelete.getAbsolutePath(), fileSize);
+                cleanedCount++;
+            } else {
+                LOG.warn("Failed to delete log file: {}", fileToDelete.getAbsolutePath());
+            }
+
+            double diskUsagePercent = getDiskUsagePercent(dir);
+            if (diskUsagePercent < Config.log_cleaner_disk_usage_target) {
+                break;
+            }
         }
 
         if (cleanedCount > 0) {
             LOG.info("Log cleanup completed for directory {}. Deleted {} files. Final disk usage: {}%",
-                    logDir.getDirPath(), cleanedCount, String.format("%.2f", diskUsagePercent));
+                    logDir.getDirPath(), cleanedCount, String.format("%.2f", getDiskUsagePercent(dir)));
         }
 
         return cleanedCount;
@@ -284,8 +256,8 @@ public class LogCleaner extends FrontendDaemon {
     }
 
     private boolean matchesLogPattern(String fileName, String pattern) {
-        // Match exact name or name with suffix (e.g., fe.log, fe.log.20240101-1, fe.log.20240101-1.gz)
-        return fileName.equals(pattern) || fileName.startsWith(pattern + ".");
+        // do not remove the current writing log file.
+        return fileName.startsWith(pattern + ".");
     }
 
     private boolean isAuditLogFile(String fileName) {
