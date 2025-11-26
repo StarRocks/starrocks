@@ -218,7 +218,6 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
 Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partition_id, TTransactionId transaction_id,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery,
                               bool is_shadow) {
-    DCHECK(tablet != nullptr);
     if (tablet == nullptr) {
         return Status::InternalError("tablet not exist during commit txn");
     }
