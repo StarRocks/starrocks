@@ -1768,6 +1768,7 @@ declare -a all_packages=(
     libdivide
     flamegraph
     tenann
+    pprof
 )
 
 # Machine specific packages
