@@ -14,13 +14,17 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
 public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
@@ -1793,6 +1797,54 @@ public class ViewPlanTest extends PlanTestBase {
 
         starRocksAssert.dropView("v_l");
         starRocksAssert.dropView("v_r");
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
+    }
+
+    /**
+     * Test that querying a view still works after the source table has new columns added.
+     * Previously, this would throw IllegalStateException when enable_view_based_mv_rewrite=true.
+     * See: https://github.com/StarRocks/starrocks/issues/xxx
+     */
+    @Test
+    public void testViewWithAlteredSourceTable() throws Exception {
+        // Create a test table
+        String tableName = "test_view_alter_table";
+        starRocksAssert.withTable("CREATE TABLE `" + tableName + "` (\n" +
+                "  `k1` bigint NULL,\n" +
+                "  `v1` bigint NULL,\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        // Create a view with SELECT *
+        String viewName = "test_view_star";
+        String createView = "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName;
+        starRocksAssert.withView(createView);
+
+        // Verify basic view query works
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(true);
+        String viewPlan1 = getFragmentPlan("SELECT * FROM " + viewName);
+        Assertions.assertTrue(viewPlan1.contains("OlapScanNode"));
+
+        // Alter the table to add new columns
+        String alterStmtStr = "ALTER TABLE " + tableName + " ADD COLUMN v3 bigint DEFAULT '0'";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                alterStmtStr, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(alterTableStmt, starRocksAssert.getCtx());
+        waitForSchemaChangeAlterJobFinish();
+
+        // Query the view again - this should NOT throw IllegalStateException
+        // The view should still return the original columns (k1, v1, v2)
+        String viewPlan2 = getFragmentPlan("SELECT * FROM " + viewName);
+        Assertions.assertTrue(viewPlan2.contains("OlapScanNode"));
+
+        // Clean up
+        starRocksAssert.dropView(viewName);
+        starRocksAssert.dropTable(tableName);
         starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 }

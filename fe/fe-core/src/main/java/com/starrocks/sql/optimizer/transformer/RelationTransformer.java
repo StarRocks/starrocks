@@ -890,6 +890,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         boolean isInlineView = isInlineView();
         boolean isEnableViewBasedRewrite = isEnableViewBasedRewrite(node.getView());
+        // Check if the view schema is compatible with the output columns.
+        // When the base table has been altered (e.g., columns added), the output columns from
+        // re-analyzing the view's query may differ from the view's stored schema.
+        // In this case, we should skip view-based MV rewrite to avoid IllegalStateException.
+        boolean isViewSchemaCompatible = logicalPlan.getOutputColumn().size() ==
+                node.getView().getBaseSchema().size();
         if (isInlineView) {
             // expand views in logical plan
             OptExprBuilder builder = new OptExprBuilder(
@@ -897,7 +903,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     logicalPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn(), logicalPlan.getRootBuilder()
                             .getColumnRefToConstOperators()));
-            if (isEnableViewBasedRewrite) {
+            if (isEnableViewBasedRewrite && isViewSchemaCompatible) {
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList();
                 LogicalViewScanOperator viewScanOperator = buildViewScan(logicalPlan, node, newOutputColumns, true);
                 builder.getRoot().getOp().setEquivalentOp(viewScanOperator);
