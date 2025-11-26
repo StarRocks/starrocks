@@ -56,6 +56,7 @@ public class UserIdentityUtils {
         tUserIdent.setHost(userIdentity.getHost());
         tUserIdent.setUsername(userIdentity.getUser());
         tUserIdent.setIs_domain(userIdentity.isDomain());
+        tUserIdent.setIs_ephemeral(userIdentity.isEphemeral());
         return tUserIdent;
     }
 
