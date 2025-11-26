@@ -112,6 +112,16 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
                 metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
+
+                // For index_size function, append index type to meta column name
+                if (aggCall.getFnName().equals(FunctionSet.INDEX_SIZE)) {
+                    String indexType = "ALL";
+                    if (aggCall.getChildren().size() > 1 && aggCall.getChild(1) instanceof ConstantOperator) {
+                        ConstantOperator indexTypeOp = (ConstantOperator) aggCall.getChild(1);
+                        indexType = indexTypeOp.getVarchar().toUpperCase();
+                    }
+                    metaColumnName = aggCall.getFnName() + "_" + indexType + "_" + usedColumn.getName();
+                }
             } else {
                 usedColumn = scanOperator.getOutputColumns().get(0);
                 // for count, distinguish between count(*) and count(column)
@@ -128,7 +138,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             ColumnRefOperator metaColumn;
             if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
-                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.INDEX_SIZE)) {
                 if (countPlaceHolderColumn != null) {
                     metaColumn = countPlaceHolderColumn;
                 } else {
@@ -154,7 +165,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             Type newAggReturnType = aggCall.getType();
             if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
-                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.INDEX_SIZE)) {
                 aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
                         new Type[] {IntegerType.BIGINT}, Function.CompareMode.IS_IDENTICAL);
                 newAggFnName = FunctionSet.SUM;
@@ -256,7 +268,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         return !(type.isStringType() || type.isComplexType());
                     } else if ((functionName.equals(FunctionSet.COUNT) ||
                             functionName.equals(FunctionSet.COLUMN_SIZE) ||
-                            functionName.equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) && !aggregator.isDistinct()) {
+                            functionName.equals(FunctionSet.COLUMN_COMPRESSED_SIZE) ||
+                            functionName.equals(FunctionSet.INDEX_SIZE)) && !aggregator.isDistinct()) {
                         if (usedColumns.size() == 1) {
                             ColumnRefOperator usedColumn =
                                     context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());

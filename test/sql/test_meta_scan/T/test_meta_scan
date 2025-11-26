@@ -107,6 +107,28 @@ SELECT column_size(a) > 0, column_compressed_size(a) > 0 FROM meta_nested_types 
 SELECT column_size(m) > 0, column_compressed_size(m) > 0 FROM meta_nested_types [_META_];
 SELECT column_size(s) > 0, column_compressed_size(s) > 0 FROM meta_nested_types [_META_];
 
+-- name: test_meta_index_size_functions
+CREATE TABLE meta_index_table (
+    k1 int,
+    k2 varchar(20),
+    k3 int
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "bloom_filter_columns" = "k2");
+
+INSERT INTO meta_index_table VALUES
+(1, 'value1', 100),
+(2, 'value2', 200),
+(3, 'value3', 300);
+
+-- test index_size function with different index types
+SELECT index_size(k1) >= 0 FROM meta_index_table [_META_];
+SELECT index_size(k1, 'ZONEMAP') >= 0 FROM meta_index_table [_META_];
+SELECT index_size(k1, 'ALL') >= 0 FROM meta_index_table [_META_];
+SELECT index_size(k2, 'BLOOM') >= 0 FROM meta_index_table [_META_];
+SELECT index_size(k3, 'BITMAP') >= 0 FROM meta_index_table [_META_];
+
 -- name: test_update_table_on_meta_scan
 CREATE TABLE `update_table_with_null_partition` (
     `k1` date,
