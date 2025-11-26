@@ -57,7 +57,7 @@ public class ProcProfileAction extends WebBaseAction {
     public void executeGet(BaseRequest request, BaseResponse response) {
         getPageHeader(request, response.getContent());
 
-        // Add proc profile tabs CSS link in the head section
+        // Add proc profile tabs CSS and JavaScript links in the head section
         // Insert before the closing </head> tag by replacing the body tag opening
         String content = response.getContent().toString();
         int headEndIndex = content.lastIndexOf("</head>");
@@ -67,6 +67,8 @@ public class ProcProfileAction extends WebBaseAction {
             response.getContent()
                     .append("  <link href=\"/static/css?res=proc-profile-tabs.css\" ")
                     .append("rel=\"stylesheet\" media=\"screen\"/>\n");
+            response.getContent()
+                    .append("  <script type=\"text/javascript\" src=\"/static?res=proc-profile-collect.js\"></script>\n");
             response.getContent().append(content.substring(headEndIndex));
         }
 
@@ -335,42 +337,6 @@ public class ProcProfileAction extends WebBaseAction {
         buffer.append("<span id=\"collectStatus\" style=\"margin-left: 15px;\"></span>");
         buffer.append("</form>");
         buffer.append("</div>");
-        
-        // Add JavaScript for form handling
-        buffer.append("<script>");
-        buffer.append("document.getElementById('collectProfileForm').addEventListener('submit', function(e) {");
-        buffer.append("    e.preventDefault();");
-        buffer.append("    var form = this;");
-        buffer.append("    var btn = document.getElementById('collectBtn');");
-        buffer.append("    var status = document.getElementById('collectStatus');");
-        buffer.append("    var originalText = btn.textContent;");
-        buffer.append("    btn.disabled = true;");
-        buffer.append("    btn.textContent = 'Collecting...';");
-        buffer.append("    status.innerHTML = '<span style=\"color: #337ab7;\">Collecting profile, please wait...</span>';");
-        buffer.append("    ");
-        buffer.append("    var formData = new FormData(form);");
-        buffer.append("    fetch('/proc_profile/collect', {");
-        buffer.append("        method: 'POST',");
-        buffer.append("        body: formData");
-        buffer.append("    })");
-        buffer.append("    .then(response => response.json())");
-        buffer.append("    .then(data => {");
-        buffer.append("        if (data.status === 'success') {");
-        buffer.append("            status.innerHTML = '<span style=\"color: green;\">' + data.message + '</span>';");
-        buffer.append("            setTimeout(function() { location.reload(); }, 2000);");
-        buffer.append("        } else {");
-        buffer.append("            status.innerHTML = '<span style=\"color: red;\">Error: ' + (data.message || 'Unknown error') + '</span>';");
-        buffer.append("            btn.disabled = false;");
-        buffer.append("            btn.textContent = originalText;");
-        buffer.append("        }");
-        buffer.append("    })");
-        buffer.append("    .catch(error => {");
-        buffer.append("        status.innerHTML = '<span style=\"color: red;\">Error: ' + error.message + '</span>';");
-        buffer.append("        btn.disabled = false;");
-        buffer.append("        btn.textContent = originalText;");
-        buffer.append("    });");
-        buffer.append("});");
-        buffer.append("</script>");
     }
 
     private static class ProfileFileInfo {
