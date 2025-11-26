@@ -1,0 +1,181 @@
+-- name: test_proc_profile_collect
+shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
+-- result:
+0
+
+-- !result
+shell: ${mysql_cmd} -e "show backends\G" | grep "HttpPort" | head -1 | awk -F':' '{print $2}' | xargs > be_http_port.txt
+-- result:
+0
+
+-- !result
+[UC]shell: echo "BE_IP=$(cat be_ip.txt), BE_HTTP_PORT=$(cat be_http_port.txt)"
+-- result:
+0
+BE_IP=172.26.92.227, BE_HTTP_PORT=8042
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Collect Profile"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'value="10"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "Profile Type"
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10&type=mem" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10&type=both" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=5&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&seconds=10&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&seconds=10&type=mem" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&seconds=10&type=both" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=INVALID&seconds=10&type=cpu" | grep -c '"status":"error"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=-1&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=99999&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "seconds=10&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&type=cpu" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST -u root: "${url}/proc_profile/collect" -d "node=FE&seconds=10" | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: sleep 2
+-- result:
+0
+
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "cpu-profile-"
+-- result:
+0
+1
+-- !result
+shell: sleep 2
+-- result:
+0
+
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "cpu-profile-"
+-- result:
+0
+1
+-- !result
+shell: curl -s "http://$(cat be_ip.txt):$(cat be_http_port.txt)/pprof/profile?seconds=2" > /tmp/test_profile.pprof
+-- result:
+0
+
+-- !result
+shell: gzip -c /tmp/test_profile.pprof > /tmp/test_profile.pprof.gz
+-- result:
+0
+
+-- !result
+shell: curl -s -X POST "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile?action=save&filename=test-profile-$(date +%Y%m%d-%H%M%S)-pprof.gz" --data-binary @/tmp/test_profile.pprof.gz | grep -c '"status":"success"'
+-- result:
+0
+1
+-- !result
+shell: rm -f /tmp/test_profile.pprof /tmp/test_profile.pprof.gz
+-- result:
+0
+
+-- !result
+shell: curl -s -X POST "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile?action=save&filename=../../../etc/passwd" -d "test" | grep -c '"status":"error"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -X POST "http://$(cat be_ip.txt):$(cat be_http_port.txt)/api/proc_profile?action=save" -d "test" | grep -c '"status":"error"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Collect Profile"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Contention"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'value="mem"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c "collectProfileForm"
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'action="/proc_profile/collect"'
+-- result:
+0
+1
+-- !result
+shell: curl -s -u root: "${url}/proc_profile?node=FE" | grep -c 'name="node"'
+-- result:
+0
+1
+-- !result
+shell: rm -f be_ip.txt be_http_port.txt
+-- result:
+0
+
+-- !result
