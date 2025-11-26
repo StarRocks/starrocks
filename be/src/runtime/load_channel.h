@@ -98,7 +98,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    void cancel(const std::string& reason);
 
     void abort();
 
@@ -151,6 +151,7 @@ private:
     bthread::Mutex _lock;
     // key -> tablets channel
     std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    std::atomic<bool> _cancelled{false};
     std::atomic<bool> _closed{false};
 
     Span _span;
