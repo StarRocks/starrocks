@@ -103,6 +103,8 @@ private:
     Status _init_scanner(RuntimeState* state);
     Status _check_all_slots_nullable();
 
+    const std::string OPENXJSON_SERDE_LIB = "org.openx.data.jsonserde.JsonSerDe";
+
     // =====================================
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;

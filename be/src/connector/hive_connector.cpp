@@ -20,6 +20,7 @@
 #include "connector/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
@@ -817,7 +818,23 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = new HdfsTextScanner();
+        const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
+        const auto* file_desc = dynamic_cast<const FileTableDescriptor*>(_hive_table);
+        if (hdfs_desc != nullptr || file_desc != nullptr) {
+            std::string serde_lib;
+            if (hdfs_desc != nullptr) {
+                serde_lib = hdfs_desc->get_serde_lib();
+            } else {
+                serde_lib = file_desc->get_serde_lib();
+            }
+            if (serde_lib == OPENXJSON_SERDE_LIB) {
+                scanner = new HdfsJsonScanner();
+            } else {
+                scanner = new HdfsTextScanner();
+            }
+        } else {
+            scanner = new HdfsTextScanner();
+        }
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
