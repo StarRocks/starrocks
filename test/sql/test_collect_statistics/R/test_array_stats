@@ -223,6 +223,24 @@ FROM _statistics_.column_statistics
 WHERE table_name = 'test_array_stats.test_array_comprehensive_ndv' 
 ORDER BY column_name;
 -- result:
+arr_arr_int	0
+arr_arr_str	0
+arr_bigint	0
+arr_boolean	0
+arr_date	0
+arr_datetime	0
+arr_decimal	0
+arr_double	0
+arr_float	0
+arr_int	0
+arr_map_int	0
+arr_map_mixed	0
+arr_map_str	0
+arr_string	0
+arr_struct_complex	0
+arr_struct_simple	0
+arr_varchar	0
+k1	6
 -- !result
 ADMIN SET FRONTEND CONFIG ("enable_manual_collect_array_ndv"="true");
 -- result:
