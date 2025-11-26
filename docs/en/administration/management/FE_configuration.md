@@ -664,6 +664,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The timeout duration to obtain the global lock.
 - Introduced in: -
 
+##### db_used_data_quota_update_interval_secs
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the database used data quota is updated. StarRocks periodically updates the used data quota for all databases to track storage consumption. This value is used for quota enforcement and metrics collection. The minimum allowed interval is 30 seconds to prevent excessive system load. A value less than 30 will be rejected.
+- Introduced in: -
+
 ##### drop_backend_after_decommission
 
 - Default: true

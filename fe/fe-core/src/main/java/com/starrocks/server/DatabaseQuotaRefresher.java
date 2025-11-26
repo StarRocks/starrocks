@@ -37,7 +37,18 @@ public class DatabaseQuotaRefresher extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        checkAndMayUpdateInterval();
         updateAllDatabaseUsedDataQuota();
+    }
+
+    protected void checkAndMayUpdateInterval() {
+        long currentInterval = getInterval();
+        long newInterval = Config.db_used_data_quota_update_interval_secs * 1000L;
+        if (currentInterval == newInterval) {
+            return;
+        }
+        setInterval(newInterval);
+        LOG.info("Update DatabaseQuotaRefresher interval from {} ms to {} ms", currentInterval, newInterval);
     }
 
     private void updateAllDatabaseUsedDataQuota() {
@@ -54,11 +65,9 @@ public class DatabaseQuotaRefresher extends FrontendDaemon {
                     continue;
                 }
 
-                //There is no need to count if it is equal to Long.MAX_VALUE.
-                if (db.getDataQuota() < FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES) {
-                    long usedDataQuota = getUsedDataQuota(db);
-                    db.usedDataQuotaBytes.set(usedDataQuota);
-                }
+                // Always update the used data quota, because the Metrics will rely on this value.
+                long usedDataQuota = getUsedDataQuota(db);
+                db.usedDataQuotaBytes.set(usedDataQuota);
 
                 if (db.getReplicaQuota() < FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE) {
                     long usedReplicaQuota = getUsedReplicaQuota(db);
@@ -73,13 +82,15 @@ public class DatabaseQuotaRefresher extends FrontendDaemon {
     private long getUsedDataQuota(Database database) {
         long usedDataQuota = 0;
         for (Table table : database.getTables()) {
-            if (!table.isOlapTableOrMaterializedView()) {
+            // Collect data size for native tables and materialized views for both shared-nothing and shared-data.
+            if (!table.isNativeTableOrMaterializedView()) {
                 continue;
             }
 
             OlapTable olapTable = (OlapTable) table;
             try (AutoCloseableLock ignore =
                     new AutoCloseableLock(database.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                // TODO: maybe time consuming iterating the entire table to get the data size, consider caching the value in OlapTable
                 usedDataQuota = usedDataQuota + olapTable.getDataSize();
             }
         }
@@ -89,7 +100,7 @@ public class DatabaseQuotaRefresher extends FrontendDaemon {
     private long getUsedReplicaQuota(Database database) {
         long usedReplicaQuota = 0;
         for (Table table : database.getTables()) {
-            if (!table.isOlapTableOrMaterializedView()) {
+            if (!table.isNativeTableOrMaterializedView()) {
                 continue;
             }
 
