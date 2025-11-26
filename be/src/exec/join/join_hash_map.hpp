@@ -15,15 +15,11 @@
 #pragma once
 
 #include "column/column.h"
+#include "exec/join/join_hash_map.h"
 #include "exec/join/join_hash_table_descriptor.h"
+#include "exec/join/join_key_constructor.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
-
-#define JOIN_HASH_MAP_TPP
-
-#ifndef JOIN_HASH_MAP_H
-#include "join_hash_map.h"
-#endif
 
 namespace starrocks {
 
@@ -1951,19 +1947,16 @@ void JoinHashMap<LT, CT, MT>::_probe_from_ht_for_asof_left_outer_join_with_other
     AsofJoinProbeDispatcher::dispatch(asof_temporal_probe_type, opcode, process_probe_rows);
 }
 
-// ------------------------------------------------------------------------------------
-// JoinHashTable
-// ------------------------------------------------------------------------------------
-
-template <bool is_remain>
-Status JoinHashTable::lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
-    visit([&](const auto& hash_map) { hash_map->template lazy_output<is_remain>(state, probe_chunk, result_chunk); });
-    if (_table_items->has_large_column) {
-        RETURN_IF_ERROR((*result_chunk)->downgrade());
-    }
-    return Status::OK();
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_probe_index_output(ChunkPtr* chunk) {
+    _probe_state->probe_index.resize((*chunk)->num_rows());
+    (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
 }
 
-#undef JOIN_HASH_MAP_TPP
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+void JoinHashMap<LT, CT, MT>::_build_index_output(ChunkPtr* chunk) {
+    _probe_state->build_index.resize(_probe_state->count);
+    (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
+}
 
 } // namespace starrocks
