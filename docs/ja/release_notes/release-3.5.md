@@ -11,6 +11,38 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.9
+
+リリース日：2025年11月26日
+
+### 改善点
+
+- トランザクション各ステージのタイミングを観測するため、FE にトランザクションレイテンシ指標を追加しました。[#64948](https://github.com/StarRocks/starrocks/pull/64948)
+- データレイク環境でのテーブル全体の再書き込みを簡素化するため、S3 上の非パーティション Hive テーブルへの上書きに対応しました。[#65340](https://github.com/StarRocks/starrocks/pull/65340)
+- Tablet メタデータキャッシュをより細かく制御するため、CacheOptions を導入しました。[#65222](https://github.com/StarRocks/starrocks/pull/65222)
+- 最新データに整合した統計情報を維持するため、INSERT OVERWRITE のサンプル統計収集をサポートしました。[#65363](https://github.com/StarRocks/starrocks/pull/65363)
+- Tablet の非同期レポートによる統計情報の欠落や誤りを避けるため、INSERT OVERWRITE 後の統計収集戦略を最適化しました。[#65327](https://github.com/StarRocks/starrocks/pull/65327)
+- INSERT OVERWRITE またはマテリアライズドビューのリフレッシュ操作で削除または置き換えられたパーティションに保持期間を導入し、回収可能性を向上させるため一定期間リサイクルビンに残すようにしました。[#64779](https://github.com/StarRocks/starrocks/pull/64779)
+
+### バグ修正
+
+次の問題を修正しました：
+
+- `LocalMetastore.truncateTable()` に関連するロック競合および並行性の問題。[#65191](https://github.com/StarRocks/starrocks/pull/65191)
+- TabletChecker に関連するロック競合およびレプリカチェック性能の問題。[#65312](https://github.com/StarRocks/starrocks/pull/65312)
+- HTTP SQL によるユーザー切り替え時の誤ったエラーロギング。[#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- DelVec CRC32 アップグレード互換性問題によって発生するチェックサム失敗。[#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- RocksDB のイテレーションタイムアウトによる Tablet メタデータ読み込み失敗。[#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- JSON ハイパーパスが `$` またはすべてスキップされた場合、内部 `flat_path` が空になり、`substr` 呼び出しが例外を投げ BE がクラッシュする問題。[#65260](https://github.com/StarRocks/starrocks/pull/65260)
+- フラグメント実行において PREPARED フラグが正しく設定されない問題。[#65423](https://github.com/StarRocks/starrocks/pull/65423)
+- 重複したロードプロファイルカウンタにより、書き込みおよびフラッシュ指標が不正確になる問題。[#65252](https://github.com/StarRocks/starrocks/pull/65252)
+- 複数の HTTP リクエストが同じ TCP 接続を再利用する際、ExecuteSQL リクエストの後に非 ExecuteSQL リクエストが到着すると、チャネルクローズ時に `HttpConnectContext` が登録解除されず、HTTP コンテキストリークが発生する問題。[#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- MySQL 8.0 のスキーマイントロスペクションエラー（`default_authentication_plugin` と `authentication_policy` のセッション変数追加で修正）。[#65330](https://github.com/StarRocks/starrocks/pull/65330)
+- パーティション上書き後に作成される一時パーティションに対して不要な統計収集が行われることで、SHOW ANALYZE STATUS がエラーになる問題。[#65298](https://github.com/StarRocks/starrocks/pull/65298)
+- Event Scheduler における Global Runtime Filter の競合問題。[#65200](https://github.com/StarRocks/starrocks/pull/65200)
+- Data Cache の最小ディスクサイズ制約が大きすぎるため、Data Cache が過度に無効化される問題。[#64909](https://github.com/StarRocks/starrocks/pull/64909)
+- `gold` リンカの自動フォールバックに関連する aarch64 のビルド問題。[#65156](https://github.com/StarRocks/starrocks/pull/65156)
+
 ## 3.5.8
 
 リリース日：2025年11月10日
