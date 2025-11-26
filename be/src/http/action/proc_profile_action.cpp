@@ -19,8 +19,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include <ctime>
-#include <iomanip>
 
 #include "common/config.h"
 #include "common/logging.h"
@@ -35,16 +33,12 @@
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"
 
-#if !(defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER))
-#include <gperftools/profiler.h>
-#endif
-
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_LIST = "list";
-const static std::string ACTION_COLLECT = "collect";
+const static std::string ACTION_SAVE = "save";
 
 void ProcProfileAction::handle(HttpRequest* req) {
     VLOG_ROW << req->debug_string();
@@ -56,8 +50,8 @@ void ProcProfileAction::handle(HttpRequest* req) {
             _handle_error(req, strings::Substitute("Not support action: '$0'", action));
         }
     } else if (req->method() == HttpMethod::POST) {
-        if (action == ACTION_COLLECT) {
-            _handle_collect(req);
+        if (action == ACTION_SAVE) {
+            _handle_save(req);
         } else {
             _handle_error(req, strings::Substitute("Not support action: '$0'", action));
         }
@@ -150,110 +144,61 @@ void ProcProfileAction::_handle_list(HttpRequest* req) {
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
 }
 
-void ProcProfileAction::_handle_collect(HttpRequest* req) {
+void ProcProfileAction::_handle_save(HttpRequest* req) {
     rapidjson::Document root;
     root.SetObject();
     rapidjson::Document::AllocatorType& allocator = root.GetAllocator();
 
-#if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
-    root.AddMember("status", rapidjson::Value("error", allocator), allocator);
-    root.AddMember("message", rapidjson::Value("Profiling is not available with address sanitizer builds.", allocator), allocator);
-    rapidjson::StringBuffer strbuf;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
-    root.Accept(writer);
-    req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
-    HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
-    return;
-#else
     // Parse parameters
-    int seconds = 10; // default 10 seconds
-    const std::string& seconds_str = req->param("seconds");
-    if (!seconds_str.empty()) {
-        seconds = std::atoi(seconds_str.c_str());
-        if (seconds <= 0 || seconds > 3600) {
-            seconds = 10;
-        }
-    }
+    const std::string& filename = req->param("filename");
+    std::string profile_data = req->get_request_body();
 
-    std::string profile_type = "both"; // default to both
-    const std::string& type_str = req->param("type");
-    if (!type_str.empty()) {
-        if (type_str == "cpu" || type_str == "contention" || type_str == "both") {
-            profile_type = type_str;
-        }
-    }
-
-    std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
-    std::filesystem::path dir_path(profile_log_dir);
-    if (!std::filesystem::exists(dir_path)) {
-        std::filesystem::create_directories(dir_path);
-    }
-
-    // Generate timestamp
-    auto now = std::time(nullptr);
-    std::tm* timeinfo = std::localtime(&now);
-    std::ostringstream timestamp_stream;
-    timestamp_stream << std::put_time(timeinfo, "%Y%m%d-%H%M%S");
-    std::string timestamp = timestamp_stream.str();
-
-    std::vector<std::string> collected_files;
-
-    // Collect CPU profile
-    if (profile_type == "cpu" || profile_type == "both") {
-        try {
-            std::ostringstream tmp_prof_file_name;
-            tmp_prof_file_name << config::pprof_profile_dir << "/starrocks_profile." << getpid() << "." << rand();
-            std::string tmp_file = tmp_prof_file_name.str();
-
-            ProfilerStart(tmp_file.c_str());
-            sleep(seconds);
-            ProfilerStop();
-
-            // Read the profile data and compress it
-            std::ifstream prof_file(tmp_file, std::ios::in | std::ios::binary);
-            if (prof_file.is_open()) {
-                // Save to proc_profile directory
-                std::string output_filename = "cpu-profile-" + timestamp + "-pprof.gz";
-                std::string output_path = profile_log_dir + "/" + output_filename;
-
-                // Use gzip command to compress the file directly
-                std::string gzip_cmd = "gzip -c '" + tmp_file + "' > '" + output_path + "'";
-                int result = system(gzip_cmd.c_str());
-                if (result == 0 && std::filesystem::exists(output_path)) {
-                    collected_files.push_back(output_filename);
-                } else {
-                    LOG(WARNING) << "Failed to compress profile file: " << output_path;
-                }
-
-                prof_file.close();
-                // Clean up temp file
-                std::remove(tmp_file.c_str());
-            }
-        } catch (const std::exception& e) {
-            LOG(WARNING) << "Failed to collect CPU profile: " << e.what();
-        }
-    }
-
-    // Collect contention profile (similar to memory profiling)
-    if (profile_type == "contention" || profile_type == "both") {
-        // For contention, we use the same approach but with a different endpoint
-        // Since ContentionAction::handle is empty, we'll skip it for now
-        // and just note that contention profiling needs to be implemented
-        LOG(INFO) << "Contention profile collection requested but not yet implemented";
-    }
-
-    if (collected_files.empty()) {
+    if (filename.empty()) {
         root.AddMember("status", rapidjson::Value("error", allocator), allocator);
-        root.AddMember("message", rapidjson::Value("Failed to collect any profiles", allocator), allocator);
-    } else {
-        root.AddMember("status", rapidjson::Value("success", allocator), allocator);
-        std::string message = "Profile collection completed. Collected " + std::to_string(collected_files.size()) + " file(s)";
-        root.AddMember("message", rapidjson::Value(message.c_str(), allocator), allocator);
-        rapidjson::Value files(rapidjson::kArrayType);
-        for (const auto& file : collected_files) {
-            files.PushBack(rapidjson::Value(file.c_str(), allocator), allocator);
+        root.AddMember("message", rapidjson::Value("Missing filename", allocator), allocator);
+        rapidjson::StringBuffer strbuf;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+        root.Accept(writer);
+        req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
+        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, strbuf.GetString());
+        return;
+    }
+
+    // Validate filename to prevent directory traversal
+    if (filename.find("..") != std::string::npos || filename.find("/") != std::string::npos) {
+        root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+        root.AddMember("message", rapidjson::Value("Invalid filename", allocator), allocator);
+        rapidjson::StringBuffer strbuf;
+        rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+        root.Accept(writer);
+        req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
+        HttpChannel::send_reply(req, HttpStatus::BAD_REQUEST, strbuf.GetString());
+        return;
+    }
+
+    try {
+        std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
+        std::filesystem::path dir_path(profile_log_dir);
+        if (!std::filesystem::exists(dir_path)) {
+            std::filesystem::create_directories(dir_path);
         }
-        root.AddMember("files", files, allocator);
+
+        std::string output_path = profile_log_dir + "/" + filename;
+        std::ofstream out_file(output_path, std::ios::out | std::ios::binary);
+        if (out_file.is_open()) {
+            // Write binary data (profile_data may contain binary gzip data)
+            out_file.write(profile_data.data(), profile_data.size());
+            out_file.close();
+            root.AddMember("status", rapidjson::Value("success", allocator), allocator);
+            root.AddMember("message", rapidjson::Value("Profile saved successfully", allocator), allocator);
+        } else {
+            root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+            root.AddMember("message", rapidjson::Value("Failed to open file for writing", allocator), allocator);
+        }
+    } catch (const std::exception& e) {
+        LOG(WARNING) << "Failed to save profile: " << e.what();
+        root.AddMember("status", rapidjson::Value("error", allocator), allocator);
+        root.AddMember("message", rapidjson::Value(std::string("Failed to save profile: ") + e.what(), allocator), allocator);
     }
 
     rapidjson::StringBuffer strbuf;
@@ -261,7 +206,6 @@ void ProcProfileAction::_handle_collect(HttpRequest* req) {
     root.Accept(writer);
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
-#endif
 }
 
 void ProcProfileAction::_handle_error(HttpRequest* req, const std::string& error_msg) {

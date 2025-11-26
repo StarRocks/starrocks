@@ -167,30 +167,78 @@ public class ProcProfileCollectAction extends WebBaseAction {
         }
 
         StringBuilder result = new StringBuilder();
+        java.text.SimpleDateFormat timestampFormat = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss");
+        String timestamp = timestampFormat.format(new Date(System.currentTimeMillis()));
         
-        // Use the new BE API endpoint for collecting profiles
-        String collectUrl = "http://" + host + ":" + port + "/api/proc_profile?action=collect";
-        try {
-            // Build POST request with form parameters
-            String typeParam = profileType.equals("mem") ? "contention" : profileType;
-            String formData = "seconds=" + java.net.URLEncoder.encode(String.valueOf(seconds), "UTF-8") +
-                    "&type=" + java.net.URLEncoder.encode(typeParam, "UTF-8");
-            
-            org.apache.http.entity.StringEntity entity = new org.apache.http.entity.StringEntity(
-                    formData, org.apache.http.entity.ContentType.APPLICATION_FORM_URLENCODED);
-            
-            String response = HttpUtils.post(collectUrl, entity, null);
-            // Parse JSON response
-            com.google.gson.JsonObject jsonResponse = com.google.gson.JsonParser.parseString(response).getAsJsonObject();
-            if (jsonResponse.has("status") && "success".equals(jsonResponse.get("status").getAsString())) {
-                result.append(jsonResponse.get("message").getAsString());
-            } else {
-                String errorMsg = jsonResponse.has("message") ? jsonResponse.get("message").getAsString() : "Unknown error";
-                throw new RuntimeException("BE profile collection failed: " + errorMsg);
+        // Collect CPU profile using existing /pprof/profile endpoint
+        if ("cpu".equals(profileType) || "both".equals(profileType)) {
+            try {
+                String pprofUrl = "http://" + host + ":" + port + "/pprof/profile?seconds=" + seconds;
+                String profileData = HttpUtils.get(pprofUrl, null);
+                
+                // Compress the profile data
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                try (java.util.zip.GZIPOutputStream gzos = new java.util.zip.GZIPOutputStream(baos)) {
+                    gzos.write(profileData.getBytes("UTF-8"));
+                }
+                byte[] compressedData = baos.toByteArray();
+                
+                // Save to BE's proc_profile directory
+                String filename = "cpu-profile-" + timestamp + "-pprof.gz";
+                String saveUrl = "http://" + host + ":" + port + "/api/proc_profile?action=save&filename=" + 
+                        java.net.URLEncoder.encode(filename, "UTF-8");
+                
+                org.apache.http.entity.ByteArrayEntity entity = new org.apache.http.entity.ByteArrayEntity(
+                        compressedData, org.apache.http.entity.ContentType.APPLICATION_OCTET_STREAM);
+                
+                String saveResponse = HttpUtils.post(saveUrl, entity, null);
+                com.google.gson.JsonObject saveJson = com.google.gson.JsonParser.parseString(saveResponse).getAsJsonObject();
+                if (saveJson.has("status") && "success".equals(saveJson.get("status").getAsString())) {
+                    result.append("CPU profile collected and saved. ");
+                } else {
+                    throw new RuntimeException("Failed to save CPU profile: " + 
+                            (saveJson.has("message") ? saveJson.get("message").getAsString() : "Unknown error"));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to collect CPU profile from BE {}:{}", host, port, e);
+                throw new RuntimeException("Failed to collect CPU profile: " + e.getMessage(), e);
             }
-        } catch (Exception e) {
-            LOG.error("Failed to collect profile from BE {}:{}", host, port, e);
-            throw new RuntimeException("Failed to collect profile: " + e.getMessage(), e);
+        }
+
+        // Collect contention profile (similar to memory profiling)
+        if ("mem".equals(profileType) || "both".equals(profileType)) {
+            try {
+                String contentionUrl = "http://" + host + ":" + port + "/pprof/contention?seconds=" + seconds;
+                String profileData = HttpUtils.get(contentionUrl, null);
+                
+                // Compress the profile data
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                try (java.util.zip.GZIPOutputStream gzos = new java.util.zip.GZIPOutputStream(baos)) {
+                    gzos.write(profileData.getBytes("UTF-8"));
+                }
+                byte[] compressedData = baos.toByteArray();
+                
+                // Save to BE's proc_profile directory
+                String filename = "contention-profile-" + timestamp + "-pprof.gz";
+                String saveUrl = "http://" + host + ":" + port + "/api/proc_profile?action=save&filename=" + 
+                        java.net.URLEncoder.encode(filename, "UTF-8");
+                
+                org.apache.http.entity.ByteArrayEntity entity = new org.apache.http.entity.ByteArrayEntity(
+                        compressedData, org.apache.http.entity.ContentType.APPLICATION_OCTET_STREAM);
+                
+                String saveResponse = HttpUtils.post(saveUrl, entity, null);
+                com.google.gson.JsonObject saveJson = com.google.gson.JsonParser.parseString(saveResponse).getAsJsonObject();
+                if (saveJson.has("status") && "success".equals(saveJson.get("status").getAsString())) {
+                    result.append("Contention profile collected and saved. ");
+                } else {
+                    throw new RuntimeException("Failed to save contention profile: " + 
+                            (saveJson.has("message") ? saveJson.get("message").getAsString() : "Unknown error"));
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to collect contention profile from BE {}:{}", host, port, e);
+                // Don't throw for contention if it's not critical
+                result.append("Contention profile collection failed: ").append(e.getMessage()).append(". ");
+            }
         }
 
         return result.toString().trim();
