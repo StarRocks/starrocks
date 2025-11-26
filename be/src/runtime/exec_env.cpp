@@ -576,6 +576,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_put_aggregate_metadata_thread_pool));
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
 
+    int32_t snasphot_file_syner_thread_count = std::min(config::partition_snapshot_threads, CpuInfo::num_cores() / 4);
+    RETURN_IF_ERROR(ThreadPoolBuilder("snapshot_file_syner")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, snasphot_file_syner_thread_count))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_snapshot_file_syner_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(snapshot_file_syner, _snapshot_file_syner_thread_pool);
+
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
     _lake_update_manager =
@@ -673,6 +681,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
         component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_snapshot_file_syner_thread_pool) {
+        start = MonotonicMillis();
+        _snapshot_file_syner_thread_pool->shutdown();
+        component_times.emplace_back("snapshot_file_syner_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {

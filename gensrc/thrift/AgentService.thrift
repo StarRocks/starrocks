@@ -282,7 +282,7 @@ struct TUpdateSchemaReq {
     5: optional Descriptors.TOlapTableColumnParam column_param
 }
 
-struct TClusterSnapshotRequest {
+struct TPartitionSnapshotRequest {
     1: required i64 job_id
     2: required i64 db_id
     3: required Types.TTableId table_id
@@ -526,7 +526,7 @@ struct TAgentTaskRequest {
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
     32: optional TCompactionControlReq compaction_control_req
-    33: optional TClusterSnapshotRequest data_snapshot_req
+    33: optional TPartitionSnapshotRequest partition_snapshot_req
 }
 
 struct TAgentResult {

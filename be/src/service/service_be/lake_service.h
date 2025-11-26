@@ -104,6 +104,11 @@ public:
     void vacuum_full(::google::protobuf::RpcController* controller, const ::starrocks::VacuumFullRequest* request,
                      ::starrocks::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
+    void upload_snapshot_files(::google::protobuf::RpcController* controller,
+                               const ::starrocks::UploadSnapshotFilesRequestPB* request,
+                               ::starrocks::UploadSnapshotFilesResponsePB* response,
+                               ::google::protobuf::Closure* done) override;
+
 private:
     void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
                                           std::span<const TxnInfoPB> txn_infos, const int64_t* log_versions,

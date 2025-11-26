@@ -110,5 +110,6 @@ using DropAutoIncrementMapAgentTaskRequest = AgentTaskRequestWithReqBody<TDropAu
 using RemoteSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TRemoteSnapshotRequest>;
 using ReplicateSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicateSnapshotRequest>;
 using UpdateSchemaTaskRequest = AgentTaskRequestWithReqBody<TUpdateSchemaReq>;
+using PartitionSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TPartitionSnapshotRequest>;
 
 } // namespace starrocks

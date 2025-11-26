@@ -204,6 +204,9 @@ CONF_mInt32(replication_min_speed_time_seconds, "300");
 // Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
 
+// The count of thread to data snapshot
+CONF_mInt32(partition_snapshot_threads, "8");
+
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.

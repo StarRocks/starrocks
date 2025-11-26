@@ -269,6 +269,25 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
+message TabletDataSnapshotPB {
+    optional int64 tablet_id = 1;
+    repeated string new_data_files = 2;
+}
+
+message UploadSnapshotFilesRequestPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    repeated TabletDataSnapshotPB tablet_snapshots = 6;
+}
+
+message UploadSnapshotFilesResponsePB {
+    optional StatusPB status = 1;
+    repeated int64 failed_tablets = 2;
+}
+
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
 }
@@ -379,5 +398,6 @@ service LakeService {
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
+    rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
 }
 

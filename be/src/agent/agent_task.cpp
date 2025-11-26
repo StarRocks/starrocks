@@ -26,6 +26,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+#include "storage/lake/partition_snapshot_task.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -1111,6 +1112,13 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
     auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     VLOG(1) << "Remove task success. type=" << agent_task_req->task_type << ", signature=" << agent_task_req->signature
             << ", task_count_in_queue=" << task_queue_size;
+}
+
+void run_partition_snapshot_task(const std::shared_ptr<PartitionSnapshotAgentTaskRequest>& agent_task_req,
+                                 ExecEnv* exec_env) {
+    const TPartitionSnapshotRequest& partition_snapshot_req = agent_task_req->task_req;
+    VLOG(1) << "Got data snapshot task signature=" << agent_task_req->signature;
+    lake::run_partition_snapshot_task(partition_snapshot_req, exec_env);
 }
 
 } // namespace starrocks

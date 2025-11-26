@@ -33,6 +33,7 @@
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/options.h"
+#include "storage/lake/snapshot_file_syncer.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -1372,6 +1373,61 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
         latch.count_down();
     }
 
+    latch.wait();
+}
+
+void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* controller,
+                                            const ::starrocks::UploadSnapshotFilesRequestPB* request,
+                                            ::starrocks::UploadSnapshotFilesResponsePB* response,
+                                            ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    auto thread_pool = _env->snapshot_file_syner_thread_pool();
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("upload cluster snapshot files thread pool is null");
+        return;
+    }
+    auto job_id = request->job_id();
+    auto db_id = request->db_id();
+    auto table_id = request->table_id();
+    auto partition_id = request->partition_id();
+    auto physical_partition_id = request->physical_partition_id();
+    auto tablet_snapshots = request->tablet_snapshots();
+    bthread::Mutex repsonse_mtx;
+
+    auto latch = BThreadCountDownLatch(tablet_snapshots.size());
+    auto record_failure = [&](const Status& st, int64_t tablet_id, std::string_view log_prefix) {
+        LOG(WARNING) << log_prefix << st << " tablet_id=" << tablet_id;
+        std::lock_guard l(repsonse_mtx);
+        if (response->status().status_code() == 0) {
+            st.to_protobuf(response->mutable_status());
+        }
+        response->add_failed_tablets(tablet_id);
+    };
+    for (auto& tablet_snapshot : tablet_snapshots) {
+        auto tablet_id = tablet_snapshot.tablet_id();
+        auto tablet_snapshot_info = lake::TabletSnapshotInfo(db_id, table_id, partition_id, physical_partition_id,
+                                                             tablet_id, tablet_snapshot);
+        auto task = std::make_shared<CancellableRunnable>(
+                [&] {
+                    DeferOp defer([&] { latch.count_down(); });
+                    auto snapshot_file_syncer = lake::SnapshotFileSyncer(_env);
+                    auto st = snapshot_file_syncer.upload(tablet_snapshot_info, response);
+                    if (!st.ok()) {
+                        record_failure(st, tablet_id, "Fail to upload cluster snapshot files: ");
+                    }
+                },
+                [&] {
+                    Status st = Status::Cancelled("upload cluster snapshot files task has been cancelled");
+                    record_failure(st, tablet_id, "");
+                    latch.count_down();
+                });
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            record_failure(st, tablet_id, "Fail to submit upload cluster snapshot files task: ");
+            latch.count_down();
+        }
+    }
     latch.wait();
 }
 

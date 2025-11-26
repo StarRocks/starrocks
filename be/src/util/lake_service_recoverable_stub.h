@@ -43,6 +43,10 @@ public:
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::CompactRequest* request,
                  ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done);
 
+    void upload_snapshot_files(::google::protobuf::RpcController* controller,
+                               const ::starrocks::UploadSnapshotFilesRequestPB* request,
+                               ::starrocks::UploadSnapshotFilesResponsePB* response, ::google::protobuf::Closure* done);
+
 private:
     std::shared_ptr<starrocks::LakeService_Stub> _stub;
     const butil::EndPoint _endpoint;
