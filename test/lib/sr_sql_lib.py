@@ -2968,6 +2968,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"])
         )
 
+<<<<<<< HEAD
+=======
+    def assert_query_contains(self, query, *expects):
+        """
+        assert explain result contains expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
+    def assert_query_error_contains(self, query, *expects):
+        """
+        assert error message contains expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            haystack = str(res["msg"])
+            tools.assert_true(
+                haystack.find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, haystack),
+            )
+
+>>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
     def assert_explain_contains(self, query, *expects):
         """
         assert explain result contains expect string

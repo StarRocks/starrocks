@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
@@ -21,6 +22,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+=======
+>>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
@@ -29,9 +32,12 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.TagOptions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -41,10 +47,19 @@ import com.starrocks.sql.ast.CreateOrReplaceTagClause;
 import com.starrocks.sql.ast.DropBranchClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
+import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.TagOptions;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+>>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -63,8 +78,11 @@ import org.apache.iceberg.SnapshotRef;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdatePartitionSpec;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
@@ -121,10 +139,10 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     }
 
     public IcebergAlterTableExecutor(AlterTableStmt stmt,
-            Table table,
-            IcebergCatalog icebergCatalog,
-            ConnectContext context,
-            HdfsEnvironment hdfsEnvironment) {
+                                     Table table,
+                                     IcebergCatalog icebergCatalog,
+                                     ConnectContext context,
+                                     HdfsEnvironment hdfsEnvironment) {
         super(stmt);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
@@ -451,6 +469,11 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     }
 
     @Override
+    public Void visitAddPartitionClause(AddPartitionClause clause, ConnectContext context) {
+        return null;
+    }
+
+    @Override
     public Void visitDropTagClause(DropTagClause clause, ConnectContext context) {
         actions.add(() -> {
             String tagName = clause.getTag();
@@ -499,6 +522,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
+<<<<<<< HEAD
     private void fastForward(List<ConstantOperator> args) {
         if (args.size() != 2) {
             throw new StarRocksConnectorException("invalid args. fast forward must contain `from branch` and `to branch`");
@@ -726,5 +750,82 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 throw new StarRocksConnectorException("Failed to delete file " + file, e);
             }
         });
+=======
+    private Term transformExprToIcebergTerm(Expr expr) {
+        if (expr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) expr;
+            return Expressions.ref(slotRef.getColumnName());
+        } else if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            String fn = functionCallExpr.getFnName().getFunction();
+            Expr child = functionCallExpr.getChild(0);
+            if (child instanceof SlotRef) {
+                String colName = ((SlotRef) child).getColumnName();
+                switch (fn.toLowerCase()) {
+                    case "year":
+                        return Expressions.year(colName);
+                    case "month":
+                        return Expressions.month(colName);
+                    case "day":
+                        return Expressions.day(colName);
+                    case "hour":
+                        return Expressions.hour(colName);
+                    case "identity":
+                        return Expressions.ref(colName);
+                    case "truncate":
+                        IntLiteral width = (IntLiteral) functionCallExpr.getChild(1);
+                        return Expressions.truncate(colName, (int) width.getValue());
+                    case "bucket":
+                        IntLiteral numBuckets = (IntLiteral) functionCallExpr.getChild(1);
+                        return Expressions.bucket(colName, (int) numBuckets.getValue());
+                    case "void":
+                        // not supported yet.
+                    default:
+                        throw new SemanticException(
+                                "Unsupported partition transform %s for column %s", fn, colName);
+                }
+            } else {
+                throw new SemanticException("Unsupported partition transform %s for arguments", fn);
+            }
+        } else {
+            throw new SemanticException("Does not support partition clause: " + expr);
+        }
+    }
+
+    @Override
+    public Void visitAddPartitionColumnClause(AddPartitionColumnClause clause, ConnectContext context) {
+        actions.add(() -> {
+            UpdatePartitionSpec spec = this.transaction.updateSpec();
+            List<Term> terms = clause.getPartitionExprList().stream()
+                    .map(this::transformExprToIcebergTerm).toList();
+            try {
+                for (Term term : terms) {
+                    spec.addField(term);
+                }
+                spec.commit();
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Failed to add partition column: " + e.getMessage(), e);
+            }
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitDropPartitionColumnClause(DropPartitionColumnClause clause, ConnectContext context) {
+        actions.add(() -> {
+            UpdatePartitionSpec spec = this.transaction.updateSpec();
+            List<Term> terms = clause.getPartitionExprList().stream()
+                    .map(this::transformExprToIcebergTerm).toList();
+            try {
+                for (Term term : terms) {
+                    spec.removeField(term);
+                }
+                spec.commit();
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Failed to drop partition column: " + e.getMessage(), e);
+            }
+        });
+        return null;
+>>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
     }
 }
