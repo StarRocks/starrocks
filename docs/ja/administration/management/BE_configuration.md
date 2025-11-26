@@ -97,6 +97,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
 - 導入バージョン: -
 
+##### sys_log_timezone
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: ログプレフィックスにタイムゾーン情報を表示するかどうか。`true` はタイムゾーン情報を表示することを示し、`false` は表示しないことを示します。
+- 導入バージョン: -
+
 ### サーバー
 
 ##### abort_on_large_memory_allocation
