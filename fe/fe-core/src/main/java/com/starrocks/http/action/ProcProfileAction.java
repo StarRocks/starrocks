@@ -114,6 +114,9 @@ public class ProcProfileAction extends WebBaseAction {
     private void addProfileListInfo(StringBuilder buffer, String nodeParam) {
         buffer.append("<h2>Process Profiles</h2>");
         buffer.append("<p>This table lists all available CPU and memory profile files</p>");
+        
+        // Add profile collection form
+        addProfileCollectionForm(buffer, nodeParam);
 
         List<ProfileFileInfo> profileFiles;
         if ("FE".equals(nodeParam)) {
@@ -300,6 +303,74 @@ public class ProcProfileAction extends WebBaseAction {
             buffer.append("</tr>");
         }
         buffer.append("</tbody>");
+    }
+
+    private void addProfileCollectionForm(StringBuilder buffer, String nodeParam) {
+        buffer.append("<div style=\"margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;\">");
+        buffer.append("<h3>Collect Profile</h3>");
+        buffer.append("<p>Collect a new profile for a specified duration. The profile will appear in the list below after collection completes.</p>");
+        buffer.append("<form id=\"collectProfileForm\" method=\"POST\" action=\"/proc_profile/collect\">");
+        buffer.append("<input type=\"hidden\" name=\"node\" value=\"").append(nodeParam).append("\">");
+        buffer.append("<div style=\"margin-bottom: 10px;\">");
+        buffer.append("<label for=\"seconds\">Duration (seconds): </label>");
+        buffer.append("<input type=\"number\" id=\"seconds\" name=\"seconds\" value=\"10\" min=\"1\" max=\"3600\" style=\"width: 80px; margin-left: 10px;\">");
+        buffer.append("</div>");
+        buffer.append("<div style=\"margin-bottom: 10px;\">");
+        buffer.append("<label for=\"type\">Profile Type: </label>");
+        buffer.append("<select id=\"type\" name=\"type\" style=\"margin-left: 10px;\">");
+        if ("FE".equals(nodeParam)) {
+            buffer.append("<option value=\"cpu\">CPU</option>");
+            buffer.append("<option value=\"mem\">Memory</option>");
+            buffer.append("<option value=\"both\" selected>Both</option>");
+        } else {
+            buffer.append("<option value=\"cpu\">CPU</option>");
+            buffer.append("<option value=\"contention\">Contention</option>");
+            buffer.append("<option value=\"both\" selected>Both</option>");
+        }
+        buffer.append("</select>");
+        buffer.append("</div>");
+        buffer.append("<button type=\"submit\" id=\"collectBtn\" style=\"padding: 8px 16px; background-color: #337ab7; color: white; border: none; border-radius: 4px; cursor: pointer;\">");
+        buffer.append("Collect Profile");
+        buffer.append("</button>");
+        buffer.append("<span id=\"collectStatus\" style=\"margin-left: 15px;\"></span>");
+        buffer.append("</form>");
+        buffer.append("</div>");
+        
+        // Add JavaScript for form handling
+        buffer.append("<script>");
+        buffer.append("document.getElementById('collectProfileForm').addEventListener('submit', function(e) {");
+        buffer.append("    e.preventDefault();");
+        buffer.append("    var form = this;");
+        buffer.append("    var btn = document.getElementById('collectBtn');");
+        buffer.append("    var status = document.getElementById('collectStatus');");
+        buffer.append("    var originalText = btn.textContent;");
+        buffer.append("    btn.disabled = true;");
+        buffer.append("    btn.textContent = 'Collecting...';");
+        buffer.append("    status.innerHTML = '<span style=\"color: #337ab7;\">Collecting profile, please wait...</span>';");
+        buffer.append("    ");
+        buffer.append("    var formData = new FormData(form);");
+        buffer.append("    fetch('/proc_profile/collect', {");
+        buffer.append("        method: 'POST',");
+        buffer.append("        body: formData");
+        buffer.append("    })");
+        buffer.append("    .then(response => response.json())");
+        buffer.append("    .then(data => {");
+        buffer.append("        if (data.status === 'success') {");
+        buffer.append("            status.innerHTML = '<span style=\"color: green;\">' + data.message + '</span>';");
+        buffer.append("            setTimeout(function() { location.reload(); }, 2000);");
+        buffer.append("        } else {");
+        buffer.append("            status.innerHTML = '<span style=\"color: red;\">Error: ' + (data.message || 'Unknown error') + '</span>';");
+        buffer.append("            btn.disabled = false;");
+        buffer.append("            btn.textContent = originalText;");
+        buffer.append("        }");
+        buffer.append("    })");
+        buffer.append("    .catch(error => {");
+        buffer.append("        status.innerHTML = '<span style=\"color: red;\">Error: ' + error.message + '</span>';");
+        buffer.append("        btn.disabled = false;");
+        buffer.append("        btn.textContent = originalText;");
+        buffer.append("    });");
+        buffer.append("});");
+        buffer.append("</script>");
     }
 
     private static class ProfileFileInfo {

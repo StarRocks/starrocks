@@ -248,6 +248,7 @@ public class HttpServer {
         // proc profile actions
         ProcProfileAction.registerAction(controller);
         ProcProfileFileAction.registerAction(controller);
+        ProcProfileCollectAction.registerAction(controller);
 
         // meta service action
         ImageAction.registerAction(controller);

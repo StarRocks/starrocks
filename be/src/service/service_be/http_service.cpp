@@ -293,6 +293,7 @@ Status HttpServiceBE::start() {
     // Register proc profile list action (for JSON API)
     auto* proc_profile_action = new ProcProfileAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/proc_profile/{action}", proc_profile_action);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/proc_profile/{action}", proc_profile_action);
     _http_handlers.emplace_back(proc_profile_action);
 
     // Register proc profile file action (for serving individual files)

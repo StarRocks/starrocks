@@ -35,6 +35,7 @@ public:
 
 private:
     void _handle_list(HttpRequest* req);
+    void _handle_collect(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
     [[maybe_unused]] ExecEnv* _exec_env;
 };
