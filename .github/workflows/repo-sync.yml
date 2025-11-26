@@ -149,33 +149,10 @@ jobs:
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
         run: |
-          if [[ ! -e ${BODY_FILE} ]]; then
-            echo "File ${BODY_FILE} not found"
-            exit 1
-          fi
-
-          for i in {1..3}; do
-            is_succ=true
-            info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"` || is_succ=false
-            if [[ "$is_succ" != "false" ]]; then
-              echo $info
-              break
-            else
-              sleep 30
-            fi
-          done
-          
-          # check pr url
-          if [[ "$is_succ" != "true" ]]; then
-            echo "::error::Create pull request failed"
-            exit 1
-          fi
-
-          pr_url=`echo $info | tail -n 1`
-          if [[ -n $pr_url ]]; then
-            echo pr_url=${pr_url} >> $GITHUB_OUTPUT
-          fi
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
 
       # previous pr files' check pending
       - name: Create pending pull request
@@ -188,26 +165,10 @@ jobs:
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
         run: |
-          for i in {1..3}; do
-            is_succ=true
-            info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -b "${BODY}" -r "${REVIEWER}"` || is_succ=false
-            if [[ "$is_succ" != "false" ]]; then
-              echo $info
-              break
-            else
-              sleep 30
-            fi
-          done
-          
-          # check pr url
-          if [[ "$is_succ" != "true" ]]; then
-            echo "::error::Create pull request failed"
-            exit 1
-          fi
-
-          pr_url=`echo $info | tail -n 1`
-          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
 
       # Unexpected failure
       - name: Create Error pull request
@@ -227,25 +188,8 @@ jobs:
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          for i in {1..3}; do
-            is_succ=true
-            info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"` || is_succ=false
-            if [[ "$is_succ" != "false" ]]; then
-              echo $info
-              break
-            else
-              sleep 30
-            fi
-          done
-          
-          # check pr url
-          if [[ "$is_succ" != "true" ]]; then
-            echo "::error::Create pull request failed"
-            exit 1
-          fi
-
-          pr_url=`echo $info | tail -n 1`
-          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
 
       - name: notify
         if: always()
@@ -368,34 +312,11 @@ jobs:
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
         run: |
-          if [[ ! -e ${BODY_FILE} ]]; then
-            echo "File ${BODY_FILE} not found"
-            exit 1
-          fi
-
-          for i in {1..3}; do
-            is_succ=true
-            info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"` || is_succ=false
-            if [[ "$is_succ" != "false" ]]; then
-              echo $info
-              break
-            else
-              sleep 30
-            fi
-          done
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
           
-          # check pr url
-          if [[ "$is_succ" != "true" ]]; then
-            echo "::error::Create pull request failed"
-            exit 1
-          fi
-
-          pr_url=`echo $info | tail -n 1`
-          if [[ -n $pr_url ]]; then
-            echo pr_url=${pr_url} >> $GITHUB_OUTPUT
-          fi
-
       # previous pr files' check pending
       - name: Create pending pull request
         id: create_pending_pr
@@ -407,26 +328,10 @@ jobs:
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
           BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+          BASE: ${{ inputs.BRANCH }}
         run: |
-          for i in {1..3}; do
-            is_succ=true
-            info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -b "${BODY}" -r "${REVIEWER}"` || is_succ=false
-            if [[ "$is_succ" != "false" ]]; then
-              echo $info
-              break
-            else
-              sleep 30
-            fi
-          done
-          
-          # check pr url
-          if [[ "$is_succ" != "true" ]]; then
-            echo "::error::Create pull request failed"
-            exit 1
-          fi
-
-          pr_url=`echo $info | tail -n 1`
-          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
 
       # Unexpected failure
       - name: Create Error pull request
@@ -446,25 +351,8 @@ jobs:
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
-          for i in {1..3}; do
-            is_succ=true
-            info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"` || is_succ=false
-            if [[ "$is_succ" != "false" ]]; then
-              echo $info
-              break
-            else
-              sleep 30
-            fi
-          done
-          
-          # check pr url
-          if [[ "$is_succ" != "true" ]]; then
-            echo "::error::Create pull request failed"
-            exit 1
-          fi
-
-          pr_url=`echo $info | tail -n 1`
-          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+          cd ${{ github.workspace }}/elastic-service
+          ./scripts/create_sync_repo.sh
 
       - name: notify
         if: always()
