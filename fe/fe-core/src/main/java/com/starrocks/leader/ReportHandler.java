@@ -1064,8 +1064,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 } finally {
                     locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
                 }
-                LOG.info("sync {} update {} in {} tablets in db[{}]. backend[{}]", syncCounter, logSyncCounter,
-                        offset, dbId, backendId);
+                LOG.info("sync {} update {} in {} tablets in db[{}], table[{}]. backend[{}]", syncCounter, logSyncCounter,
+                        offset, dbId, tableId, backendId);
             }
         } // end for dbs
     }
