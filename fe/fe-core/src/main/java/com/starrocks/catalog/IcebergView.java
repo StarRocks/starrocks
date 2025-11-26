@@ -26,7 +26,7 @@ public class IcebergView extends ConnectorView {
     private final String defaultCatalogName;
     private final String defaultDbName;
     private final String location;
-    private Map<String, String> properties;
+    private final Map<String, String> properties;
     public static final String STARROCKS_DIALECT = "starrocks";
 
     public IcebergView(long id, String catalogName, String dbName, String name, List<Column> schema,

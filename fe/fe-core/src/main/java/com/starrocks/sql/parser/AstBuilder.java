@@ -1823,15 +1823,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
 
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
         return new CreateViewStmt(
                 context.IF() != null,
                 context.REPLACE() != null,
@@ -1841,7 +1832,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 isSecurity,
                 (QueryStatement) visit(context.queryStatement()),
                 createPos(context),
-                properties
+                buildProperties(context.properties())
                 );
     }
 

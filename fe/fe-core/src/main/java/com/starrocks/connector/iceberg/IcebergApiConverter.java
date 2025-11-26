@@ -643,17 +643,15 @@ public class IcebergApiConverter {
         String queryId = connectContext.getQueryId().toString();
 
         Map<String, String> properties = new HashMap<>();
-        properties.put("queryId", queryId);
-        properties.put("starrocksCatalog", catalogName);
-        properties.put("starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
-
         if (!Strings.isNullOrEmpty(definition.getComment())) {
             properties.put(IcebergMetadata.COMMENT, definition.getComment());
         }
-
         if (!MapUtils.isEmpty(definition.getProperties())) {
             properties.putAll(definition.getProperties());
         }
+        properties.put("queryId", queryId);
+        properties.put("starrocksCatalog", catalogName);
+        properties.put("starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         return properties;
     }
