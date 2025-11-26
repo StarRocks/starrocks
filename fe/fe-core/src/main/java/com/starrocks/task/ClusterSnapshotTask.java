@@ -16,7 +16,7 @@ package com.starrocks.task;
 
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TBackend;
-import com.starrocks.thrift.TClusterSnapshotRequest;
+import com.starrocks.thrift.TPartitionSnapshotRequest;
 import com.starrocks.thrift.TTaskType;
 
 import java.util.List;
@@ -33,7 +33,7 @@ public class ClusterSnapshotTask extends AgentTask {
     
     public ClusterSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long physicalPartitionId, 
                                long jobId, long preVersion, long newVersion, long virtualTabletId) {
-        super(null, backendId, TTaskType.DATA_SNAPSHOT, dbId, tableId, partitionId, -1L, -1L, -1L);
+        super(null, backendId, TTaskType.PARTITION_SNAPSHOT, dbId, tableId, partitionId, -1L, -1L, -1L);
         this.jobId = jobId;
         this.preVersion = preVersion;
         this.newVersion = newVersion;
@@ -69,8 +69,8 @@ public class ClusterSnapshotTask extends AgentTask {
         this.nodeToTablets = nodeToTablets;
     }
 
-    public TClusterSnapshotRequest toThrift() {
-        TClusterSnapshotRequest request = new TClusterSnapshotRequest();
+    public TPartitionSnapshotRequest toThrift() {
+        TPartitionSnapshotRequest request = new TPartitionSnapshotRequest();
         request.setJob_id(jobId);
         request.setDb_id(dbId);
         request.setTable_id(tableId);

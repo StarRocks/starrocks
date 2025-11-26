@@ -47,7 +47,6 @@ import com.starrocks.thrift.TCheckConsistencyReq;
 import com.starrocks.thrift.TClearAlterTaskRequest;
 import com.starrocks.thrift.TClearTransactionTaskRequest;
 import com.starrocks.thrift.TCloneReq;
-import com.starrocks.thrift.TClusterSnapshotRequest;
 import com.starrocks.thrift.TCompactionControlReq;
 import com.starrocks.thrift.TCompactionReq;
 import com.starrocks.thrift.TCreateTabletReq;
@@ -56,6 +55,7 @@ import com.starrocks.thrift.TDropAutoIncrementMapReq;
 import com.starrocks.thrift.TDropTabletReq;
 import com.starrocks.thrift.TMoveDirReq;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionSnapshotRequest;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TReleaseSnapshotRequest;
@@ -406,10 +406,10 @@ public class AgentBatchTask implements Runnable {
                 tAgentTaskRequest.setUpdate_schema_req(req);
                 return tAgentTaskRequest;
             }
-            case DATA_SNAPSHOT: {
+            case PARTITION_SNAPSHOT: {
                 ClusterSnapshotTask clusterSnapshotTask = (ClusterSnapshotTask) task;
-                TClusterSnapshotRequest req = clusterSnapshotTask.toThrift();
-                tAgentTaskRequest.setData_snapshot_req(req);
+                TPartitionSnapshotRequest req = clusterSnapshotTask.toThrift();
+                tAgentTaskRequest.setPartition_snapshot_req(req);
                 return tAgentTaskRequest;
             }
             default:
