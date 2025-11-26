@@ -686,7 +686,7 @@ public class DefaultCoordinator extends Coordinator {
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (executionDAG.getWorkerNum() == 1 && jobSpec.supportSingleNodeParallelSchedule() &&
-                scheduler instanceof AllAtOnceExecutionSchedule && isLoadType && !hasOlapTableSink()) {
+                scheduler instanceof AllAtOnceExecutionSchedule && !isLoadType && !hasOlapTableSink()) {
             scheduler = new SingleNodeSchedule();
         }
     }
