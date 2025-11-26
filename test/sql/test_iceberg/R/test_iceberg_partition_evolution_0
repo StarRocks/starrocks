@@ -45,7 +45,7 @@ select * from test_orders where order_id between 1 and 3 order by order_id;
 2	102	20.0	2024-01-02 10:00:00
 3	103	30.0	2024-02-01 10:00:00
 -- !result
-function: assert_explain_contains("select * from test_orders where order_id between 1 and 3 order by order_id;", "partitions=3/5")
+function: assert_explain_verbose_contains("select * from test_orders where order_id between 1 and 3 order by order_id;", "partitions=3/5")
 -- result:
 None
 -- !result
@@ -55,7 +55,7 @@ select * from test_orders where order_id between 4 and 6 order by order_id;
 5	202	50.0	2024-03-15 12:00:00
 6	203	60.0	2024-04-01 08:00:00
 -- !result
-function: assert_explain_contains("select * from test_orders where order_id between 4 and 6 order by order_id;", "partitions=2/5")
+function: assert_explain_verbose_contains("select * from test_orders where order_id between 4 and 6 order by order_id;", "partitions=2/5")
 -- result:
 None
 -- !result
@@ -63,7 +63,7 @@ SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00' 
 -- result:
 5	150.0
 -- !result
-function: assert_explain_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=4/5")
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=4/5")
 -- result:
 None
 -- !result
@@ -71,7 +71,7 @@ SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00' 
 -- result:
 2	90.0
 -- !result
-function: assert_explain_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=1/5")
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=1/5")
 -- result:
 None
 -- !result

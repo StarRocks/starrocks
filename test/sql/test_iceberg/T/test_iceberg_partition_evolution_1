@@ -38,12 +38,12 @@ SELECT country, COUNT(*) AS c, SUM(score) AS s FROM test_users_bucketed GROUP BY
 SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4,5,6,7,16,32);
 
 -- partitions=7/8
-function: assert_explain_contains("SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4,5,6,7,16,32);", "partitions=7/8")
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4,5,6,7,16,32);", "partitions=7/8")
 
 SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4);
 
 -- partitions=3/8
-function: assert_explain_contains("SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4);", "partitions=3/8")
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4);", "partitions=3/8")
 
 
 drop table test_users_bucketed force;

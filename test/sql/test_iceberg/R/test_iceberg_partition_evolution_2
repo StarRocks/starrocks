@@ -64,7 +64,7 @@ SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND t
 -- result:
 7
 -- !result
-function: assert_explain_contains("SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=6/6")
+function: assert_explain_verbose_contains("SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=6/6")
 -- result:
 None
 -- !result
@@ -72,7 +72,7 @@ SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '
 -- result:
 US	2
 -- !result
-function: assert_explain_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
+function: assert_explain_verbose_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
 -- result:
 None
 -- !result

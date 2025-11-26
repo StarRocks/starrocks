@@ -39,12 +39,12 @@ SELECT country, COUNT(*) AS c FROM test_events GROUP BY country ORDER BY country
 SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
 
 -- partititons=6/6
-function: assert_explain_contains("SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=6/6")
+function: assert_explain_verbose_contains("SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=6/6")
 
 SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;
 
 -- partitions=2/6
-function: assert_explain_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
+function: assert_explain_verbose_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
 
 drop table test_events force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
