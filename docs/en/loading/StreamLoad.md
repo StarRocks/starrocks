@@ -247,6 +247,12 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 From v3.4.0, the system supports merging multiple Stream Load requests.
 
+:::warning
+
+Note that the Merge Commit optimization is suitable for the scenario with **concurrent** Stream Load jobs on a single table. It is not recommended if the concurrency is one. Meanwhile, think twice before setting `merge_commit_async` to `false` and `merge_commit_interval_ms` to a large value because they may cause load performance degradation.
+
+:::
+
 Merge Commit is an optimization for Stream Load, designed for high-concurrency, small-batch (from KB to tens of MB) real-time loading scenarios. In earlier versions, each Stream Load request would generate a transaction and a data version, which led to the following issues in high-concurrency loading scenarios:
 
 - Excessive data versions impact query performance, and limiting the number of versions may cause `too many versions` errors.
