@@ -18,6 +18,7 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TUserIdentity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -40,4 +41,16 @@ public class UserIdentityTest {
         Assertions.assertEquals(str2, userIdent.toString());
     }
 
+    @Test
+    public void testEphemeralFlagRoundTrip() {
+        UserIdentity ephemeralIdentity = UserIdentity.createEphemeralUserIdent("ldap_user", "10.0.%");
+
+        TUserIdentity thriftIdentity = ephemeralIdentity.toThrift();
+        Assertions.assertTrue(thriftIdentity.isSetIs_ephemeral());
+        Assertions.assertTrue(thriftIdentity.isIs_ephemeral());
+
+        UserIdentity roundTrip = UserIdentity.fromThrift(thriftIdentity);
+        Assertions.assertEquals(ephemeralIdentity.toString(), roundTrip.toString());
+        Assertions.assertTrue(roundTrip.isEphemeral());
+    }
 }
