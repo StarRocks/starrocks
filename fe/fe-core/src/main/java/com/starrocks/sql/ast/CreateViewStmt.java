@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
@@ -44,7 +45,7 @@ public class CreateViewStmt extends DdlStmt {
                           boolean security,
                           QueryStatement queryStmt,
                           NodePosition pos) {
-        this(ifNotExists, replace, tableName, colWithComments, comment, security, queryStmt, pos, null);
+        this(ifNotExists, replace, tableName, colWithComments, comment, security, queryStmt, pos, Maps.newHashMap());
     }
 
     public CreateViewStmt(boolean ifNotExists,
@@ -64,7 +65,7 @@ public class CreateViewStmt extends DdlStmt {
         this.comment = Strings.nullToEmpty(comment);
         this.security = security;
         this.queryStatement = queryStmt;
-        this.properties = properties;
+        this.properties = properties != null ? properties : Maps.newHashMap();
     }
 
     public String getCatalog() {

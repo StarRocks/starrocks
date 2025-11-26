@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.TableName;
 
@@ -35,7 +36,7 @@ public class IcebergView extends ConnectorView {
         this.defaultCatalogName = defaultCatalogName;
         this.defaultDbName = defaultDbName;
         this.location = location;
-        this.properties = properties;
+        this.properties = properties != null ? properties : Maps.newHashMap();
     }
 
     @Override

@@ -457,6 +457,7 @@ public class AstToStringBuilder {
         try {
             properties = new HashMap<>(table.getProperties());
         } catch (NotImplementedException e) {
+            // hive view does not implement getProperties
         }
 
         // Location

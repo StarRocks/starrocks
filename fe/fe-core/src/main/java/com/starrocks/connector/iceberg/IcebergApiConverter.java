@@ -48,6 +48,7 @@ import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.UnknownType;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
@@ -650,7 +651,7 @@ public class IcebergApiConverter {
             properties.put(IcebergMetadata.COMMENT, definition.getComment());
         }
 
-        if (definition.getProperties() != null && !definition.getProperties().isEmpty()) {
+        if (!MapUtils.isEmpty(definition.getProperties())) {
             properties.putAll(definition.getProperties());
         }
 
