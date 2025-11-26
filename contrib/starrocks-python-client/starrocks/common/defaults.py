@@ -16,7 +16,13 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from sqlalchemy.engine import reflection as sa_reflection
+try:
+    from sqlalchemy.engine.reflection import ReflectionDefaults
+except:
+    class ReflectionDefaults:
+        @classmethod
+        def table_comment(cls):
+            return {"text": None}
 
 from starrocks.common.params import TableInfoKeyWithPrefix
 from starrocks.common.types import SystemRunMode, TableDistribution, TableEngine, TableType, ViewSecurityType
@@ -24,7 +30,7 @@ from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.engine.interfaces import ReflectedMVState, ReflectedTableKeyInfo, ReflectedViewState
 
 
-class ReflectionTableDefaults(sa_reflection.ReflectionDefaults):
+class ReflectionTableDefaults(ReflectionDefaults):
     """StarRocks table reflection default values management."""
 
     # StarRocks default properties that are automatically set

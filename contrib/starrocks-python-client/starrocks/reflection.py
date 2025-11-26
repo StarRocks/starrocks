@@ -55,6 +55,11 @@ from .engine.interfaces import (
 logger = logging.getLogger(__name__)
 
 
+class hashdict(dict):
+    def __hash__(self):
+        return hash(tuple(sorted(self.items())))
+
+
 class StarRocksInspector(Inspector):
     """
     The StarRocksInspector provides a custom inspector for the StarRocks dialect,
@@ -113,7 +118,10 @@ class StarRocksInspector(Inspector):
 
         # 1. Call parent class (will call get_pk_constraints, etc., which will trigger _setup_parser)
         #    And, it will set all dialect options from parsed_state, including for a View or a Mv or a Table.
-        super().reflect_table(table, include_columns, exclude_columns, resolve_fks, _extend_on, _reflect_info)
+        if _reflect_info: # SQLAlchemy 2.0
+            super().reflect_table(table, include_columns, exclude_columns, resolve_fks, _extend_on, _reflect_info)
+        else: # SQLAlchemy 1.4
+            super().reflect_table(table, include_columns, exclude_columns, resolve_fks, _extend_on)
         # comment is already set to Table.comment, the starrocks_comment is not used again.
         self._delete_comment_from_dialect_options(table)
 
@@ -487,7 +495,7 @@ class StarRocksTableDefinitionParser(object):
         if properties := table_config.get(TableConfigKey.PROPERTIES):
             # logger.debug("table_config.%s: %s", TableConfigKey.PROPERTIES, properties)
             try:
-                opts[TableInfoKeyWithPrefix.PROPERTIES] = dict(json.loads(properties or "{}").items())
+                opts[TableInfoKeyWithPrefix.PROPERTIES] = hashdict(json.loads(properties or "{}").items())
             except json.JSONDecodeError:
                 logger.info(f"properties are not valid JSON: {properties}")
         return opts
