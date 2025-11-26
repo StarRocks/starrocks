@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.10.12)
+cmake_minimum_required(VERSION 3.16.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -75,7 +75,7 @@ set(EXEC_FILES
     hash_join_components.cpp
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
-    join/join_hash_map.cpp
+    join/join_hash_table.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
@@ -345,6 +345,26 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)
 
+add_library(join_hash_map_inst_objs OBJECT
+    join/join_hash_map_mapping_inst.cpp
+    join/join_hash_map_linear_chained_inst.cpp
+    join/join_hash_map_linear_chained_set_inst.cpp
+    join/join_hash_map_bucket_chained_inst.cpp
+    join/join_hash_map_asof_inst.cpp
+)
+
+IF(ENABLE_MULTI_DYNAMIC_LIBS)
+    set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
+ENDIF()
+
+target_precompile_headers(join_hash_map_inst_objs
+    PRIVATE
+    join/join_hash_map.h
+    join/join_hash_map.hpp
+    join/join_hash_map_method.hpp
+)
+
 ADD_BE_LIB(Exec
     ${EXEC_FILES}
+    $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
