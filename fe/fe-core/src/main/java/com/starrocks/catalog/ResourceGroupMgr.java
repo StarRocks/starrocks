@@ -395,7 +395,7 @@ public class ResourceGroupMgr implements Writable {
                 if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(wg.getMemPool())) {
                     throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
                 }
-                if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) &&
+                if (wg.getMemPool() != null && !ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) &&
                         changedProperties.getMemLimit() != null &&
                         !wg.getMemLimit().equals(changedProperties.getMemLimit())) {
                     throw new DdlException(
