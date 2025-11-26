@@ -190,6 +190,8 @@ set(STORAGE_FILES
     lake/compaction_task_context.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
+    lake/partition_snapshot_task.cpp
+    lake/snapshot_file_syncer.cpp
     lake/vacuum.cpp
     lake/vacuum_full.cpp
     lake/general_tablet_writer.cpp

@@ -22,4 +22,20 @@ bool TUniqueId::operator<(const TUniqueId& rhs) const {
     return hi < rhs.hi || (hi == rhs.hi && lo < rhs.lo);
 }
 
+bool TBackend::operator<(const TBackend& rhs) const {
+    if (host < rhs.host) {
+        return true;
+    }
+    if (rhs.host < host) {
+        return false;
+    }
+    if (be_port < rhs.be_port) {
+        return true;
+    }
+    if (rhs.be_port < be_port) {
+        return false;
+    }
+    return http_port < rhs.http_port;
+}
+
 } // namespace starrocks
