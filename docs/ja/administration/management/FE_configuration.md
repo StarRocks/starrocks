@@ -371,7 +371,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: アイドル状態のクライアント接続がタイムアウトするまでの時間。
 - 導入バージョン: -
 
-<<<<<<< HEAD
 ##### thrift_backlog_num
 
 - デフォルト: 1024
@@ -409,18 +408,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入バージョン: -
 
 ##### mysql_service_nio_enable_keep_alive
-=======
-##### db_used_data_quota_update_interval_secs
-
-- デフォルト: 300
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: データベースの使用データクォータを更新する間隔。StarRocksは定期的にすべてのデータベースの使用データクォータを更新して、ストレージ消費を追跡します。この値はクォータ制御とメトリクス収集に使用されます。システム負荷を過度に高めないため、許可される最小間隔は30秒です。30未満の値は拒否されます。
-- 導入バージョン: -
-
-##### drop_backend_after_decommission
->>>>>>> 60f9dca237 ([Enhancement] Add total database data size metric and make refresh interval configurable (#65824))
 
 - デフォルト: true
 - タイプ: Boolean
@@ -2784,6 +2771,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: いいえ
 - 説明: FE が使用する文字セット。
+- 導入バージョン: -
+
+##### db_used_data_quota_update_interval_secs
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: データベースの使用データクォータを更新する間隔。StarRocksは定期的にすべてのデータベースの使用データクォータを更新して、ストレージ消費を追跡します。この値はクォータ制御とメトリクス収集に使用されます。システム負荷を過度に高めないため、許可される最小間隔は30秒です。30未満の値は拒否されます。
 - 導入バージョン: -
 
 ##### report_queue_size (廃止予定)

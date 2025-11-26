@@ -627,21 +627,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<<<<<<< HEAD
 <!--
 ##### thrift_rpc_strict_mode
-=======
-##### db_used_data_quota_update_interval_secs
-
-- 默认值：300
-- 类型：Int
-- 单位：Seconds
-- 是否动态：是
-- 描述：数据库已使用数据配额的更新间隔。StarRocks 会定期更新所有数据库的已使用数据配额以跟踪存储消耗情况。此值用于配额管控和指标采集。允许的最小间隔为 30 秒，以防止系统负载过高。如果配置的值小于 30，将被拒绝。
-- 引入版本：-
-
-##### drop_backend_after_decommission
->>>>>>> 60f9dca237 ([Enhancement] Add total database data size metric and make refresh interval configurable (#65824))
 
 - 默认值：true
 - 类型：Boolean
@@ -3873,16 +3860,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：FE 所使用的字符集。
 - 引入版本：-
 
-<!--
 ##### db_used_data_quota_update_interval_secs
 
 - 默认值：300
 - 类型：Int
-- Unit:
-- 是否动态：否
-- 描述：
+- 单位：Seconds
+- 是否动态：是
+- 描述：数据库已使用数据配额的更新间隔。StarRocks 会定期更新所有数据库的已使用数据配额以跟踪存储消耗情况。此值用于配额管控和指标采集。允许的最小间隔为 30 秒，以防止系统负载过高。如果配置的值小于 30，将被拒绝。
 - 引入版本：-
--->
 
 <!--
 ##### disable_hadoop_load
