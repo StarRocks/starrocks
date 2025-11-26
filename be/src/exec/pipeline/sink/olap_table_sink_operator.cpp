@@ -96,7 +96,9 @@ bool OlapTableSinkOperator::pending_finish() const {
 
 Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
     _is_cancelled = true;
-    return _sink->close(state, Status::Cancelled("Cancelled by pipeline engine"));
+    auto final_status = state->fragment_ctx()->final_status();
+    std::string reason = "Cancelled by pipeline engine, reason: " + final_status.to_string();
+    return _sink->close(state, Status::Cancelled(reason));
 }
 
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
