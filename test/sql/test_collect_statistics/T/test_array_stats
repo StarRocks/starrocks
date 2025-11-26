@@ -236,7 +236,6 @@ drop stats test_array_ndv;
 admin set frontend config ("enable_manual_collect_array_ndv"="false");
 
 -- This test covers the bug where sample returns empty result set for some tablets
--- admin set frontend config('enable_statistic_collect_on_first_load' = 'false');
 CREATE TABLE test_array_collection_size(
     k1 int,
     p_date date,
@@ -261,5 +260,28 @@ WHERE table_name = 'test_array_stats.test_array_collection_size'
 ORDER BY column_name;
 
 drop stats test_array_collection_size;
-drop table test_array_collection_size;;
+drop table test_array_collection_size;
 
+CREATE TABLE test_array_collection_size(
+    k1 int,
+    p_date date,
+    int_arr array<int>,
+    str_arr array<string>
+) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+PROPERTIES ("replication_num"="1");
+
+-- Insert data into one tablet, leave others empty
+INSERT INTO test_array_collection_size
+select 1, '2023-01-01', [1,2,3], ['a','b','c']
+from table(generate_series(1, 200001));
+
+-- Rely on the load-triggered statistic collection, which should be analyze sample
+-- Verify collection_size statistics for array columns
+SELECT column_name, row_count, collection_size, data_size
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_collection_size' 
+ORDER BY column_name;
+
+drop stats test_array_collection_size;
+drop table test_array_collection_size;
