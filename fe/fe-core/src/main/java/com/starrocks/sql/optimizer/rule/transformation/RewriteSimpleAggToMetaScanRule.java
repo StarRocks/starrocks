@@ -29,11 +29,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.expression.ExprUtils;
->>>>>>> 5ec4583a28 ([BugFix] disable rewrite min/max to meta scan in shared-data mode if schema change happened (#65911))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
