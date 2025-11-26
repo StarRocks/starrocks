@@ -53,7 +53,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public MetaRecoveryDaemon() {
-        super("meta_recovery");
+        super("meta-recovery");
     }
 
     @Override

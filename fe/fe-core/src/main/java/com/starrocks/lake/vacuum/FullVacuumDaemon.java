@@ -69,7 +69,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     public FullVacuumDaemon() {
         // Check every minute if we should run a full vacuum
-        super("FullVacuumDaemon", 1000 * 60);
+        super("full-vacuum-daemon", 1000 * 60);
     }
 
     @Override

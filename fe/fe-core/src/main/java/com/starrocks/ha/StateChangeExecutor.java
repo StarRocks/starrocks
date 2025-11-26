@@ -44,7 +44,7 @@ public class StateChangeExecutor extends Daemon {
     }
 
     public StateChangeExecutor() {
-        this("stateChangeExecutor");
+        this("state-change-executor");
     }
 
     public StateChangeExecutor(String name) {

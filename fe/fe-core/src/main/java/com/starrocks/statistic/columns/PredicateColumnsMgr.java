@@ -214,7 +214,7 @@ public class PredicateColumnsMgr {
         private static final DaemonThread INSTANCE = new DaemonThread();
 
         public DaemonThread() {
-            super("PredicateColumnsDaemonThread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
+            super("predicate-columns-daemon-thread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
         }
 
         public static DaemonThread getInstance() {

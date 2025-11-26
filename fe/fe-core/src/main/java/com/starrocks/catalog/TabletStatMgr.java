@@ -89,7 +89,7 @@ public class TabletStatMgr extends FrontendDaemon {
     private LocalDateTime lastWorkTimestamp = LocalDateTime.MIN;
 
     public TabletStatMgr() {
-        super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
+        super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
     public LocalDateTime getLastWorkTimestamp() {
