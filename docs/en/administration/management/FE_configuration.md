@@ -335,7 +335,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### log_cleaner_enable
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes

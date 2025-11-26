@@ -237,7 +237,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### log_cleaner_enable
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：是

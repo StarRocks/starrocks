@@ -227,7 +227,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### log_cleaner_enable
 
-- デフォルト: true
+- デフォルト: false 
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
