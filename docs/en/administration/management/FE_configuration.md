@@ -3876,16 +3876,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The character set that is used by the FE.
 - Introduced in: -
 
-<!--
 ##### db_used_data_quota_update_interval_secs
 
 - Default: 300
 - Type: Int
-- Unit:
-- Is mutable: No
-- Description:
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the database used data quota is updated. StarRocks periodically updates the used data quota for all databases to track storage consumption. This value is used for quota enforcement and metrics collection. The minimum allowed interval is 30 seconds to prevent excessive system load. A value less than 30 will be rejected.
 - Introduced in: -
--->
 
 <!--
 ##### disable_hadoop_load
