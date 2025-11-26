@@ -1644,7 +1644,7 @@ public class Config extends ConfigBase {
      * One master daemon thread will update database used data quota for db txn manager
      * every db_used_data_quota_update_interval_secs
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval to update the database used data quota in seconds")
     public static int db_used_data_quota_update_interval_secs = 300;
 
     /**
