@@ -940,6 +940,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 Locker locker = new Locker();
                 locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
                 try {
+                    // Get the table by tableId again, ensure it still exists under the lock.
+                    olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
+                    if (olapTable == null) {
+                        break;
+                    }
+
                     List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                     for (int i = 0; i < tabletMetaList.size(); i++) {
                         offset++;

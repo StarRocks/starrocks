@@ -1054,14 +1054,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
 
-        OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
-        if (olapTable == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "table does not exist");
-        }
-
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(dbId, tblId, LockType.WRITE);
         try {
+            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+            if (olapTable == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "table does not exist");
+            }
+
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, physicalPartitionId);
             if (partition == null) {
