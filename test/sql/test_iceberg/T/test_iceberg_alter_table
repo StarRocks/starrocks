@@ -44,5 +44,48 @@ set ('file_format'='orc');
 
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0} force;
 
+
+-- partition evolution test
+
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+create table test_part_evo (
+  id bigint,
+  data string,
+  dt date,
+  value bigint  
+);
+
+alter table test_part_evo add partition column dt, truncate(value, 10), bucket(id, 10);
+insert into test_part_evo values (1, 'data1', '2023-01-01', 100);
+insert into test_part_evo values (2, 'data2', '2023-01-02', 200);
+insert into test_part_evo values (3, 'data3', '2023-01-03', 300);
+insert into test_part_evo values (4, 'data4', '2023-01-04', 400);
+
+function: assert_query_contains("show create table test_part_evo", "PARTITION BY (`dt`, truncate(`value`, 10), bucket(`id`, 10))")
+
+alter table test_part_evo drop partition column dt;
+alter table test_part_evo add partition column month(dt);
+insert into test_part_evo values (5, 'data5', '2023-01-05', 500);
+
+function: assert_query_contains("show create table test_part_evo", "PARTITION BY (truncate(`value`, 10), bucket(`id`, 10), month(`dt`))")
+
+select * from test_part_evo order by id;
+
+alter table test_part_evo drop partition column truncate(value, 10), bucket(id, 10);
+
+function: assert_query_contains("show create table test_part_evo", "PARTITION BY (month(`dt`))")
+
+select * from test_part_evo order by id;
+
+function: assert_query_error_contains("alter table test_part_evo add partition column fn(dt)", "Unsupported partition transform")
+
+function: assert_query_error_contains("alter table test_part_evo add partition column month(dt)", "Failed to add partition column")
+
+function: assert_query_error_contains("alter table test_part_evo drop partition column day(dt)", "Failed to drop partition column")
+
+drop table test_part_evo force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
