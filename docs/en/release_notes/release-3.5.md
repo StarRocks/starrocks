@@ -11,6 +11,38 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.9
+
+Release date: November 26, 2025
+
+### Improvements
+
+- Added transaction latency metrics to FE for observing timing across transaction stages. [#64948](https://github.com/StarRocks/starrocks/pull/64948)
+- Supports overwriting S3 unpartitioned Hive tables to simplify full-table rewrites in data lake scenarios. [#65340](https://github.com/StarRocks/starrocks/pull/65340)
+- Introduced CacheOptions to provide finer-grained control over tablet metadata caching. [#65222](https://github.com/StarRocks/starrocks/pull/65222)
+- Supports sample statistics collection for INSERT OVERWRITE to ensure statistics stay consistent with the latest data. [#65363](https://github.com/StarRocks/starrocks/pull/65363)
+- Optimized the statistics collection strategy after INSERT OVERWRITE to avoid missing or incorrect statistics due to asynchronous tablet reports. [#65327](https://github.com/StarRocks/starrocks/pull/65327)
+- Introduced a retention period for partitions dropped or replaced by INSERT OVERWRITE or materialized view refresh operations, keeping them in the recycle bin for a while to improve recoverability. [#64779](https://github.com/StarRocks/starrocks/pull/64779)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Lock contention and concurrency issues related to `LocalMetastore.truncateTable()`. [#65191](https://github.com/StarRocks/starrocks/pull/65191)
+- Lock contention and replica check performance issues related to TabletChecker. [#65312](https://github.com/StarRocks/starrocks/pull/65312)
+- Incorrect error logging when changing user via HTTP SQL. [#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- Checksum failures caused by DelVec CRC32 upgrade compatibility issues. [#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- Tablet metadata load failures caused by RocksDB iteration timeout. [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- When the internal `flat_path` string is empty because the JSON hyper extraction path is `$` or all paths are skipped, calling `substr` will throw an exception and cause BE crash. [#65260](https://github.com/StarRocks/starrocks/pull/65260)
+- The PREPARED flag in fragment execution is not correctly set. [#65423](https://github.com/StarRocks/starrocks/pull/65423)
+- Inaccurate write and flush metrics caused by duplicated load profile counters. [#65252](https://github.com/StarRocks/starrocks/pull/65252)
+- When multiple HTTP requests reuse the same TCP connection, if a non‑ExecuteSQL request arrives after an ExecuteSQL request, the `HttpConnectContext` cannot be unregistered at channel close, causing HTTP context leaks. [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- MySQL 8.0 schema introspection errors (Fixed by adding session variables `default_authentication_plugin` and `authentication_policy`). [#65330](https://github.com/StarRocks/starrocks/pull/65330)
+- SHOW ANALYZE STATUS errors caused by unnecessary statistics collection for temporary partitions created after partition overwrite operations. [#65298](https://github.com/StarRocks/starrocks/pull/65298)
+- Global Runtime Filter race in the Event Scheduler. [#65200](https://github.com/StarRocks/starrocks/pull/65200)
+- Data Cache is aggressively disabled because the minimum Data Cache disk size constraint is too large. [#64909](https://github.com/StarRocks/starrocks/pull/64909)
+- An aarch64 build issue related to the `gold` linker automatic fallback. [#65156](https://github.com/StarRocks/starrocks/pull/65156)
+
 ## 3.5.8
 
 Release date: November 10, 2025
