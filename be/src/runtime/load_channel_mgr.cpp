@@ -126,7 +126,7 @@ void LoadChannelMgr::close() {
     _async_rpc_pool->shutdown();
     std::lock_guard l(_lock);
     for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
-        iter->second->cancel();
+        iter->second->cancel("load channel manager closed");
         iter->second->abort();
         iter = _load_channels.erase(iter);
     }
@@ -277,7 +277,7 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
-            channel->cancel();
+            channel->cancel(request.reason());
             channel->abort();
         }
     }
@@ -367,7 +367,7 @@ void LoadChannelMgr::_start_load_channels_clean() {
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
-        channel->cancel();
+        channel->cancel("load channel timeout");
     }
     for (auto& channel : timeout_channels) {
         channel->abort();
@@ -410,7 +410,7 @@ void LoadChannelMgr::abort_txn(int64_t txn_id) {
     if (channel != nullptr) {
         LOG(INFO) << "Aborting load channel because transaction was aborted. load_id=" << print_id(channel->load_id())
                   << " txn_id=" << txn_id;
-        channel->cancel();
+        channel->cancel("transaction aborted");
         channel->abort();
     }
 }
