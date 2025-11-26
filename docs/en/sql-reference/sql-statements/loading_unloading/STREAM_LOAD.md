@@ -136,6 +136,12 @@ When you load JSON data, also note that the size per JSON object cannot exceed 4
 
 Enables Merge Commit for multiple concurrent Stream Load requests within a specified time window and to merge them into a single transaction.
 
+:::warning
+
+Note that the Merge Commit optimization is suitable for the scenario with **concurrent** Stream Load jobs on a single table. It is not recommended if the concurrency is one. Meanwhile, think twice before setting `merge_commit_async` to `false` and `merge_commit_interval_ms` to a large value because they may cause load performance degradation.
+
+:::
+
 | **Parameter**            | **Required** | **Description**                                              |
 | ------------------------ | ------------ | ------------------------------------------------------------ |
 | enable_merge_commit      | No           | Whether to enable the Merge Commit for the loading request. Valid values: `true` and `false` (Default). |
