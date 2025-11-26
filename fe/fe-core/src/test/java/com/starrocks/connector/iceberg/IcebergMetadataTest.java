@@ -21,8 +21,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
@@ -83,15 +85,6 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TypeDef;
->>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -1606,14 +1599,9 @@ public class IcebergMetadataTest extends TableTestBase {
         ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
         AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
 
-<<<<<<< HEAD
         ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
         ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
-=======
-        ColumnDef c2 = new ColumnDef("col2", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)), true);
-        ColumnDef c3 = new ColumnDef("col3", new TypeDef(TypeFactory.createType(PrimitiveType.VARCHAR)), true);
-        ColumnDef cdt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)), true);
->>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
+        ColumnDef cdt = new ColumnDef("dt", TypeDef.create(PrimitiveType.DATE), true);
         List<ColumnDef> cols = new ArrayList<>();
         cols.add(c2);
         cols.add(c3);

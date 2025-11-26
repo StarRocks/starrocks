@@ -4869,9 +4869,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
-    public ParseNode visitAddColumnsClause(StarRocksParser.AddColumnsClauseContext context) {
-=======
     public ParseNode visitAddPartitionColumnClause(
             com.starrocks.sql.parser.StarRocksParser.AddPartitionColumnClauseContext context) {
         List<Expr> partitionExprList = visit(context.expressionList().expression(), Expr.class);
@@ -4888,7 +4885,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddColumnsClause(com.starrocks.sql.parser.StarRocksParser.AddColumnsClauseContext context) {
->>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
         Map<String, String> properties = new HashMap<>();
         properties = getProperties(context.properties());

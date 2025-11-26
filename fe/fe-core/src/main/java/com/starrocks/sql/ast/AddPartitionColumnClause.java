@@ -14,7 +14,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.alter.AlterOpType;
+import com.starrocks.analysis.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -28,12 +29,12 @@ public class AddPartitionColumnClause extends AlterTableClause {
     }
 
     public AddPartitionColumnClause(List<Expr> partitionExprList, NodePosition pos) {
-        super(pos);
+        super(AlterOpType.SCHEMA_CHANGE, pos);
         this.partitionExprList = partitionExprList;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddPartitionColumnClause(this, context);
+        return visitor.visitAddPartitionColumnClause(this, context);
     }
 }

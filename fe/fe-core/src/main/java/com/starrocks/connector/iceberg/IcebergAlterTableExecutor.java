@@ -14,16 +14,15 @@
 
 package com.starrocks.connector.iceberg;
 
-<<<<<<< HEAD
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
-=======
->>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.BranchOptions;
@@ -52,14 +51,6 @@ import com.starrocks.sql.ast.DropTagClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.TagOptions;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
->>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -129,9 +120,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private static final Duration DEFAULT_RETENTION_THRESHOLD = Duration.ofDays(7);
 
     public IcebergAlterTableExecutor(AlterTableStmt stmt,
-            Table table,
-            IcebergCatalog icebergCatalog,
-            HdfsEnvironment hdfsEnvironment) {
+                                     Table table,
+                                     IcebergCatalog icebergCatalog,
+                                     HdfsEnvironment hdfsEnvironment) {
         super(stmt);
         this.table = table;
         this.icebergCatalog = icebergCatalog;
@@ -522,7 +513,6 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         return null;
     }
 
-<<<<<<< HEAD
     private void fastForward(List<ConstantOperator> args) {
         if (args.size() != 2) {
             throw new StarRocksConnectorException("invalid args. fast forward must contain `from branch` and `to branch`");
@@ -562,7 +552,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         if (args.size() != 1) {
             throw new StarRocksConnectorException("invalid args. rollback snapshot must contain `snapshot id`");
         }
-        
+
         long snapshotId = args.get(0)
                 .castTo(Type.BIGINT)
                 .map(ConstantOperator::getBigint)
@@ -601,15 +591,15 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         VelocityEngine defaultVelocityEngine = new VelocityEngine();
         defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
         StringWriter writer = new StringWriter();
-        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate", 
+        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
                 "INSERT INTO $catalogName.$dbName.$tableName" +
-                " SELECT * FROM $catalogName.$dbName.$tableName" +
-                " #if ($partitionFilterSql)" +
-                " WHERE $partitionFilterSql" +
-                " #end"
+                        " SELECT * FROM $catalogName.$dbName.$tableName" +
+                        " #if ($partitionFilterSql)" +
+                        " WHERE $partitionFilterSql" +
+                        " #end"
         );
         String executeStmt = writer.toString();
-        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll, 
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll,
                 minFileSizeBytes, batchSize, batchParallelism, context, stmt);
         try {
             job.prepare();
@@ -659,7 +649,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         } else {
             LocalDateTime time = Optional.ofNullable(args.get(0))
                     .flatMap(arg -> arg.castTo(Type.DATETIME)
-                    .map(ConstantOperator::getDatetime))
+                            .map(ConstantOperator::getDatetime))
                     .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
         }
@@ -750,7 +740,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 throw new StarRocksConnectorException("Failed to delete file " + file, e);
             }
         });
-=======
+    }
+
     private Term transformExprToIcebergTerm(Expr expr) {
         if (expr instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) expr;
@@ -826,6 +817,5 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             }
         });
         return null;
->>>>>>> 4d45cdfa96 ([Enhancement] support to alter iceberg table partiton spec (#65922))
     }
 }
