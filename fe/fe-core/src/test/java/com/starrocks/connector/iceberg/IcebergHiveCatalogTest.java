@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
@@ -24,7 +23,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ViewAnalyzer;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -57,12 +60,11 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.type.IntegerType.INT;
 
 public class IcebergHiveCatalogTest {
-    private static final String CATALOG_NAME = "iceberg_hive_catalog";
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
     public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
-    public static ConnectContext connectContext;
-
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
+    private static final String CATALOG_NAME = "iceberg_hive_catalog";
+    public static ConnectContext connectContext;
 
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
@@ -238,6 +240,100 @@ public class IcebergHiveCatalogTest {
         Assertions.assertEquals("alex", icebergView.getProperties().get("owner"));
     }
 
+    @Test
+    public void testCreateViewPropertiesNotIcebergCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+        final String catalogName = "catalog";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = mockGsm;
+                minTimes = 0;
+
+                mockGsm.getCatalogMgr();
+                result = mockCatalogMgr;
+                minTimes = 0;
+
+                mockCatalogMgr.catalogExists(catalogName);
+                result = true;
+                minTimes = 0;
+
+                mockCatalogMgr.getCatalogType(catalogName);
+                result = "hive";
+                minTimes = 0;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableName(catalogName, "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            ViewAnalyzer.analyze(stmt, connectContext);
+        });
+    }
+
+    @Test
+    public void testCreateViewPropertiesInternalCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+        final String catalogName = "default_catalog";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = mockGsm;
+                minTimes = 0;
+
+                mockGsm.getCatalogMgr();
+                result = mockCatalogMgr;
+                minTimes = 0;
+
+                mockCatalogMgr.catalogExists(catalogName);
+                result = true;
+                minTimes = 0;
+
+                mockCatalogMgr.isInternalCatalog(catalogName);
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableName(catalogName, "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            ViewAnalyzer.analyze(stmt, connectContext);
+        });
+    }
+
+    @Test
+    public void testCreateViewPropertiesUnknownCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+        final String catalogName = "xxx";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = mockGsm;
+                minTimes = 0;
+
+                mockGsm.getCatalogMgr();
+                result = mockCatalogMgr;
+                minTimes = 0;
+
+                mockCatalogMgr.catalogExists(catalogName);
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableName(catalogName, "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            ViewAnalyzer.analyze(stmt, connectContext);
+        });
+    }
 
     @Test
     public void testAlterViewProperties(@Mocked HiveCatalog hiveCatalog, @Mocked BaseView baseView,
