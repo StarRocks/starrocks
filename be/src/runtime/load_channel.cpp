@@ -288,11 +288,20 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
     closure_guard.release();
 }
 
-void LoadChannel::cancel() {
+void LoadChannel::cancel(const std::string& reason) {
+    bool print_cancel_msg = false;
+    DeferOp defer([&]() {
+        if (print_cancel_msg) {
+            LOG(INFO) << "Cancel load channel, txn_id=" << _txn_id << ", load_id=" << print_id(_load_id)
+                      << ", reason=" << reason;
+        }
+    });
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
     }
+    print_cancel_msg = !_cancelled.load(std::memory_order_acquire);
+    _cancelled.store(true, std::memory_order_release);
 }
 
 void LoadChannel::abort() {

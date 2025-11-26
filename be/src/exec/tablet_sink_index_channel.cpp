@@ -1105,6 +1105,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     request.set_sender_id(_parent->_sender_id);
     request.set_txn_id(_parent->_txn_id);
     request.set_sink_id(_parent->_sink_id);
+    request.set_reason(err_st.to_string());
 
     auto closure = new RefCountClosure<PTabletWriterCancelResult>();
 
