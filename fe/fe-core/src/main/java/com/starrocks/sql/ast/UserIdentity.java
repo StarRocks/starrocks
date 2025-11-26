@@ -177,6 +177,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         tUserIdent.setHost(host);
         tUserIdent.setUsername(user);
         tUserIdent.setIs_domain(isDomain);
+        tUserIdent.setIs_ephemeral(ephemeral);
         return tUserIdent;
     }
 
