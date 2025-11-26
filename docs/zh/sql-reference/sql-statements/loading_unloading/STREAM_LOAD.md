@@ -137,6 +137,12 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 用于启用 Merge Commit 功能，在指定的时间窗口内合并多个并发的 Stream Load 请求，并将它们合并为一个事务。
 
+:::warning
+
+请注意 Merge Commit 优化适用于单张表上存在**并发** Stream Load 作业的场景。若并发数为 1，则不建议使用该优化。同时，将 `merge_commit_async` 设为 `false` 并为 `merge_commit_interval_ms` 赋予较大值时需谨慎考虑，此类设置可能导致导入性能下降。
+
+:::
+
 | **参数名称**              | **是否必选** | **参数说明**                                                 |
 | ------------------------ | ------------ | ------------------------------------------------------------ |
 | enable_merge_commit      | 否           | 是否为导入请求启用 Merge Commit。有效值：`true` 或 `false`（默认值）。 |
