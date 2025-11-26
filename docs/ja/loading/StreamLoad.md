@@ -247,6 +247,12 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 v3.4.0 以降、システムは複数の Stream Load リクエストのマージをサポートしています。
 
+:::warning
+
+Merge Commit 最適化は、単一テーブルに対する**並行** Stream Load ジョブが実行されるシナリオに適しています。並行度が 1 の場合は推奨されません。また、`merge_commit_async` を `false` に設定し、`merge_commit_interval_ms` を大きな値に設定する場合は慎重に検討してください。これらはロードパフォーマンスの低下を引き起こす可能性があります。
+
+:::
+
 Merge Commit は、*hc*、小バッチ（KB から数十 MB）のリアルタイムロードシナリオ向けに設計された Stream Load の最適化です。以前のバージョンでは、各 Stream Load リクエストがトランザクションとデータバージョンを生成していましたが、*hc* ロードシナリオでは次のような問題が発生していました。
 
 - データバージョンが多すぎるとクエリパフォーマンスに影響し、バージョン数を制限すると `too many versions` エラーが発生する可能性があります。
