@@ -643,7 +643,7 @@ public abstract class MVPCTRefreshPartitioner {
     private List<String> getExpiredPartitionsWithRetention(String ttlCondition,
                                                            PCellSortedSet toRefreshPartitions,
                                                            boolean isMockPartitionIds) {
-        return getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition, 
+        return getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition,
                 toRefreshPartitions, isMockPartitionIds);
     }
 
