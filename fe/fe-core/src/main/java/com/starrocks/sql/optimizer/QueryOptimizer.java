@@ -515,7 +515,6 @@ public class QueryOptimizer extends Optimizer {
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
 
-        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
         // see JoinPredicatePushdown
         if (sessionVariable.isEnableRboTablePrune()) {
             context.setEnableJoinEquivalenceDerive(false);
@@ -571,6 +570,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
+
+        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAsofJoinTemporalExpressionToChildProject());
@@ -909,6 +910,9 @@ public class QueryOptimizer extends Optimizer {
 
     private OptExpression convertDistinctAggOverWindowToNullSafeEqualJoin(OptExpression tree,
                                                                           TaskContext rootTaskContext) {
+        if (!rootTaskContext.getOptimizerContext().getSessionVariable().isEnableDistinctAggOverWindow()) {
+            return tree;
+        }
         if (Util.getStream(tree).noneMatch(op -> op instanceof LogicalWindowOperator)) {
             return tree;
         }

@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Expr;
@@ -30,6 +31,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
 
@@ -56,7 +58,7 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
-        if (analyticFunction.getParams().isDistinct() && !analyticExpr.isUnboundedWindowWithoutSlidingFrame()) {
+        if (analyticFunction.getParams().isDistinct() && !isWindowSupportDistinctAggregations(analyticExpr)) {
             throw new SemanticException("DISTINCT not allowed in analytic function: " + analyticFunction.toSql(),
                     analyticExpr.getPos());
         }
@@ -381,5 +383,21 @@ public class AnalyticAnalyzer {
             return ((LiteralExpr) offset).getLongValue() > 0;
         }
         return false;
+    }
+
+    // range window support count/sum/avg(distinct)
+    public static boolean isWindowSupportDistinctAggregations(AnalyticExpr analyticExpr) {
+        AnalyticWindow window = analyticExpr.getWindow();
+        FunctionCallExpr fnCall = analyticExpr.getFnCall();
+        if (window != null && !window.getType().equals(AnalyticWindow.Type.RANGE)) {
+            return false;
+        }
+
+        final Set<String> supportFunctions = ImmutableSet.of(
+                FunctionSet.SUM,
+                FunctionSet.AVG,
+                FunctionSet.COUNT);
+
+        return supportFunctions.contains(fnCall.getFnName().getFunction());
     }
 }
