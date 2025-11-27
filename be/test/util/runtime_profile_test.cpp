@@ -612,4 +612,50 @@ TEST(TestRuntimeProfile, testRaceMergeProfiles) {
     thr2.join();
 }
 
+TEST(TestRuntimeProfile, testShouldDisplay) {
+    // Test should_display() with different threshold values
+    auto profile = std::make_shared<RuntimeProfile>("test");
+
+    // Test with default strategy (threshold == 0)
+    // Zero-value counters should not display
+    auto* zero_counter = profile->add_counter("zero_counter", TUnit::UNIT, create_strategy(TUnit::UNIT));
+    zero_counter->set(0);
+    ASSERT_FALSE(zero_counter->should_display());
+
+    // Non-zero counters should display
+    auto* nonzero_counter = profile->add_counter("nonzero_counter", TUnit::UNIT, create_strategy(TUnit::UNIT));
+    nonzero_counter->set(100);
+    ASSERT_TRUE(nonzero_counter->should_display());
+
+    // Test with positive threshold
+    TCounterStrategy threshold_strategy;
+    threshold_strategy.aggregate_type = TCounterAggregateType::SUM;
+    threshold_strategy.merge_type = TCounterMergeType::MERGE_ALL;
+    threshold_strategy.min_max_type = TCounterMinMaxType::MIN_MAX_ALL;
+    threshold_strategy.display_threshold = 50;
+
+    auto* below_threshold = profile->add_counter("below_threshold", TUnit::UNIT, threshold_strategy);
+    below_threshold->set(30);
+    ASSERT_FALSE(below_threshold->should_display());
+
+    auto* above_threshold = profile->add_counter("above_threshold", TUnit::UNIT, threshold_strategy);
+    above_threshold->set(100);
+    ASSERT_TRUE(above_threshold->should_display());
+
+    // Test with negative threshold (force display even if zero)
+    TCounterStrategy force_display_strategy;
+    force_display_strategy.aggregate_type = TCounterAggregateType::SUM;
+    force_display_strategy.merge_type = TCounterMergeType::MERGE_ALL;
+    force_display_strategy.min_max_type = TCounterMinMaxType::MIN_MAX_ALL;
+    force_display_strategy.display_threshold = -1;
+
+    auto* force_zero = profile->add_counter("force_zero", TUnit::UNIT, force_display_strategy);
+    force_zero->set(0);
+    ASSERT_TRUE(force_zero->should_display());
+
+    auto* force_nonzero = profile->add_counter("force_nonzero", TUnit::UNIT, force_display_strategy);
+    force_nonzero->set(100);
+    ASSERT_TRUE(force_nonzero->should_display());
+}
+
 } // namespace starrocks
