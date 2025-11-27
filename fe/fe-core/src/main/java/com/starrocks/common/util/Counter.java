@@ -72,8 +72,16 @@ public class Counter {
         this.minValue = Optional.of(minValue);
     }
 
+    public void clearMinValue() {
+        this.minValue = Optional.empty();
+    }
+
     public void setMaxValue(long maxValue) {
         this.maxValue = Optional.of(maxValue);
+    }
+
+    public void clearMaxValue() {
+        this.maxValue = Optional.empty();
     }
 
     public void update(long increment) {
