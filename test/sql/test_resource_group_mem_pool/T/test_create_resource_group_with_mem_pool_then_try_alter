@@ -1,0 +1,31 @@
+-- name: test_create_resource_group_with_mem_pool_then_try_alter
+
+[UC] drop resource group shared_resource_group_for_james;
+
+[UC] create resource group shared_resource_group_for_james
+to (user='james') 
+with (
+  'cpu_weight' = '9',
+  'mem_limit' = '66%',
+  'max_cpu_cores' = "8", 
+  'mem_pool' = 'mem_pool_for_james'
+);
+
+show verbose resource groups all;
+
+alter resource group shared_resource_group_for_james with (
+    'mem_limit' = '99%',
+    'mem_pool' = 'other_pool'
+);
+
+alter resource group shared_resource_group_for_james with (
+    'mem_limit' = '99%'
+);
+
+alter resource group shared_resource_group_for_james with (
+    'max_cpu_cores' = "1"
+);
+
+show verbose resource groups all;
+
+[UC] drop resource group shared_resource_group_for_james;
