@@ -42,6 +42,7 @@ import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
 import com.starrocks.http.action.ProcProfileAction;
+import com.starrocks.http.action.ProcProfileCollectAction;
 import com.starrocks.http.action.ProcProfileFileAction;
 import com.starrocks.http.action.QueryAction;
 import com.starrocks.http.action.QueryProfileAction;
