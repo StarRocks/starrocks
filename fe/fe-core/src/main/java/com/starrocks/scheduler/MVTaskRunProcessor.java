@@ -257,7 +257,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // record mv refresh trace info for better debugging
         // TODO: it may be too long, need to optimize it later.
         String mvRefreshInfo = getMVRefreshTraceInfo();
-        Tracers.record("MVRefreshInfo", mvRefreshInfo);
+        Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
