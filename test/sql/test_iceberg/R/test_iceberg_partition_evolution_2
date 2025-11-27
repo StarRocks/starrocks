@@ -76,6 +76,10 @@ function: assert_explain_verbose_contains("SELECT country, COUNT(*) AS c FROM te
 -- result:
 None
 -- !result
+function: assert_query_contains("analyze table test_events;", "OK")
+-- result:
+None
+-- !result
 drop table test_events force;
 -- result:
 -- !result

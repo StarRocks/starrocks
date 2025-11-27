@@ -39,7 +39,6 @@ select * from test_orders where order_id between 4 and 6 order by order_id;
 -- partitions=2/5
 function: assert_explain_verbose_contains("select * from test_orders where order_id between 4 and 6 order by order_id;", "partitions=2/5")
 
-
 -- check partition pruning
 SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
   
@@ -50,6 +49,8 @@ SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00' 
 
 -- partitions=1/5
 function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=1/5")
+
+function: assert_query_contains("analyze table test_orders;", "OK")
 
 drop table test_orders force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
