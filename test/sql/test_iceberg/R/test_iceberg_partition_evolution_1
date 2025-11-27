@@ -63,6 +63,10 @@ function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(score) FROM test
 -- result:
 None
 -- !result
+function: assert_query_contains("analyze table test_users_bucketed;", "OK")
+-- result:
+None
+-- !result
 drop table test_users_bucketed force;
 -- result:
 -- !result
