@@ -79,12 +79,14 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String ICEBERG_CATALOG_SECURITY = "iceberg.catalog.security";
     public static final String KEY_NESTED_NAMESPACE_ENABLED = "rest.nested-namespace-enabled";
     public static final String USER_AGENT = "header.User-Agent";
+    public static final String KEY_VIEW_ENDPOINTS_ENABLED = "rest.view-endpoints-enabled";
 
     private String catalogName = null;
     private final Configuration conf;
     private final RESTSessionCatalog delegate;
     private Map<String, String> restCatalogProperties;
     private final boolean nestedNamespaceEnabled;
+    private final boolean viewEndpointsEnabled;
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -112,6 +114,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         nestedNamespaceEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_NESTED_NAMESPACE_ENABLED, false);
+        viewEndpointsEnabled = PropertyUtil.propertyAsBoolean(restCatalogProperties, KEY_VIEW_ENDPOINTS_ENABLED, true);
         // setup oauth2
         OAuth2SecurityConfig securityConfig = OAuth2SecurityConfigBuilder.build(restCatalogProperties);
         OAuth2SecurityProperties securityProperties = new OAuth2SecurityProperties(securityConfig);
@@ -134,6 +137,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.delegate = restCatalog;
         this.conf = conf;
         this.nestedNamespaceEnabled = false;
+        this.viewEndpointsEnabled = true;
     }
 
     @Override
@@ -268,15 +272,20 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         }
 
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
-        try {
-            viewIdentifiers = delegate.listViews(buildContext(context), ns);
-        } catch (BadRequestException e) {
-            LOG.warn("Failed to list views from {} namespace. Perhaps the server side does not implement the interface. " +
-                    "Ask the user to check it", ns, e);
-        } catch (RESTException re) {
-            LOG.error("Failed to list views using REST Catalog, for dbName {}", dbName, re);
-            throw new StarRocksConnectorException("Failed to list views using REST Catalog",
-                    new RuntimeException("Failed to list views using REST Catalog, exception: " + re.getMessage(), re));
+        if (viewEndpointsEnabled) {
+            try {
+                viewIdentifiers = delegate.listViews(buildContext(context), ns);
+            } catch (BadRequestException e) {
+                LOG.warn("Failed to list views from {} namespace. Perhaps the server side does not implement the interface. " +
+                        "Ask the user to check it, or you can disable view endpoints by setting '{}' to false",
+                        ns, ICEBERG_CUSTOM_PROPERTIES_PREFIX + KEY_VIEW_ENDPOINTS_ENABLED, e);
+            } catch (RESTException re) {
+                LOG.error("Failed to list views using REST Catalog, for dbName {}", dbName, re);
+                throw new StarRocksConnectorException("Failed to list views using REST Catalog",
+                        new RuntimeException("Failed to list views using REST Catalog, exception: " + re.getMessage(), re));
+            }
+        } else {
+            LOG.debug("View endpoints are disabled for catalog, skipping view list operations");
         }
 
         final List<TableIdentifier> finalIdentifiers = ImmutableList.<TableIdentifier>builder()
@@ -351,12 +360,17 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
     @Override
     public View getView(ConnectContext context, String dbName, String viewName) {
+        if (!viewEndpointsEnabled) {
+            throw new StarRocksConnectorException("View operations are disabled for this catalog. " +
+                    "Set '" + ICEBERG_CUSTOM_PROPERTIES_PREFIX + KEY_VIEW_ENDPOINTS_ENABLED +
+                    "' to true to enable view endpoints");
+        }
         try {
             return delegate.loadView(buildContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
         } catch (RESTException re) {
-            LOG.error("Failed to rename table using REST Catalog, for dbName {} viewName {}", dbName, viewName, re);
-            throw new StarRocksConnectorException("Failed to rename table using REST Catalog",
-                    new RuntimeException("Failed to rename table using REST Catalog, exception: " + re.getMessage(), re));
+            LOG.error("Failed to load view using REST Catalog, for dbName {} viewName {}", dbName, viewName, re);
+            throw new StarRocksConnectorException("Failed to load view using REST Catalog",
+                    new RuntimeException("Failed to load view using REST Catalog, exception: " + re.getMessage(), re));
         }
     }
 
