@@ -86,6 +86,7 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
@@ -2182,6 +2183,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                         TableProperty.DEFAULT_COMPACTION_STRATEGY);
                 metaType = TTabletMetaType.COMPACTION_STRATEGY;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+                return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
                         " in shared_data mode");
@@ -3170,5 +3173,80 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withComputeResource(schemaChangeData.getComputeResource())
                 .withDisableReplicatedStorageForGIN(schemaChangeData.isDisableReplicatedStorageForGIN())
                 .build();
+    }
+
+    /**
+     * Processes the alteration of the 'cloud_native_fast_schema_evolution_v2' property for a table.
+     *
+     * <p>This method handles the logic for enabling or disabling the fast schema evolution v2 feature.
+     * If the feature is being enabled, it modifies the table property directly. If it's being disabled,
+     * it creates a new {@link LakeTableAsyncFastSchemaChangeJob} to synchronize the tablet metadata
+     * with the latest schema.
+     *
+     * @param db The database containing the table.
+     * @param olapTable The table to be altered.
+     * @param properties The properties map from the ALTER TABLE statement.
+     * @return An {@link Optional} containing the {@link AlterJobV2} if a job is created for disabling the feature,
+     *         otherwise an empty Optional.
+     * @throws DdlException if the property modification is invalid.
+     */
+    private Optional<AlterJobV2> processAlterCloudNativeFastSchemaEvolutionV2Property(
+            Database db, OlapTable olapTable, Map<String, String> properties) throws DdlException {
+        boolean enableFastSchemaEvolutionV2 = PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(
+                olapTable.getType(), properties, false);
+        AlterJobV2 alterJob = null;
+        if (enableFastSchemaEvolutionV2 == ((LakeTable) olapTable).isFastSchemaEvolutionV2()) {
+            LOG.info("Property [{}] for table [{}] is already {}, and nothing needs to do",
+                    PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                    olapTable.getName(), enableFastSchemaEvolutionV2);
+        } else if (enableFastSchemaEvolutionV2) {
+            // from false to true, just modify the property in traditional way
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+            LOG.info("Property [{}] for table [{}] is set to {}",
+                    PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                    olapTable.getName(), enableFastSchemaEvolutionV2);
+        } else {
+            // from true to false, need to update tablet metas to the latest schema. Here we reuse
+            // LakeTableAsyncFastSchemaChangeJob to do it
+            alterJob = createJobToDisableCloudNativeFastSchemaEvolutionV2(db, olapTable);
+            LOG.info("Create a schema change job to disable {}, job_id: {},  table: {}",
+                    PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, alterJob.getJobId(), olapTable.getName());
+        }
+        return Optional.ofNullable(alterJob);
+    }
+
+    /**
+     * Creates an {@link LakeTableAsyncFastSchemaChangeJob} to disable the 'cloud_native_fast_schema_evolution_v2' 
+     * feature for a table.
+     *
+     * <p>When disabling this feature, it's necessary to ensure all tablet metadata is updated to the latest
+     * schema version. This method creates a special {@link LakeTableAsyncFastSchemaChangeJob} that, instead of
+     * performing a schema change, iterates through all tablets and updates their metadata.
+     *
+     * @param db The database containing the table.
+     * @param table The table for which to disable the feature.
+     * @return The created {@link AlterJobV2} to be executed.
+     * @throws DdlException if there are no available compute nodes.
+     */
+    private LakeTableAsyncFastSchemaChangeJob createJobToDisableCloudNativeFastSchemaEvolutionV2(
+            Database db, OlapTable table) throws DdlException {
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        LakeTableAsyncFastSchemaChangeJob job = new LakeTableAsyncFastSchemaChangeJob(
+                jobId, db.getId(), table.getId(), table.getName(), Config.alter_table_timeout_second * 1000L);
+        job.setDisableFastSchemaEvolutionV2();
+        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+            long indexId = indexMeta.getIndexId();
+            String indexName = table.getIndexNameById(indexId);
+            SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMeta);
+            job.setIndexTabletSchema(indexId, indexName, schemaInfo);
+        }
+        ConnectContext connectContext = ConnectContext.get();
+        ComputeResource computeResource  = connectContext != null ?
+                connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+        if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().isResourceAvailable(computeResource)) {
+            throw new DdlException("no available compute nodes:" + computeResource);
+        }
+        job.setComputeResource(computeResource);
+        return job;
     }
 }

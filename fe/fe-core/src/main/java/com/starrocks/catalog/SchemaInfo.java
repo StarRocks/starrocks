@@ -289,4 +289,22 @@ public class SchemaInfo {
             return new SchemaInfo(this);
         }
     }
+
+    public static SchemaInfo fromMaterializedIndex(OlapTable table, MaterializedIndexMeta indexMeta) {
+        return SchemaInfo.newBuilder()
+                .setId(indexMeta.getSchemaId())
+                .setKeysType(indexMeta.getKeysType())
+                .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                .setStorageType(table.getStorageType())
+                .setVersion(indexMeta.getSchemaVersion())
+                .addColumns(indexMeta.getSchema())
+                .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                .setIndexes(OlapTable.getIndexesBySchema(table.getCopiedIndexes(), indexMeta.getSchema()))
+                .setBloomFilterColumnNames(table.getBfColumnIds())
+                .setBloomFilterFpp(table.getBfFpp())
+                .setCompressionType(table.getCompressionType())
+                .setCompressionLevel(table.getCompressionLevel())
+                .build();
+    }
 }

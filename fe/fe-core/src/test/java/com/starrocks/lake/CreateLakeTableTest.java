@@ -519,6 +519,7 @@ public class CreateLakeTableTest {
                 "PARTITION p3 VALUES [(\"2024-02-01\"), (\"2024-02-02\")))\n" +
                 "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
                 "PROPERTIES (\n" +
+                "\"cloud_native_fast_schema_evolution_v2\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\",\n" +
                 "\"datacache.enable\" = \"true\",\n" +
                 "\"enable_async_write_back\" = \"false\",\n" +

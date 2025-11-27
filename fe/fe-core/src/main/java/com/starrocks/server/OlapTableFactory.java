@@ -256,7 +256,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
 
                 processFlatJsonConfig(properties, table, tableName);
-
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -285,6 +284,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
+
+            if (table.isCloudNativeTable()) {
+                boolean fastSchemaEvolutionV2 = properties == null ? true :
+                        PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, true);
+                ((LakeTable) table).setFastSchemaEvolutionV2(fastSchemaEvolutionV2);
+            }
+
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
                 // check reserved column for PK table

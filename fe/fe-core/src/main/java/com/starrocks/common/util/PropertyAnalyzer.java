@@ -259,6 +259,12 @@ public class PropertyAnalyzer {
     // fast schema evolution
     public static final String PROPERTIES_USE_FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+ 
+    /**
+     * Configuration for the v2 implementation of fast schema evolution for cloud-native table.
+     * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
+     */
+    public static final String PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2 = "cloud_native_fast_schema_evolution_v2";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -1949,6 +1955,25 @@ public class PropertyAnalyzer {
         }
     }
 
+    public static boolean analyzeCloudNativeFastSchemaEvolutionV2(Table.TableType tableType,
+            Map<String, String> properties, boolean removeFromProperties) throws SemanticException {
+        if (tableType != Table.TableType.CLOUD_NATIVE) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    String.format("Property %s only supports cloud-native tables, but table type is %s",
+                            PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, tableType.name()));
+        }
+        boolean cloudNativeFastSchemaEvolutionV2 = true;
+        String value = properties.get(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2);
+        if (value != null) {
+            cloudNativeFastSchemaEvolutionV2 = parseBooleanStrictly(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                    value);
+        }
+        if (removeFromProperties) {
+            properties.remove(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2);
+        }
+        return cloudNativeFastSchemaEvolutionV2;
+    }
+
     @NotNull
     private static String getExcludeString(List<TableName> tables) {
         StringBuilder tableSb = new StringBuilder();
@@ -2025,13 +2050,15 @@ public class PropertyAnalyzer {
         return sb.toString();
     }
 
-    public static boolean parseBoolean(String value) {
-        if (value.equalsIgnoreCase("true")) {
-            return true;
+    public static boolean parseBooleanStrictly(String property, String value) throws SemanticException {
+        boolean ret = false;
+        if ("true".equalsIgnoreCase(value)) {
+            ret = true;
+        } else if ("false".equalsIgnoreCase(value)) {
+            ret = false;
+        } else {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, property, value, "'true' or 'false'");
         }
-        if (value.equalsIgnoreCase("false")) {
-            return false;
-        }
-        throw new IllegalArgumentException("Illegal boolean value: " + value);
+        return ret;
     }
 }
