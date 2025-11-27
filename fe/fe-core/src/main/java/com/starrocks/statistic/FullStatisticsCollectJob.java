@@ -344,11 +344,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("minFunction", "''");
             context.put("collectionSizeFunction", "-1");
         } else if (columnType.isCollectionType()) {
-            String collectionSizeFunction = "AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
-                    "(" + quoteColumnKey + ")) ";
+            String collectionSizeFunction = "IFNULL(AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
+                    "(" + quoteColumnKey + ")), -1) ";
             long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                     ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
-            String dataSizeFunction =  "COUNT(*) * " + elementTypeSize + " * " + collectionSizeFunction;
+            String dataSizeFunction =
+                    "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + collectionSizeFunction.trim() + ")";
             context.put("hllFunction", "'00'");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
