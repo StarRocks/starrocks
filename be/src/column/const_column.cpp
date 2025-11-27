@@ -71,6 +71,13 @@ void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+void ConstColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    DCHECK(_size > 0);
+    for (uint32_t i = from; i < to; ++i) {
+        _data->xxh3_hash(&hash[i], 0, 1);
+    }
+}
+
 void ConstColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call crc32 hash";
 }

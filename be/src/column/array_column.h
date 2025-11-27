@@ -150,6 +150,7 @@ public:
     void crc32_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash_at(uint32_t* seed, uint32_t idx) const override;
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+    void xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 

@@ -60,6 +60,14 @@ void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+void JsonColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; i++) {
+        JsonValue* json = get_object(i);
+        int64_t h = json->hash();
+        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&h, sizeof(h), hash[i]));
+    }
+}
+
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     JsonValue* value = get_object(idx);
     DCHECK(value != nullptr);

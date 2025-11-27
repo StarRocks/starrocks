@@ -1,0 +1,69 @@
+-- name: test_exchange_hash_function_version
+-- result:
+-- !result
+-- result:
+-- !result
+-- result:
+-- !result
+-- result:
+exchange_hash_function_version	0
+-- !result
+-- result:
+-- !result
+-- result:
+1000
+-- !result
+-- result:
+5050	5050
+-- !result
+-- result:
+-- !result
+-- result:
+1000
+-- !result
+-- result:
+5050	5050
+-- !result
+-- result:
+-- !result
+-- result:
+1000000
+-- !result
+-- result:
+-- !result
+-- result:
+1000000
+-- !result
+-- result:
+-- !result
+-- result:
+0	100	4550
+1	100	4560
+2	100	4570
+3	100	4580
+4	100	4590
+5	100	4600
+6	100	4610
+7	100	4620
+8	100	4630
+9	100	4640
+-- !result
+-- result:
+-- !result
+-- result:
+0	100	4550
+1	100	4560
+2	100	4570
+3	100	4580
+4	100	4590
+5	100	4600
+6	100	4610
+7	100	4620
+8	100	4630
+9	100	4640
+-- !result
+-- result:
+-- !result
+-- result:
+-- !result
+

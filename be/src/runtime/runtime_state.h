@@ -504,6 +504,9 @@ public:
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
 
+    void set_exchange_hash_function_version(int version) { this->_exchange_hash_function_version = version; }
+    int exchange_hash_function_version() const { return this->_exchange_hash_function_version; }
+
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
@@ -599,6 +602,9 @@ private:
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;
+
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int _exchange_hash_function_version = 0;
 
     DescriptorTbl* _desc_tbl = nullptr;
 

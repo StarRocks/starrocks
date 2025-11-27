@@ -291,6 +291,11 @@ void AdaptiveNullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to
     return NullableColumn::fnv_hash(hash, from, to);
 }
 
+void AdaptiveNullableColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    materialized_nullable();
+    return NullableColumn::xxh3_hash(hash, from, to);
+}
+
 void AdaptiveNullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     materialized_nullable();
     return NullableColumn::crc32_hash(hash, from, to);

@@ -208,6 +208,11 @@ void ArrayViewColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const
     throw std::runtime_error("ArrayViewColumn::fnv_hash() is not supported");
 }
 
+void ArrayViewColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    DCHECK(false) << "ArrayViewColumn::xxh3_hash() is not supported";
+    throw std::runtime_error("ArrayViewColumn::xxh3_hash() is not supported");
+}
+
 void ArrayViewColumn::crc32_hash_at(uint32_t* seed, uint32_t idx) const {
     DCHECK(false) << "ArrayViewColumn::crc32_hash_at() is not supported";
     throw std::runtime_error("ArrayViewColumn::crc32_hash_at() is not supported");

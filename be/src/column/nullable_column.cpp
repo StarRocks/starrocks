@@ -410,6 +410,29 @@ void NullableColumn::fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t 
     }
 }
 
+void NullableColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    if (!_has_null) {
+        _data_column->xxh3_hash(hash, from, to);
+        return;
+    }
+    const auto null_data = _null_column->immutable_data();
+    uint32_t value = 0x9e3779b9;
+    while (from < to) {
+        uint32_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        if (null_data[from]) {
+            for (uint32_t i = from; i < new_from; ++i) {
+                hash[i] = hash[i] ^ (value + (hash[i] << 6) + (hash[i] >> 2));
+            }
+        } else {
+            _data_column->xxh3_hash(hash, from, new_from);
+        }
+        from = new_from;
+    }
+}
+
 void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     // fast path when _has_null is false
     if (!_has_null) {

@@ -496,6 +496,19 @@ void ArrayColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+void ArrayColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    const auto offsets = _offsets->immutable_data();
+    for (uint32_t i = from; i < to; ++i) {
+        uint32_t offset = offsets[i];
+        size_t array_size = offsets[i + 1] - offset;
+        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&array_size, sizeof(array_size), hash[i]));
+        for (size_t j = 0; j < array_size; ++j) {
+            uint32_t ele_offset = offset + static_cast<uint32_t>(j);
+            _elements->xxh3_hash(&hash[i], ele_offset, ele_offset + 1);
+        }
+    }
+}
+
 void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         crc32_hash_at(hash + i, i);

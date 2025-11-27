@@ -211,6 +211,8 @@ public:
 
     void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
+    void xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;

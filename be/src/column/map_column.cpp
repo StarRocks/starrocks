@@ -560,6 +560,24 @@ void MapColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+void MapColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    const auto offsets_data = _offsets->immutable_data();
+    for (uint32_t i = from; i < to; ++i) {
+        uint32_t offset = offsets_data[i];
+        size_t map_size = offsets_data[i + 1] - offset;
+        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&map_size, sizeof(map_size), hash[i]));
+        uint32_t base_hash = hash[i];
+        for (size_t j = 0; j < map_size; ++j) {
+            uint32_t pair_hash = base_hash;
+            uint32_t ele_offset = offset + static_cast<uint32_t>(j);
+            _keys->xxh3_hash(&pair_hash, ele_offset, ele_offset + 1);
+            _values->xxh3_hash(&pair_hash, ele_offset, ele_offset + 1);
+            // for get same hash on un-order map, we need to satisfies the commutative law
+            hash[i] += pair_hash;
+        }
+    }
+}
+
 void MapColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         crc32_hash_at(hash + i, i);

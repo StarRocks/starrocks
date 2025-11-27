@@ -309,6 +309,14 @@ void FixedLengthColumnBase<T>::fnv_hash_selective(uint32_t* hash, uint16_t* sel,
     }
 }
 
+template <typename T>
+void FixedLengthColumnBase<T>::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    const auto datas = this->immutable_data();
+    for (uint32_t i = from; i < to; ++i) {
+        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&datas[i], sizeof(ValueType), hash[i]));
+    }
+}
+
 // Must same with RawValue::zlib_crc32
 template <typename T>
 void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
