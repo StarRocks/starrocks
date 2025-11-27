@@ -120,6 +120,7 @@ set(UTIL_FILES
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp
+  type_utils.cpp
 )
 
 ADD_BE_LIB(Util
