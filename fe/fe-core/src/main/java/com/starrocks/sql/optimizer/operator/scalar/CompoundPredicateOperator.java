@@ -152,6 +152,27 @@ public class CompoundPredicateOperator extends PredicateOperator {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public boolean equalsSelf(Object o) {
+        if (!super.equalsSelf(o)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) o;
+        return type == that.type;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) obj;
+        return type == that.type;
+    }
+
+    @Override
+>>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     public int hashCode() {
         int h = 0;
         for (ScalarOperator scalarOperator : this.getChildren()) {
