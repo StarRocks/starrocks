@@ -99,8 +99,6 @@ public abstract class MVPCTRefreshPartitioner {
     // The partitions to refresh for mv which is filtered before various filter actions.
     protected final PCellSortedSet mvToRefreshPotentialPartitions = PCellSortedSet.of();
 
-    private static final String NULL_PARTITION = "pNULL";
-
     public MVPCTRefreshPartitioner(MvTaskRunContext mvContext,
                                    TaskRunContext context,
                                    Database db,
@@ -661,11 +659,6 @@ public abstract class MVPCTRefreshPartitioner {
         // filter partitions by partition_retention_condition
         String ttlCondition = mv.getTableProperty().getPartitionRetentionCondition();
         if (!Strings.isNullOrEmpty(ttlCondition)) {
-            // remove pNULL partition if exists
-            if (toRefreshPartitions.containsName(NULL_PARTITION)) {
-                logger.info("Filter partitions by partition_retention_condition, and remove null partition");
-                toRefreshPartitions.removeByName(NULL_PARTITION);
-            }
             List<String> toRemovePartitions =
                     getExpiredPartitionsWithRetention(ttlCondition, toRefreshPartitions, isMockPartitionIds);
             if (CollectionUtils.isNotEmpty(toRemovePartitions)) {

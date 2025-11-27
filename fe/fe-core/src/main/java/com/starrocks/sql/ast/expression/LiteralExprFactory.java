@@ -22,6 +22,8 @@ import com.starrocks.type.Type;
 
 import java.time.LocalDateTime;
 
+import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
+
 /**
  * Centralized factory for building {@link LiteralExpr} instances. The logic used to live
  * in {@link LiteralExpr} directly but has been moved here to keep the base class focused
@@ -33,6 +35,9 @@ public final class LiteralExprFactory {
 
     public static LiteralExpr create(String value, Type type) throws AnalysisException {
         Preconditions.checkArgument(type.isValid());
+        if (value != null && value.equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
+            return NullLiteral.create(type);
+        }
         LiteralExpr literalExpr;
         try {
             switch (type.getPrimitiveType()) {
