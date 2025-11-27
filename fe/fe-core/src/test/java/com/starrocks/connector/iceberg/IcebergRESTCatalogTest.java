@@ -23,7 +23,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -43,6 +45,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
@@ -60,8 +63,12 @@ import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.ICEBERG_CATALOG_SECURITY;
 import static com.starrocks.type.IntegerType.INT;
 import static org.apache.iceberg.catalog.SessionCatalog.SessionContext;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergRESTCatalogTest {
     private static final String CATALOG_NAME = "iceberg_rest_catalog";
@@ -293,7 +300,6 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to list all namespaces using REST Catalog",
                 () -> metadata.listDbNames(new ConnectContext()));
-
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to list tables using REST Catalog",
                 () -> metadata.listTableNames(new ConnectContext(), "db"));
@@ -362,5 +368,52 @@ public class IcebergRESTCatalogTest {
                         "catalog", "db", "view", "comment",
                         Lists.newArrayList(new Column("k1", INT)), "select * from t",
                         AlterViewStmt.AlterDialectType.NONE, Maps.newHashMap()), false));
+    }
+
+    @Test
+    public void testBuildContextWithJwtSecurity(@Mocked RESTSessionCatalog restCatalog) {
+        // Test when security is set to JWT and auth token is provided
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "JWT");
+        
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+        
+        // Create a mock ConnectContext with auth token using MockUp
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getQualifiedUser() {
+                return "test_user";
+            }
+            
+            @Mock
+            public String getSessionId() {
+                return "test_session";
+            }
+            
+            @Mock
+            public String getAuthToken() {
+                return "test_token";
+            }
+            
+            @Mock
+            public UserIdentity getCurrentUserIdentity() {
+                return new UserIdentity("test_user", "%");
+            }
+        };
+        SessionCatalog.SessionContext sessionContext = Deencapsulation.invoke(catalog, "buildContext", connectContext);
+        assertNotNull(sessionContext);
+        assertTrue(sessionContext.credentials().containsKey("token"));
+        assertEquals("test_token", sessionContext.credentials().get("token"));
+
+
+        properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "Jwt");
+        catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+        sessionContext = Deencapsulation.invoke(catalog, "buildContext", connectContext);
+        assertNotNull(sessionContext);
+        assertTrue(sessionContext.credentials().containsKey("token"));
+        assertEquals("test_token", sessionContext.credentials().get("token"));
     }
 }
