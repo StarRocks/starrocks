@@ -35,6 +35,8 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClusterSnapshotTask;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,6 +54,10 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
 
     public FullClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         super(id, snapshotName, storageVolumeName, createdTimeMs);
+    }
+
+    public AgentBatchTask getLakeSnapshotBatchTask() {
+        return lakeSnapshotBatchTask;
     }
 
     @Override
@@ -86,7 +92,7 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
         long feImageJournalId = feController.getImageJournalId();
         if (feImageJournalId < feCheckpointJournalId) {
             Pair<Boolean, String> createFEImageRet = feController.runCheckpointControllerWithIds(feImageJournalId,
-                    feCheckpointJournalId, needClusterSnapshotInfo());
+                    feCheckpointJournalId, true);
             if (!createFEImageRet.first) {
                 throw new StarRocksException("checkpoint failed for FE image: " + createFEImageRet.second);
             }
@@ -165,6 +171,19 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
         // send delete expire partition tasks
     }
 
+    @Override
+    public void finishSnapshotTask(ClusterSnapshotTask task, TFinishTaskRequest request) {
+        // TODO(zhangqiang)
+        // handle failed tablets
+        if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
+            task.setFinished(true);
+        } else {
+            task.setFailed(true);
+            task.setErrorMsg(request.getTask_status().getError_msgs().get(0));
+            LOG.warn("Cluster snapshot task failed, task: {}, error: {}", task, task.getErrorMsg());
+        }
+    }
+
     private long getVirtualTabletId() throws StarRocksException {
         String svName = getStorageVolumeName();
         StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(svName);
@@ -231,6 +250,7 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
 
         AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
         AgentTaskExecutor.submit(lakeSnapshotBatchTask);
+        LOG.info("Finish create cluster snapshot tasks. job: {}, vTabletId: {}", getId(), vTabletId);
     }
 
     private boolean collectNodeToTablets(List<Long> tabletIds, Map<TBackend, List<Long>> nodeToTablets, long aggregatorNodeId) {
@@ -265,16 +285,11 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
 
         // Handle null cases
         if (prevClusterSnapshotInfo == null || prevClusterSnapshotInfo.isEmpty()) {
+            LOG.info("prevClusterSnapshotInfo is null or empty");
             // All partitions in new are added
             if (newClusterSnapshotInfo != null && !newClusterSnapshotInfo.isEmpty()) {
                 collectAllPartitions(newClusterSnapshotInfo, diff.getAddedPartitions());
             }
-            return diff;
-        }
-
-        if (newClusterSnapshotInfo == null || newClusterSnapshotInfo.isEmpty()) {
-            // All partitions in prev are deleted
-            collectAllPartitions(prevClusterSnapshotInfo, diff.getDeletedPartitions());
             return diff;
         }
 

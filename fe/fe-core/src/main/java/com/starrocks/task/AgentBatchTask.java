@@ -410,6 +410,7 @@ public class AgentBatchTask implements Runnable {
                 ClusterSnapshotTask clusterSnapshotTask = (ClusterSnapshotTask) task;
                 TPartitionSnapshotRequest req = clusterSnapshotTask.toThrift();
                 tAgentTaskRequest.setPartition_snapshot_req(req);
+                LOG.info("PARTITION_SNAPSHOT end");
                 return tAgentTaskRequest;
             }
             default:

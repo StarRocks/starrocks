@@ -99,6 +99,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CheckConsistencyTask;
 import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.CloneTask;
+import com.starrocks.task.ClusterSnapshotTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.task.DirMoveTask;
@@ -349,6 +350,9 @@ public class LeaderImpl {
                 case UPDATE_SCHEMA:
                     finishUpdateSchemaTask(task, request);
                     break;
+                case PARTITION_SNAPSHOT:
+                    finishPartitionSnapshotTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -499,6 +503,15 @@ public class LeaderImpl {
                     locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishPartitionSnapshotTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().finishSnapshotTask(
+                    (ClusterSnapshotTask) task, request);
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }

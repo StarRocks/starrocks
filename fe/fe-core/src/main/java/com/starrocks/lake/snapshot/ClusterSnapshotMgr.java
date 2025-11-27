@@ -34,8 +34,10 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.task.ClusterSnapshotTask;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsResponse;
+import com.starrocks.thrift.TFinishTaskRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -255,6 +257,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         setJobFinishedIfRestoredFromIt(restoredSnapshotInfo);
         abortUnfinishedClusterSnapshotJob();
         clearFinishedAutomatedClusterSnapshotExceptLast();
+    }
+
+    public void finishSnapshotTask(ClusterSnapshotTask task, TFinishTaskRequest request) {
+        ClusterSnapshotJob job = automatedSnapshotJobs.get(task.getJobId());
+        if (job != null) {
+            job.finishSnapshotTask(task, request);
+        }
     }
 
     public void setJobFinishedIfRestoredFromIt(RestoredSnapshotInfo restoredSnapshotInfo) {

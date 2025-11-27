@@ -19,7 +19,9 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.task.ClusterSnapshotTask;
 import com.starrocks.thrift.TClusterSnapshotJobsItem;
+import com.starrocks.thrift.TFinishTaskRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -165,6 +167,10 @@ public abstract class ClusterSnapshotJob implements Writable {
 
     public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
         snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
+    }
+
+    public void finishSnapshotTask(ClusterSnapshotTask task, TFinishTaskRequest request) {
+        // Default implementation: do nothing
     }
 
     public void logJob() {
