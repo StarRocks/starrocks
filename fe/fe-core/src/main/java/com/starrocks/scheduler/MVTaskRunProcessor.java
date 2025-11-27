@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
@@ -233,12 +234,30 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     }
 
     /**
+     * Get the trace info for mv refresh for better debugging.
+     * @return current mv refresh trace info about base tables and partitions.
+     */
+    private String getMVRefreshTraceInfo() {
+        try {
+            return MetaFunctions.inspectMVRefreshInfo(db, mv);
+        } catch (Exception e) {
+            logger.warn("failed to inspect mv refresh info for mv: {}", mv.getName(), e);
+        }
+        return "";
+    }
+
+    /**
      * Retry the `doRefreshMaterializedView` method to avoid insert fails in occasional cases.
      */
     private Constants.TaskRunState retryProcessTaskRun(TaskRunContext taskRunContext) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = mvRefreshProcessor.getRetryTimes(taskRunContext.getCtx());
         logger.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
+
+        // record mv refresh trace info for better debugging
+        // TODO: it may be too long, need to optimize it later.
+        String mvRefreshInfo = getMVRefreshTraceInfo();
+        Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
