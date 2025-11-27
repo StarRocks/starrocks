@@ -2836,6 +2836,27 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ("missing min_version", cntl.ErrorText());
     }
 
+    // thread pool is null
+    {
+        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                              [](void* arg) { *(ThreadPool**)arg = nullptr; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(10);
+        request.set_min_version(1);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("tablet stats thread pool is null", cntl.ErrorText());
+    }
+
     // 2. success case
     {
         GetTabletMetadatasRequest request;
@@ -2902,6 +2923,84 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ(tablet_metadatas.version_metadatas_size(), 2);
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(3));
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(4));
+    }
+
+    // 5. failed case
+    // get tablet metadata failed
+    {
+        TEST_ENABLE_ERROR_POINT("TabletManager::get_tablet_metadata",
+                                Status::IOError("injected get tablet metadata error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::get_tablet_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        brpc::Controller cntl;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(3);
+        request.set_min_version(2);
+
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::IO_ERROR, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "injected get tablet metadata error"));
+    }
+
+    // thread pool is full
+    {
+        SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(10);
+        request.set_min_version(1);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
+    }
+
+    // task cancelled
+    {
+        class MockRunnable : public Runnable {
+        public:
+            MockRunnable() {}
+            virtual ~MockRunnable() override {}
+            virtual void run() override {}
+            virtual void cancel() override {}
+        };
+
+        SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [](void* arg) {
+            auto ptr = (*(std::shared_ptr<Runnable>*)arg);
+            ptr->cancel();
+            (*(std::shared_ptr<Runnable>*)arg) = std::make_shared<MockRunnable>();
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(10);
+        request.set_min_version(1);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::CANCELLED, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*Get tablet metadatas task has been cancelled*"));
     }
 }
 

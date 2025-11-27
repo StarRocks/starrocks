@@ -456,6 +456,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
+    TEST_ERROR_POINT("TabletManager::get_tablet_metadata");
     StatusOr<TabletMetadataPtr> tablet_metadata_or;
     auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
     if (cache_key.ok() && _metacache->lookup_aggregation_partition(*cache_key)) {
