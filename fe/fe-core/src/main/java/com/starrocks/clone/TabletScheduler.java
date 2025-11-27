@@ -406,9 +406,10 @@ public class TabletScheduler extends FrontendDaemon {
             for (Replica replica : replicas) {
                 if (replica.getState() == Replica.ReplicaState.DECOMMISSION && replica.getLastFailedVersion() < 0
                         && decommissionedReplica != null && replica.getId() == decommissionedReplica.getId()) {
+                    String replicaInfo = tabletSchedCtx.getTablet() != null ?
+                            tabletSchedCtx.getTablet().getReplicaInfos() : "tablet is null";
                     tabletScheduler.finalizeTabletCtx(tabletSchedCtx, TabletSchedCtx.State.CANCELLED,
-                            "src replica of rebalance need to reset state, replicas: " +
-                                    tabletSchedCtx.getTablet().getReplicaInfos());
+                            "src replica of rebalance need to reset state, replicas: " + replicaInfo);
                     break;
                 }
             }
