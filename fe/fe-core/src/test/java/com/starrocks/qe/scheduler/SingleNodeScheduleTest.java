@@ -60,11 +60,13 @@ public class SingleNodeScheduleTest extends SchedulerTestBase {
                 // no-op in unit tests to keep the single BE usable
             }
         };
+        connectContext.getSessionVariable().setEnableSingleNodeSchedule(true);
     }
 
     @AfterEach
     public void afterEach() {
         SimpleScheduler.getHostBlacklist().clear();
+        connectContext.getSessionVariable().setEnableSingleNodeSchedule(false);
     }
 
     @Test
