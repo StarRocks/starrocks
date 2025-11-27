@@ -22,8 +22,7 @@ import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
-import com.starrocks.leader.MetaHelper;
-import com.starrocks.persist.Storage;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatus;
@@ -162,7 +161,7 @@ public class FailoverGroup implements Writable {
 
     public long getReplicatedJournalId() {
         try {
-            return new Storage(getFailoverImageDir()).getImageJournalId();
+            return new ImageLoader(getFailoverImageDir()).getImageJournalId();
         } catch (Exception e) {
             LOG.warn("Failed to get failover image journal id in failover group {}", name);
         }
@@ -492,7 +491,7 @@ public class FailoverGroup implements Writable {
             }
         }
 
-        long imageVersion = new Storage(MetaHelper.getImageFileDir(true)).getImageJournalId();
+        long imageVersion = new ImageLoader(GlobalStateMgr.getImageDirPath()).getImageJournalId();
         if (imageVersion <= request.getLast_meta_version()) {
             triggerNewImage();
             TFailoverGroupRequestMetaResponse response = new TFailoverGroupRequestMetaResponse();
@@ -609,7 +608,7 @@ public class FailoverGroup implements Writable {
         TFailoverGroupRequestMetaRequest request = new TFailoverGroupRequestMetaRequest();
         request.setFailover_group_name(name);
         request.setSecondary_member(localMember.toThrift());
-        long lastMetaVersion = new Storage(getFailoverImageDir(), true).getImageJournalId();
+        long lastMetaVersion = new ImageLoader(getFailoverImageDir()).getImageJournalId();
         request.setLast_meta_version(lastMetaVersion);
 
         TFailoverGroupRequestMetaResponse response = SecondaryHelper.sendRequestMetaTo(address, request);
