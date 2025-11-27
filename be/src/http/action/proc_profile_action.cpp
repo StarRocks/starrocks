@@ -198,7 +198,7 @@ void ProcProfileAction::_handle_save(HttpRequest* req) {
     } catch (const std::exception& e) {
         LOG(WARNING) << "Failed to save profile: " << e.what();
         root.AddMember("status", rapidjson::Value("error", allocator), allocator);
-        root.AddMember("message", rapidjson::Value(std::string("Failed to save profile: ") + e.what(), allocator), allocator);
+        root.AddMember("message", rapidjson::Value(strings::Substitute("Failed to save profile: $0", e.what()).c_str(), allocator), allocator);
     }
 
     rapidjson::StringBuffer strbuf;
