@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.UtFrameUtils;
@@ -253,12 +254,46 @@ public class CachingIcebergCatalogTest {
             new Verifications() {
                 {
                     delegate.getTable(ctx, "db1", "t1"); 
-                    times = 2;
+                    times = 2; //caffeine has a diff with guava here
                 }
             };
         } finally {
             es.shutdownNow();
         }
     }
-}
 
+    @Test
+    public void testEstimateCountReflectsTableCache(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "db2", "tbl2");
+                result = nativeTable;
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getTable(connectContext, "db2", "tbl2");
+        Map<String, Long> counts = cachingIcebergCatalog.estimateCount();
+        Assertions.assertEquals(1L, counts.get("Table"));
+    }
+
+    @Test
+    public void testGetTableBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog,
+                                                                   @Mocked Table nativeTable) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setAuthToken("token");
+        new Expectations() {
+            {
+                restCatalog.getTable(ctx, "db3", "tbl3");
+                result = nativeTable;
+                times = 2;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+        Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+    }
+}
