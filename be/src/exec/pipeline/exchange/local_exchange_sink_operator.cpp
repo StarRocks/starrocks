@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -25,10 +26,16 @@ Status LocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _exchanger->incr_sinker();
     _unique_metrics->add_info_string("ShuffleNum", std::to_string(_exchanger->source_dop()));
-    _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
-            "LocalExchangePeakMemoryUsage", TUnit::BYTES,
-            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+    if (_driver_sequence == 0) {
+        _peak_memory_usage_counter = _unique_metrics->AddHighWaterMarkCounter(
+                "LocalExchangePeakMemoryUsage", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        _peak_num_rows_counter = _unique_metrics->AddHighWaterMarkCounter(
+                "LocalExchangePeakNumRows", TUnit::UNIT,
+                RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
+    }
     _exchanger->attach_sink_observer(state, this->observer());
+
     return Status::OK();
 }
 
@@ -43,12 +50,15 @@ StatusOr<ChunkPtr> LocalExchangeSinkOperator::pull_chunk(RuntimeState* state) {
 Status LocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     _exchanger->finish(state);
+    if (_peak_memory_usage_counter != nullptr) {
+        COUNTER_SET(_peak_memory_usage_counter, (int64_t)_exchanger->get_peak_memory_usage());
+        COUNTER_SET(_peak_num_rows_counter, (int64_t)_exchanger->get_peak_num_rows());
+    }
     return Status::OK();
 }
 
 Status LocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto res = _exchanger->accept(chunk, _driver_sequence);
-    _peak_memory_usage_counter->set(_exchanger->get_memory_usage());
     return res;
 }
 
