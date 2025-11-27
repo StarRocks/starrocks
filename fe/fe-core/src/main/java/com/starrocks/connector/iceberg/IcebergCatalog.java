@@ -308,7 +308,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                     }
                 }
                 if (partition == null) {
-                    long tableLastestSnapshotTime = getTableLastestSnapshotTime(icebergTable);
+                    long tableLastestSnapshotTime = getTableLastestSnapshotTime(icebergTable, logger);
                     logger.warn("The unpartitioned table [{}] has no partitions in PartitionsTable, " +
                             "using {} as last updated time", nativeTable.name(), tableLastestSnapshotTime);
                     partition = new Partition(tableLastestSnapshotTime);
@@ -371,18 +371,21 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
         if (lastUpdated ==  -1) {
             // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
-            lastUpdated = getTableLastestSnapshotTime(icebergTable);
+            lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
             logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
                     "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
         }
         return lastUpdated;
     }
 
-    private long getTableLastestSnapshotTime(IcebergTable icebergTable) {
+    private long getTableLastestSnapshotTime(IcebergTable icebergTable,
+                                             Logger logger) {
         Table nativeTable = icebergTable.getNativeTable();
         Snapshot snapshot = nativeTable.currentSnapshot();
         if (snapshot == null) {
-            throw new StarRocksConnectorException("Table " + nativeTable.name() + " has no snapshot");
+            logger.warn("The table [{}] has no current snapshot, using -1 as last updated time",
+                    nativeTable.name());
+            return -1;
         }
         return snapshot.timestampMillis();
     }
