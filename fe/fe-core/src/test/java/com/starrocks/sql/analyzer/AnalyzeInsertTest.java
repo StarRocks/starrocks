@@ -490,15 +490,17 @@ public class AnalyzeInsertTest {
      */
     @Test
     public void testAreTablesCopySafeForInsertIntoHiveTable(@Mocked HiveTable hiveTable) {
-        new MockUp<MetaUtils>() {
+        new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDatabase(String catalogName, String databaseName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 if ("hive_catalog".equals(catalogName)) {
                     return new Database();
                 }
-                return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName);
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             }
+        };
 
+        new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 if ("hive_catalog".equals(tableName.getCatalog())) {
@@ -576,11 +578,6 @@ public class AnalyzeInsertTest {
     @Test
     public void testAreTablesCopySafeForInsertIntoMysqlTable(@Mocked MysqlTable mysqlTable) {
         new MockUp<MetaUtils>() {
-            @Mock
-            public Database getDatabase(String catalogName, String databaseName) {
-                return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName);
-            }
-
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 if ("mysql_table".equals(tableName.getTbl())) {
