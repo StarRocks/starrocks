@@ -145,6 +145,15 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        BinaryPredicateOperator that = (BinaryPredicateOperator) obj;
+        return type == that.type;
+    }
+
+    @Override
     public boolean isNullable() {
         return !this.type.equals(BinaryType.EQ_FOR_NULL) && super.isNullable();
     }
