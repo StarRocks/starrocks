@@ -884,20 +884,20 @@ public class RuntimeProfileTest {
         TRuntimeProfileTree updateTree = updateProfile.toThrift();
 
         baseProfile.update(updateTree);
-        Assertions.assertEquals(6, baseC1.getValue());
-        Assertions.assertFalse(baseC1.getMinValue().isPresent());
-        Assertions.assertFalse(baseC1.getMaxValue().isPresent());
-        Assertions.assertEquals(8, baseC2.getValue());
-        Assertions.assertTrue(baseC2.getMinValue().isPresent());
-        Assertions.assertEquals(4, baseC2.getMinValue().get().longValue());
-        Assertions.assertTrue(baseC2.getMaxValue().isPresent());
-        Assertions.assertEquals(12, baseC2.getMaxValue().get().longValue());
+        Assert.assertEquals(6, baseC1.getValue());
+        Assert.assertFalse(baseC1.getMinValue().isPresent());
+        Assert.assertFalse(baseC1.getMaxValue().isPresent());
+        Assert.assertEquals(8, baseC2.getValue());
+        Assert.assertTrue(baseC2.getMinValue().isPresent());
+        Assert.assertEquals(4, baseC2.getMinValue().get().longValue());
+        Assert.assertTrue(baseC2.getMaxValue().isPresent());
+        Assert.assertEquals(12, baseC2.getMaxValue().get().longValue());
         Counter baseC3 = baseProfile.getCounter("counter3");
-        Assertions.assertNotNull(baseC3);
-        Assertions.assertEquals(10, baseC3.getValue());
-        Assertions.assertTrue(baseC3.getMinValue().isPresent());
-        Assertions.assertEquals(5, baseC3.getMinValue().get().longValue());
-        Assertions.assertTrue(baseC3.getMaxValue().isPresent());
-        Assertions.assertEquals(15, baseC3.getMaxValue().get().longValue());
+        Assert.assertNotNull(baseC3);
+        Assert.assertEquals(10, baseC3.getValue());
+        Assert.assertTrue(baseC3.getMinValue().isPresent());
+        Assert.assertEquals(5, baseC3.getMinValue().get().longValue());
+        Assert.assertTrue(baseC3.getMaxValue().isPresent());
+        Assert.assertEquals(15, baseC3.getMaxValue().get().longValue());
     }
 }
