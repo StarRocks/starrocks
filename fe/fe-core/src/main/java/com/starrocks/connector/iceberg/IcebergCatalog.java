@@ -32,6 +32,11 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Schema;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SortOrder;
+>>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
@@ -279,6 +284,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
                         // Get the last updated time of the table according to the table schema
+<<<<<<< HEAD
                         long lastUpdated = -1;
                         try {
                             lastUpdated = row.get(7, Long.class);
@@ -288,12 +294,21 @@ public interface IcebergCatalog extends MemoryTrackable {
                             // Therefore, only brief logs are printed now.
                             logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId);
                         }
+=======
+                        // last_updated_at can be null if the referenced snapshot has been expired.
+                        // Use Long wrapper to avoid NPE during auto-unboxing.
+                        long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row, 7,
+                                EMPTY_PARTITION_NAME, snapshotId);
+>>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
                         partition = new Partition(lastUpdated);
                         break;
                     }
                 }
                 if (partition == null) {
-                    partition = new Partition(-1);
+                    long tableLastestSnapshotTime = getTableLastestSnapshotTime(icebergTable, logger);
+                    logger.warn("The unpartitioned table [{}] has no partitions in PartitionsTable, " +
+                            "using {} as last updated time", nativeTable.name(), tableLastestSnapshotTime);
+                    partition = new Partition(tableLastestSnapshotTime);
                 }
                 partitionMap.put(EMPTY_PARTITION_NAME, partition);
             } catch (IOException e) {
@@ -323,6 +338,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                         PartitionSpec spec = nativeTable.specs().get(specId);
 
                         String partitionName =
+<<<<<<< HEAD
                                 PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
 
                         long lastUpdated = -1;
@@ -333,6 +349,12 @@ public interface IcebergCatalog extends MemoryTrackable {
                                     snapshotId, e);
                         }
                         Partition partition = new Partition(lastUpdated);
+=======
+                                PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
+                        long lastUpdated =
+                                getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
+                        Partition partition = new Partition(lastUpdated, specId);
+>>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
                         partitionMap.put(partitionName, partition);
                     }
                 }
@@ -341,6 +363,43 @@ public interface IcebergCatalog extends MemoryTrackable {
             }
         }
         return partitionMap;
+    }
+
+    private long getPartitionLastUpdatedTime(IcebergTable icebergTable, StructLike row,
+                                             int columnIndex, String partitionName,
+                                             long snapshotId) {
+        Table nativeTable = icebergTable.getNativeTable();
+        Logger logger = getLogger();
+        // last_updated_at can be null if the referenced snapshot has been expired.
+        // Use Long wrapper to avoid NPE during auto-unboxing.
+        long lastUpdated = -1;
+        if (row != null) {
+            try {
+                lastUpdated = row.get(columnIndex, Long.class);
+            } catch (Exception e) {
+                logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
+                                "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
+            }
+        }
+        if (lastUpdated ==  -1) {
+            // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
+            lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
+            logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
+                    "using current snapshot timestamp: {}", nativeTable.name(), snapshotId, lastUpdated);
+        }
+        return lastUpdated;
+    }
+
+    private long getTableLastestSnapshotTime(IcebergTable icebergTable,
+                                             Logger logger) {
+        Table nativeTable = icebergTable.getNativeTable();
+        Snapshot snapshot = nativeTable.currentSnapshot();
+        if (snapshot == null) {
+            logger.warn("The table [{}] has no current snapshot, using -1 as last updated time",
+                    nativeTable.name());
+            return -1;
+        }
+        return snapshot.timestampMillis();
     }
 
     default List<String> listPartitionNames(IcebergTable icebergTable,
