@@ -75,6 +75,10 @@ function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM tes
 -- result:
 None
 -- !result
+function: assert_query_contains("analyze table test_orders;", "OK")
+-- result:
+None
+-- !result
 drop table test_orders force;
 -- result:
 -- !result

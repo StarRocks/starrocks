@@ -46,6 +46,8 @@ SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '
 -- partitions=2/6
 function: assert_explain_verbose_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
 
+function: assert_query_contains("analyze table test_events;", "OK")
+
 drop table test_events force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog default_catalog;
