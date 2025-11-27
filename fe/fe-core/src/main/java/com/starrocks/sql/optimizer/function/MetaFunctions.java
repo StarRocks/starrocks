@@ -148,19 +148,20 @@ public class MetaFunctions {
     public static ConstantOperator inspectMvMeta(ConstantOperator mvName) {
         TableName tableName = TableName.fromString(mvName.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
+        Database db = dbTable.getLeft();
         Table table = dbTable.getRight();
         if (!table.isMaterializedView()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
     }
 
@@ -168,6 +169,8 @@ public class MetaFunctions {
         // base table to refresh info
         @SerializedName(value = "tableToUpdatePartitions")
         private final Map<String, Set<String>> tableToUpdatePartitions;
+        @SerializedName(value = "tablePartitionInfos")
+        private final Map<String, String> tablePartitionInfos;
         // olap table info
         @SerializedName("baseOlapTableVisibleVersionMap")
         private final Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap;
@@ -177,9 +180,11 @@ public class MetaFunctions {
 
         public MVRefreshInfoMeta(
                 Map<String, Set<String>> tableToUpdatePartitions,
+                Map<String, String> tablePartitionInfos,
                 Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap,
                 Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap) {
             this.tableToUpdatePartitions = tableToUpdatePartitions;
+            this.tablePartitionInfos = tablePartitionInfos;
             this.baseOlapTableVisibleVersionMap = baseTableVisibleVersionMap;
             this.baseExternalTableInfoVisibleVersionMap = baseTableInfoVisibleVersionMap;
         }
@@ -194,17 +199,24 @@ public class MetaFunctions {
         }
         TableName tableName = TableName.fromString(mvName.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
+        Database db = dbTable.getLeft();
         Table table = dbTable.getRight();
         if (!table.isMaterializedView()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
-        Locker locker = new Locker();
         MaterializedView mv = (MaterializedView) table;
+        String json = inspectMVRefreshInfo(db, mv);
+        return ConstantOperator.createVarchar(json);
+    }
+
+    public static String inspectMVRefreshInfo(Database db, MaterializedView mv) {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
             Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
             Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
+            Map<String, String> tablePartitionInfos = Maps.newHashMap();
             for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
                 Table baseTable = MvUtils.getTableChecked(baseTableInfo);
                 Set<String> toUpdatePartitions = null;
@@ -217,6 +229,8 @@ public class MetaFunctions {
                     tableToUpdatePartitions.put(baseTable.getName(), toUpdatePartitions);
                 }
                 tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
+                String partitionInfo = getTablePartitionInfo(baseTable);
+                tablePartitionInfos.put(baseTable.getName(), partitionInfo);
             }
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
@@ -231,13 +245,14 @@ public class MetaFunctions {
                     externalVisibleVersionMap.entrySet().stream()
                             .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
                             .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+
             MVRefreshInfoMeta meta = new MVRefreshInfoMeta(tableToUpdatePartitions,
+                    tablePartitionInfos,
                     baseOlapTableVisibleVersionMap,
                     baseExternalTableVisibleVersionMap);
-            String json = meta.inspect();
-            return ConstantOperator.createVarchar(json);
+            return meta.inspect();
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
         }
     }
 
@@ -248,44 +263,48 @@ public class MetaFunctions {
         }
         TableName tableName = TableName.fromString(input.getVarchar());
         Pair<Database, Table> dbTable = inspectTable(tableName);
+        Database db = dbTable.getLeft();
         Table table = dbTable.getRight();
         if (table == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not a table");
         }
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
-
-            JsonObject obj = new JsonObject();
-            if (table instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) table;
-                olapTable.getPartitions()
-                        .stream()
-                        .forEach(partition -> {
-                            MaterializedView.BasePartitionInfo basePartitionInfo =
-                                    new MaterializedView.BasePartitionInfo(partition.getId(),
-                                            partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                                            partition.getDefaultPhysicalPartition().getVisibleVersionTime());
-                            obj.add(partition.getName(), GsonUtils.GSON.toJsonTree(basePartitionInfo));
-                        });
-            } else {
-                Map<String, PartitionInfo> partitionNameWithPartitionInfo =
-                        ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
-                partitionNameWithPartitionInfo.entrySet()
-                        .stream()
-                        .map(entry -> Pair.of(entry.getKey(),
-                                MaterializedView.BasePartitionInfo.fromExternalTable(entry.getValue())))
-                        .forEach(pair -> {
-                            obj.add(pair.getLeft(),
-                                    pair.getRight() == null ? JsonNull.INSTANCE : GsonUtils.GSON.toJsonTree(pair.getRight()));
-                        });
-            }
-            String json = obj.toString();
+            String json = getTablePartitionInfo(table);
             return ConstantOperator.createVarchar(json);
         } finally {
-            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
+    }
+
+    private static String getTablePartitionInfo(Table table) {
+        JsonObject obj = new JsonObject();
+        if (table instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) table;
+            olapTable.getPartitions()
+                    .stream()
+                    .forEach(partition -> {
+                        MaterializedView.BasePartitionInfo basePartitionInfo =
+                                new MaterializedView.BasePartitionInfo(partition.getId(),
+                                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                                        partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+                        obj.add(partition.getName(), GsonUtils.GSON.toJsonTree(basePartitionInfo));
+                    });
+        } else {
+            Map<String, PartitionInfo> partitionNameWithPartitionInfo =
+                    ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
+            partitionNameWithPartitionInfo.entrySet()
+                    .stream()
+                    .map(entry -> Pair.of(entry.getKey(),
+                            MaterializedView.BasePartitionInfo.fromExternalTable(entry.getValue())))
+                    .forEach(pair -> {
+                        obj.add(pair.getLeft(),
+                                pair.getRight() == null ? JsonNull.INSTANCE : GsonUtils.GSON.toJsonTree(pair.getRight()));
+                    });
+        }
+        return obj.toString();
     }
 
     /**
