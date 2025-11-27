@@ -647,6 +647,7 @@ createViewStatement
     ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
     comment?
     (SECURITY (NONE | INVOKER))?
+    properties?
     AS queryStatement
     ;
 
