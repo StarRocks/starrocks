@@ -127,6 +127,8 @@ void GlobalDriverExecutor::_worker_thread() {
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
+        // do not remove this writing, it is used to ensure that MemTracker will not be destructed before the SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER
+        auto runtime_state_holder = fragment_ctx->runtime_state_ptr();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)

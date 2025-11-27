@@ -3049,7 +3049,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePhasedScheduler = false;
 
     @VarAttr(name = ENABLE_SINGLE_NODE_SCHEDULE)
-    private boolean enableSingleNodeSchedule = false;
+    private boolean enableSingleNodeSchedule = true;
 
     @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
     private boolean enablePipelineEventScheduler = true;
