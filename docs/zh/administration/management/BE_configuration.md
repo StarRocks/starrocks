@@ -98,12 +98,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### arrow_flight_port
 
-- 默认值: `-1`
+- 默认值: -1
 - 类型: Int
 - 单位: Port
 - 是否可变: 否
-- 描述: TCP 端口，用于 BE 的 Arrow Flight SQL 服务器。将其设置为 `-1` 以禁用 Arrow Flight 服务。在非 macOS 构建中，BE 在启动期间会调用 ArrowFlightSqlServer::start(`arrow_flight_port`)；如果端口不可用，服务器启动会失败并且 BE 进程退出。配置的端口会在心跳负载（`arrow_flight_port`）中上报给 FE。在启动 BE 之前在 `be.conf` 中配置此值。
-- 引入版本: `v3.4.0, v3.5.0`
+- 描述: TCP 端口，用于 BE 的 Arrow Flight SQL 服务器。将其设置为 `-1` 以禁用 Arrow Flight 服务。在非 macOS 构建中，BE 在启动期间会调用通过该端口启动 Arrow Flight SQL Server；如果端口不可用，服务器启动会失败并且 BE 进程退出。配置的端口会在心跳负载中上报给 FE。
+- 引入版本: v3.4.0, v3.5.0
 
 ##### be_exit_after_disk_write_hang_second
 
@@ -201,7 +201,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 描述: 当此项设置为 `true` 时，BE 的 bRPC 服务配置为使用 TLS：在 BE 启动时，`ServerOptions.ssl_options` 会用 `ssl_certificate_path` 和 `ssl_private_key_path` 指定的证书和私钥填充。这样会为传入的 bRPC 连接启用 HTTPS/TLS；客户端必须使用 TLS 连接。确保证书和密钥文件存在、对 BE 进程可访问，并符合 bRPC/SSL 的要求。
+- 描述: 当此项设置为 `true` 时，BE 的 bRPC 服务配置为使用 TLS，并使用 `ssl_certificate_path` 和 `ssl_private_key_path` 指定的证书和私钥。这样会为传入的 bRPC 连接启用 HTTPS/TLS。客户端必须使用 TLS 连接。请确保证书和密钥文件存在、且 BE 进程可访问，并符合 bRPC/SSL 的要求。
 - 引入版本: v4.0.0
 
 ##### enable_jemalloc_memory_tracker
@@ -219,7 +219,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: Int
 - 単位: -
 - 是否可变: 是
-- 描述: 为 UpdateManager 中的 "get_pindex" 线程池设置工作线程数，该线程池用于加载/获取持久化索引数据（在为主键表应用 rowset 时使用）。在运行时，配置更新会调整池的最大线程数：如果 `>0` 则应用该值；如果为 0 则运行时回调使用 CPU 核心数 (CpuInfo::num_cores())。在初始化时，池的最大线程数计算为 max(get_pindex_worker_count, max_apply_thread_cnt * 2)，其中 max_apply_thread_cnt 是 apply-thread 池的最大值。增大此值可提高 pindex 加载的并行度；降低则减少并发和内存/CPU 使用。
+- 描述: 为 UpdateManager 中的 "get_pindex" 线程池设置工作线程数，该线程池用于加载/获取持久化索引数据（在为主键表应用 rowset 时使用）。如果设置为大于 0 则系统应用该值；如果设置为 0 则运行时回调使用 CPU 核心数。在初始化时，改线程池的最大线程数计算为 `max(get_pindex_worker_count, max_apply_thread_cnt * 2)`，其中 `max_apply_thread_cnt` 是 apply-thread 池的最大值。增大此值可提高 pindex 加载的并行度；降低则减少并发和内存/CPU 使用。
 - 引入版本: v3.2.0
 
 ##### heartbeat_service_port
@@ -327,7 +327,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: Int
 - 単位: Threads
 - 是否可变: 是
-- 描述: 为 BE 的 UpdateManager 中的 "update_apply" 线程池设置最小线程数——该线程池用于为主键表应用 rowset。值为 0 表示禁用固定最小值（不强制下限）；当 transaction_apply_worker_count 也为 0 时，池的最大线程数默认为 CPU 核心数，因此有效的工作线程容量等于 CPU 核心数。可以增大此值以保证应用事务的基线并发；设置过高可能增加 CPU 争用。更改通过 update_config HTTP 处理器在运行时生效（它会在 apply 线程池上调用 update_min_threads）。
+- 描述: 为 BE 的 UpdateManager 中的 "update_apply" 线程池设置最小线程数。该线程池用于为主键表应用 rowset。值为 0 表示禁用固定最小值（不强制下限）；当 `transaction_apply_worker_count` 也为 0 时，该线程池的最大线程数默认为 CPU 核心数，因此有效的工作线程容量等于 CPU 核心数。可以增大此值以保证应用事务的基线并发；设置过高可能增加 CPU 争用。
 - 引入版本: v3.2.11
 
 ### 元数据与集群管理
@@ -337,8 +337,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: -1
 - 类型: Int
 - 单位: -
-- 是否可变: No
-- 描述: 该 StarRocks 后端的全局集群标识符。启动时 StorageEngine 会将 config::cluster_id 读入其生效的 cluster id，并验证所有 data root 路径都包含相同的 cluster id（参见 StorageEngine::_check_all_root_path_cluster_id）。值为 -1 表示“未设置”——引擎可以从现有数据目录或来自 master 心跳推导出生效的 id。如果配置了非负 id，则配置的 id 与存储在数据目录中的 id 之间的任何不匹配都会导致启动验证失败（Status::Corruption）。当某些 root 缺少 id 并且引擎被允许写入 id（options.need_write_cluster_id）时，它会将生效的 id 持久化到那些 root 中。
+- 是否可变: 否
+- 描述: BE 节点在集群的全局集群标识符。具有相同集群 ID 的 FE 或 BE 属于同一个 StarRocks 集群。取值范围：正整数。默认值 -1 表示在 Leader FE 首次启动时随机生成一个。
 - 引入版本: v3.2.0
 
 ### 用户，角色及权限
@@ -977,11 +977,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_load_channel_rpc_async
 
-- 默认值: `true`
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: 是
-- 描述: 启用后，load-channel 打开类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 卸载到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
+- 描述: 启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
 - 引入版本: `v3.5.0`
 
 ##### pull_load_task_dir
@@ -990,7 +990,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: string
 - 単位: -
 - 是否可变: No
-- 描述: BE 存储 “pull load” 任务的数据和工作文件（下载的源文件、任务状态、临时输出等）的文件系统路径。该目录必须对 BE 进程可写，并且具有足够的磁盘空间以容纳即将到来的加载。默认值相对于 STARROCKS_HOME；测试会创建并期望该目录存在（参见测试配置）。
+- 描述: BE 存储 “pull load” 任务的数据和工作文件（下载的源文件、任务状态、临时输出等）的文件系统路径。该目录必须对 BE 进程可写，并且具有足够的磁盘空间以容纳下载的内容。
 - 引入版本: v3.2.0
 
 ### 统计信息
@@ -1165,7 +1165,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: Int
 - 单位: Bytes
 - 是否可变: No
-- 描述: 构建列数据与索引页时使用的目标未压缩页面大小（以字节为单位）。该值会被拷贝到 ColumnWriterOptions.data_page_size 和 IndexedColumnWriterOptions.index_page_size，并被页面构建器（例如 BinaryPlainPageBuilder::is_page_full 和缓冲区预留逻辑）用来决定何时完成一个页面以及预留多少内存。值为 0 会在构建器中禁用页面大小限制。更改此值会影响页面数量、元数据开销、内存预留以及 I/O/压缩的权衡（页面越小 → 页面数和元数据越多；页面越大 → 页面更少，压缩可能更好，但内存峰值可能更大）。
+- 描述: 构建列数据与索引页时使用的目标未压缩 Page 大小（以字节为单位）。该值会被 Page Builder 用来决定何时完成一个 Page 以及预留多少内存。值为 0 会在构建器中禁用 Page 大小限制。更改此值会影响 Page 数量、元数据开销、内存预留以及 I/O/压缩的权衡（Page 越小 → Page 数和元数据越多；Page 越大 → Page 更少，压缩比更大，但内存峰值可能更大）。
 - 引入版本: v3.2.4
 
 ##### default_num_rows_per_column_file_block
@@ -1308,9 +1308,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: false
 - 类型: Boolean
 - 单位: -
-- 是否可变: No
-- 描述: 启用后，StarRocks 将为新写入的存储对象（segment 文件、delete/update 文件、rowset segments、lake SSTs、persistent index 文件等）创建磁盘加密产物。写入路径（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex 及相关代码路径）会从 KeyCache 请求加密信息，将 encryption_info 附加到可写文件，并将 encryption_meta 持久化到 rowset / segment / sstable 元数据中（如 segment_encryption_metas、delete/update encryption metadata）。Frontend 与 Backend/CN 的加密标志必须匹配——不匹配会导致 BE 在心跳时中止（LOG(FATAL)）。此标志不可在运行时修改；请在部署前启用，并确保密钥管理（KEK）与 KeyCache 已在集群中正确配置并同步。
-- 引入版本: v3.3.1, 3.4.0, 3.5.0, 4.0.0
+- 是否可变: 否
+- 描述: 启用后，StarRocks 将为新写入的存储对象（segment 文件、delete/update 文件、rowset segments、lake SSTs、persistent index 文件等）进行磁盘加密。写入路径（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex 及相关代码路径）会从 KeyCache 请求加密信息，将 encryption_info 附加到可写文件，并将 encryption_meta 持久化到 rowset / segment / sstable 元数据中（如 segment_encryption_metas、delete/update encryption metadata）。FE 与 FE/CN 的加密标志必须匹配。如果不匹配会导致 BE 在心跳时中止（LOG(FATAL)）。此参数不可在运行时修改，必须在第一次部署集群前启用，并确保密钥管理（KEK）与 KeyCache 已在集群中正确配置并同步。
+- 引入版本: v3.3.1
 
 ##### file_descriptor_cache_clean_interval
 
@@ -2318,7 +2318,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 1048576 (1 MB)
 - 类型: long
 - 単位: Bytes
-- 是否可变: No
-- 描述: 从 INFO 日志文件读取并在 BE 调试 webserver 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
+- 是否可变: 否
+- 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
 - 引入版本: v3.2.0
 
