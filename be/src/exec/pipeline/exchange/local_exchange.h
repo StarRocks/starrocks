@@ -165,6 +165,8 @@ public:
     int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 
     size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
+    size_t get_peak_memory_usage() const { return _memory_manager->get_peak_memory_usage(); }
+    size_t get_peak_num_rows() const { return _memory_manager->get_peak_num_rows(); }
 
     void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _sink_observable.add_observer(state, observer);
