@@ -41,13 +41,35 @@
             btn.textContent = 'Collecting...';
             status.innerHTML = '<span style="color: #337ab7;">Collecting profile, please wait...</span>';
             
-            // Prepare form data
-            var formData = new FormData(form);
+            // Prepare form data as URL-encoded string
+            var nodeValue = form.querySelector('input[name="node"]');
+            var secondsValue = form.querySelector('input[name="seconds"]');
+            var typeValue = form.querySelector('select[name="type"]');
+            
+            if (!nodeValue || !nodeValue.value) {
+                status.innerHTML = '<span style="color: red;">Error: Node parameter is missing from form.</span>';
+                btn.disabled = false;
+                btn.textContent = originalText;
+                return;
+            }
+            
+            // Build URL-encoded form data
+            var params = new URLSearchParams();
+            params.append('node', nodeValue.value);
+            if (secondsValue && secondsValue.value) {
+                params.append('seconds', secondsValue.value);
+            }
+            if (typeValue && typeValue.value) {
+                params.append('type', typeValue.value);
+            }
             
             // Submit via fetch API
             fetch('/proc_profile/collect', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: params.toString()
             })
             .then(function(response) {
                 return response.json();
