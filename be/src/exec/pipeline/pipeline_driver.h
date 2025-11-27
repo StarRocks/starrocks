@@ -437,8 +437,6 @@ public:
                 return false;
             }
 
-            // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
-            //  This writing method is a bit tricky, and when there is a better way, replace it
             mark_precondition_ready();
 
             RETURN_IF_ERROR(check_short_circuit());
@@ -447,6 +445,40 @@ public:
             }
             // Driver state must be set to a state different from PRECONDITION_BLOCK bellow,
             // to avoid call mark_precondition_ready() and check_short_circuit() multiple times.
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            set_driver_state(DriverState::OUTPUT_FULL);
+            return false;
+        }
+
+        // INPUT_EMPTY
+        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            set_driver_state(DriverState::INPUT_EMPTY);
+            return false;
+        }
+
+        return true;
+    }
+
+    // used in event scheduler
+    // check driver is ready for schedule
+    // similar to is_not_blocked but without check short_circuit.
+    bool check_is_ready() {
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
+        }
+        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
+            return true;
+        }
+
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+            mark_precondition_ready();
         }
 
         // OUTPUT_FULL
