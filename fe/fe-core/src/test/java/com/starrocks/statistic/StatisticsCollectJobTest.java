@@ -83,6 +83,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        new StatisticsMetaManager().createStatisticsTablesForTest();
 
         starRocksAssert.withTable("CREATE TABLE `t0_stats` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -409,7 +410,27 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(1, jobs2.size());
+=======
+        Assertions.assertEquals(1, jobs2.size());
+
+        BasicStatsMeta basicStatsMeta3 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
+                StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.of(2021, 1, 1, 1, 1, 1), Maps.newHashMap());
+        basicStatsMeta3.increaseDeltaRows(10000000L);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta3);
+
+        List<StatisticsCollectJob> job3 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                        Lists.newArrayList(IntegerType.BIGINT),
+                        StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assertions.assertEquals(1, job3.size());
+        Assertions.assertTrue(job3.get(0) instanceof HyperStatisticsCollectJob);
+>>>>>>> 6590dc596e ([BugFix] fix the statistics collection of collection_size (#65788))
     }
 
     @Test
@@ -479,8 +500,34 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertEquals("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
                 "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, " + dbid +
                 " as db_id, " + t0StatsTableId +
+<<<<<<< HEAD
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
+=======
+                " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
+                "('percent'='10') " +
+                "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+
+        mostCommonValues = new HashMap<>();
+        mostCommonValues.put("1", "10");
+        mostCommonValues.put("2", "20");
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectBucketsWithoutNdv",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v6", IntegerType.BIGINT);
+        Assertions.assertEquals(normalize.apply("select cast(2 as int) as version, cast(10009 as bigint), " +
+                        "cast(10060 as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "from " +
+                        "(select `v6` as column_key from `test`.`t0_stats` where rand() <= 0.1 and `v6` is not null and " +
+                        "`v6` not in (1,2) order by `v6` limit 10000000) t"),
+                normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogramWithHllNdv",
+                db, olapTable, mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v6', %d, " +
+                        "'test.t0_stats', histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]'),  " +
+                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+>>>>>>> 6590dc596e ([BugFix] fix the statistics collection of collection_size (#65788))
     }
 
     @Test

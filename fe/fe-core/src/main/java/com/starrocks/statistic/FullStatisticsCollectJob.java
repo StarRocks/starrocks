@@ -337,6 +337,23 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
+<<<<<<< HEAD
+=======
+            context.put("collectionSizeFunction", "-1");
+        } else if (columnType.isCollectionType()) {
+            String collectionSizeFunction = "IFNULL(AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
+                    "(" + quoteColumnKey + ")), -1) ";
+            long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
+                    ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
+            String dataSizeFunction =
+                    "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + collectionSizeFunction.trim() + ")";
+            context.put("hllFunction", "'00'");
+            context.put("countNullFunction", "0");
+            context.put("maxFunction", "''");
+            context.put("minFunction", "''");
+            context.put("collectionSizeFunction", collectionSizeFunction);
+            context.put("dataSize", dataSizeFunction);
+>>>>>>> 6590dc596e ([BugFix] fix the statistics collection of collection_size (#65788))
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnKey + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnKey + ")");
