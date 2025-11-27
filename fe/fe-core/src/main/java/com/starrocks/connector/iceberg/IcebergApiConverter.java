@@ -46,19 +46,7 @@ import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.StructField;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
-import com.starrocks.type.UnknownType;
 import org.apache.commons.collections4.MapUtils;
->>>>>>> 3cd8933ea2 ([Enhancement] support creating iceberg view with properties (#65938))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
@@ -67,7 +55,6 @@ import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;

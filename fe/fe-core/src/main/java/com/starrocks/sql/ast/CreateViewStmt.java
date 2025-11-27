@@ -15,11 +15,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
-=======
 import com.google.common.collect.Maps;
->>>>>>> 3cd8933ea2 ([Enhancement] support creating iceberg view with properties (#65938))
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.parser.NodePosition;
 
