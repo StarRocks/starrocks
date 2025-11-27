@@ -173,18 +173,16 @@ public:
         int64_t display_threshold() const { return _strategy.display_threshold; }
 
         // Returns true if this counter should be displayed in the profile output.
-        // By default, zero-value counters are omitted to improve readability.
-        // Counters with display_threshold > 0 are only displayed if value > threshold.
-        // Counters with display_threshold < 0 are always displayed (even if zero).
+        // The display behavior is controlled by the display_threshold:
+        // - threshold < 0: always display (force show even if zero)
+        // - threshold == 0: always display (default, for compatibility)
+        // - threshold > 0: display only if value > threshold
         bool should_display() const {
             int64_t threshold = _strategy.display_threshold;
-            // threshold < 0: always display (force show even if zero)
-            // threshold == 0: display only if value != 0 (skip zero values)
+            // threshold <= 0: always display (default, for compatibility)
             // threshold > 0: display only if value > threshold
-            if (threshold < 0) {
+            if (threshold <= 0) {
                 return true;
-            } else if (threshold == 0) {
-                return value() != 0;
             } else {
                 return value() > threshold;
             }

@@ -900,4 +900,115 @@ public class RuntimeProfileTest {
         Assertions.assertTrue(baseC3.getMaxValue().isPresent());
         Assertions.assertEquals(15, baseC3.getMaxValue().get().longValue());
     }
+
+    @Test
+    public void testShouldDisplayWithThreshold() {
+        // Test that counters are displayed by default for compatibility
+        Counter zeroCounter = new Counter(TUnit.UNIT, null, 0);
+        Assertions.assertTrue(zeroCounter.shouldDisplay(), "Zero-value counter should display by default for compatibility");
+
+        Counter nonZeroCounter = new Counter(TUnit.UNIT, null, 100);
+        Assertions.assertTrue(nonZeroCounter.shouldDisplay(), "Non-zero counter should display");
+
+        // Test with display_threshold > 0 (only display if value > threshold)
+        TCounterStrategy thresholdStrategy = new TCounterStrategy();
+        thresholdStrategy.aggregate_type = TCounterAggregateType.SUM;
+        thresholdStrategy.merge_type = TCounterMergeType.MERGE_ALL;
+        thresholdStrategy.display_threshold = 50;
+
+        Counter belowThresholdCounter = new Counter(TUnit.UNIT, thresholdStrategy, 30);
+        Assertions.assertFalse(belowThresholdCounter.shouldDisplay(), 
+                "Counter below threshold should not display");
+
+        Counter aboveThresholdCounter = new Counter(TUnit.UNIT, thresholdStrategy, 100);
+        Assertions.assertTrue(aboveThresholdCounter.shouldDisplay(), 
+                "Counter above threshold should display");
+
+        // Test with display_threshold <= 0 (always display)
+        TCounterStrategy alwaysDisplayStrategy = new TCounterStrategy();
+        alwaysDisplayStrategy.aggregate_type = TCounterAggregateType.SUM;
+        alwaysDisplayStrategy.merge_type = TCounterMergeType.MERGE_ALL;
+        alwaysDisplayStrategy.display_threshold = -1;
+
+        Counter forceZeroCounter = new Counter(TUnit.UNIT, alwaysDisplayStrategy, 0);
+        Assertions.assertTrue(forceZeroCounter.shouldDisplay(), 
+                "Counter with negative threshold should always display");
+    }
+
+    @Test
+    public void testPrintCounterWithMinMax() {
+        // Test counter without min/max
+        Counter simpleCounter = new Counter(TUnit.UNIT, null, 100);
+        String simpleOutput = RuntimeProfile.printCounterWithMinMax(simpleCounter);
+        Assertions.assertEquals("100", simpleOutput);
+
+        // Test counter with min/max same as value
+        Counter sameMinMaxCounter = new Counter(TUnit.UNIT, null, 100);
+        sameMinMaxCounter.setMinValue(100);
+        sameMinMaxCounter.setMaxValue(100);
+        String sameMinMaxOutput = RuntimeProfile.printCounterWithMinMax(sameMinMaxCounter);
+        Assertions.assertEquals("100", sameMinMaxOutput, 
+                "Should not show min/max if they equal the value");
+
+        // Test counter with different min/max
+        Counter rangeCounter = new Counter(TUnit.UNIT, null, 100);
+        rangeCounter.setMinValue(50);
+        rangeCounter.setMaxValue(150);
+        String rangeOutput = RuntimeProfile.printCounterWithMinMax(rangeCounter);
+        Assertions.assertEquals("100 [50, 150]", rangeOutput, 
+                "Should show min/max range when different from value");
+
+        // Test with TIME_NS type
+        Counter timeCounter = new Counter(TUnit.TIME_NS, null, 1000000000L); // 1 second
+        timeCounter.setMinValue(500000000L);  // 0.5 second
+        timeCounter.setMaxValue(2000000000L); // 2 seconds
+        String timeOutput = RuntimeProfile.printCounterWithMinMax(timeCounter);
+        Assertions.assertTrue(timeOutput.contains("["), 
+                "Time counter with range should include min/max");
+    }
+
+    @Test
+    public void testPrettyPrintShowsAllCounters() {
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        Counter zeroCounter = profile.addCounter("ZeroCounter", TUnit.UNIT, null);
+        zeroCounter.setValue(0);
+        
+        Counter nonZeroCounter = profile.addCounter("NonZeroCounter", TUnit.UNIT, null);
+        nonZeroCounter.setValue(100);
+
+        StringBuilder builder = new StringBuilder();
+        profile.prettyPrint(builder, "");
+        String output = builder.toString();
+
+        // Both counters should be displayed by default for compatibility
+        Assertions.assertTrue(output.contains("ZeroCounter"), 
+                "Zero-value counter should be included in output for compatibility");
+        Assertions.assertTrue(output.contains("NonZeroCounter"), 
+                "Non-zero counter should be included in output");
+    }
+
+    @Test
+    public void testPrettyPrintMinMaxInline() {
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        Counter counter = profile.addCounter("TestCounter", TUnit.UNIT, null);
+        counter.setValue(100);
+        counter.setMinValue(50);
+        counter.setMaxValue(150);
+
+        StringBuilder builder = new StringBuilder();
+        profile.prettyPrint(builder, "");
+        String output = builder.toString();
+
+        // Check that min/max is shown inline with the counter
+        Assertions.assertTrue(output.contains("TestCounter: 100 [50, 150]"), 
+                "Counter should show value with inline min/max range");
+        
+        // Check that separate __MIN_OF_ and __MAX_OF_ counters are not shown
+        Assertions.assertFalse(output.contains("__MIN_OF_"), 
+                "Separate MIN counter should not appear in output");
+        Assertions.assertFalse(output.contains("__MAX_OF_"), 
+                "Separate MAX counter should not appear in output");
+    }
 }

@@ -617,17 +617,17 @@ TEST(TestRuntimeProfile, testShouldDisplay) {
     auto profile = std::make_shared<RuntimeProfile>("test");
 
     // Test with default strategy (threshold == 0)
-    // Zero-value counters should not display
+    // Counters should display by default for compatibility
     auto* zero_counter = profile->add_counter("zero_counter", TUnit::UNIT, create_strategy(TUnit::UNIT));
     zero_counter->set(0);
-    ASSERT_FALSE(zero_counter->should_display());
+    ASSERT_TRUE(zero_counter->should_display());
 
     // Non-zero counters should display
     auto* nonzero_counter = profile->add_counter("nonzero_counter", TUnit::UNIT, create_strategy(TUnit::UNIT));
     nonzero_counter->set(100);
     ASSERT_TRUE(nonzero_counter->should_display());
 
-    // Test with positive threshold
+    // Test with positive threshold (only display if value > threshold)
     TCounterStrategy threshold_strategy;
     threshold_strategy.aggregate_type = TCounterAggregateType::SUM;
     threshold_strategy.merge_type = TCounterMergeType::MERGE_ALL;
@@ -642,7 +642,7 @@ TEST(TestRuntimeProfile, testShouldDisplay) {
     above_threshold->set(100);
     ASSERT_TRUE(above_threshold->should_display());
 
-    // Test with negative threshold (force display even if zero)
+    // Test with negative threshold (always display)
     TCounterStrategy force_display_strategy;
     force_display_strategy.aggregate_type = TCounterAggregateType::SUM;
     force_display_strategy.merge_type = TCounterMergeType::MERGE_ALL;
