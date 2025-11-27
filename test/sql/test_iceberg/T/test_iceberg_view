@@ -8,6 +8,32 @@ select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0}
 
 drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+
+show create table iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex", "comment"="this is a test view") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+
+show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+create database default_catalog.test_internal_db_${uuid0};
+
+create view if not exists default_catalog.test_internal_db_${uuid0}.test_internal_view_${uuid0} properties ("key"="value") as select 1 from dual;
+
+drop database default_catalog.test_internal_db_${uuid0};
+
 create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
 
 select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;

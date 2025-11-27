@@ -1845,7 +1845,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 isSecurity,
-                (QueryStatement) visit(context.queryStatement()), createPos(context));
+                (QueryStatement) visit(context.queryStatement()),
+                createPos(context),
+                buildProperties(context.properties())
+                );
     }
 
     @Override
