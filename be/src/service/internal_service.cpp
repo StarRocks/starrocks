@@ -350,6 +350,14 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
         }
     }
 
+    bool is_pipeline = t_batch_requests->common_param.__isset.is_pipeline && t_batch_requests->common_param.is_pipeline;
+    if (!is_pipeline) {
+        Status::InvalidArgument(
+                "non-pipeline engine is no longer supported since 3.2, please set enable_pipeline_engine=true.")
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+
     auto& common_request = t_batch_requests->common_param;
     auto& unique_requests = t_batch_requests->unique_param_per_instance;
     std::string instances_id;
