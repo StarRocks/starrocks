@@ -149,12 +149,7 @@ Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& 
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     auto scoped =
             trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
-<<<<<<< HEAD
-    return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
-                      tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery);
-=======
-    return commit_txn(tablet, partition_id, transaction_id, load_id, rowset_ptr, is_recovery, is_shadow);
->>>>>>> 236566b477 ([BugFix] Fix ingestion failed during alter (#65396))
+    return commit_txn(tablet, partition_id, transaction_id, load_id, rowset_ptr, is_recovery, is_recovery);
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
@@ -219,14 +214,8 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     return Status::OK();
 }
 
-<<<<<<< HEAD
-Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                              TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
-                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
-=======
 Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partition_id, TTransactionId transaction_id,
-                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery,
-                              bool is_shadow) {
+                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     if (tablet == nullptr) {
         return Status::InternalError("tablet not exist during commit txn");
     }
@@ -235,7 +224,6 @@ Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partit
     auto schema_hash = tablet->schema_hash();
     auto tablet_uid = tablet->tablet_uid();
 
->>>>>>> 236566b477 ([BugFix] Fix ingestion failed during alter (#65396))
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "Invalid commit req "
                    << " partition_id=" << partition_id << " txn_id: " << transaction_id << " tablet_id=" << tablet_id;
