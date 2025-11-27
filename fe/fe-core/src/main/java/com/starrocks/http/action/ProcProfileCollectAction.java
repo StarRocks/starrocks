@@ -15,14 +15,11 @@
 package com.starrocks.http.action;
 
 import com.google.gson.JsonObject;
-import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpUtils;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.memory.ProcProfileCollector;
-import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -33,7 +30,6 @@ import java.util.Date;
 
 public class ProcProfileCollectAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(ProcProfileCollectAction.class);
-    private static final SimpleDateFormat PROFILE_TIME_FORMAT = new SimpleDateFormat("yyyyMMdd-HHmmss");
 
     public ProcProfileCollectAction(ActionController controller) {
         super(controller);
@@ -47,7 +43,13 @@ public class ProcProfileCollectAction extends WebBaseAction {
     public void executePost(BaseRequest request, BaseResponse response) {
         String nodeParam = request.getSingleParameter("node");
         if (nodeParam == null || nodeParam.isEmpty()) {
-            nodeParam = "FE";
+            JsonObject result = new JsonObject();
+            result.addProperty("status", "error");
+            result.addProperty("message", "Missing node parameter. Please specify a BE node.");
+            response.setContentType("application/json");
+            response.appendContent(result.toString());
+            writeResponse(request, response);
+            return;
         }
 
         String secondsStr = request.getSingleParameter("seconds");
@@ -66,27 +68,24 @@ public class ProcProfileCollectAction extends WebBaseAction {
         String typeParam = request.getSingleParameter("type");
         String profileType = "both"; // default to both
         if (!StringUtils.isEmpty(typeParam)) {
-            if ("cpu".equalsIgnoreCase(typeParam) || "mem".equalsIgnoreCase(typeParam) || "both".equalsIgnoreCase(typeParam)) {
+            // For BE, we use "cpu", "contention", or "both" (mem maps to contention)
+            if ("cpu".equalsIgnoreCase(typeParam) || "contention".equalsIgnoreCase(typeParam) || 
+                "both".equalsIgnoreCase(typeParam) || "mem".equalsIgnoreCase(typeParam)) {
                 profileType = typeParam.toLowerCase();
+                // Map "mem" to "contention" for BE
+                if ("mem".equals(profileType)) {
+                    profileType = "contention";
+                }
             }
         }
 
         JsonObject result = new JsonObject();
 
         if ("FE".equals(nodeParam)) {
-            // Collect profile on FE
-            try {
-                collectFEProfile(seconds, profileType);
-                result.addProperty("status", "success");
-                result.addProperty("message", "Profile collection started for " + seconds + " seconds");
-                result.addProperty("node", "FE");
-                result.addProperty("type", profileType);
-            } catch (Exception e) {
-                LOG.error("Failed to collect FE profile", e);
-                result.addProperty("status", "error");
-                result.addProperty("message", "Failed to collect profile: " + e.getMessage());
-            }
-        } else if (nodeParam.startsWith("BE:")) {
+            // FE profiling is not supported - only BE profiling is available
+            result.addProperty("status", "error");
+            result.addProperty("message", "FE profiling is not supported. Please use BE profiling instead.");
+        } else if (nodeParam != null && nodeParam.startsWith("BE:")) {
             // Collect profile on BE
             try {
                 String beResult = collectBEProfile(nodeParam, seconds, profileType);
@@ -109,47 +108,6 @@ public class ProcProfileCollectAction extends WebBaseAction {
         writeResponse(request, response);
     }
 
-    private void collectFEProfile(long seconds, String profileType) throws Exception {
-        ProcProfileCollector collector = GlobalStateMgr.getCurrentState().getProcProfileCollector();
-        if (collector == null) {
-            throw new RuntimeException("ProcProfileCollector is not initialized");
-        }
-
-        // Use AsyncProfiler directly to collect profile for specified duration
-        one.profiler.AsyncProfiler profiler = one.profiler.AsyncProfiler.getInstance();
-        String profileLogDir = collector.getProfileLogDir();
-        String timestamp = PROFILE_TIME_FORMAT.format(new Date(System.currentTimeMillis()));
-
-        if ("cpu".equals(profileType) || "both".equals(profileType)) {
-            String cpuFileName = "cpu-profile-" + timestamp + ".html";
-            try {
-                profiler.execute(String.format("start,quiet,event=cpu,cstack=vm,jstackdepth=%d,file=%s",
-                        Config.proc_profile_jstack_depth, profileLogDir + "/" + cpuFileName));
-                Thread.sleep(seconds * 1000L);
-                profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + cpuFileName));
-                collector.compressFile(cpuFileName);
-                LOG.info("Collected CPU profile for {} seconds: {}", seconds, cpuFileName);
-            } catch (Exception e) {
-                LOG.error("Failed to collect CPU profile", e);
-                throw e;
-            }
-        }
-
-        if ("mem".equals(profileType) || "both".equals(profileType)) {
-            String memFileName = "mem-profile-" + timestamp + ".html";
-            try {
-                profiler.execute(String.format("start,quiet,event=alloc,alloc=2m,cstack=vm,jstackdepth=%d,file=%s",
-                        Config.proc_profile_jstack_depth, profileLogDir + "/" + memFileName));
-                Thread.sleep(seconds * 1000L);
-                profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + memFileName));
-                collector.compressFile(memFileName);
-                LOG.info("Collected memory profile for {} seconds: {}", seconds, memFileName);
-            } catch (Exception e) {
-                LOG.error("Failed to collect memory profile", e);
-                throw e;
-            }
-        }
-    }
 
     private String collectBEProfile(String beNodeId, long seconds, String profileType) throws Exception {
         // Parse BE node: "BE:host:port"
@@ -205,8 +163,8 @@ public class ProcProfileCollectAction extends WebBaseAction {
             }
         }
 
-        // Collect contention profile (similar to memory profiling)
-        if ("mem".equals(profileType) || "both".equals(profileType)) {
+        // Collect contention profile
+        if ("contention".equals(profileType) || "both".equals(profileType)) {
             try {
                 String contentionUrl = "http://" + host + ":" + port + "/pprof/contention?seconds=" + seconds;
                 String profileData = HttpUtils.get(contentionUrl, null);

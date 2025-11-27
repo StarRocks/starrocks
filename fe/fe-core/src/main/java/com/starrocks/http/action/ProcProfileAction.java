@@ -308,6 +308,11 @@ public class ProcProfileAction extends WebBaseAction {
     }
 
     private void addProfileCollectionForm(StringBuilder buffer, String nodeParam) {
+        // Only show collect form for BE nodes, not for FE
+        if ("FE".equals(nodeParam)) {
+            return;
+        }
+        
         buffer.append("<div style=\"margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background-color: #f9f9f9;\">");
         buffer.append("<h3>Collect Profile</h3>");
         buffer.append("<p>Collect a new profile for a specified duration. The profile will appear in the list below after collection completes.</p>");
@@ -320,15 +325,9 @@ public class ProcProfileAction extends WebBaseAction {
         buffer.append("<div style=\"margin-bottom: 10px;\">");
         buffer.append("<label for=\"type\">Profile Type: </label>");
         buffer.append("<select id=\"type\" name=\"type\" style=\"margin-left: 10px;\">");
-        if ("FE".equals(nodeParam)) {
-            buffer.append("<option value=\"cpu\">CPU</option>");
-            buffer.append("<option value=\"mem\">Memory</option>");
-            buffer.append("<option value=\"both\" selected>Both</option>");
-        } else {
-            buffer.append("<option value=\"cpu\">CPU</option>");
-            buffer.append("<option value=\"contention\">Contention</option>");
-            buffer.append("<option value=\"both\" selected>Both</option>");
-        }
+        buffer.append("<option value=\"cpu\">CPU</option>");
+        buffer.append("<option value=\"contention\">Contention</option>");
+        buffer.append("<option value=\"both\" selected>Both</option>");
         buffer.append("</select>");
         buffer.append("</div>");
         buffer.append("<button type=\"submit\" id=\"collectBtn\" style=\"padding: 8px 16px; background-color: #337ab7; color: white; border: none; border-radius: 4px; cursor: pointer;\">");
