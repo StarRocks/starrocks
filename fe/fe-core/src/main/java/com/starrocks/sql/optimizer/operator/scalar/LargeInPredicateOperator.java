@@ -83,8 +83,24 @@ public class LargeInPredicateOperator extends InPredicateOperator {
     }
 
     @Override
+<<<<<<< HEAD
     public int hashCode() {
         return Objects.hash(rawConstantList, constantCount, constantType);
+=======
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        LargeInPredicateOperator that = (LargeInPredicateOperator) obj;
+        return constantCount == that.constantCount &&
+               Objects.equals(rawConstantList, that.rawConstantList) &&
+               Objects.equals(constantType, that.constantType);
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), rawConstantList, constantCount, constantType);
+>>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     }
 
     @Override

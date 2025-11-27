@@ -88,8 +88,22 @@ public class MultiInPredicateOperator extends PredicateOperator {
     }
 
     @Override
+<<<<<<< HEAD
     public int hashCode() {
         return Objects.hash(super.hashCode(), isNotIn);
+=======
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        MultiInPredicateOperator that = (MultiInPredicateOperator) obj;
+        return isNotIn == that.isNotIn && tupleSize == that.tupleSize;
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotIn);
+>>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     }
 
     @Override

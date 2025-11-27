@@ -81,7 +81,21 @@ public class ExistsPredicateOperator extends PredicateOperator {
     }
 
     @Override
+<<<<<<< HEAD
     public int hashCode() {
         return Objects.hash(super.hashCode(), isNotExists);
+=======
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        ExistsPredicateOperator that = (ExistsPredicateOperator) obj;
+        return isNotExists == that.isNotExists;
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), isNotExists);
+>>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     }
 }
