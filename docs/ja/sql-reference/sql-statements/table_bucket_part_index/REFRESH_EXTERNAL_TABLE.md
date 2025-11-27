@@ -8,8 +8,13 @@ displayed_sidebar: docs
 
 StarRocks にキャッシュされたメタデータを更新します。このメタデータはデータレイクのテーブルから取得されます。このステートメントは以下のシナリオで使用されます:
 
+<<<<<<< HEAD
 - **外部テーブル**: Apache Hive™ または Apache Hudi のデータをクエリするために Hive 外部テーブルまたは Hudi 外部テーブルを使用する場合、このステートメントを実行して StarRocks にキャッシュされた Hive テーブルまたは Hudi テーブルのメタデータを更新できます。
 - **外部カタログ**: 対応するデータソースのデータをクエリするために [external catalog](../../../data_source/catalog/catalog_overview.md) を使用する場合、このステートメントを実行して StarRocks にキャッシュされたメタデータを更新できます。
+=======
+- **外部テーブル**: Apache Hive™ または Apache Hudi のデータをクエリするために Hive 外部テーブルまたは Hudi 外部テーブルを使用する場合、StarRocks にキャッシュされた Hive テーブルまたは Hudi テーブルのメタデータを更新するためにこのステートメントを実行できます。
+- **外部カタログ**: 対応するデータソースのクエリに[外部カタログ](../../../data_source/catalog/catalog_overview.md)（JDBC カタログを除く）を使用する場合、StarRocks にキャッシュされたメタデータを更新するためにこのステートメントを実行できます。
+>>>>>>> dd2b09320d ([Doc] Update REFRESH EXTERNAL TABLE Desc (#65984))
 
 > **注意**
 >
