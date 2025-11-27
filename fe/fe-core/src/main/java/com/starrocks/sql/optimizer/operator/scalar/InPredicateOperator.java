@@ -123,4 +123,13 @@ public class InPredicateOperator extends PredicateOperator {
         List<Integer> argumentHashCodes = getChildren().stream().map(Objects::hashCode).collect(Collectors.toList());
         return Objects.hash(argumentHashCodes, opType, isNotIn, isSubquery);
     }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        InPredicateOperator that = (InPredicateOperator) obj;
+        return isNotIn == that.isNotIn && isSubquery == that.isSubquery;
+    }
 }

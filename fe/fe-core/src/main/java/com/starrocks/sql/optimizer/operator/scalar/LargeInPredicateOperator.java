@@ -88,6 +88,17 @@ public class LargeInPredicateOperator extends InPredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        LargeInPredicateOperator that = (LargeInPredicateOperator) obj;
+        return constantCount == that.constantCount &&
+               Objects.equals(rawConstantList, that.rawConstantList) &&
+               Objects.equals(constantType, that.constantType);
+    }
+
+    @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLargeInPredicate(this, context);
     }
