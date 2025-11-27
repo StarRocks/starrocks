@@ -132,10 +132,12 @@ public class OlapPartitionTraits extends DefaultTraits {
      */
     public static boolean isBaseTableChanged(Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
-        return mvRefreshedPartitionInfo.getId() != partition.getId()
-                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
-                > mvRefreshedPartitionInfo.getLastRefreshTime();
+        if (mvRefreshedPartitionInfo.getId() != partition.getId()) {
+            return true;
+        }
+        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
+        return defaultPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || defaultPartition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {
