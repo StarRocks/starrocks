@@ -91,7 +91,21 @@ public class BetweenPredicateOperator extends PredicateOperator {
     }
 
     @Override
+<<<<<<< HEAD
     public int hashCode() {
         return Objects.hash(super.hashCode(), notBetween);
+=======
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        BetweenPredicateOperator that = (BetweenPredicateOperator) obj;
+        return notBetween == that.notBetween;
+    }
+
+    @Override
+    public int hashCodeSelf() {
+        return Objects.hash(super.hashCodeSelf(), notBetween);
+>>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     }
 }
