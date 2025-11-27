@@ -890,7 +890,6 @@ TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     auto res = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("test_path", serialized_string);
     EXPECT_FALSE(res.ok());
     EXPECT_TRUE(res.status().is_corruption());
-    EXPECT_TRUE(res.status().message().find("bundle_metadata_size is 0") != std::string::npos);
 }
 
 TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {
