@@ -110,12 +110,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### arrow_flight_port
 
-- デフォルト: `-1`
+- デフォルト: -1
 - タイプ: Int
 - 単位: Port
 - 変更可能: いいえ
-- 説明: BE の Arrow Flight SQL サーバー用の TCP ポート。Arrow Flight サービスを無効化するには `-1` に設定します。macOS 以外のビルドでは、BE は起動時に ArrowFlightSqlServer::start(`arrow_flight_port`) を呼び出します。ポートが利用できない場合、サーバーの起動は失敗し BE プロセスは終了します。設定されたポートはハートビートペイロード（`arrow_flight_port`）で FE に報告されます。BE を起動する前に `be.conf` でこの値を設定してください。
-- 導入バージョン: `v3.4.0, v3.5.0`
+- 説明: BE の Arrow Flight SQL サーバー用の TCP ポート。Arrow Flight サービスを無効化するには `-1` に設定します。macOS 以外のビルドでは、BE は起動時に Arrow Flight SQL Server を呼び出します。ポートが利用できない場合、サーバーの起動は失敗し BE プロセスは終了します。設定されたポートは HeartBeat Payload で FE に報告されます。BE を起動する前に `be.conf` でこの値を設定してください。
+- 導入バージョン: v3.4.0, v3.5.0
 
 ##### be_exit_after_disk_write_hang_second
 
@@ -347,7 +347,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### ssl_certificate_path
 
-- デフォルト: 
+- デフォルト: 空の文字列
 - タイプ: String
 - 単位: -
 - 変更可能: No
