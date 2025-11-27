@@ -727,6 +727,37 @@ public class AnalyzerUtils {
     private static class TableCollector extends AstTraverser<Void, Void> {
         protected Map<TableName, Table> tables;
 
+        /**
+         * One table may contain multi MaterializeIndexMetas. and it's different if one has tableA and baseIndex a
+         * and one has tableA and baseIndex b. So use TableId and its base table index as the key to distinguish a TableRelation.
+         */
+        protected static class TableIndexId {
+            long tableId;
+            long baseIndexMetaId;
+
+            public TableIndexId(long tableId, long indexMetaId) {
+                this.tableId = tableId;
+                this.baseIndexMetaId = indexMetaId;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+                TableIndexId that = (TableIndexId) o;
+                return tableId == that.tableId && baseIndexMetaId == that.baseIndexMetaId;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(tableId, baseIndexMetaId);
+            }
+        }
+
         public TableCollector() {
             this.tables = Maps.newHashMap();
         }
@@ -854,6 +885,14 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+    /**
+     * Restore original OLAP tables in AST from snapshots back to original tables.
+     * This is used to reverse the effect of copyOlapTable after ExecPlan generation.
+     */
+    public static void restoreOriginalTables(StatementBase statementBase, Set<OlapTable> olapTables) {
+        new AnalyzerUtils.OlapTableRestorer(olapTables).visit(statementBase);
+    }
+
     public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
         new SourceTablesCollector(sourceTables).visit(statementBase);
     }
@@ -952,23 +991,56 @@ public class AnalyzerUtils {
             }
 
             Table table = node.getTable();
-            // system table is immutable
-            if (table instanceof SystemTable) {
+            if (!isTableCopySafe(table)) {
+                tables.put(node.getName(), node.getTable());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            if (!tables.isEmpty()) {
                 return null;
             }
-            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+
+            // Check if the target table is copy safe
+            Table targetTable = node.getTargetTable();
+            if (!isTableCopySafe(targetTable)) {
+                TableName tableName = TableName.fromTableRef(node.getTableRef());
+                tables.put(tableName, targetTable);
+                return null;
+            }
+            // Continue to visit source tables in SELECT clause
+            return visit(node.getQueryStatement());
+        }
+
+        /**
+         * Check if a table is copy safe.
+         * Copy safe tables:
+         * 1. OlapTable/MaterializedView with limited related MVs (supports copyOnlyForQuery)
+         * 2. Immutable external tables (Hive, Iceberg)
+         */
+        private boolean isTableCopySafe(Table table) {
+            if (table == null) {
+                return true;
+            }
+
+            // system table is immutable
+            if (table instanceof SystemTable) {
+                return true;
+            }
+
+            int relatedMVCount = table.getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
             if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
                 // OlapTable can be copied via copyOnlyForQuery
-                return null;
+                return true;
             } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
                 // Immutable table
-                return null;
-            } else {
-                tables.put(node.getName(), node.getTable());
+                return true;
             }
-            return null;
+            return false;
         }
     }
 
@@ -979,37 +1051,6 @@ public class AnalyzerUtils {
         public OlapTableCollector(Set<OlapTable> tables) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
-        }
-
-        /**
-         * One table may contain multi MaterializeIndexMetas. and it's different if one has tableA and baseIndex a
-         * and one has tableA and baseIndex b. So use TableId and its base table index as the key to distinguish a TableRelation.
-         */
-        class TableIndexId {
-            long tableId;
-            long baseIndexMetaId;
-
-            public TableIndexId(long tableId, long indexMetaId) {
-                this.tableId = tableId;
-                this.baseIndexMetaId = indexMetaId;
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                if (this == o) {
-                    return true;
-                }
-                if (o == null || getClass() != o.getClass()) {
-                    return false;
-                }
-                TableIndexId that = (TableIndexId) o;
-                return tableId == that.tableId && baseIndexMetaId == that.baseIndexMetaId;
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(tableId, baseIndexMetaId);
-            }
         }
 
         @Override
@@ -1046,6 +1087,46 @@ public class AnalyzerUtils {
             olapTables.add(table);
             idMap.put(tableIndexId, copied);
             return copied;
+        }
+    }
+
+    private static class OlapTableRestorer extends TableCollector {
+        private final Map<TableIndexId, OlapTable> idMap;
+
+        public OlapTableRestorer(Set<OlapTable> tables) {
+            this.idMap = new HashMap<>();
+            // Build the mapping from original tables set
+            for (OlapTable table : tables) {
+                TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
+                idMap.put(tableIndexId, table);
+            }
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            super.visitInsertStatement(node, context);
+            Table restored = restoreTable(node.getTargetTable());
+            if (restored != null) {
+                node.setTargetTable(restored);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table restored = restoreTable(node.getTable());
+            if (restored != null) {
+                node.setTable(restored);
+            }
+            return null;
+        }
+
+        private Table restoreTable(Table currentTable) {
+            if (!(currentTable instanceof OlapTable table)) {
+                return null;
+            }
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
+            return idMap.get(tableIndexId);
         }
     }
 

@@ -562,6 +562,9 @@ public class InsertPlanner {
             isSchemaValid =
                     olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
             if (isSchemaValid) {
+                // Restore original tables in AST after successful plan generation
+                // This ensures subsequent plan calls can access the latest table state with temp partitions
+                AnalyzerUtils.restoreOriginalTables(insertStmt, olapTables);
                 return plan;
             }
         }
