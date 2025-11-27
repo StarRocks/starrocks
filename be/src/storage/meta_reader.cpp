@@ -100,7 +100,7 @@ void MetaReader::_fill_empty_result(Chunk* chunk) {
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         const auto& field = _collect_context.seg_collecter_params.fields[i];
         ColumnPtr column = chunk->get_column_by_slot_id(slot->id());
-        if (field == "count") {
+        if (field == META_COUNT_COL || field == META_COUNT_ROWS) {
             column->append_datum(int64_t(0));
         } else {
             column->append_nulls(1);
