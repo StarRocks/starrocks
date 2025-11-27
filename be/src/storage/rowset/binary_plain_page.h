@@ -341,8 +341,8 @@ private:
     }
 
     Status next_range_with_filter(uint32_t idx, uint32_t end, Column* dst,
-                                const std::vector<const ColumnPredicate*>& compound_and_predicates, const uint8_t* null,
-                                uint8_t* selection, uint16_t* selected_idx);
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null, uint8_t* selection, uint16_t* selected_idx);
 
     void reserve_col(size_t n, Column* column) override {
         Column* data_col;
