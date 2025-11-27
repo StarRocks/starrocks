@@ -14,15 +14,11 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import static com.starrocks.type.UnknownType.UNKNOWN_TYPE;
 
 public class PredicateOperatorTest {
 
@@ -55,9 +51,9 @@ public class PredicateOperatorTest {
     @Test
     public void testEquivalentWithDifferentArgumentSizes() {
         // Create two predicate operators with different numbers of arguments
-        ScalarOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
-        ScalarOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
-        ScalarOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "col3", true);
+        ScalarOperator col1 = new ColumnRefOperator(1, Type.INT, "col1", true);
+        ScalarOperator col2 = new ColumnRefOperator(2, Type.INT, "col2", true);
+        ScalarOperator col3 = new ColumnRefOperator(3, Type.INT, "col3", true);
 
         // One argument
         TestPredicateOperator op1 = new TestPredicateOperator(OperatorType.BINARY, col1);
@@ -76,10 +72,10 @@ public class PredicateOperatorTest {
     @Test
     public void testEquivalentWithSameArgumentSizes() {
         // Create two predicate operators with the same number of arguments
-        ScalarOperator col1 = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
-        ScalarOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "col2", true);
-        ScalarOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "col3", true);
-        ScalarOperator col4 = new ColumnRefOperator(4, IntegerType.INT, "col4", true);
+        ScalarOperator col1 = new ColumnRefOperator(1, Type.INT, "col1", true);
+        ScalarOperator col2 = new ColumnRefOperator(2, Type.INT, "col2", true);
+        ScalarOperator col3 = new ColumnRefOperator(3, Type.INT, "col3", true);
+        ScalarOperator col4 = new ColumnRefOperator(4, Type.INT, "col4", true);
 
         // Both have two arguments
         TestPredicateOperator op1 = new TestPredicateOperator(OperatorType.BINARY, col1, col2);
@@ -99,9 +95,9 @@ public class PredicateOperatorTest {
     @Test
     public void testBetweenEquivalentWithDifferentNotBetweenFlag() {
         // Create two BetweenPredicateOperator instances with same arguments but different notBetween flag
-        ScalarOperator value = new ColumnRefOperator(1, IntegerType.INT, "value", true);
-        ScalarOperator lower = new ColumnRefOperator(2, IntegerType.INT, "lower", true);
-        ScalarOperator upper = new ColumnRefOperator(3, IntegerType.INT, "upper", true);
+        ScalarOperator value = new ColumnRefOperator(1, Type.INT, "value", true);
+        ScalarOperator lower = new ColumnRefOperator(2, Type.INT, "lower", true);
+        ScalarOperator upper = new ColumnRefOperator(3, Type.INT, "upper", true);
 
         // One with notBetween = false (BETWEEN)
         BetweenPredicateOperator betweenOp = new BetweenPredicateOperator(false, value, lower, upper);
@@ -121,13 +117,13 @@ public class PredicateOperatorTest {
     @Test
     public void testBetweenEquivalentWithSameNotBetweenFlag() {
         // Create two BetweenPredicateOperator instances with same arguments and same notBetween flag
-        ScalarOperator value1 = new ColumnRefOperator(1, IntegerType.INT, "value", true);
-        ScalarOperator lower1 = new ColumnRefOperator(2, IntegerType.INT, "lower", true);
-        ScalarOperator upper1 = new ColumnRefOperator(3, IntegerType.INT, "upper", true);
+        ScalarOperator value1 = new ColumnRefOperator(1, Type.INT, "value", true);
+        ScalarOperator lower1 = new ColumnRefOperator(2, Type.INT, "lower", true);
+        ScalarOperator upper1 = new ColumnRefOperator(3, Type.INT, "upper", true);
 
-        ScalarOperator value2 = new ColumnRefOperator(4, IntegerType.INT, "value2", true);
-        ScalarOperator lower2 = new ColumnRefOperator(5, IntegerType.INT, "lower2", true);
-        ScalarOperator upper2 = new ColumnRefOperator(6, IntegerType.INT, "upper2", true);
+        ScalarOperator value2 = new ColumnRefOperator(4, Type.INT, "value2", true);
+        ScalarOperator lower2 = new ColumnRefOperator(5, Type.INT, "lower2", true);
+        ScalarOperator upper2 = new ColumnRefOperator(6, Type.INT, "upper2", true);
 
         // Both with notBetween = false
         BetweenPredicateOperator op1 = new BetweenPredicateOperator(false, value1, lower1, upper1);
@@ -148,8 +144,8 @@ public class PredicateOperatorTest {
     @Test
     public void testBinaryEquivalentWithDifferentBinaryTypes() {
         // Create two BinaryPredicateOperator instances with same arguments but different binary types
-        ScalarOperator left = new ColumnRefOperator(1, IntegerType.INT, "left", true);
-        ScalarOperator right = new ColumnRefOperator(2, IntegerType.INT, "right", true);
+        ScalarOperator left = new ColumnRefOperator(1, Type.INT, "left", true);
+        ScalarOperator right = new ColumnRefOperator(2, Type.INT, "right", true);
 
         // One with EQ type
         BinaryPredicateOperator eqOp = new BinaryPredicateOperator(BinaryType.EQ, left, right);
@@ -169,11 +165,11 @@ public class PredicateOperatorTest {
     @Test
     public void testBinaryEquivalentWithSameBinaryType() {
         // Create two BinaryPredicateOperator instances with same binary type but different arguments
-        ScalarOperator left1 = new ColumnRefOperator(1, IntegerType.INT, "left1", true);
-        ScalarOperator right1 = new ColumnRefOperator(2, IntegerType.INT, "right1", true);
+        ScalarOperator left1 = new ColumnRefOperator(1, Type.INT, "left1", true);
+        ScalarOperator right1 = new ColumnRefOperator(2, Type.INT, "right1", true);
 
-        ScalarOperator left2 = new ColumnRefOperator(3, IntegerType.INT, "left2", true);
-        ScalarOperator right2 = new ColumnRefOperator(4, IntegerType.INT, "right2", true);
+        ScalarOperator left2 = new ColumnRefOperator(3, Type.INT, "left2", true);
+        ScalarOperator right2 = new ColumnRefOperator(4, Type.INT, "right2", true);
 
         // Both with EQ type
         BinaryPredicateOperator op1 = new BinaryPredicateOperator(BinaryType.EQ, left1, right1);
@@ -194,8 +190,8 @@ public class PredicateOperatorTest {
     @Test
     public void testCompoundEquivalentWithDifferentCompoundTypes() {
         // Create two CompoundPredicateOperator instances with same arguments but different compound types
-        ScalarOperator left = new ColumnRefOperator(1, BooleanType.BOOLEAN, "left", true);
-        ScalarOperator right = new ColumnRefOperator(2, BooleanType.BOOLEAN, "right", true);
+        ScalarOperator left = new ColumnRefOperator(1, Type.BOOLEAN, "left", true);
+        ScalarOperator right = new ColumnRefOperator(2, Type.BOOLEAN, "right", true);
 
         // One with AND type
         CompoundPredicateOperator andOp = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, left, right);
@@ -215,11 +211,11 @@ public class PredicateOperatorTest {
     @Test
     public void testCompoundEquivalentWithSameCompoundType() {
         // Create two CompoundPredicateOperator instances with same compound type but different arguments
-        ScalarOperator left1 = new ColumnRefOperator(1, BooleanType.BOOLEAN, "left1", true);
-        ScalarOperator right1 = new ColumnRefOperator(2, BooleanType.BOOLEAN, "right1", true);
+        ScalarOperator left1 = new ColumnRefOperator(1, Type.BOOLEAN, "left1", true);
+        ScalarOperator right1 = new ColumnRefOperator(2, Type.BOOLEAN, "right1", true);
 
-        ScalarOperator left2 = new ColumnRefOperator(3, BooleanType.BOOLEAN, "left2", true);
-        ScalarOperator right2 = new ColumnRefOperator(4, BooleanType.BOOLEAN, "right2", true);
+        ScalarOperator left2 = new ColumnRefOperator(3, Type.BOOLEAN, "left2", true);
+        ScalarOperator right2 = new ColumnRefOperator(4, Type.BOOLEAN, "right2", true);
 
         // Both with AND type
         CompoundPredicateOperator op1 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, left1, right1);
@@ -240,7 +236,7 @@ public class PredicateOperatorTest {
     @Test
     public void testExistsEquivalentWithDifferentNotExistsFlag() {
         // Create two ExistsPredicateOperator instances with same arguments but different notExists flag
-        ScalarOperator subquery = new ColumnRefOperator(1, UNKNOWN_TYPE, "subquery", true);
+        ScalarOperator subquery = new ColumnRefOperator(1, Type.UNKNOWN_TYPE, "subquery", true);
 
         // One with notExists = false (EXISTS)
         ExistsPredicateOperator existsOp = new TestExistsPredicateOperator(false, subquery);
@@ -260,8 +256,8 @@ public class PredicateOperatorTest {
     @Test
     public void testExistsEquivalentWithSameNotExistsFlag() {
         // Create two ExistsPredicateOperator instances with same notExists flag but different arguments
-        ScalarOperator subquery1 = new ColumnRefOperator(1, UNKNOWN_TYPE, "subquery1", true);
-        ScalarOperator subquery2 = new ColumnRefOperator(2, UNKNOWN_TYPE, "subquery2", true);
+        ScalarOperator subquery1 = new ColumnRefOperator(1, Type.UNKNOWN_TYPE, "subquery1", true);
+        ScalarOperator subquery2 = new ColumnRefOperator(2, Type.UNKNOWN_TYPE, "subquery2", true);
 
         // Both with notExists = false
         ExistsPredicateOperator op1 = new TestExistsPredicateOperator(false, subquery1);
@@ -282,9 +278,9 @@ public class PredicateOperatorTest {
     @Test
     public void testInEquivalentWithDifferentIsNotInFlags() {
         // Create two InPredicateOperator instances with same arguments but different isNotIn flags
-        ScalarOperator column = new ColumnRefOperator(1, IntegerType.INT, "column", true);
-        ScalarOperator value1 = new ColumnRefOperator(2, IntegerType.INT, "value1", true);
-        ScalarOperator value2 = new ColumnRefOperator(3, IntegerType.INT, "value2", true);
+        ScalarOperator column = new ColumnRefOperator(1, Type.INT, "column", true);
+        ScalarOperator value1 = new ColumnRefOperator(2, Type.INT, "value1", true);
+        ScalarOperator value2 = new ColumnRefOperator(3, Type.INT, "value2", true);
 
         // One with isNotIn = false (IN)
         InPredicateOperator inOp = new InPredicateOperator(false, column, value1, value2);
@@ -304,13 +300,13 @@ public class PredicateOperatorTest {
     @Test
     public void testInEquivalentWithSameIsNotInFlag() {
         // Create two InPredicateOperator instances with same isNotIn flag but different arguments
-        ScalarOperator column1 = new ColumnRefOperator(1, IntegerType.INT, "column1", true);
-        ScalarOperator value1 = new ColumnRefOperator(2, IntegerType.INT, "value1", true);
-        ScalarOperator value2 = new ColumnRefOperator(3, IntegerType.INT, "value2", true);
+        ScalarOperator column1 = new ColumnRefOperator(1, Type.INT, "column1", true);
+        ScalarOperator value1 = new ColumnRefOperator(2, Type.INT, "value1", true);
+        ScalarOperator value2 = new ColumnRefOperator(3, Type.INT, "value2", true);
 
-        ScalarOperator column2 = new ColumnRefOperator(4, IntegerType.INT, "column2", true);
-        ScalarOperator value3 = new ColumnRefOperator(5, IntegerType.INT, "value3", true);
-        ScalarOperator value4 = new ColumnRefOperator(6, IntegerType.INT, "value4", true);
+        ScalarOperator column2 = new ColumnRefOperator(4, Type.INT, "column2", true);
+        ScalarOperator value3 = new ColumnRefOperator(5, Type.INT, "value3", true);
+        ScalarOperator value4 = new ColumnRefOperator(6, Type.INT, "value4", true);
 
         // Both with isNotIn = false
         InPredicateOperator op1 = new InPredicateOperator(false, column1, value1, value2);
@@ -331,7 +327,7 @@ public class PredicateOperatorTest {
     @Test
     public void testIsNullEquivalentWithDifferentIsNotNullFlags() {
         // Create two IsNullPredicateOperator instances with same arguments but different isNotNull flags
-        ScalarOperator column = new ColumnRefOperator(1, IntegerType.INT, "column", true);
+        ScalarOperator column = new ColumnRefOperator(1, Type.INT, "column", true);
 
         // One with isNotNull = false (IS NULL)
         IsNullPredicateOperator nullOp = new IsNullPredicateOperator(false, column);
@@ -351,8 +347,8 @@ public class PredicateOperatorTest {
     @Test
     public void testIsNullEquivalentWithSameIsNotNullFlag() {
         // Create two IsNullPredicateOperator instances with same isNotNull flag but different arguments
-        ScalarOperator column1 = new ColumnRefOperator(1, IntegerType.INT, "column1", true);
-        ScalarOperator column2 = new ColumnRefOperator(2, IntegerType.INT, "column2", true);
+        ScalarOperator column1 = new ColumnRefOperator(1, Type.INT, "column1", true);
+        ScalarOperator column2 = new ColumnRefOperator(2, Type.INT, "column2", true);
 
         // Both with isNotNull = false
         IsNullPredicateOperator op1 = new IsNullPredicateOperator(false, column1);
@@ -373,8 +369,8 @@ public class PredicateOperatorTest {
     @Test
     public void testLikeEquivalentWithDifferentLikeTypes() {
         // Create two LikePredicateOperator instances with same arguments but different like types
-        ScalarOperator column = new ColumnRefOperator(1, VarcharType.VARCHAR, "column", true);
-        ScalarOperator pattern = new ColumnRefOperator(2, VarcharType.VARCHAR, "pattern", true);
+        ScalarOperator column = new ColumnRefOperator(1, Type.VARCHAR, "column", true);
+        ScalarOperator pattern = new ColumnRefOperator(2, Type.VARCHAR, "pattern", true);
 
         // One with LIKE type
         LikePredicateOperator likeOp = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, column, pattern);
@@ -394,11 +390,11 @@ public class PredicateOperatorTest {
     @Test
     public void testLikeEquivalentWithSameLikeType() {
         // Create two LikePredicateOperator instances with same like type but different arguments
-        ScalarOperator column1 = new ColumnRefOperator(1, VarcharType.VARCHAR, "column1", true);
-        ScalarOperator pattern1 = new ColumnRefOperator(2, VarcharType.VARCHAR, "pattern1", true);
+        ScalarOperator column1 = new ColumnRefOperator(1, Type.VARCHAR, "column1", true);
+        ScalarOperator pattern1 = new ColumnRefOperator(2, Type.VARCHAR, "pattern1", true);
 
-        ScalarOperator column2 = new ColumnRefOperator(3, VarcharType.VARCHAR, "column2", true);
-        ScalarOperator pattern2 = new ColumnRefOperator(4, VarcharType.VARCHAR, "pattern2", true);
+        ScalarOperator column2 = new ColumnRefOperator(3, Type.VARCHAR, "column2", true);
+        ScalarOperator pattern2 = new ColumnRefOperator(4, Type.VARCHAR, "pattern2", true);
 
         // Both with LIKE type
         LikePredicateOperator op1 = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, column1, pattern1);

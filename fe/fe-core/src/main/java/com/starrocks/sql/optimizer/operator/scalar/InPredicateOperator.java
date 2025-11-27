@@ -119,22 +119,17 @@ public class InPredicateOperator extends PredicateOperator {
     }
 
     @Override
-<<<<<<< HEAD
     public int hashCode() {
         List<Integer> argumentHashCodes = getChildren().stream().map(Objects::hashCode).collect(Collectors.toList());
         return Objects.hash(argumentHashCodes, opType, isNotIn, isSubquery);
-=======
+    }
+
+    @Override
     public boolean equivalent(Object obj) {
         if (!super.equivalent(obj)) {
             return false;
         }
         InPredicateOperator that = (InPredicateOperator) obj;
         return isNotIn == that.isNotIn && isSubquery == that.isSubquery;
-    }
-
-    @Override
-    public int hashCodeSelf() {
-        return Objects.hash(super.hashCodeSelf(), isNotIn, isSubquery);
->>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     }
 }

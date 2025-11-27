@@ -74,21 +74,16 @@ public class IsNullPredicateOperator extends PredicateOperator {
     }
 
     @Override
-<<<<<<< HEAD
     public int hashCode() {
         return Objects.hash(super.hashCode(), isNotNull);
-=======
+    }
+
+    @Override
     public boolean equivalent(Object obj) {
         if (!super.equivalent(obj)) {
             return false;
         }
         IsNullPredicateOperator that = (IsNullPredicateOperator) obj;
         return isNotNull == that.isNotNull;
-    }
-
-    @Override
-    public int hashCodeSelf() {
-        return Objects.hash(super.hashCodeSelf(), isNotNull);
->>>>>>> 196ddfa2fd ([BugFix] Implement predicate operator equivalent method (#65999))
     }
 }
