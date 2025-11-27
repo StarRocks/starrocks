@@ -657,8 +657,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 } catch (Exception e) {
                     finished = false;
                     LOG.warn("erase partition failed in Recycle Bin, DB id: {}, table id: {}, partition name: " +
-                             "{}, partition id: {}, error message: {}", partitionInfo.getDbId(), partitionInfo.getTableId(),
-                             partitionInfo.getPartition().getName(), partitionInfo.getPartition().getId(), e.getMessage());
+                             "{}, partition id: {}, error message: {}",
+                            partitionInfo.getDbId(), partitionInfo.getTableId(), partitionInfo.getPartition().getName(),
+                            partitionInfo.getPartition().getId(), e.getMessage(), e);
                 }
 
                 if (!finished) {
