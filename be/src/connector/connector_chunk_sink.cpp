@@ -43,7 +43,41 @@ Status ConnectorChunkSink::init() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ConnectorChunkSink::add(Chunk* chunk) {
+=======
+Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
+                                                 const std::vector<int8_t>& partition_field_null_list,
+                                                 const ChunkPtr& chunk) {
+    // partition_field_null_list is used to distinguish with the secenario like NULL and string "null"
+    // They are under the same dir path, but should not in the same data file.
+    // We should record them in different files so that each data file could has its own meta info.
+    // otherwise, the scanFileTask may filter data incorrectly.
+    PartitionKey partition_key = std::make_pair(partition, partition_field_null_list);
+    auto it = _partition_chunk_writers.find(partition_key);
+    if (it != _partition_chunk_writers.end()) {
+        return it->second->write(chunk);
+    } else {
+        auto writer = _partition_chunk_writer_factory->create(partition, partition_field_null_list);
+        auto commit_callback = [this](const CommitResult& r) { this->callback_on_commit(r); };
+        auto error_handler = [this](const Status& s) { this->set_status(s); };
+        writer->set_commit_callback(commit_callback);
+        writer->set_error_handler(error_handler);
+        writer->set_io_poller(_io_poller);
+        auto st = writer->init();
+        if (!st.ok()) {
+            set_status(st);
+            return st;
+        }
+        // save the writer to the map, so errors from subsequent write() can be correctly handled.
+        _partition_chunk_writers[partition_key] = writer;
+        RETURN_IF_ERROR(writer->write(chunk));
+    }
+    return Status::OK();
+}
+
+Status ConnectorChunkSink::add(const ChunkPtr& chunk) {
+>>>>>>> 75f8eb5815 ([BugFix] Fix connector sink hang when writer's initial write fails (#65951))
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
