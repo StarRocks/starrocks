@@ -23,11 +23,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.UserIdentity;
->>>>>>> d0c29fdaea ([Enhancement] make JWT security in IcebergRESTCatalog case-insensitive (#66028))
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorViewDefinition;
@@ -40,6 +35,7 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -68,11 +64,7 @@ import java.util.concurrent.Executors;
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
-<<<<<<< HEAD
-=======
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.ICEBERG_CATALOG_SECURITY;
-import static com.starrocks.type.IntegerType.INT;
->>>>>>> d0c29fdaea ([Enhancement] make JWT security in IcebergRESTCatalog case-insensitive (#66028))
 import static org.apache.iceberg.catalog.SessionCatalog.SessionContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
