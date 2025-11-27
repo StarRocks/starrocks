@@ -46,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -209,6 +210,13 @@ public class Partition extends MetaObject implements GsonPostProcessable {
 
     public PhysicalPartition getSubPartition(String name) {
         return nameToSubPartition.get(name);
+    }
+
+    public PhysicalPartition getLatestPhysicalPartition() {
+        return getSubPartitions()
+                .stream()
+                .max(Comparator.comparing(PhysicalPartition::getVisibleVersionTime))
+                .orElseGet(this::getDefaultPhysicalPartition);
     }
 
     public PhysicalPartition getDefaultPhysicalPartition() {
