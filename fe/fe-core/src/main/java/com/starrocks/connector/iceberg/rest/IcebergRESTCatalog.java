@@ -252,6 +252,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     new RuntimeException("Failed to get database using REST Catalog exception:" + re.getMessage(), re));
         }
     }
+
     @Override
     public List<String> listTables(ConnectContext context, String dbName) {
         Namespace ns = convertDbNameToNamespace(dbName);
@@ -396,7 +397,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             Table table = delegate.registerTable(buildContext(context), tableIdentifier, metadataFileLocation);
             return table != null;
         } catch (RESTException re) {
-            LOG.error("Failed to register table using REST Catalog, for dbName {} tableName {} metadataFileLocation {}", 
+            LOG.error("Failed to register table using REST Catalog, for dbName {} tableName {} metadataFileLocation {}",
                     dbName, tableName, metadataFileLocation, re);
             throw new StarRocksConnectorException("Failed to register table using REST Catalog",
                     new RuntimeException("Failed to register table using REST Catalog, exception: " + re.getMessage(), re));
@@ -433,10 +434,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         if (Strings.isNullOrEmpty(context.getAuthToken())) {
             return SessionCatalog.SessionContext.createEmpty();
         } else {
-            ImmutableMap.Builder mapBuilder = ImmutableMap.<String, String>builder()
+            ImmutableMap.Builder<String, String> mapBuilder = ImmutableMap.<String, String>builder()
                     .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken());
 
-            if (Security.JWT.name().equals(restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"))) {
+            if (Security.JWT.name().equalsIgnoreCase(restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"))) {
                 mapBuilder.put(OAuth2Properties.TOKEN, context.getAuthToken());
             }
             credentials = mapBuilder.buildOrThrow();
