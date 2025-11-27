@@ -289,6 +289,8 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     DCHECK(null_data == nullptr || column->is_nullable());
 
+    // caller must make sure SparseRange's ranges are all in the same page
+    size_t num_rows = range.span_size();
     if (null_data != nullptr) {
         // Create temporary nullable column for predicate evaluation
         auto temp_column = column->clone_empty();
@@ -297,7 +299,6 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         auto& temp_null_column = temp_nullable_column->null_column_ref();
 
         // Read data column and null column
-        size_t num_rows = range.span_size();
         temp_null_column.append_numbers(null_data, num_rows);
         RETURN_IF_ERROR(next_batch(range, temp_data_column));
         DCHECK(temp_null_column.size() == num_rows);
@@ -345,26 +346,24 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
     std::vector<uint16_t> dict_selected_idx(dict_size);
     RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, dict_column.get(), dict_selection.data(),
                                                      dict_selected_idx.data(), 0, dict_size));
+    // Count selected dictionary entries
+    uint32_t dict_selected_count = SIMD::count_nonzero(dict_selection.data(), dict_size);
+    if (dict_selected_count == 0) {
+        memset(selection, 0, num_rows);
+        return Status::OK();
+    }
 
     // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
     if (_vec_code_buf == nullptr) {
         _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
-    _vec_code_buf->reserve(range.span_size());
+    _vec_code_buf->reserve(num_rows);
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
 
     if (nread == 0) {
-        return Status::OK();
-    }
-
-    // Count selected dictionary entries
-    uint32_t dict_selected_count = SIMD::count_nonzero(dict_selection.data(), dict_size);
-    if (dict_selected_count == 0) {
-        // No dictionary entries match, so no rows will match
-        memset(selection, 0, nread);
         return Status::OK();
     }
 
