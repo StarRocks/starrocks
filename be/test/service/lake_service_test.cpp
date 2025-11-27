@@ -2784,4 +2784,125 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
     }
 }
 
+TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
+    // 0. setup: create tablet with version 1, 2, 3, 4
+    auto publish_version = [&](int64_t base_version, int64_t new_version) {
+        auto txn_log = generate_write_txn_log(1, 10 * new_version, 100 * new_version);
+        CHECK_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(base_version);
+        request.set_new_version(new_version);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(txn_log.txn_id());
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        CHECK_EQ(0, response.failed_tablets_size());
+        CHECK_EQ(0, response.status().status_code());
+    };
+
+    publish_version(1, 2);
+    publish_version(2, 3);
+    publish_version(3, 4);
+
+    // 1. missing request fields
+    {
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    }
+
+    {
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        request.add_tablet_ids(_tablet_id);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing max_version", cntl.ErrorText());
+    }
+
+    {
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(3);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing min_version", cntl.ErrorText());
+    }
+
+    // 2. success case
+    {
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        brpc::Controller cntl;
+
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(3);
+        request.set_min_version(2);
+
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(response.status().status_code(), 0);
+        ASSERT_EQ(response.tablet_metadatas_size(), 1);
+        ASSERT_TRUE(response.tablet_metadatas().contains(_tablet_id));
+
+        const auto& tablet_metadatas = response.tablet_metadatas().at(_tablet_id);
+        ASSERT_EQ(tablet_metadatas.version_metadatas_size(), 2);
+        ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(2));
+        ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(3));
+        ASSERT_EQ(tablet_metadatas.version_metadatas().at(2).version(), 2);
+        ASSERT_EQ(tablet_metadatas.version_metadatas().at(3).version(), 3);
+    }
+
+    // 3. tablet not found
+    {
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        brpc::Controller cntl;
+
+        int64_t non_existent_tablet_id = -1;
+        request.add_tablet_ids(non_existent_tablet_id);
+        request.set_max_version(2);
+        request.set_min_version(1);
+
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(response.status().status_code(), 0);
+        ASSERT_EQ(response.tablet_metadatas_size(), 0);
+    }
+
+    // 4. some versions not found
+    {
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        brpc::Controller cntl;
+
+        request.add_tablet_ids(_tablet_id);
+        // version 5 does not exist
+        request.set_max_version(5);
+        request.set_min_version(3);
+
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(response.status().status_code(), 0);
+        ASSERT_EQ(response.tablet_metadatas_size(), 1);
+        ASSERT_TRUE(response.tablet_metadatas().contains(_tablet_id));
+
+        // should find version 3 and 4
+        const auto& tablet_metadatas = response.tablet_metadatas().at(_tablet_id);
+        ASSERT_EQ(tablet_metadatas.version_metadatas_size(), 2);
+        ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(3));
+        ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(4));
+    }
+}
+
 } // namespace starrocks

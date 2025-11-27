@@ -1375,4 +1375,92 @@ void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
     latch.wait();
 }
 
+void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* controller,
+                                           const ::starrocks::GetTabletMetadatasRequest* request,
+                                           ::starrocks::GetTabletMetadatasResponse* response,
+                                           ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_max_version()) {
+        cntl->SetFailed("missing max_version");
+        return;
+    }
+    if (!request->has_min_version()) {
+        cntl->SetFailed("missing min_version");
+        return;
+    }
+
+    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("tablet stats thread pool is null");
+        return;
+    }
+
+    Status::OK().to_protobuf(response->mutable_status());
+
+    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
+    bthread::Mutex response_mtx;
+    int64_t max_version = request->max_version();
+    int64_t min_version = request->min_version();
+
+    // traverse each tablet_id and submit get tablet metadatas task
+    for (auto tablet_id : request->tablet_ids()) {
+        auto task = std::make_shared<CancellableRunnable>(
+                [&, tablet_id, max_version, min_version] {
+                    DeferOp defer([&] { latch.count_down(); });
+
+                    // get tablet metadatas within the specified version range
+                    std::vector<TabletMetadataPtr> metadatas;
+                    for (int64_t version = max_version; version >= min_version; --version) {
+                        // don't fill meta cache to avoid polluting the cache
+                        lake::CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = true};
+                        auto tablet_metadata_or = _tablet_mgr->get_tablet_metadata(tablet_id, version, cache_opts);
+                        const auto& st = tablet_metadata_or.status();
+                        if (st.ok()) {
+                            metadatas.emplace_back(std::move(tablet_metadata_or).value());
+                        } else if (!st.is_not_found()) {
+                            LOG(WARNING) << "Fail to get tablet metadata. tablet: " << tablet_id
+                                         << ", version: " << version << ", err: " << st;
+                            std::lock_guard l(response_mtx);
+                            st.to_protobuf(response->mutable_status());
+                            return;
+                        }
+                    }
+
+                    if (!metadatas.empty()) {
+                        std::lock_guard l(response_mtx);
+                        auto& tablet_metadatas = (*response->mutable_tablet_metadatas())[tablet_id];
+                        for (const auto& metadata : metadatas) {
+                            (*tablet_metadatas.mutable_version_metadatas())[metadata->version()].CopyFrom(*metadata);
+                        }
+                    }
+                },
+                [&, tablet_id] {
+                    Status st = Status::Cancelled(
+                            fmt::format("Get tablet metadatas task has been cancelled. tablet: {}", tablet_id));
+                    LOG(WARNING) << st;
+                    std::lock_guard l(response_mtx);
+                    if (response->status().status_code() == 0) {
+                        st.to_protobuf(response->mutable_status());
+                    }
+                    latch.count_down();
+                });
+
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit get tablet metadatas task. tablet: " << tablet_id << ", err: " << st;
+            std::lock_guard l(response_mtx);
+            st.to_protobuf(response->mutable_status());
+            latch.count_down();
+        }
+    }
+
+    latch.wait();
+}
+
 } // namespace starrocks
