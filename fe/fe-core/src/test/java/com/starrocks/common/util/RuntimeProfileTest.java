@@ -858,4 +858,46 @@ public class RuntimeProfileTest {
             Assert.assertEquals(11L, c1.getMaxValue().get().longValue());
         }
     }
+
+    @Test
+    public void testUpdateMinMax() {
+        RuntimeProfile baseProfile = new RuntimeProfile("base_profile");
+        Counter baseC1 = baseProfile.addCounter("counter1", TUnit.UNIT, null);
+        baseC1.setValue(4);
+        baseC1.setMinValue(1);
+        baseC1.setMaxValue(7);
+        Counter baseC2 = baseProfile.addCounter("counter2", TUnit.UNIT, null);
+        baseC2.setValue(5);
+
+        RuntimeProfile updateProfile = new RuntimeProfile("update_profile");
+        Counter updateC1 = updateProfile.addCounter("counter1", TUnit.UNIT, null);
+        updateC1.setValue(6);
+        Counter updateC2 = updateProfile.addCounter("counter2", TUnit.UNIT, null);
+        updateC2.setValue(8);
+        updateC2.setMinValue(4);
+        updateC2.setMaxValue(12);
+        Counter updateC3 = updateProfile.addCounter("counter3", TUnit.UNIT, null);
+        updateC3.setValue(10);
+        updateC3.setMinValue(5);
+        updateC3.setMaxValue(15);
+
+        TRuntimeProfileTree updateTree = updateProfile.toThrift();
+
+        baseProfile.update(updateTree);
+        Assert.assertEquals(6, baseC1.getValue());
+        Assert.assertFalse(baseC1.getMinValue().isPresent());
+        Assert.assertFalse(baseC1.getMaxValue().isPresent());
+        Assert.assertEquals(8, baseC2.getValue());
+        Assert.assertTrue(baseC2.getMinValue().isPresent());
+        Assert.assertEquals(4, baseC2.getMinValue().get().longValue());
+        Assert.assertTrue(baseC2.getMaxValue().isPresent());
+        Assert.assertEquals(12, baseC2.getMaxValue().get().longValue());
+        Counter baseC3 = baseProfile.getCounter("counter3");
+        Assert.assertNotNull(baseC3);
+        Assert.assertEquals(10, baseC3.getValue());
+        Assert.assertTrue(baseC3.getMinValue().isPresent());
+        Assert.assertEquals(5, baseC3.getMinValue().get().longValue());
+        Assert.assertTrue(baseC3.getMaxValue().isPresent());
+        Assert.assertEquals(15, baseC3.getMaxValue().get().longValue());
+    }
 }
