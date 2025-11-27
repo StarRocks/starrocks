@@ -3895,16 +3895,8 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     PUniqueId load_id;
     load_id.set_hi(1000);
     load_id.set_lo(1000);
-<<<<<<< HEAD
-    ASSERT_TRUE(StorageEngine::instance()
-                        ->txn_manager()
-                        ->commit_txn(_tablet->data_dir()->get_meta(), 100, 100, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs1, false)
-                        .ok());
-=======
     ASSERT_TRUE(
-            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 100, 100, load_id, rs1, false, false).ok());
->>>>>>> 236566b477 ([BugFix] Fix ingestion failed during alter (#65396))
+            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 100, 100, load_id, rs1, false).ok());
     ASSERT_EQ(true, rs1->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
     ASSERT_TRUE(rs1->tablet_schema() != nullptr);
@@ -3939,16 +3931,8 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_EQ(false, rs2->rowset_meta()->skip_tablet_schema());
     load_id.set_hi(1001);
     load_id.set_lo(1001);
-<<<<<<< HEAD
-    ASSERT_TRUE(StorageEngine::instance()
-                        ->txn_manager()
-                        ->commit_txn(_tablet->data_dir()->get_meta(), 101, 101, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs2, false)
-                        .ok());
-=======
     ASSERT_TRUE(
-            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 101, 101, load_id, rs2, false, false).ok());
->>>>>>> 236566b477 ([BugFix] Fix ingestion failed during alter (#65396))
+            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 101, 101, load_id, rs2, false).ok());
     ASSERT_EQ(true, rs2->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
     ASSERT_TRUE(rs2->tablet_schema() != nullptr);
@@ -3993,16 +3977,8 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     _tablet->set_update_schema_running(true);
     load_id.set_hi(1002);
     load_id.set_lo(1002);
-<<<<<<< HEAD
-    ASSERT_TRUE(StorageEngine::instance()
-                        ->txn_manager()
-                        ->commit_txn(_tablet->data_dir()->get_meta(), 102, 102, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs3, false)
-                        .ok());
-=======
     ASSERT_TRUE(
-            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 102, 102, load_id, rs3, false, false).ok());
->>>>>>> 236566b477 ([BugFix] Fix ingestion failed during alter (#65396))
+            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 102, 102, load_id, rs3, false).ok());
     ASSERT_EQ(false, rs3->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(0, _tablet->committed_rowset_size());
     ASSERT_TRUE(rs3->tablet_schema() != nullptr);
@@ -4023,16 +3999,8 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_EQ(false, rs4->rowset_meta()->skip_tablet_schema());
     load_id.set_hi(1003);
     load_id.set_lo(1003);
-<<<<<<< HEAD
-    ASSERT_TRUE(StorageEngine::instance()
-                        ->txn_manager()
-                        ->commit_txn(_tablet->data_dir()->get_meta(), 103, 103, _tablet->tablet_id(),
-                                     _tablet->schema_hash(), _tablet->tablet_uid(), load_id, rs4, false)
-                        .ok());
-=======
     ASSERT_TRUE(
-            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 103, 103, load_id, rs4, false, false).ok());
->>>>>>> 236566b477 ([BugFix] Fix ingestion failed during alter (#65396))
+            StorageEngine::instance()->txn_manager()->commit_txn(_tablet, 103, 103, load_id, rs4, false).ok());
     ASSERT_EQ(true, rs4->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
     ASSERT_TRUE(rs4->tablet_schema() != nullptr);
