@@ -111,12 +111,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### arrow_flight_port
 
-- Default: `-1`
+- Default: -1
 - Type: Int
-- Unit: Port
+- Unit: -
 - Is mutable: No
-- Description: TCP port for the BE Arrow Flight SQL server. Set to `-1` to disable the Arrow Flight service. On non-macOS builds the BE invokes ArrowFlightSqlServer::start(`arrow_flight_port`) during startup; if the port is unavailable the server startup fails and the BE process exits. The configured port is reported to the FE in the heartbeat payload (`arrow_flight_port`). Configure this value in `be.conf` before starting the BE.
-- Introduced in: `v3.4.0, v3.5.0`
+- Description: TCP port for the BE Arrow Flight SQL server. `-1` indicaes to disable the Arrow Flight service. On non-macOS builds, BE invokes Arrow Flight SQL Server with this port during startup; if the port is unavailable, the server startup fails and the BE process exits. The configured port is reported to the FE in the heartbeat payload.
+- Introduced in: v3.4.0, v3.5.0
 
 ##### be_exit_after_disk_write_hang_second
 
@@ -354,12 +354,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### thrift_port
 
-- Default: `0`
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Port number used to export the internal Thrift-based BackendService (ImpalaInternalService). When the process runs as CN (control node) and `thrift_port` is non-zero, it overrides `be_port` and the Thrift server binds to this value; otherwise `be_port` is used. This option is deprecated — setting a non-zero `thrift_port` logs a warning advising to use `be_port` instead. Ensure the chosen port is available and permitted by host network/firewall settings.
-- Introduced in: `v3.2.0`
+- Description: Port used to export the internal Thrift-based BackendService. When the process runs as a Compute Node and this item is set to a non-zero value, it overrides `be_port` and the Thrift server binds to this value; otherwise `be_port` is used. This configuration is deprecated — setting a non-zero `thrift_port` logs a warning advising to use `be_port` instead.
+- Introduced in: v3.2.0
 
 ##### thrift_rpc_connection_max_valid_time_ms
 
@@ -1117,12 +1117,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### enable_load_channel_rpc_async
 
-- Default: `true`
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, handling of load-channel open RPCs (e.g., PTabletWriterOpen) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a ChannelOpenTask and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and lets you tune concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread-pool submission fails (pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when enabling to avoid request rejections or delayed processing.
-- Introduced in: `v3.5.0`
+- Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
+- Introduced in: v3.5.0
 
 ##### pull_load_task_dir
 
