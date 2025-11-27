@@ -26,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.ViewAnalyzer;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -290,7 +291,7 @@ public class IcebergHiveCatalogTest {
                 result = true;
                 minTimes = 0;
 
-                mockCatalogMgr.isInternalCatalog(catalogName);
+                CatalogMgr.isInternalCatalog(catalogName);
                 result = true;
                 minTimes = 0;
             }
@@ -374,5 +375,22 @@ public class IcebergHiveCatalogTest {
 
         Table table = metadata.getView(connectContext, "db", "view");
         Assertions.assertEquals("no comment", table.getComment());
+    }
+
+    @Test
+    public void testExternalCatalogViewDdlPropertiesPrinting() {
+        List<Column> cols = Lists.newArrayList(new Column("k1", INT));
+        Map<String, String> props = ImmutableMap.of(
+                "owner", "alex",
+                "comment", "this is a test view"
+        );
+
+        IcebergView view = new IcebergView(1L, "catalog", "db", "view", cols,
+                "select 1", "catalog", "db", "loc", props);
+
+        String ddl = AstToStringBuilder.getExternalCatalogViewDdlStmt(view);
+        Assertions.assertTrue(ddl.contains("PROPERTIES ("));
+        Assertions.assertTrue(ddl.contains("\"owner\" = \"alex\""));
+        Assertions.assertTrue(ddl.contains("\"comment\" = \"this is a test view\""));
     }
 }
