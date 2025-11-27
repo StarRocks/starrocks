@@ -531,6 +531,10 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
               Status::Corruption(strings::Substitute(
                       "deserialized shared metadata($0) failed, file_size($1) < bundle_metadata_size($2)", path,
                       file_size, bundle_metadata_size + footer_size)));
+    RETURN_IF(bundle_metadata_size == 0,
+              Status::Corruption(strings::Substitute("deserialized shared metadata($0) failed, "
+                                                     "bundle_metadata_size is 0",
+                                                     path)));
 
     auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
     std::string_view bundle_metadata_str =
@@ -663,7 +667,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     auto metadata = std::make_shared<TabletMetadataPB>();
     std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
     if (!metadata->ParseFromArray(metadata_str.data(), size)) {
-        return Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
+        std::string err_msg =
+                strings::Substitute("deserialized tablet $0 metadata failed", tablet_id);
+        corrupted_tablet_meta_handler(Status::Corruption(err_msg), path);
+        return Status::Corruption(err_msg);
     }
 
     FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });
