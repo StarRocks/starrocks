@@ -25,6 +25,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -33,6 +34,8 @@ import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -56,9 +59,21 @@ import static java.util.Objects.requireNonNull;
  * 8. Finish the transaction
  */
 public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase implements GsonPostProcessable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LakeTableAsyncFastSchemaChangeJob.class);
+
     // shadow index id -> index schema
     @SerializedName(value = "schemaInfos")
     private List<IndexSchemaInfo> schemaInfos;
+
+    /**
+     * Whether this job is used to disable fast schema evolution v2. When this flag is true,
+     * this job will not perform a regular schema change, but will instead update tablet metadata
+     * to the latest schema version, and set the table property to false.
+     */
+    @SerializedName(value = "disableFseV2")
+    private boolean disableFastSchemaEvolutionV2 = false;
+
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
     // for deserialization
@@ -76,6 +91,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
             setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
         }
+        this.disableFastSchemaEvolutionV2 = other.disableFastSchemaEvolutionV2;
         partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
@@ -116,6 +132,14 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     }
 
     private void updateCatalogUnprotected(Database db, LakeTable table) {
+        if (disableFastSchemaEvolutionV2) {
+            // only update the property, no need to update schema which is actually not changed
+            table.setFastSchemaEvolutionV2(false);
+            LOG.info("Schema change job finish to disable {}, job_id: {}, table: {}",
+                    PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, getJobId(), table.getName());
+            return;
+        }
+
         Set<String> droppedOrModifiedColumns = Sets.newHashSet();
         boolean hasMv = !table.getRelatedMaterializedViews().isEmpty();
         for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
@@ -155,10 +179,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         // This PR(#55282) only writes the schemaInfo once in the entire schema change job process, 
         // but it has compatibility issues with previous versions, so it was reverted.
         // However, since some versions include this PR, the schemaInfo may be null when upgrading from these versions.
-        List<IndexSchemaInfo> jobSchemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        LakeTableAsyncFastSchemaChangeJob schemaChangeJob = (LakeTableAsyncFastSchemaChangeJob) job;
+        List<IndexSchemaInfo> jobSchemaInfos = schemaChangeJob.schemaInfos;
         if (jobSchemaInfos != null && !jobSchemaInfos.isEmpty()) {
             this.schemaInfos = new ArrayList<>(jobSchemaInfos);
         }
+        this.disableFastSchemaEvolutionV2 = schemaChangeJob.disableFastSchemaEvolutionV2;
     }
 
     @Override
@@ -190,6 +216,15 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         return schemaInfos.stream().map(i -> i.schemaInfo).collect(Collectors.toList());
     }
 
+    public void setDisableFastSchemaEvolutionV2() {
+        this.disableFastSchemaEvolutionV2 = true;
+    }
+
+    boolean isDisableFastSchemaEvolutionV2() {
+        return disableFastSchemaEvolutionV2;
+    }
+
+    @SuppressWarnings("rawtypes")
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         String progress = FeConstants.NULL_STRING;
