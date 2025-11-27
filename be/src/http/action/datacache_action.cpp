@@ -71,46 +71,57 @@ void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjs
     root.SetObject();
     func(root);
     rapidjson::StringBuffer strbuf;
-    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+    rapidjson::PrettyWriter writer(strbuf);
     root.Accept(writer);
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
 }
 
+double DataCacheAction::_calc_rate(size_t quota, size_t used) {
+    if (quota > 0) {
+        return std::round(static_cast<double>(used) / static_cast<double>(quota) * 100.0) / 100.0;
+    }
+    return 0;
+}
+
 void DataCacheAction::_handle_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
-#ifdef WITH_STARCACHE
+        auto& allocator = root.GetAllocator();
+
         DataCacheMemMetrics mem_metrics;
         if (_mem_cache != nullptr) {
             mem_metrics = _mem_cache->cache_metrics();
         }
+        DataCacheHitRateCounter* hit_rate_counter = DataCacheHitRateCounter::instance();
+        root.AddMember("page_cache_mem_quota_bytes", rapidjson::Value(mem_metrics.mem_quota_bytes), allocator);
+        root.AddMember("page_cache_mem_used_bytes", rapidjson::Value(mem_metrics.mem_used_bytes), allocator);
+        auto mem_used_rate = _calc_rate(mem_metrics.mem_quota_bytes, mem_metrics.mem_used_bytes);
+        root.AddMember("page_cache_mem_used_rate", rapidjson::Value(mem_used_rate), allocator);
 
-        auto& allocator = root.GetAllocator();
+        root.AddMember("page_cache_hit_count", rapidjson::Value(hit_rate_counter->page_cache_hit_count()), allocator);
+        root.AddMember("page_cache_miss_count", rapidjson::Value(hit_rate_counter->page_cache_miss_count()), allocator);
+        root.AddMember("page_cache_hit_rate", rapidjson::Value(hit_rate_counter->page_cache_hit_rate()), allocator);
+
+        root.AddMember("page_cache_hit_count_last_minute",
+                       rapidjson::Value(hit_rate_counter->page_cache_hit_count_last_minute()), allocator);
+        root.AddMember("page_cache_miss_count_last_minute",
+                       rapidjson::Value(hit_rate_counter->page_cache_miss_count_last_minute()), allocator);
+        root.AddMember("page_cache_hit_rate_last_minute",
+                       rapidjson::Value(hit_rate_counter->page_cache_hit_rate_last_minute()), allocator);
+
+#ifdef WITH_STARCACHE
         auto* starcache = reinterpret_cast<StarCacheEngine*>(_disk_cache);
         auto&& metrics = starcache->starcache_metrics(2);
         std::string status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         rapidjson::Value status_value;
         status_value.SetString(status.c_str(), status.length(), allocator);
-        root.AddMember("status", status_value, allocator);
-        root.AddMember("mem_quota_bytes", rapidjson::Value(mem_metrics.mem_quota_bytes), allocator);
-        root.AddMember("mem_used_bytes", rapidjson::Value(mem_metrics.mem_used_bytes), allocator);
-        root.AddMember("disk_quota_bytes", rapidjson::Value(metrics.disk_quota_bytes), allocator);
-        root.AddMember("disk_used_bytes", rapidjson::Value(metrics.disk_used_bytes), allocator);
+        root.AddMember("block_cache_status", status_value, allocator);
+        root.AddMember("block_cache_disk_quota_bytes", rapidjson::Value(metrics.disk_quota_bytes), allocator);
+        root.AddMember("block_cache_disk_used_bytes", rapidjson::Value(metrics.disk_used_bytes), allocator);
 
-        auto mem_used_rate = 0.0;
-        if (mem_metrics.mem_quota_bytes > 0) {
-            mem_used_rate =
-                    std::round(double(mem_metrics.mem_used_bytes) / double(mem_metrics.mem_quota_bytes) * 100.0) /
-                    100.0;
-        }
-        auto disk_used_rate = 0.0;
-        if (metrics.disk_quota_bytes > 0) {
-            disk_used_rate =
-                    std::round(double(metrics.disk_used_bytes) / double(metrics.disk_quota_bytes) * 100.0) / 100.0;
-        }
-        root.AddMember("mem_used_rate", rapidjson::Value(mem_used_rate), allocator);
-        root.AddMember("disk_used_rate", rapidjson::Value(disk_used_rate), allocator);
+        auto disk_used_rate = _calc_rate(metrics.disk_quota_bytes, metrics.disk_used_bytes);
+        root.AddMember("block_cache_disk_used_rate", rapidjson::Value(disk_used_rate), allocator);
 
         std::string disk_spaces;
         for (size_t i = 0; i < metrics.disk_dir_spaces.size(); ++i) {
@@ -124,51 +135,54 @@ void DataCacheAction::_handle_stat(HttpRequest* req) {
 
         rapidjson::Value disk_spaces_value;
         disk_spaces_value.SetString(disk_spaces.c_str(), disk_spaces.length(), allocator);
-        root.AddMember("disk_spaces", disk_spaces_value, allocator);
-        root.AddMember("meta_used_bytes", rapidjson::Value(metrics.meta_used_bytes), allocator);
+        root.AddMember("block_cache_disk_spaces", disk_spaces_value, allocator);
+        root.AddMember("block_cache_meta_used_bytes", rapidjson::Value(metrics.meta_used_bytes), allocator);
 
-        root.AddMember("hit_count", rapidjson::Value(metrics.detail_l1->hit_count), allocator);
-        root.AddMember("miss_count", rapidjson::Value(metrics.detail_l1->miss_count), allocator);
+        root.AddMember("block_cache_hit_count", rapidjson::Value(metrics.detail_l1->hit_count), allocator);
+        root.AddMember("block_cache_miss_count", rapidjson::Value(metrics.detail_l1->miss_count), allocator);
 
         size_t total_reads = metrics.detail_l1->hit_count + metrics.detail_l1->miss_count;
-        auto hit_rate =
-                total_reads == 0
-                        ? 0.0
-                        : std::round(double(metrics.detail_l1->hit_count) / double(total_reads) * 100.0) / 100.0;
-        root.AddMember("hit_rate", rapidjson::Value(hit_rate), allocator);
+        auto hit_rate = _calc_rate(total_reads, metrics.detail_l1->hit_count);
+        root.AddMember("block_cache_hit_rate", rapidjson::Value(hit_rate), allocator);
 
-        root.AddMember("hit_bytes", rapidjson::Value(metrics.detail_l1->hit_bytes), allocator);
-        root.AddMember("miss_bytes", rapidjson::Value(metrics.detail_l1->miss_bytes), allocator);
+        root.AddMember("block_cache_hit_bytes", rapidjson::Value(metrics.detail_l1->hit_bytes), allocator);
+        root.AddMember("block_cache_miss_bytes", rapidjson::Value(metrics.detail_l1->miss_bytes), allocator);
 
-        root.AddMember("hit_count_last_minute", rapidjson::Value(metrics.detail_l2->hit_count_last_minite), allocator);
-        root.AddMember("miss_count_last_minute", rapidjson::Value(metrics.detail_l2->miss_count_last_minite),
+        root.AddMember("block_cache_hit_count_last_minute", rapidjson::Value(metrics.detail_l2->hit_count_last_minite),
                        allocator);
-        root.AddMember("hit_bytes_last_minute", rapidjson::Value(metrics.detail_l2->hit_bytes_last_minite), allocator);
-        root.AddMember("miss_bytes_last_minute", rapidjson::Value(metrics.detail_l2->miss_bytes_last_minite),
+        root.AddMember("block_cache_miss_count_last_minute",
+                       rapidjson::Value(metrics.detail_l2->miss_count_last_minite), allocator);
+        root.AddMember("block_cache_hit_bytes_last_minute", rapidjson::Value(metrics.detail_l2->hit_bytes_last_minite),
+                       allocator);
+        root.AddMember("block_cache_miss_bytes_last_minute",
+                       rapidjson::Value(metrics.detail_l2->miss_bytes_last_minite), allocator);
+
+        root.AddMember("block_cache_read_disk_bytes", rapidjson::Value(metrics.detail_l2->read_disk_bytes), allocator);
+
+        root.AddMember("block_cache_write_bytes", rapidjson::Value(metrics.detail_l2->write_bytes), allocator);
+        root.AddMember("block_cache_write_success_count", rapidjson::Value(metrics.detail_l2->write_success_count),
+                       allocator);
+        root.AddMember("block_cache_write_fail_count", rapidjson::Value(metrics.detail_l2->write_fail_count),
                        allocator);
 
-        root.AddMember("read_mem_bytes", rapidjson::Value(metrics.detail_l2->read_mem_bytes), allocator);
-        root.AddMember("read_disk_bytes", rapidjson::Value(metrics.detail_l2->read_disk_bytes), allocator);
-
-        root.AddMember("write_bytes", rapidjson::Value(metrics.detail_l2->write_bytes), allocator);
-        root.AddMember("write_success_count", rapidjson::Value(metrics.detail_l2->write_success_count), allocator);
-        root.AddMember("write_fail_count", rapidjson::Value(metrics.detail_l2->write_fail_count), allocator);
-
-        root.AddMember("remove_bytes", rapidjson::Value(metrics.detail_l2->remove_bytes), allocator);
-        root.AddMember("remove_success_count", rapidjson::Value(metrics.detail_l2->remove_success_count), allocator);
-        root.AddMember("remove_fail_count", rapidjson::Value(metrics.detail_l2->remove_fail_count), allocator);
-
-        root.AddMember("current_reading_count", rapidjson::Value(metrics.detail_l2->current_reading_count), allocator);
-        root.AddMember("current_writing_count", rapidjson::Value(metrics.detail_l2->current_writing_count), allocator);
-        root.AddMember("current_removing_count", rapidjson::Value(metrics.detail_l2->current_removing_count),
+        root.AddMember("block_cache_remove_bytes", rapidjson::Value(metrics.detail_l2->remove_bytes), allocator);
+        root.AddMember("block_cache_remove_success_count", rapidjson::Value(metrics.detail_l2->remove_success_count),
                        allocator);
+        root.AddMember("block_cache_remove_fail_count", rapidjson::Value(metrics.detail_l2->remove_fail_count),
+                       allocator);
+
+        root.AddMember("block_cache_current_reading_count", rapidjson::Value(metrics.detail_l2->current_reading_count),
+                       allocator);
+        root.AddMember("block_cache_current_writing_count", rapidjson::Value(metrics.detail_l2->current_writing_count),
+                       allocator);
+        root.AddMember("block_cache_current_removing_count",
+                       rapidjson::Value(metrics.detail_l2->current_removing_count), allocator);
 #endif
     });
 }
 
 void DataCacheAction::_handle_app_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
-#ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
         DataCacheHitRateCounter* hit_rate_counter = DataCacheHitRateCounter::instance();
 
@@ -194,7 +208,6 @@ void DataCacheAction::_handle_app_stat(HttpRequest* req) {
                        rapidjson::Value(hit_rate_counter->page_cache_miss_count_last_minute()), allocator);
         root.AddMember("page_cache_hit_rate_last_minute",
                        rapidjson::Value(hit_rate_counter->page_cache_hit_rate_last_minute()), allocator);
-#endif
     });
 }
 
