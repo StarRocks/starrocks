@@ -668,7 +668,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
     if (!metadata->ParseFromArray(metadata_str.data(), size)) {
         std::string err_msg = strings::Substitute("deserialized tablet $0 metadata failed", tablet_id);
-        corrupted_tablet_meta_handler(Status::Corruption(err_msg), path);
+        (void)corrupted_tablet_meta_handler(Status::Corruption(err_msg), path);
         return Status::Corruption(err_msg);
     }
 
