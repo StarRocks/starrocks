@@ -407,7 +407,8 @@ public class SetStmtTest {
         SystemVariable setVar = new SystemVariable(SetType.SESSION, "no_exist", new StringLiteral("true"));
         Throwable exception = assertThrows(SemanticException.class, () ->
                 SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx));
-        assertThat(exception.getMessage(), containsString("Unknown system variable 'no_exist'"));
+        assertThat(exception.getMessage(),
+                containsString("Unknown system variable 'no_exist', the most similar variables"));
     }
 
     @Test
