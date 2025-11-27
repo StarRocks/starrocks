@@ -205,35 +205,30 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
 
     size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
     SparseRangeIterator<> iter = range.new_iterator();
-    bool append_status = true;
     size_t index = 0;
     while (to_read > 0) {
         _cur_idx = iter.begin();
         Range<> r = iter.next(to_read);
         size_t length = r.span_size();
         size_t end = _cur_idx + length;
-        append_status &= next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
-                                                null_data != nullptr ? null_data + index : nullptr, selection + index,
-                                                selected_idx + index);
+        RETURN_IF_ERROR(next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
+                                               null_data != nullptr ? null_data + index : nullptr, selection + index,
+                                               selected_idx + index));
         index += length;
         to_read -= length;
         _cur_idx = end;
     }
-    if (append_status) {
-        return Status::OK();
-    }
-
-    return Status::InternalError("BinaryPlainPageDecoder::next_batch_with_filter error!");
+    return Status::OK();
 }
 
 template <LogicalType Type>
-bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
+Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
         uint32_t idx, uint32_t end, Column* dst, const std::vector<const ColumnPredicate*>& compound_and_predicates,
         const uint8_t* null, uint8_t* selection, uint16_t* selected_idx) {
     if constexpr (Type == TYPE_VARCHAR) {
         uint32_t num_rows = end - idx;
         if (num_rows == 0) {
-            return true;
+            return Status::OK();
         }
 
         BinaryColumn::Offsets temp_offsets;
@@ -284,36 +279,28 @@ bool BinaryPlainPageDecoder<Type>::next_range_with_filter(
 
         uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
         if (selected_count == 0) {
-            return true;
+            return Status::OK();
         }
 
         auto data_column = ColumnHelper::get_data_column(dst);
-        Status status = append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows);
-        if (UNLIKELY(!status.ok())) {
-            LOG(WARNING) << "append_with_mask failed: " << status;
-            return false;
-        }
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows));
 
         // Append null flags for selected rows if null_data is provided
         if (null != nullptr) {
             auto* nullable_column = down_cast<NullableColumn*>(dst);
             auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column.get());
-            status = append_with_mask</*PositiveSelect=*/true>(nullable_column->null_column().get(),
-                                                               *temp_nullable->null_column(), selection, num_rows);
-            if (UNLIKELY(!status.ok())) {
-                LOG(WARNING) << "append_with_mask failed: " << status;
-                return false;
-            }
+            RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(
+                    nullable_column->null_column().get(), *temp_nullable->null_column(), selection, num_rows));
             nullable_column->update_has_null();
         }
 
 #ifndef NDEBUG
         dst->check_or_die();
 #endif
-        return true;
+        return Status::OK();
     } else {
         DCHECK(false) << "unreachable path";
-        return false;
+        return Status::InternalError("BinaryPlainPageDecoder::next_range_with_filter error!");
     }
 }
 
