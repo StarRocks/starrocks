@@ -587,6 +587,13 @@ public interface AstVisitor<R, C> {
     }
 
     // ------------------------------------------- Alter Clause ----------------------------------------------------
+    default R visitAddPartitionColumnClause(AddPartitionColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropPartitionColumnClause(DropPartitionColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
 
     default R visitAddRollupClause(AddRollupClause clause, C context) {
         return visitNode(clause, context);
