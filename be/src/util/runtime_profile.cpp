@@ -169,15 +169,29 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
         for (const auto& tcounter : node.counters) {
             auto j = _counter_map.find(tcounter.name);
 
+            Counter* counter = nullptr;
             if (j == _counter_map.end()) {
                 // TODO(hcf) pass correct parent counter name
-                _counter_map[tcounter.name] = std::make_pair(
-                        _pool->add(new Counter(tcounter.type, tcounter.strategy, tcounter.value)), ROOT_COUNTER);
+                counter = _pool->add(new Counter(tcounter.type, tcounter.strategy));
+                _counter_map[tcounter.name] = std::make_pair(counter, ROOT_COUNTER);
             } else {
                 if (j->second.first->type() != tcounter.type) {
                     LOG(ERROR) << "Cannot update counters with the same name (" << j->first << ") but different types.";
                 } else {
-                    j->second.first->set(tcounter.value);
+                    counter = j->second.first;
+                }
+            }
+            if (counter) {
+                counter->set(tcounter.value);
+                if (tcounter.__isset.min_value) {
+                    counter->set_min(tcounter.min_value);
+                } else {
+                    counter->clear_min();
+                }
+                if (tcounter.__isset.max_value) {
+                    counter->set_max(tcounter.max_value);
+                } else {
+                    counter->clear_max();
                 }
             }
         }
