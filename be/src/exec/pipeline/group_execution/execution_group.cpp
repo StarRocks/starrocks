@@ -76,7 +76,7 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
     auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
-        bool submitted = pipeline_prepare_pool->try_offer([sync_ctx, &driver, runtime_state = state]() {
+        bool submitted = pipeline_prepare_pool->try_offer([sync_ctx, driver, runtime_state = state]() {
             // make sure mem tracker is instance level
             auto mem_tracker = runtime_state->instance_mem_tracker();
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
