@@ -41,7 +41,93 @@ public class ProcProfileCollectAction extends WebBaseAction {
 
     @Override
     public void executePost(BaseRequest request, BaseResponse response) {
-        String nodeParam = request.getSingleParameter("node");
+        // Parse POST body parameters (handles both multipart/form-data and application/x-www-form-urlencoded)
+        String nodeParam = null;
+        String secondsStr = null;
+        String typeParam = null;
+        
+        // First try to get from query parameters (in case of GET-style POST)
+        nodeParam = request.getSingleParameter("node");
+        secondsStr = request.getSingleParameter("seconds");
+        typeParam = request.getSingleParameter("type");
+        
+        // If not in query params, try to parse from POST body
+        if (nodeParam == null || nodeParam.isEmpty()) {
+            try {
+                String content = request.getContent();
+                if (content != null && !content.isEmpty()) {
+                    String contentType = request.getRequest().headers().get("Content-Type");
+                    if (contentType != null && contentType.contains("multipart/form-data")) {
+                        // Parse multipart/form-data
+                        String boundary = null;
+                        for (String part : contentType.split(";")) {
+                            part = part.trim();
+                            if (part.startsWith("boundary=")) {
+                                boundary = part.substring("boundary=".length());
+                                break;
+                            }
+                        }
+                        if (boundary != null) {
+                            String[] parts = content.split("--" + boundary);
+                            for (String part : parts) {
+                                if (part.contains("Content-Disposition: form-data")) {
+                                    String[] lines = part.split("\r\n|\n");
+                                    String fieldName = null;
+                                    StringBuilder fieldValue = new StringBuilder();
+                                    boolean inValue = false;
+                                    for (String line : lines) {
+                                        if (line.startsWith("Content-Disposition: form-data; name=\"")) {
+                                            int start = line.indexOf("name=\"") + 6;
+                                            int end = line.indexOf("\"", start);
+                                            if (end > start) {
+                                                fieldName = line.substring(start, end);
+                                            }
+                                        } else if (line.isEmpty() && fieldName != null) {
+                                            inValue = true;
+                                        } else if (inValue && fieldName != null) {
+                                            if (fieldValue.length() > 0) {
+                                                fieldValue.append("\n");
+                                            }
+                                            fieldValue.append(line);
+                                        }
+                                    }
+                                    if (fieldName != null && fieldValue.length() > 0) {
+                                        String value = fieldValue.toString().trim();
+                                        if ("node".equals(fieldName)) {
+                                            nodeParam = value;
+                                        } else if ("seconds".equals(fieldName)) {
+                                            secondsStr = value;
+                                        } else if ("type".equals(fieldName)) {
+                                            typeParam = value;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Parse application/x-www-form-urlencoded
+                        String[] pairs = content.split("&");
+                        for (String pair : pairs) {
+                            String[] keyValue = pair.split("=", 2);
+                            if (keyValue.length == 2) {
+                                String key = java.net.URLDecoder.decode(keyValue[0], "UTF-8");
+                                String value = java.net.URLDecoder.decode(keyValue[1], "UTF-8");
+                                if ("node".equals(key)) {
+                                    nodeParam = value;
+                                } else if ("seconds".equals(key)) {
+                                    secondsStr = value;
+                                } else if ("type".equals(key)) {
+                                    typeParam = value;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to parse POST body: {}", e.getMessage());
+            }
+        }
+        
         if (nodeParam == null || nodeParam.isEmpty()) {
             JsonObject result = new JsonObject();
             result.addProperty("status", "error");
@@ -52,7 +138,6 @@ public class ProcProfileCollectAction extends WebBaseAction {
             return;
         }
 
-        String secondsStr = request.getSingleParameter("seconds");
         long seconds = 10; // default 10 seconds
         if (!StringUtils.isEmpty(secondsStr)) {
             try {
@@ -65,7 +150,6 @@ public class ProcProfileCollectAction extends WebBaseAction {
             }
         }
 
-        String typeParam = request.getSingleParameter("type");
         String profileType = "both"; // default to both
         if (!StringUtils.isEmpty(typeParam)) {
             // For BE, we use "cpu", "contention", or "both" (mem maps to contention)
