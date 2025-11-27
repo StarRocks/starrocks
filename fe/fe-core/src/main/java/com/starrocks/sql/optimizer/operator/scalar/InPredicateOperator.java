@@ -122,4 +122,13 @@ public class InPredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), isNotIn, isSubquery);
     }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        InPredicateOperator that = (InPredicateOperator) obj;
+        return isNotIn == that.isNotIn && isSubquery == that.isSubquery;
+    }
 }

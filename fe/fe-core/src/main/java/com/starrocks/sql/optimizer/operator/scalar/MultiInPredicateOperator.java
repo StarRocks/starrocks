@@ -93,6 +93,15 @@ public class MultiInPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        MultiInPredicateOperator that = (MultiInPredicateOperator) obj;
+        return isNotIn == that.isNotIn && tupleSize == that.tupleSize;
+    }
+
+    @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
         return visitor.visitMultiInPredicate(this, context);
     }

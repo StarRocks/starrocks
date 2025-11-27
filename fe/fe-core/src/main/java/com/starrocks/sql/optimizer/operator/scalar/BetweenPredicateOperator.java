@@ -94,4 +94,13 @@ public class BetweenPredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), notBetween);
     }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        BetweenPredicateOperator that = (BetweenPredicateOperator) obj;
+        return notBetween == that.notBetween;
+    }
 }
