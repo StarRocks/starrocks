@@ -659,7 +659,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
                     << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
                     << ", tablets: " << ctx.tablets;
         });
-        closure->addFailedHandler([](const Context& ctx, std::string_view rpc_error_msg) {
+        closure->addFailureHandler([](const Context& ctx, std::string_view rpc_error_msg) {
             LOG(ERROR) << "Failed to cancel secondary replicas, txn_id: " << ctx.txn_id
                        << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
                        << ", error: " << rpc_error_msg << ", tablets: " << ctx.tablets;
