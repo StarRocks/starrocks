@@ -400,6 +400,10 @@ public:
     // bucket_id = c1_bucket_id * 60 * 10 + c2_bucket_id * 10 + c3_bucket_id
     virtual void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const;
 
+    virtual void xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const;
+    virtual void xxh3_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const;
+    virtual void xxh3_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const;
+
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
     // Push one row to MysqlRowBuffer

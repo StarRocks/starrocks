@@ -1,0 +1,66 @@
+-- name: test_exchange_hash_function_benchmark @system
+-- Benchmark test comparing fnv_hash vs xxh3_hash performance
+-- Focus on exchange shuffle operations, minimize computation overhead
+
+-- Create test table with moderate size data (several million rows)
+CREATE TABLE `t_hash_benchmark` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL,
+  `c3` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- Insert test data (10 million rows with high cardinality for shuffle)
+insert into t_hash_benchmark 
+SELECT 
+    generate_series % 100000 as c0,
+    generate_series as c1,
+    concat('str_', generate_series, '_', repeat('x', 100), '_', generate_series % 1000) as c2,
+    generate_series % 1000 as c3
+FROM TABLE(generate_series(1, 10000000));
+
+-- Test 1: Simple shuffle distinct - minimal computation, focus on exchange
+-- fnv_hash
+insert into blackhole() 
+select /*+SET_VAR(query_timeout=3600, exchange_hash_function_version=0)*/ distinct c0, c1, c2 
+from t_hash_benchmark;
+
+-- xxh3_hash
+insert into blackhole() 
+select /*+SET_VAR(query_timeout=3600, exchange_hash_function_version=1)*/ distinct c0, c1, c2 
+from t_hash_benchmark;
+
+-- Test 2: Simple shuffle group by with only count - minimize computation
+-- fnv_hash
+select /*+SET_VAR(query_timeout=3600, exchange_hash_function_version=0)*/ count(*) from (
+    select c0, c1, count(*) 
+    from t_hash_benchmark 
+    group by c0, c1
+) t;
+
+-- xxh3_hash
+select /*+SET_VAR(query_timeout=3600, exchange_hash_function_version=1)*/ count(*) from (
+    select c0, c1, count(*) 
+    from t_hash_benchmark 
+    group by c0, c1
+) t;
+
+-- Test 3: Shuffle join with simple count - focus on exchange
+-- fnv_hash
+select /*+SET_VAR(query_timeout=3600, exchange_hash_function_version=0)*/ count(*) from 
+    t_hash_benchmark a join [shuffle] t_hash_benchmark b 
+    on a.c0 = b.c0;
+
+-- xxh3_hash
+select /*+SET_VAR(query_timeout=3600, exchange_hash_function_version=1)*/ count(*) from 
+    t_hash_benchmark a join [shuffle] t_hash_benchmark b 
+    on a.c0 = b.c0;
+
+-- Clean up
+DROP TABLE t_hash_benchmark;
