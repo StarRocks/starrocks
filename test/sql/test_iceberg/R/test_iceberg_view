@@ -12,6 +12,58 @@ select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0}
 drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 -- result:
 -- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+-- result:
+1	beijing	zhangsan
+2	shanghai	lisi
+-- !result
+show create table iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+iceberg_v2_parquet_partitioned_table	CREATE TABLE `iceberg_v2_parquet_partitioned_table` (
+  `k1` int(11) DEFAULT NULL,
+  `k2` varchar(1073741824) DEFAULT NULL,
+  `k3` varchar(1073741824) DEFAULT NULL
+)
+PARTITION BY (`k3`)
+PROPERTIES ("write-format" = "parquet", "location" = "oss://starrocks-ci-test/iceberg_ci_db/iceberg_v2_parquet_partitioned_table", "write.upsert.enabled" = "true");
+-- !result
+show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+-- result:
+[REGEX].*"owner" = "alex".*
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+-- result:
+-- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex", "comment"="this is a test view") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+-- result:
+1	beijing	zhangsan
+2	shanghai	lisi
+-- !result
+show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+-- result:
+[REGEX].*("owner" = "alex".*"comment" = "this is a test view"|"comment" = "this is a test view".*"owner" = "alex").*
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+-- result:
+-- !result
+create database default_catalog.test_internal_db_${uuid0};
+-- result:
+-- !result
+create view if not exists default_catalog.test_internal_db_${uuid0}.test_internal_view_${uuid0} properties ("key"="value") as select 1 from dual;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Setting properties is only supported for Iceberg views.')
+-- !result
+drop database default_catalog.test_internal_db_${uuid0};
+-- result:
+-- !result
 create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
 -- result:
 -- !result
