@@ -952,23 +952,56 @@ public class AnalyzerUtils {
             }
 
             Table table = node.getTable();
-            // system table is immutable
-            if (table instanceof SystemTable) {
+            if (!isTableCopySafe(table)) {
+                tables.put(node.getName(), node.getTable());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            if (!tables.isEmpty()) {
                 return null;
             }
-            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+
+            // Check if the target table is copy safe
+            Table targetTable = node.getTargetTable();
+            if (!isTableCopySafe(targetTable)) {
+                TableName tableName = TableName.fromTableRef(node.getTableRef());
+                tables.put(tableName, targetTable);
+                return null;
+            }
+            // Continue to visit source tables in SELECT clause
+            return visit(node.getQueryStatement());
+        }
+
+        /**
+         * Check if a table is copy safe.
+         * Copy safe tables:
+         * 1. OlapTable/MaterializedView with limited related MVs (supports copyOnlyForQuery)
+         * 2. Immutable external tables (Hive, Iceberg)
+         */
+        private boolean isTableCopySafe(Table table) {
+            if (table == null) {
+                return true;
+            }
+
+            // system table is immutable
+            if (table instanceof SystemTable) {
+                return true;
+            }
+
+            int relatedMVCount = table.getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
             if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
                 // OlapTable can be copied via copyOnlyForQuery
-                return null;
+                return true;
             } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
                 // Immutable table
-                return null;
-            } else {
-                tables.put(node.getName(), node.getTable());
+                return true;
             }
-            return null;
+            return false;
         }
     }
 
