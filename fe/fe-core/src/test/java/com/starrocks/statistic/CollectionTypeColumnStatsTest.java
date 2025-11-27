@@ -14,13 +14,11 @@
 
 package com.starrocks.statistic;
 
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.base.CollectionTypeColumnStats;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.MapType;
-import com.starrocks.type.StringType;
-import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -34,7 +32,7 @@ class CollectionTypeColumnStatsTest extends PlanTestBase {
 
     @Test
     public void testGetCollectionSizeArrayType() {
-        Type itemType = IntegerType.INT;
+        Type itemType = Type.INT;
         ArrayType arrayType = new ArrayType(itemType);
         CollectionTypeColumnStats stats = new CollectionTypeColumnStats("arr_col", arrayType, false);
         String result = stats.getCollectionSize();
@@ -43,8 +41,8 @@ class CollectionTypeColumnStatsTest extends PlanTestBase {
 
     @Test
     public void testGetCollectionSizeMapType() {
-        Type keyType = StringType.STRING;
-        Type valueType = IntegerType.INT;
+        Type keyType = Type.STRING;
+        Type valueType = Type.INT;
         MapType mapType = new MapType(keyType, valueType);
         CollectionTypeColumnStats stats = new CollectionTypeColumnStats("map_col", mapType, false);
         String result = stats.getCollectionSize();
@@ -53,7 +51,7 @@ class CollectionTypeColumnStatsTest extends PlanTestBase {
 
     @Test
     public void testGetCollectionSizeWithNullHandling() {
-        Type itemType = IntegerType.INT;
+        Type itemType = Type.INT;
         ArrayType arrayType = new ArrayType(itemType);
         CollectionTypeColumnStats stats = new CollectionTypeColumnStats("arr_col", arrayType, false);
         String result = stats.getCollectionSize();
@@ -63,7 +61,7 @@ class CollectionTypeColumnStatsTest extends PlanTestBase {
 
     @Test
     public void testGetFullDataSize() {
-        Type itemType = IntegerType.INT;
+        Type itemType = Type.INT;
         ArrayType arrayType = new ArrayType(itemType);
         CollectionTypeColumnStats stats = new CollectionTypeColumnStats("arr_col", arrayType, false);
         String result = stats.getFullDataSize();
