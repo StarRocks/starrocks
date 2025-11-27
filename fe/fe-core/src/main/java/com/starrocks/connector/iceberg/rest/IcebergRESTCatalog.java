@@ -252,6 +252,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     new RuntimeException("Failed to get database using REST Catalog exception:" + re.getMessage(), re));
         }
     }
+
     @Override
     public List<String> listTables(ConnectContext context, String dbName) {
         Namespace ns = convertDbNameToNamespace(dbName);
@@ -419,10 +420,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         if (Strings.isNullOrEmpty(context.getAuthToken())) {
             return SessionCatalog.SessionContext.createEmpty();
         } else {
-            ImmutableMap.Builder mapBuilder = ImmutableMap.<String, String>builder()
+            ImmutableMap.Builder<String, String> mapBuilder = ImmutableMap.<String, String>builder()
                     .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken());
 
-            if (Security.JWT.name().equals(restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"))) {
+            if (Security.JWT.name().equalsIgnoreCase(restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"))) {
                 mapBuilder.put(OAuth2Properties.TOKEN, context.getAuthToken());
             }
             credentials = mapBuilder.buildOrThrow();
