@@ -605,72 +605,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         if (backendTabletInfo.isSetMax_rowset_creation_time()) {
                             replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
                         }
-<<<<<<< HEAD
                         if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                             foundTabletsWithValidSchema.add(tabletId);
                             // 1. (intersection)
                             if (needSync(replica, backendTabletInfo)) {
                                 // need sync
-                                tabletSyncMap.put(tabletMeta.getDbId(), tabletId);
-=======
-                        foundTabletsWithValidSchema.add(tabletId);
-                        // 1. (intersection)
-                        if (needSync(replica, backendTabletInfo)) {
-                            // need sync
-                            tabletSyncMap.put(Pair.create(tabletMeta.getDbId(), tabletMeta.getTableId()), tabletId);
-                        }
-
-                        // check and set path,
-                        // path info of replica is only saved in Leader FE
-                        if (backendTabletInfo.isSetPath_hash() &&
-                                replica.getPathHash() != backendTabletInfo.getPath_hash()) {
-                            replica.setPathHash(backendTabletInfo.getPath_hash());
-                        }
-
-                        if (backendTabletInfo.isSetSchema_hash() && replica.getState() == ReplicaState.NORMAL
-                                && replica.getSchemaHash() != backendTabletInfo.getSchema_hash()) {
-                            // update the schema hash only when replica is normal
-                            replica.setSchemaHash(backendTabletInfo.getSchema_hash());
-                        }
-
-                        if (!isRestoreReplica(replica, tabletMeta) &&
-                                needRecover(replica, backendTabletInfo)) {
-                            LOG.warn("replica {} of tablet {} on backend {} need recovery. "
-                                            + "replica in FE: {}, report version {}, report schema hash: {},"
-                                            + " is bad: {}",
-                                    replica.getId(), tabletId, backendId,
-                                    replica, backendTabletInfo.getVersion(), backendTabletInfo.getSchema_hash(),
-                                    backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown");
-                            tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
-                        }
-
-                        replica.setLastReportVersion(backendTabletInfo.getVersion());
-
-                        // check if tablet needs migration
-                        long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
-                        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(tabletMeta.getDbId(), tabletMeta.getTableId());
-                        if (olapTable == null) {
-                            continue;
-                        }
-                        PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-                        if (physicalPartition == null) {
-                            continue;
-                        }
-
-                        TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
-                        if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
-                            if (storageMedium != backendTabletInfo.getStorage_medium()) {
-                                // If storage medium is less than 1, there is no need to send migration tasks to BE.
-                                // Because BE will ignore this request.
-                                if (backendStorageTypeCnt <= 1) {
-                                    LOG.debug("available storage medium type count is less than 1, " +
-                                                    "no need to send migrate task. tabletId={}, backendId={}.",
-                                            tabletMeta, backendId);
-                                } else {
-                                    tabletMigrationMap.put(storageMedium, tabletId);
-                                }
->>>>>>> c0665a5f68 ([Enhancement] Optimize update replica lock in tablet report and clone (#61939))
+                                tabletSyncMap.put(Pair.create(tabletMeta.getDbId(), tabletMeta.getTableId()), tabletId);
                             }
 
                             // check and set path,
