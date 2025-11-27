@@ -14,22 +14,39 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.api.client.util.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.AnalyticEvalNode;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 public class DistinctAggregationOverWindowTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        FeConstants.unitTestView = false;
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE `s1` (    \n" +
                 "  `v1` bigint(20) NULL COMMENT \"\",    \n" +
                 "  `v2` int(11) NULL COMMENT \"\",    \n" +
+                "  `s1` struct<count bigint, sum double, avg double> NULL COMMENT \"\",    \n" +
                 "  `a1` array<varchar(65533)> NULL COMMENT \"\",    \n" +
                 "  `a2` array<varchar(65533)> NULL COMMENT \"\"    \n" +
                 ") ENGINE=OLAP    \n" +
@@ -330,5 +347,397 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 9: v1 <=> 1: v1\n" +
                 "  |  equal join conjunct: 10: v2 <=> 2: v2");
+    }
+
+    @Test
+    public void testFramedWindow() throws Exception {
+        String sql = "with cte as(\n" +
+                "select v1,v2,v3,\n" +
+                " count(distinct v3)over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct v3)over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct v3)over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0\n" +
+                ")\n" +
+                "select sum(murmur_hash3_32(v1)),\n" +
+                "       sum(murmur_hash3_32(v2)),\n" +
+                "       sum(murmur_hash3_32(v3)),\n" +
+                "       sum(murmur_hash3_32(dist_count)),\n" +
+                "       sum(murmur_hash3_32(dist_sum)),\n" +
+                "       sum(murmur_hash3_32(dist_avg))\n" +
+                "from cte;";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "  3:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 10> : murmur_hash3_32(CAST(19: fused_multi_distinct_count_sum_avg.count[true] AS " +
+                "VARCHAR))\n" +
+                "  |  <slot 11> : murmur_hash3_32(CAST(19: fused_multi_distinct_count_sum_avg.sum[true] AS " +
+                "VARCHAR))\n" +
+                "  |  <slot 12> : murmur_hash3_32(CAST(19: fused_multi_distinct_count_sum_avg.avg[true] AS " +
+                "VARCHAR))\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count_sum_avg(3: v3), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        connectContext.getSessionVariable().setOptimizeDistinctAggOverFramedWindow(1);
+        plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setOptimizeDistinctAggOverFramedWindow(0);
+        assertCContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+
+        assertCContains(plan, "  5:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 20: v1, 21: v2, 22: ");
+
+        assertCContains(plan, "  9:Project\n" +
+                "  |  <slot 4> : 19: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 5> : 19: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 6> : 19: fused_multi_distinct_count_sum_avg.avg[false]\n" +
+                "  |  <slot 20> : 20: v1\n" +
+                "  |  <slot 21> : 21: v2\n" +
+                "  |  \n" +
+                "  8:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count_sum_avg(22: v3), ]\n" +
+                "  |  partition by: 20: v1\n" +
+                "  |  order by: 21: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
+    public void testDistinctDecimalFramedWindow() throws Exception {
+        String sql = "select v1,v2,v3,\n" +
+                " count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0 ";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  2 <-> [2: v2, BIGINT, true]\n" +
+                "  |  3 <-> [3: v3, BIGINT, true]\n" +
+                "  |  7 <-> cast([3: v3, BIGINT, true] as DECIMAL128(19,2))");
+
+        assertCContains(plan, "  3:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count_sum_avg[([7: cast, DECIMAL128(19,2), true]); args: " +
+                "DECIMAL128; result: struct<count bigint(20), sum decimal(38, 2), avg decimal(38, 8)>; " +
+                "args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [1: v1, BIGINT, true]\n" +
+                "  |  order by: [2: v2, BIGINT, true] ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        assertCContains(plan, "  4:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  2 <-> [2: v2, BIGINT, true]\n" +
+                "  |  3 <-> [3: v3, BIGINT, true]\n" +
+                "  |  4 <-> [8: fused_multi_distinct_count_sum_avg, struct<count bigint(20), sum decimal(38, 2), " +
+                "avg decimal(38, 8)>, true].count[false]\n" +
+                "  |  5 <-> [8: fused_multi_distinct_count_sum_avg, struct<count bigint(20), sum decimal(38, 2), " +
+                "avg decimal(38, 8)>, true].sum[false]\n" +
+                "  |  6 <-> [8: fused_multi_distinct_count_sum_avg, struct<count bigint(20), sum decimal(38, 2), " +
+                "avg decimal(38, 8)>, true].avg[false]");
+    }
+
+    private Type getAggregateFunctionReturnType(String sql, String... functionNames) throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        Set<String> names = Sets.newHashSet(functionNames);
+
+        List<AggregationNode> aggNodes = Lists.newArrayList();
+        execPlan.getTopFragment().getPlanRoot().collect(AggregationNode.class, aggNodes);
+        Optional<Type> optReturnType = aggNodes.stream()
+                .flatMap(agg -> agg.getAggInfo().getAggregateExprs().stream())
+                .filter(fcall -> names.contains(fcall.getFnName().getFunction()))
+                .findFirst()
+                .map(fcall -> ((AggregateFunction) fcall.getFn()).getReturnType());
+
+        if (optReturnType.isPresent()) {
+            return optReturnType.get();
+        }
+
+        List<AnalyticEvalNode> windowNodes = Lists.newArrayList();
+        execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, windowNodes);
+        optReturnType = windowNodes.stream()
+                .flatMap(win -> win.getAnalyticFnCalls().stream().map(e -> (FunctionCallExpr) e))
+                .filter(fcall -> names.contains(fcall.getFnName().getFunction()))
+                .findFirst()
+                .map(fcall -> ((AggregateFunction) fcall.getFn()).getReturnType());
+
+        Assertions.assertTrue(optReturnType.isPresent());
+        return optReturnType.get();
+    }
+
+    @SafeVarargs
+    final void checkFusedMultiDistinct(String sqlFmt, String type, String fusedFunName,
+                                       Pair<String, Type>... fieldTypes)
+            throws Exception {
+        String sql = sqlFmt.replaceAll("\\{TYPE\\}", type);
+        StructType fusedType = (StructType) getAggregateFunctionReturnType(sql, fusedFunName);
+        connectContext.getSessionVariable().setOptimizeDistinctAggOverFramedWindow(1);
+        StructType fusedType2 = (StructType) getAggregateFunctionReturnType(sql, fusedFunName);
+        connectContext.getSessionVariable().setOptimizeDistinctAggOverFramedWindow(0);
+        Assertions.assertEquals(IntegerType.BIGINT, fusedType.getField(FunctionSet.COUNT).getType());
+        for (Pair<String, Type> ftype : fieldTypes) {
+            Assertions.assertEquals(ftype.second, fusedType.getField(ftype.first).getType());
+            Assertions.assertEquals(ftype.second, fusedType2.getField(ftype.first).getType());
+        }
+    }
+
+    @Test
+    public void testFusedMultiDistinct() throws Exception {
+        String countSumAvgSqlFmt = "select v1,v2,v3,\n" +
+                " count(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0 ";
+
+        String countSumSqlFmt = "select v1,v2,v3,\n" +
+                " count(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_sum\n" +
+                "from t0 ";
+
+        String countAvgSqlFmt = "select v1,v2,v3,\n" +
+                " count(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_count,\n" +
+                " avg(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0 ";
+
+        String sumAvgSqlFmt = "select v1,v2,v3,\n" +
+                " sum(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0 ";
+
+        String countSqlFmt = "select v1,v2,v3,\n" +
+                "count(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_count\n" +
+                "from t0 ";
+
+        String sumSqlFmt = "select v1,v2,v3,\n" +
+                " sum(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_sum\n" +
+                "from t0 ";
+
+        String avgSqlFmt = "select v1,v2,v3,\n" +
+                " avg(distinct cast(v3 as {TYPE}))over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0 ";
+
+        String checkSumSqlFmt = "select sum(distinct cast(v3 as {TYPE})) from t0";
+        String checkAvgSqlFmt = "select avg(distinct cast(v3 as {TYPE})) from t0";
+        String[] types = new String[] {
+                "decimal(7,2)",
+                "decimal(19,2)",
+                "decimal(38,19)",
+                "decimal(38,20)",
+                "decimal(38,18)",
+                "decimal(39,18)",
+                "boolean",
+                "tinyint",
+                "int",
+                "smallint",
+                "bigint",
+                "largeint",
+                "float",
+                "double",
+                "string",
+                "varchar",
+                "char",
+        };
+
+        for (String type : types) {
+            String checkSumSql = checkSumSqlFmt.replaceAll("\\{TYPE\\}", type);
+            String checkAvgSql = checkAvgSqlFmt.replaceAll("\\{TYPE\\}", type);
+            Type sumType =
+                    getAggregateFunctionReturnType(checkSumSql, FunctionSet.SUM, FunctionSet.MULTI_DISTINCT_SUM);
+            Type avgType = getAggregateFunctionReturnType(checkAvgSql, FunctionSet.AVG);
+            checkFusedMultiDistinct(countSumAvgSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM_AVG,
+                    Pair.create(FunctionSet.SUM, sumType), Pair.create(FunctionSet.AVG, avgType));
+
+            checkFusedMultiDistinct(countSumSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM,
+                    Pair.create(FunctionSet.SUM, sumType));
+
+            checkFusedMultiDistinct(countAvgSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_AVG,
+                    Pair.create(FunctionSet.AVG, avgType));
+
+            checkFusedMultiDistinct(sumAvgSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM_AVG,
+                    Pair.create(FunctionSet.SUM, sumType), Pair.create(FunctionSet.AVG, avgType));
+
+            checkFusedMultiDistinct(countSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT);
+
+            checkFusedMultiDistinct(sumSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM,
+                    Pair.create(FunctionSet.SUM, sumType));
+
+            checkFusedMultiDistinct(avgSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_AVG,
+                    Pair.create(FunctionSet.AVG, avgType));
+        }
+
+        String[] timeTypes = new String[] {"date", "datetime"};
+        for (String type : timeTypes) {
+            checkFusedMultiDistinct(countSqlFmt, type, FunctionSet.FUSED_MULTI_DISTINCT_COUNT);
+        }
+    }
+
+    @Test
+    public void testComplexSql() throws Exception {
+        String sql = "with cte as(\n" +
+                "select distinct v1,v2,v3,\n" +
+                " count(distinct v3)over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct v3)over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct v3)over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0\n" +
+                "),\n" +
+                "cte1 as(\n" +
+                "select v1,v2,v3,\n" +
+                " count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg\n" +
+                "from t0 \n" +
+                ")\n" +
+                "select cte.dist_count = cte1.dist_count, cte.dist_sum = cte1.dist_sum, cte.dist_avg = cte1.dist_avg\n" +
+                "from cte join cte1 on cte.v1 = cte1.v1 and cte.v2 = cte1.v2 and cte.v3 = cte1.v3;";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "  10:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : 16: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 5> : 16: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 6> : 16: fused_multi_distinct_count_sum_avg.avg[false]\n" +
+                "  |  \n" +
+                "  9:SELECT\n" +
+                "  |  predicates: 2: v2 IS NOT NULL, 3: v3 IS NOT NULL\n" +
+                "  |  \n" +
+                "  8:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count_sum_avg(3: v3), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+        assertCContains(plan, "  5:Project\n" +
+                "  |  <slot 7> : 7: v1\n" +
+                "  |  <slot 8> : 8: v2\n" +
+                "  |  <slot 9> : 9: v3\n" +
+                "  |  <slot 10> : 18: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 11> : 18: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 12> : 18: fused_multi_distinct_count_sum_avg.avg[false]\n" +
+                "  |  \n" +
+                "  4:SELECT\n" +
+                "  |  predicates: 8: v2 IS NOT NULL, 9: v3 IS NOT NULL\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count_sum_avg(17: cast), ]\n" +
+                "  |  partition by: 7: v1\n" +
+                "  |  order by: 8: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 7> 7: v1 ASC, <slot 8> 8: v2 ASC\n" +
+                "  |  analytic partition by: 7: v1\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 7> : 7: v1\n" +
+                "  |  <slot 8> : 8: v2\n" +
+                "  |  <slot 9> : 9: v3\n" +
+                "  |  <slot 17> : CAST(9: v3 AS DECIMAL128(19,2))");
+        assertCContains(plan, "  13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v1 = 1: v1\n" +
+                "  |  equal join conjunct: 8: v2 = 2: v2\n" +
+                "  |  equal join conjunct: 9: v3 = 3: v3");
+    }
+
+    @Test
+    public void testMixedFunctionsOverFramedWindow() throws Exception {
+        String sql = "select v1,v2,v3,\n" +
+                " count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,\n" +
+                " sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,\n" +
+                " avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg,\n" +
+                " sum(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as sum,\n" +
+                " avg(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as avg,\n" +
+                " count(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as count,\n" +
+                " rank()over(partition by v1 order by v2) as rank,\n" +
+                " dense_rank()over(partition by v1 order by v2) as d_rank,\n" +
+                " row_number()over(partition by v1 order by v2) as r\n" +
+                "from t0 ";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "  5:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : 14: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 5> : 14: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 6> : 14: fused_multi_distinct_count_sum_avg.avg[false]\n" +
+                "  |  <slot 7> : 7: sum(cast(3: v3 as DECIMAL128(19,2)))\n" +
+                "  |  <slot 8> : 8: avg(cast(3: v3 as DECIMAL128(19,2)))\n" +
+                "  |  <slot 9> : 9: count(cast(3: v3 as DECIMAL128(19,2)))\n" +
+                "  |  <slot 10> : 10: rank()\n" +
+                "  |  <slot 11> : 11: dense_rank()\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, sum(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
+                "[, avg(CAST(3: v3 AS DECIMAL128(19,2))), ], [, count(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
+                "[, rank(), ], [, dense_rank(), ], [, fused_multi_distinct_count_sum_avg(13: cast), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+        connectContext.getSessionVariable().setOptimizeDistinctAggOverFramedWindow(1);
+        plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setOptimizeDistinctAggOverFramedWindow(0);
+        assertCContains(plan, "  16:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 4> : 4: count(distinct cast(3: v3 as DECIMAL128(19,2)))\n" +
+                "  |  <slot 5> : 5: sum(distinct cast(3: v3 as DECIMAL128(19,2)))\n" +
+                "  |  <slot 6> : 6: avg(distinct cast(3: v3 as DECIMAL128(19,2)))\n" +
+                "  |  \n" +
+                "  15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 15: v1 <=> 1: v1\n" +
+                "  |  equal join conjunct: 16: v2 <=> 2: v2\n" +
+                "  |  \n" +
+                "  |----14:EXCHANGE\n" +
+                "  |    \n" +
+                "  11:AGGREGATE (update finalize)\n" +
+                "  |  group by: 4: count(distinct cast(3: v3 as DECIMAL128(19,2))), " +
+                "5: sum(distinct cast(3: v3 as DECIMAL128(19,2))), " +
+                "6: avg(distinct cast(3: v3 as DECIMAL128(19,2))), 15: v1, 16: v2\n" +
+                "  |  \n" +
+                "  10:Project\n" +
+                "  |  <slot 4> : 14: fused_multi_distinct_count_sum_avg.count[false]\n" +
+                "  |  <slot 5> : 14: fused_multi_distinct_count_sum_avg.sum[false]\n" +
+                "  |  <slot 6> : 14: fused_multi_distinct_count_sum_avg.avg[false]\n" +
+                "  |  <slot 15> : 15: v1\n" +
+                "  |  <slot 16> : 16: v2\n" +
+                "  |  \n" +
+                "  9:ANALYTIC\n" +
+                "  |  functions: [, fused_multi_distinct_count_sum_avg(18: cast), ]\n" +
+                "  |  partition by: 15: v1\n" +
+                "  |  order by: 16: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        assertCContains(plan, "  20:ANALYTIC\n" +
+                "  |  functions: [, sum(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
+                "[, avg(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
+                "[, count(CAST(3: v3 AS DECIMAL128(19,2))), ], " +
+                "[, rank(), ], [, dense_rank(), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
     }
 }

@@ -37,7 +37,6 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
@@ -65,7 +64,7 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
-        if (analyticFunction.getParams().isDistinct() && !isUnboundedWindowWithoutSlidingFrame(analyticExpr)) {
+        if (analyticFunction.getParams().isDistinct() && !isWindowSupportDistinctAggregations(analyticExpr)) {
             throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());
         }
@@ -392,28 +391,19 @@ public class AnalyticAnalyzer {
         return false;
     }
 
-    // aggregation function over unbounded window without sliding frame can convert into
-    // null-safe-eq join with aggregation
-    // for an example:
-    // Q1: select a, b, count(distinct c) over (partition by a,b) from t;
-    // equals to
-    // Q2: with cte as (select a,b, count(distinct c) cdc from t group by a,b)
-    //     select t.a,t.b,cte.cdc from t inner join cte on t.a <=> cte.a and t.b <= cte.b
-    public static boolean isUnboundedWindowWithoutSlidingFrame(AnalyticExpr analyticExpr) {
+    // range window support count/sum/avg(distinct)
+    public static boolean isWindowSupportDistinctAggregations(AnalyticExpr analyticExpr) {
         AnalyticWindow window = analyticExpr.getWindow();
         FunctionCallExpr fnCall = analyticExpr.getFnCall();
-        List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
-
-        if (window != null &&
-                !(window.getLeftBoundary().getBoundaryType().isAbsolutePos() &&
-                        window.getRightBoundary().getBoundaryType().isAbsolutePos())) {
+        if (window != null && !window.getType().equals(AnalyticWindow.Type.RANGE)) {
             return false;
         }
 
-        if (!orderByElements.isEmpty()) {
-            return false;
-        }
-        final Set<String> supportFunctions = ImmutableSet.of(FunctionSet.SUM, FunctionSet.AVG, FunctionSet.COUNT);
+        final Set<String> supportFunctions = ImmutableSet.of(
+                FunctionSet.SUM,
+                FunctionSet.AVG,
+                FunctionSet.COUNT);
+
         return supportFunctions.contains(fnCall.getFnName().getFunction());
     }
 }

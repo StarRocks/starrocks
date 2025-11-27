@@ -1053,12 +1053,14 @@ void Analytor::_init_window_result_columns() {
                 ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
         // Binary column cound't call resize method like Numeric Column,
         // so we only reserve it.
-        if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-            _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+        if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
+            _result_window_columns[i]->resize(chunk_size);
+        } else if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);

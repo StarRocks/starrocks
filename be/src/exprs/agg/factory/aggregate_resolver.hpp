@@ -150,6 +150,17 @@ public:
     }
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
+    void add_window_mapping(const std::string& name, SpecificAggFunctionPtr fun,
+                            AggNullPred null_pred = AggNullPred()) {
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
+        auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(
+                fun, std::move(null_pred));
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), nullable_agg);
+    }
+
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr,
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
     void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
