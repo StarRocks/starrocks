@@ -77,6 +77,9 @@ bool ParquetField::has_same_complex_type(const TypeDescriptor& type_descriptor) 
         return true;
     } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
         return true;
+    } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_VARIANT) {
+        // variant type currently can be mapped to struct type in parquet
+        return true;
     } else {
         return false;
     }
