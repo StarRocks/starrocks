@@ -339,7 +339,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Enable automatic log cleaning based on disk usage. When enabled, logs will be cleaned when disk usage exceeds the threshold. The log cleaner runs as a background daemon on the FE leader node and helps prevent disk space exhaustion from log file accumulation.
+- Description: Enable automatic log cleaning based on disk usage. When enabled, logs will be cleaned when disk usage exceeds the threshold. The log cleaner runs as a background daemon on the FE node and helps prevent disk space exhaustion from log file accumulation.
 - Introduced in: -
 
 ##### log_cleaner_disk_usage_threshold
