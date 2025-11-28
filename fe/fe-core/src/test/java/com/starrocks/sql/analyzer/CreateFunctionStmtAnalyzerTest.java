@@ -468,32 +468,32 @@ public class CreateFunctionStmtAnalyzerTest {
     @Test
     public void testS3UDF() {
 
-            new MockUp<CreateFunctionAnalyzer>() {
-                @Mock
-                public String computeMd5(CreateFunctionStmt stmt) {
-                    return "0xff";
-                }
-            };
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public String computeMd5(CreateFunctionStmt stmt) {
+                return "0xff";
+            }
+        };
 
-            assertThrows(Throwable.class, () -> {
-                try {
-                    Config.enable_udf = true;
-                    String createFunctionSql = String.format("CREATE %s FUNCTION string_udf(string, string)  \n"
-                                    + "RETURNS string \n"
-                                    + "properties (\n"
-                                    + "    \"symbol\" = \"%s\",\n"
-                                    + "    \"type\" = \"StarrocksJar\",\n"
-                                    + "    \"storageVolumeName\" = \"test\",\n"
-                                    + "    \"file\" = \"%s\"\n"
-                                    + ");", "GLOBAL", "com.cisco.pda.starrocks.udf.PiiDecrypt",
-                            "s3://useast1/udf/sr-udf.jar");
-                    CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
-                            createFunctionSql, 32).get(0);
-                    new CreateFunctionAnalyzer().analyze(stmt, connectContext);
-                } finally {
-                    Config.enable_udf = false;
-                }
-            });
+        assertThrows(Throwable.class, () -> {
+            try {
+                Config.enable_udf = true;
+                String createFunctionSql = String.format("CREATE %s FUNCTION decrypt_udf(string, string)  \n"
+                                + "RETURNS string \n"
+                                + "properties (\n"
+                                + "    \"symbol\" = \"%s\",\n"
+                                + "    \"type\" = \"StarrocksJar\",\n"
+                                + "    \"storageVolumeName\" = \"test\",\n"
+                                + "    \"file\" = \"%s\"\n"
+                                + ");", "GLOBAL", "com.cisco.pda.starrocks.udf.PiiDecrypt",
+                        "s3://useast1/udf/sr-udf.jar");
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
 
     }
 }
