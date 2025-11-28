@@ -143,6 +143,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。
 - 引入版本：-
 
+##### internal_log_modules
+
+- 默认值: `{"base", "statistic"}`
+- 类型: String[]
+- 単位: -
+- 是否可变: No
+- 描述: 一个将接收专用内部日志记录的模块标识符列表。对于每个条目 X，Log4j 会创建一个名为 `internal.&lt;X&gt;` 的 logger，级别为 INFO 且 additivity="false"。这些 logger 会被路由到 internal appender（写入 `fe.internal.log`），当启用 `sys_log_to_console` 时则输出到控制台。根据需要使用简短名称或包片段 —— 精确的 logger 名称将成为 `internal.` + 配置的字符串。内部日志文件的滚动和保留遵循 `internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval` 和 `log_roll_size_mb` 的设置。添加模块会将其运行时消息分离到内部 logger 流中，便于调试和审计。
+- 引入版本: v3.2.4
+
+##### internal_log_roll_interval
+
+- 默认值: DAY
+- 类型: String
+- 単位: -
+- 是否可变: No
+- 描述: 控制 FE 内部日志 appender 的基于时间的滚动间隔。接受（不区分大小写）的值为 `HOUR` 和 `DAY`。`HOUR` 生成每小时的文件模式 (`"%d{yyyyMMddHH}"`)，`DAY` 生成每日的文件模式 (`"%d{yyyyMMdd}"`)，这些模式由 RollingFile TimeBasedTriggeringPolicy 用于命名旋转后的 `fe.internal.log` 文件。无效的值会导致初始化失败（在构建活动 Log4j 配置时会抛出 IOException）。滚动行为还取决于相关设置，例如 `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num` 和 `internal_log_delete_age`。
+- 引入版本: v3.2.4
+
 ##### log_roll_size_mb
 
 - 默认值：1024
@@ -152,6 +170,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：单个系统日志或审计日志文件的大小上限。
 - 引入版本：-
 
+##### profile_log_dir
+
+- 默认值: `Config.STARROCKS_HOME_DIR + "/log"`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: FE profile 日志写入的目录路径。`Log4jConfig` 使用此值来放置与 profile 相关的 appender（在该目录下创建类似 `fe.profile.log` 和 `fe.features.log` 的文件）。这些文件的轮换和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认值位于 `STARROCKS_HOME_DIR` 内，请确保 FE 进程对该目录具有写入及轮换/删除权限。
+- 引入版本: v3.2.5
+
+##### profile_log_roll_num
+
+- 默认值: 5
+- 类型: Int
+- 单位: Number of files
+- 是否可变: No
+- 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 `${profile_log_roll_num}` 注入到日志 XML 中（例如 `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
+- 引入版本: v3.2.5
+
 ##### qe_slow_log_ms
 
 - 默认值：5000
@@ -160,6 +196,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：Slow query 的认定时长。如果查询的响应时间超过此阈值，则会在审计日志 `fe.audit.log` 中记录为 slow query。
 - 引入版本：-
+
+##### slow_lock_log_every_ms
+
+- 默认值: 3000L
+- 类型: Long
+- 単位: 毫秒
+- 是否可变: 是
+- 描述: 在对同一个 SlowLockLogStats 实例再次输出“慢锁”警告之前，至少要等待的最小间隔（毫秒）。当锁等待时间超过 `slow_lock_threshold_ms` 后，LockUtils 会检查此值并在最近一次记录的慢锁事件发生到现在未达到 `slow_lock_log_every_ms` 毫秒时抑制额外警告。在长时间争用期间使用较大的值以减少日志量，或使用较小的值以获取更频繁的诊断信息。更改在运行时对后续检查生效。
+- 引入版本: v3.2.0
+
+##### slow_lock_threshold_ms
+
+- 默认值: 3000L
+- 类型: long
+- 単位: 毫秒
+- 是否可变: 是
+- 描述: 用于将一个锁操作或持有的锁归类为“慢”的阈值（毫秒）。当锁的等待时间或持有时间超过此值时，StarRocks 将（视上下文）输出诊断日志、包含堆栈跟踪或 waiter/owner 信息，并且在 LockManager 中在该延迟后启动死锁检测。此配置由 LockUtils（慢锁日志）、QueryableReentrantReadWriteLock（筛选慢读取者）、LockManager（死锁检测延迟和慢锁跟踪）、LockChecker（周期性慢锁检测）以及其他调用方（例如 DiskAndTabletLoadReBalancer 日志）使用。降低该值会提高敏感度并增加日志/诊断开销；将其设置为 0 或负值会禁用基于初始等待的死锁检测延迟行为。请与 `slow_lock_log_every_ms`、`slow_lock_print_stack` 和 `slow_lock_stack_trace_reserve_levels` 一起调整。
+- 引入版本: 3.2.0
 
 ##### sys_log_delete_age
 
@@ -178,6 +232,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：系统日志文件的保存目录。
 - 引入版本：-
+
+##### sys_log_enable_compress
+
+- 默认值: false
+- 类型: boolean
+- 単位: -
+- 是否可变: No
+- 描述: 当此项设置为 `true` 时，系统会在轮转的系统日志文件名后追加 ".gz" 后缀，从而使 Log4j 在轮转时生成 gzip 压缩的 FE 系统日志（例如，`fe.log.*`）。此值在生成 Log4j 配置时读取（Log4jConfig.initLogging / generateActiveLog4jXmlConfig），并控制用于 RollingFile filePattern 的 `sys_file_postfix` 属性。启用此功能可减少保留日志的磁盘占用，但会在轮转期间增加 CPU 和 I/O 开销，并改变日志文件名，因此读取日志的工具或脚本必须能够处理 .gz 文件。注意，审计日志使用单独的压缩配置，即 `audit_log_enable_compress`。
+- 引入版本: v3.2.12
 
 ##### sys_log_json_max_string_length
 
@@ -234,6 +297,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。
 - 引入版本：-
+
+##### sys_log_warn_modules
+
+- 默认值: `{}`
+- 类型: String[]
+- 単位: -
+- 是否可变: No
+- 描述: 一个记录器名称或包前缀列表，系统在启动时会将其配置为 WARN 级别的记录器并路由到警告 appender（SysWF）— 即 `fe.warn.log` 文件。条目会被插入到生成的 Log4j 配置中（与内置的 warn 模块一起，例如 org.apache.kafka、org.apache.hudi 和 org.apache.hadoop.io.compress），并生成类似 `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>` 的 logger 元素。建议使用完全限定的包和类前缀（例如 "com.example.lib"）来抑制在常规日志中产生噪声的 INFO/DEBUG 输出，并允许将警告单独捕获。
+- 引入版本: v3.2.13
 
 ### 服务器
 
@@ -1586,6 +1658,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：控制 BE 副本最大容忍的导入落后时长，超过这个时长就进行克隆。
 - 引入版本：-
 
+##### loads_history_sync_interval_second
+
+- 默认值: 60
+- 类型: Int
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: 由 LoadsHistorySyncer 用于调度周期性同步的时间间隔（秒），用于将已完成的 load 作业从 `information_schema.loads` 同步到内部表 `_statistics_.loads_history`。构造函数中将该值乘以 1000L 以设置 FrontendDaemon 的间隔。syncer 在每次运行时也会重新读取该配置，并在变化时调用 setInterval，因此更新可以在运行时生效而无需重启。syncer 会跳过首次运行（以允许表创建），且仅导入结束时间超过一分钟的 load；较小的频繁值会增加 DML 和 executor 负载，而较大的值会延迟历史 load 记录的可用性。关于目标表的保留/分区行为，请参见 `loads_history_retained_days`。
+- 引入版本: v3.3.6, v3.4.0, v3.5.0
+
 ##### max_broker_load_job_concurrency
 
 - 默认值：5
@@ -1784,6 +1865,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：Stream Load 的默认超时时间。
 - 引入版本：-
+
+##### stream_load_task_keep_max_second
+
+- 默认值: 3 * 24 * 3600
+- 类型: Int
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: 已完成或已取消的 StreamLoad 任务的保留窗口（秒）。当任务达到最终状态且其结束时间戳早于此阈值时（代码以毫秒比较：currentMs - endTimeMs > stream_load_task_keep_max_second * 1000），该任务将有资格被 `StreamLoadMgr.cleanOldStreamLoadTasks` 移除，并在加载持久化状态时被丢弃。适用于 `StreamLoadTask` 和 `StreamLoadMultiStmtTask`。如果总任务数超过 `stream_load_task_keep_max_num`，可能会提前触发清理（同步任务由 `cleanSyncStreamLoadTasks` 优先处理）。请根据历史记录/可调试性与内存使用之间的权衡设置此值。
+- 引入版本: v3.2.0
 
 ##### transaction_clean_interval_second
 
