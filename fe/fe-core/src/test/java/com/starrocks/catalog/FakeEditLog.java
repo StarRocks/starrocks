@@ -45,6 +45,7 @@ import com.starrocks.persist.DropBackendInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.NextIdLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.UpdateBackendInfo;
@@ -86,7 +87,8 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
-    public void logSaveNextId(long nextId) {
+    public void logSaveNextId(long nextId, WALApplier walApplier) {
+        walApplier.apply(new NextIdLog(nextId));
     }
 
     @Mock

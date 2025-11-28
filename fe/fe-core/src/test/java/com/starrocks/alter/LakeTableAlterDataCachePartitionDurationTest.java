@@ -46,6 +46,8 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.NextIdLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -105,8 +107,8 @@ public class LakeTableAlterDataCachePartitionDurationTest {
             }
 
             @Mock
-            public void logSaveNextId(long nextId) {
-
+            public void logSaveNextId(long nextId, WALApplier applier) {
+                applier.apply(new NextIdLog(nextId));
             }
         };
 
