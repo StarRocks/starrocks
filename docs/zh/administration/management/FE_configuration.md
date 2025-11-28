@@ -235,7 +235,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。
 - 引入版本：-
 
-##### log_cleaner_enable
+##### log_cleaner_disk_util_based_enable
 
 - 默认值：false
 - 类型：Boolean

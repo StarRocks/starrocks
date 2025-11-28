@@ -225,7 +225,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: StarRocks がシステムログを生成するモジュール。このパラメータが `org.apache.starrocks.catalog` に設定されている場合、StarRocks は catalog モジュールのシステムログのみを生成します。モジュール名はカンマ (,) とスペースで区切ります。
 - 導入バージョン: -
 
-##### log_cleaner_enable
+##### log_cleaner_disk_util_based_enable
 
 - デフォルト: false 
 - タイプ: Boolean

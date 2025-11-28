@@ -322,7 +322,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Enable automatic log cleaning based on disk usage. " +
             "When enabled, logs will be cleaned when disk usage exceeds the threshold.")
-    public static boolean log_cleaner_enable = false;
+    public static boolean log_cleaner_disk_util_based_enable = false;
 
     @ConfField(mutable = true, comment = "Disk usage threshold (percentage) to trigger log cleaning. " +
             "When disk usage exceeds this threshold, log cleaning will start. Default is 80, meaning 80%.")

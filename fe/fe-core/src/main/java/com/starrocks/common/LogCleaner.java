@@ -99,7 +99,7 @@ public class LogCleaner extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!Config.log_cleaner_enable) {
+        if (!Config.log_cleaner_disk_util_based_enable) {
             return;
         }
 
