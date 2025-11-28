@@ -1036,26 +1036,27 @@ public class RuntimeProfile {
             List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
             childNames.sort(String::compareTo);
 
-            // Filter out MIN/MAX prefix counters as they will be shown inline with their parent counter
-            List<String> filteredChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            // Keep MIN/MAX metrics head of other child counters
+            List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
+            List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
             for (String childName : childNames) {
-                if (!childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
-                        && !childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
-                    filteredChildNames.add(childName);
+                if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                        || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
+                    minMaxChildNames.add(childName);
+                } else {
+                    otherChildNames.add(childName);
                 }
             }
+            List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            reorderedChildNames.addAll(minMaxChildNames);
+            reorderedChildNames.addAll(otherChildNames);
 
             Map<String, Counter> counterMap1 = profile.getCounterMap();
-            for (String childName : filteredChildNames) {
+            for (String childName : reorderedChildNames) {
                 Counter childCounter = counterMap1.get(childName);
                 Preconditions.checkState(childCounter != null);
-                // Skip zero-value counters to improve readability
-                if (!childCounter.shouldDisplay()) {
-                    continue;
-                }
-                // Print counter with inline min/max statistics
                 builder.append(prefix).append("   - ").append(childName).append(": ")
-                        .append(printCounterWithMinMax(childCounter)).append("\n");
+                        .append(printCounter(childCounter.getValue(), childCounter.getType())).append("\n");
                 this.printChildCounters(profile, prefix + "  ", childName);
             }
         }
@@ -1127,24 +1128,26 @@ public class RuntimeProfile {
             List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
             childNames.sort(String::compareTo);
 
-            // Filter out MIN/MAX prefix counters as they will be shown inline with their parent counter
-            List<String> filteredChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            // Keep MIN/MAX metrics head of other child counters
+            List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
+            List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
             for (String childName : childNames) {
-                if (!childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
-                        && !childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
-                    filteredChildNames.add(childName);
+                if (childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MIN)
+                        || childName.startsWith(RuntimeProfile.MERGED_INFO_PREFIX_MAX)) {
+                    minMaxChildNames.add(childName);
+                } else {
+                    otherChildNames.add(childName);
                 }
             }
+            List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
+            reorderedChildNames.addAll(minMaxChildNames);
+            reorderedChildNames.addAll(otherChildNames);
 
-            for (String childName : filteredChildNames) {
+            for (String childName : reorderedChildNames) {
                 Counter childCounter = profile.getCounterMap().get(childName);
                 Preconditions.checkState(childCounter != null);
-                // Skip zero-value counters to improve readability
-                if (!childCounter.shouldDisplay()) {
-                    continue;
-                }
-                // Print counter with inline min/max statistics
-                childJsonObject.addProperty(childName, printCounterWithMinMax(childCounter));
+                childJsonObject.addProperty(childName,
+                        printCounter(childCounter.getValue(), childCounter.getType()));
                 this.addChildCounters(profile, childName, childJsonObject);
             }
         }

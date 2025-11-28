@@ -171,21 +171,9 @@ public:
         bool skip_min_max() const { return _strategy.min_max_type == TCounterMinMaxType::SKIP_ALL; }
 
         int64_t display_threshold() const { return _strategy.display_threshold; }
-
-        // Returns true if this counter should be displayed in the profile output.
-        // The display behavior is controlled by the display_threshold:
-        // - threshold < 0: always display (force show even if zero)
-        // - threshold == 0: always display (default, for compatibility)
-        // - threshold > 0: display only if value > threshold
         bool should_display() const {
             int64_t threshold = _strategy.display_threshold;
-            // threshold <= 0: always display (default, for compatibility)
-            // threshold > 0: display only if value > threshold
-            if (threshold <= 0) {
-                return true;
-            } else {
-                return value() > threshold;
-            }
+            return threshold == 0 || value() > threshold;
         }
 
     protected:

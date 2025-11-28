@@ -990,6 +990,9 @@ public class RuntimeProfileTest {
 
     @Test
     public void testPrettyPrintMinMaxInline() {
+        // Test that printCounterWithMinMax works correctly
+        // Note: The default prettyPrint behavior preserves __MIN_OF_/__MAX_OF_ counters
+        // for backward compatibility. printCounterWithMinMax is available for future use.
         RuntimeProfile profile = new RuntimeProfile("TestProfile");
         
         Counter counter = profile.addCounter("TestCounter", TUnit.UNIT, null);
@@ -997,18 +1000,58 @@ public class RuntimeProfileTest {
         counter.setMinValue(50);
         counter.setMaxValue(150);
 
+        // Test the printCounterWithMinMax utility method directly
+        String inlineOutput = RuntimeProfile.printCounterWithMinMax(counter);
+        Assertions.assertEquals("100 [50, 150]", inlineOutput,
+                "printCounterWithMinMax should format as 'value [min, max]'");
+        
+        // Default prettyPrint shows the counter value without inline min/max
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
         String output = builder.toString();
+        Assertions.assertTrue(output.contains("TestCounter: 100"),
+                "Counter value should be shown in output");
+    }
 
-        // Check that min/max is shown inline with the counter
-        Assertions.assertTrue(output.contains("TestCounter: 100 [50, 150]"), 
-                "Counter should show value with inline min/max range");
+    @Test
+    public void testGetMaxCounterWorks() {
+        // This test verifies that getMaxCounter() works correctly.
+        // This is important for ANALYZE PROFILE and other tools that rely on these counters.
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
         
-        // Check that separate __MIN_OF_ and __MAX_OF_ counters are not shown
-        Assertions.assertFalse(output.contains("__MIN_OF_"), 
-                "Separate MIN counter should not appear in output");
-        Assertions.assertFalse(output.contains("__MAX_OF_"), 
-                "Separate MAX counter should not appear in output");
+        // Add a main counter and its MIN/MAX variants (simulating merged profile)
+        Counter mainCounter = profile.addCounter("TestCounter", TUnit.UNIT, null);
+        mainCounter.setValue(100);
+        
+        Counter minCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MIN + "TestCounter", TUnit.UNIT, null);
+        minCounter.setValue(50);
+        
+        Counter maxCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MAX + "TestCounter", TUnit.UNIT, null);
+        maxCounter.setValue(150);
+        
+        // Verify getMaxCounter() returns the __MAX_OF_ counter
+        Counter retrievedMaxCounter = profile.getMaxCounter("TestCounter");
+        Assertions.assertNotNull(retrievedMaxCounter, 
+                "getMaxCounter should return the MAX counter");
+        Assertions.assertEquals(150, retrievedMaxCounter.getValue(),
+                "getMaxCounter should return the value from __MAX_OF_ counter");
+        
+        // Verify getCounter() still returns the main counter
+        Counter retrievedMainCounter = profile.getCounter("TestCounter");
+        Assertions.assertNotNull(retrievedMainCounter);
+        Assertions.assertEquals(100, retrievedMainCounter.getValue());
+        
+        // prettyPrint should show MIN/MAX counters (for backward compatibility)
+        StringBuilder builder = new StringBuilder();
+        profile.prettyPrint(builder, "");
+        String output = builder.toString();
+        
+        // MIN/MAX counters should be visible in text output
+        Assertions.assertTrue(output.contains("__MIN_OF_TestCounter"), 
+                "MIN counter should appear in output for compatibility");
+        Assertions.assertTrue(output.contains("__MAX_OF_TestCounter"), 
+                "MAX counter should appear in output for compatibility");
     }
 }
