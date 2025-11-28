@@ -40,6 +40,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <gen_cpp/CloudConfiguration_types.h>
 
 #include "common/status.h"
 #include "common/statusor.h"

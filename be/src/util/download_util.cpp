@@ -87,9 +87,10 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
 }
 
 Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
-    bool is_http = url.rfind("http://", 0) == 0;
-    bool is_file = url.rfind("file://", 0) == 0;
-    if (!is_http && !is_file) {
+    bool is_http = url.starts_with("http://");
+    bool is_local = url.starts_with("file://");
+    bool is_dfs = (!is_http) && (!is_local);
+    if (is_dfs) {
          return get_java_udf_url(url, real_url, options);
     }
     *real_url = url;

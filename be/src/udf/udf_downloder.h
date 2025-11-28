@@ -35,7 +35,7 @@ private:
 
     static std::unordered_map<std::string, std::shared_ptr<std::mutex>> _path_mutexes;
 
-    static std::mutex _map_mutex;
+    static std::mutex _download_mutex;
 
     static std::shared_ptr<std::mutex> get_mutex_for_path(const std::string& localPath);
 };
