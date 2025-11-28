@@ -2203,28 +2203,11 @@ public class EditLog {
         }
     }
 
-<<<<<<< HEAD
-    public void logUpdateDynamicTabletJob(DynamicTabletJob job) {
-        logEdit(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job);
-    }
-
-    public void logRemoveDynamicTabletJob(long jobId) {
-        logEdit(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
-=======
     public void logUpdateTabletReshardJob(TabletReshardJob job) {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
     public void logRemoveTabletReshardJob(long jobId) {
         logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId));
-    }
-
-    public void logCreateGroupProvider(GroupProviderLog provider, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER, provider, walApplier);
-    }
-
-    public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
     }
 }

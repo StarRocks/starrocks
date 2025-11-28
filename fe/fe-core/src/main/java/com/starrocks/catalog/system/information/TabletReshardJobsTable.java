@@ -31,7 +31,6 @@ public class TabletReshardJobsTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/system/information/DynamicTabletJobsTable.java
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("DB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -45,22 +44,6 @@ public class TabletReshardJobsTable {
                         .column("CREATED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("FINISHED_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("ERROR_MESSAGE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .build(), TSchemaTableType.SCH_DYNAMIC_TABLET_JOBS);
-=======
-                        .column("JOB_ID", IntegerType.BIGINT)
-                        .column("DB_ID", IntegerType.BIGINT)
-                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_ID", IntegerType.BIGINT)
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_STATE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRANSACTION_ID", IntegerType.BIGINT)
-                        .column("PARALLEL_PARTITIONS", IntegerType.BIGINT)
-                        .column("PARALLEL_TABLETS", IntegerType.BIGINT)
-                        .column("CREATED_TIME", DateType.DATETIME)
-                        .column("FINISHED_TIME", DateType.DATETIME)
-                        .column("ERROR_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_TABLET_RESHARD_JOBS);
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941)):fe/fe-core/src/main/java/com/starrocks/catalog/system/information/TabletReshardJobsTable.java
     }
 }

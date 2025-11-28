@@ -2338,12 +2338,6 @@ service FrontendService {
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
-<<<<<<< HEAD
-    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
-=======
     TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
-
-    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
 }
 
