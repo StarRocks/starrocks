@@ -975,6 +975,7 @@ struct TSortNode {
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
   40: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
+  41: optional bool per_pipeline;
 }
 
 enum TAnalyticWindowType {
