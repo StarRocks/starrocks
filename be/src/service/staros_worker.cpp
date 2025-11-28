@@ -243,12 +243,18 @@ absl::StatusOr<FileSystemHandle> StarOSWorker::get_shard_filesystem(ShardId id, 
             return build_filesystem_on_demand(id, conf);
         }
 
-        auto fs = lookup_fs_cache(it->second.fs_cache_key);
-        if (fs != nullptr) {
-            FileSystemHandle handle;
-            handle.file_system = fs;
-            handle.replicas = it->second.shard_info.replicas;
-            return handle;
+        // Cache miss: reset the fs_cache_key to ensure a new shared_ptr will be created
+        {
+            std::lock_guard<std::mutex> reset_lock(_fs_cache_key_reset_mtx);
+            auto fs = lookup_fs_cache(it->second.fs_cache_key);
+            if (fs != nullptr) {
+                FileSystemHandle handle;
+                handle.file_system = fs;
+                handle.replicas = it->second.shard_info.replicas;
+                return handle;
+            }
+
+            it->second.fs_cache_key.reset();
         }
 
         shard_info = it->second.shard_info;
