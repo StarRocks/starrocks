@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/group_execution/execution_group.h"
 
+#include <cstddef>
+
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -105,15 +107,28 @@ Status ColocateExecutionGroup::prepare_drivers(RuntimeState* state) {
 
 void ColocateExecutionGroup::submit_active_drivers() {
     VLOG_QUERY << "submit_active_drivers:" << to_string();
+    // record the number of drivers to be submitted for each pipeline
+    // Two-phase process to avoid race with submit_next_driver():
+    // 1) publish all _submit_drivers[i]
+    // 2) then submit initial drivers
+    std::vector<size_t> pipeline_init_submit_drivers(_pipelines.size());
+
     for (size_t i = 0; i < _pipelines.size(); ++i) {
         const auto& pipeline = _pipelines[i];
         DCHECK_EQ(pipeline->drivers().size(), pipeline->degree_of_parallelism());
         const auto& drivers = pipeline->drivers();
         size_t init_submit_drivers = std::min(_physical_dop, drivers.size());
         _submit_drivers[i] = init_submit_drivers;
-        for (size_t i = 0; i < init_submit_drivers; ++i) {
-            VLOG_QUERY << "submit_active_driver:" << i << ":" << drivers[i]->to_readable_string();
-            _executor->submit(drivers[i].get());
+        pipeline_init_submit_drivers[i] = init_submit_drivers;
+    }
+
+    for (size_t i = 0; i < _pipelines.size(); ++i) {
+        const auto& pipeline = _pipelines[i];
+        const auto& drivers = pipeline->drivers();
+        size_t init_submit_drivers = pipeline_init_submit_drivers[i];
+        for (size_t j = 0; j < init_submit_drivers; ++j) {
+            VLOG_QUERY << "submit_active_driver:" << j << ":" << drivers[j]->to_readable_string();
+            _executor->submit(drivers[j].get());
         }
     }
 }
