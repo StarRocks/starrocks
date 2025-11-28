@@ -181,6 +181,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // and we need to disable it.
     @SerializedName(value = "disableReplicatedStorageForGIN")
     private boolean disableReplicatedStorageForGIN = false;
+    @SerializedName(value = "historySchema")
+    private OlapTableHistorySchema historySchema;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -274,6 +276,35 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
         this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
+    }
+
+    public void setHistorySchema(OlapTableHistorySchema historySchema) {
+        this.historySchema = historySchema;
+    }
+
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.ofNullable(historySchema);
+    }
+
+    @Override
+    public boolean isExpire() {
+        boolean expiredByTime = super.isExpire();
+        boolean expiredByHistorySchema = true;
+        if (historySchema != null && !historySchema.isExpired()) {
+            try {
+                expiredByHistorySchema = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                    isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId, Lists.newArrayList(tableId));
+            } catch (Exception e) {
+                // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
+                // so could clean the history schema safely
+            }
+            if (expiredByHistorySchema) {
+                historySchema.setExpire();
+                LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
+                        jobId, tableName, historySchema.getHistoryTxnIdThreshold());
+            }
+        }
+        return expiredByTime && expiredByHistorySchema;
     }
 
     /**

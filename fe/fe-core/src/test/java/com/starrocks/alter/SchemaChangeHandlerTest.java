@@ -428,25 +428,25 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         List<Index> newIndexes = tbl.getCopiedIndexes();
 
         Assertions.assertDoesNotThrow(
-                    () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100, 100,
-                                            indexToNewSchemaId, false));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100,
+                                            indexToNewSchemaId, false, -1));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
-                    () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101, 101,
-                                            indexToNewSchemaId, true));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101,
+                                            indexToNewSchemaId, true, 101));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         OlapTableState beforeState = tbl.getState();
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
-                    () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, 102, indexToNewSchemaId,
-                                            false));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, indexToNewSchemaId,
+                                            false, -1));
         tbl.setState(beforeState);
     }
 
