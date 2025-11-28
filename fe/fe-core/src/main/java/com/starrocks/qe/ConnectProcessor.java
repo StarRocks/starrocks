@@ -1023,7 +1023,6 @@ public class ConnectProcessor {
             }
             executor.setProxy();
             executor.execute();
-            executor.addFinishedQueryDetail();
         } catch (IOException e) {
             // Client failed.
             LOG.warn("Process one query failed because IOException: ", e);
@@ -1034,6 +1033,9 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
         } finally {
+            if (executor != null) {
+                executor.addFinishedQueryDetail();
+            }
             ctx.setExecutor(null);
         }
 
