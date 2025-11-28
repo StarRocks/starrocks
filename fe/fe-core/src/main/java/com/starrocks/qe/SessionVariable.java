@@ -269,6 +269,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
+    public static final String REPLACE_PREDICATE_WITH_FILTER = "replace_predicate_with_filter";
     
     // Large IN predicate optimization: special fast path for queries with large IN constant lists.
     // When enabled, IN predicates with many constants will be converted to a special streamlined format
@@ -1576,6 +1577,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int maxPushdownConditionsPerColumn = -1;
     @VariableMgr.VarAttr(name = ENABLE_LAMBDA_PUSHDOWN)
     private boolean enableLambdaPushdown = true;
+
+    @VariableMgr.VarAttr(name = REPLACE_PREDICATE_WITH_FILTER)
+    private boolean replacePredicateWithFilter = false;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_PUSH_DOWN_RIGHT_TABLE)
     private boolean hashJoinPushDownRightTable = true;
@@ -4391,6 +4395,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableLambdaPushDown() {
         return enableLambdaPushdown;
+    }
+    public boolean getReplacePredicateWithFilter() {
+        return replacePredicateWithFilter;
+    }
+
+    public void setReplacePredicateWithFilter(boolean replacePrediateWithFilter) {
+        this.replacePredicateWithFilter = replacePrediateWithFilter;
     }
 
     public void setEnableLambdaPushdown(boolean enableLambdaPushdown) {
