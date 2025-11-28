@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -44,7 +44,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import javax.validation.constraints.NotNull;
 
-public class DynamicTabletJobTest {
+public class TabletReshardJobTest {
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     private static Database db;
@@ -85,20 +85,20 @@ public class DynamicTabletJobTest {
     }
 
     @Test
-    public void testRunDynamicTabletJob() throws Exception {
+    public void testRunTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
-        DynamicTabletJob dynamicTabletJob = createDynamicTabletJob();
-        Assertions.assertNotNull(dynamicTabletJob);
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
 
-        dynamicTabletJob.run();
-        Assertions.assertEquals(DynamicTabletJob.JobState.RUNNING, dynamicTabletJob.getJobState());
-        Assertions.assertEquals(OlapTable.OlapTableState.DYNAMIC_TABLET, table.getState());
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
-        dynamicTabletJob.run();
-        Assertions.assertEquals(DynamicTabletJob.JobState.FINISHED, dynamicTabletJob.getJobState());
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
         Assertions.assertNull(table.getPhysicalPartition(physicalPartition.getId()));
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
@@ -115,29 +115,29 @@ public class DynamicTabletJobTest {
     }
 
     @Test
-    public void testReplayDynamicTabletJob() throws Exception {
+    public void testReplayTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
         long oldVersion = physicalPartition.getVisibleVersion();
 
-        DynamicTabletJob dynamicTabletJob = createDynamicTabletJob();
-        Assertions.assertNotNull(dynamicTabletJob);
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
 
-        Assertions.assertEquals(DynamicTabletJob.JobState.PENDING, dynamicTabletJob.getJobState());
-        dynamicTabletJob.replay();
+        Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
+        tabletReshardJob.replay();
 
-        dynamicTabletJob.setJobState(DynamicTabletJob.JobState.PREPARING);
-        dynamicTabletJob.replay();
-        Assertions.assertEquals(OlapTable.OlapTableState.DYNAMIC_TABLET, table.getState());
+        tabletReshardJob.setJobState(TabletReshardJob.JobState.PREPARING);
+        tabletReshardJob.replay();
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
-        dynamicTabletJob.setJobState(DynamicTabletJob.JobState.RUNNING);
-        dynamicTabletJob.replay();
+        tabletReshardJob.setJobState(TabletReshardJob.JobState.RUNNING);
+        tabletReshardJob.replay();
 
-        dynamicTabletJob.setJobState(DynamicTabletJob.JobState.CLEANING);
-        dynamicTabletJob.replay();
+        tabletReshardJob.setJobState(TabletReshardJob.JobState.CLEANING);
+        tabletReshardJob.replay();
 
-        dynamicTabletJob.setJobState(DynamicTabletJob.JobState.FINISHED);
-        dynamicTabletJob.replay();
+        tabletReshardJob.setJobState(TabletReshardJob.JobState.FINISHED);
+        tabletReshardJob.replay();
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         PhysicalPartition newPhysicalPartition = table.getAllPhysicalPartitions().iterator().next();
@@ -153,46 +153,46 @@ public class DynamicTabletJobTest {
     }
 
     @Test
-    public void testAbortDynamicTabletJob() throws Exception {
-        DynamicTabletJob dynamicTabletJob = createDynamicTabletJob();
-        Assertions.assertNotNull(dynamicTabletJob);
+    public void testAbortTabletReshardJob() throws Exception {
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
 
-        dynamicTabletJob.abort("test abort");
-        Assertions.assertEquals(DynamicTabletJob.JobState.ABORTING, dynamicTabletJob.getJobState());
+        tabletReshardJob.abort("test abort");
+        Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, tabletReshardJob.getJobState());
 
-        dynamicTabletJob.run();
-        Assertions.assertEquals(DynamicTabletJob.JobState.ABORTED, dynamicTabletJob.getJobState());
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
     }
 
     @Test
-    public void testReplayAbortDynamicTabletJob() throws Exception {
-        DynamicTabletJob dynamicTabletJob = createDynamicTabletJob();
-        Assertions.assertNotNull(dynamicTabletJob);
+    public void testReplayAbortTabletReshardJob() throws Exception {
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        Assertions.assertNotNull(tabletReshardJob);
 
-        Assertions.assertEquals(DynamicTabletJob.JobState.PENDING, dynamicTabletJob.getJobState());
-        dynamicTabletJob.replay();
+        Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
+        tabletReshardJob.replay();
 
-        dynamicTabletJob.setJobState(DynamicTabletJob.JobState.ABORTING);
-        dynamicTabletJob.replay();
+        tabletReshardJob.setJobState(TabletReshardJob.JobState.ABORTING);
+        tabletReshardJob.replay();
 
-        dynamicTabletJob.setJobState(DynamicTabletJob.JobState.ABORTED);
-        dynamicTabletJob.replay();
+        tabletReshardJob.setJobState(TabletReshardJob.JobState.ABORTED);
+        tabletReshardJob.replay();
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
     }
 
-    private DynamicTabletJob createDynamicTabletJob() throws Exception {
+    private TabletReshardJob createTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getBaseIndex();
 
         long tabletId = materializedIndex.getTablets().get(0).getId();
         TabletList tabletList = new TabletList(List.of(tabletId));
 
-        Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, "-2");
+        Map<String, String> properties = Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_SPLIT_SIZE, "-2");
         SplitTabletClause clause = new SplitTabletClause(null, tabletList, properties);
-        clause.setDynamicTabletSplitSize(-2);
+        clause.setTabletReshardSplitSize(-2);
 
-        DynamicTabletJobFactory factory = new SplitTabletJobFactory(db, table, clause);
-        return factory.createDynamicTabletJob();
+        TabletReshardJobFactory factory = new SplitTabletJobFactory(db, table, clause);
+        return factory.createTabletReshardJob();
     }
 }

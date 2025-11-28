@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.persist;
+package com.starrocks.alter.reshard;
 
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Writable;
+/*
+ * ReshardingTablet saves the old and new tablets info during tablet splitting or merging
+ * ReshardingTablet is the base class of SplittingTablet, MergingTablet and IdenticalTablet.
+ */
+public interface ReshardingTablet {
 
-public class RemoveDynamicTabletJobLog implements Writable {
-    @SerializedName("jobId")
-    private final long jobId;
+    SplittingTablet getSplittingTablet();
 
-    public RemoveDynamicTabletJobLog(long jobId) {
-        this.jobId = jobId;
-    }
+    MergingTablet getMergingTablet();
 
-    public long getJobId() {
-        return jobId;
-    }
+    IdenticalTablet getIdenticalTablet();
 
+    long getFirstOldTabletId();
+
+    long getParallelTablets();
 }

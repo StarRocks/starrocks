@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PhysicalPartition;
@@ -31,25 +31,26 @@ public class PhysicalPartitionContext {
     @SerializedName(value = "physicalPartition")
     protected final PhysicalPartition physicalPartition;
 
-    @SerializedName(value = "dynamicTabletses")
-    protected final Map<Long, DynamicTablets> dynamicTabletses;
+    @SerializedName(value = "reshardingTabletses")
+    protected final Map<Long, ReshardingTablets> reshardingTabletses;
 
     @SerializedName(value = "commitVersion")
     protected long commitVersion;
 
     protected Future<Boolean> publishFuture;
 
-    public PhysicalPartitionContext(PhysicalPartition physicalPartition, Map<Long, DynamicTablets> dynamicTabletses) {
+    public PhysicalPartitionContext(PhysicalPartition physicalPartition,
+            Map<Long, ReshardingTablets> reshardingTabletses) {
         this.physicalPartition = physicalPartition;
-        this.dynamicTabletses = dynamicTabletses;
+        this.reshardingTabletses = reshardingTabletses;
     }
 
     public PhysicalPartition getPhysicalPartition() {
         return physicalPartition;
     }
 
-    public Map<Long, DynamicTablets> getDynamicTabletses() {
-        return dynamicTabletses;
+    public Map<Long, ReshardingTablets> getReshardingTabletses() {
+        return reshardingTabletses;
     }
 
     public void setCommitVersion(long commitVersion) {
@@ -94,8 +95,8 @@ public class PhysicalPartitionContext {
 
     public long getParallelTablets() {
         long parallelTablets = 0;
-        for (DynamicTablets dynamicTabletses : dynamicTabletses.values()) {
-            parallelTablets += dynamicTabletses.getParallelTablets();
+        for (ReshardingTablets reshardingTablets : reshardingTabletses.values()) {
+            parallelTablets += reshardingTablets.getParallelTablets();
         }
         return parallelTablets;
     }

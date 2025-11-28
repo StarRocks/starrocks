@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
@@ -35,8 +35,8 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.thrift.TDynamicTabletJobsItem;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TTabletReshardJobsItem;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,10 +48,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 /*
- * DynamicTabletJob is for dynamic tablet splitting and merging.
+ * TabletReshardJob is for tablet splitting and merging.
  */
-public class DynamicTabletJob implements Writable {
-    private static final Logger LOG = LogManager.getLogger(DynamicTabletJob.class);
+public class TabletReshardJob implements Writable {
+    private static final Logger LOG = LogManager.getLogger(TabletReshardJob.class);
 
     public enum JobState {
         PENDING, // Job is created
@@ -109,7 +109,7 @@ public class DynamicTabletJob implements Writable {
     @SerializedName(value = "watershedGtid")
     protected long watershedGtid;
 
-    public DynamicTabletJob(long jobId, JobType jobType, long dbId, long tableId,
+    public TabletReshardJob(long jobId, JobType jobType, long dbId, long tableId,
             Map<Long, PhysicalPartitionContext> physicalPartitionContexts) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -141,9 +141,9 @@ public class DynamicTabletJob implements Writable {
 
         this.stateStartedTimeMs = currentTimeMs;
 
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateDynamicTabletJob(this);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
 
-        LOG.info("Dynamic tablet job set job state. {}", this);
+        LOG.info("Tablet reshard job set job state. {}", this);
     }
 
     public long getDbId() {
@@ -164,7 +164,7 @@ public class DynamicTabletJob implements Writable {
 
     public boolean isExpired() {
         return isDone() &&
-                (System.currentTimeMillis() - finishedTimeMs) > Config.dynamic_tablet_history_job_keep_max_ms;
+                (System.currentTimeMillis() - finishedTimeMs) > Config.tablet_reshard_history_job_keep_max_ms;
     }
 
     public boolean isDone() {
@@ -225,13 +225,13 @@ public class DynamicTabletJob implements Writable {
                         onJobDone();
                         break;
                     default:
-                        LOG.warn("Invalid state in dynamic tablet job, try to abort. {}", this);
+                        LOG.warn("Invalid state in tablet reshard job, try to abort. {}", this);
                         abort("Invalid state: " + jobState);
                         break;
                 }
             } while (jobState != prevState);
         } catch (Exception e) {
-            LOG.warn("Failed to run dynamic tablet job, try to abort. {}. Exception: ",
+            LOG.warn("Failed to run tablet reshard job, try to abort. {}. Exception: ",
                     this, e);
             abort(e.getMessage());
         }
@@ -239,13 +239,13 @@ public class DynamicTabletJob implements Writable {
 
     // Begin and commit the split transaction
     protected void runPendingJob() {
-        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.DYNAMIC_TABLET);
+        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
 
         updateNextVersion();
 
         addTabletsToInvertedIndex();
 
-        registerDynamicTablets();
+        registerReshardingTablets();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
@@ -337,14 +337,14 @@ public class DynamicTabletJob implements Writable {
                 return;
             }
         } catch (Exception e) { // Db is dropped, ignore exception
-            LOG.warn("Ignore exception when waitting previous transactions finished. " + this, e);
+            LOG.warn("Ignore exception when waiting previous transactions finished. " + this, e);
         }
 
         removePhysicalPartitions();
 
-        unregisterDynamicTablets();
+        unregisterReshardingTablets();
 
-        setTableState(OlapTable.OlapTableState.DYNAMIC_TABLET, OlapTable.OlapTableState.NORMAL);
+        setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
 
         // Clear to release memory
         physicalPartitionContexts.clear();
@@ -352,14 +352,14 @@ public class DynamicTabletJob implements Writable {
         setJobState(JobState.FINISHED);
     }
 
-    // Clear dynamic tablets
+    // Clear resharding tablets
     protected void runAbortingJob() {
         try {
-            unregisterDynamicTablets();
+            unregisterReshardingTablets();
 
             setTableState(null, OlapTable.OlapTableState.NORMAL);
         } catch (Exception e) {
-            LOG.warn("Ignore exception when aborting dynamic tablet job. {}. ", this, e);
+            LOG.warn("Ignore exception when aborting tablet reshard job. {}. ", this, e);
         }
 
         // Clear to release memory
@@ -374,7 +374,7 @@ public class DynamicTabletJob implements Writable {
     }
 
     protected void onJobDone() {
-        LOG.info("Dynamic tablet job is done. {}", this);
+        LOG.info("Tablet reshard job is done. {}", this);
     }
 
     public void replay() {
@@ -383,10 +383,10 @@ public class DynamicTabletJob implements Writable {
                 case PENDING:
                     break;
                 case PREPARING:
-                    setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.DYNAMIC_TABLET);
+                    setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
                     updateNextVersion();
                     addTabletsToInvertedIndex();
-                    registerDynamicTablets();
+                    registerReshardingTablets();
                     break;
                 case RUNNING:
                     break;
@@ -395,20 +395,20 @@ public class DynamicTabletJob implements Writable {
                     break;
                 case FINISHED:
                     removePhysicalPartitions();
-                    unregisterDynamicTablets();
-                    setTableState(OlapTable.OlapTableState.DYNAMIC_TABLET, OlapTable.OlapTableState.NORMAL);
+                    unregisterReshardingTablets();
+                    setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
                     break;
                 case ABORTING:
                     break;
                 case ABORTED:
-                    unregisterDynamicTablets();
+                    unregisterReshardingTablets();
                     setTableState(null, OlapTable.OlapTableState.NORMAL);
                     break;
                 default:
                     break;
             }
         } catch (Exception e) {
-            LOG.warn("Caught exception when replay dynamic tablet job. {}. ", this, e);
+            LOG.warn("Caught exception when replay tablet reshard job. {}. ", this, e);
         }
     }
 
@@ -416,7 +416,7 @@ public class DynamicTabletJob implements Writable {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
             if (expectedState != null && olapTable.getState() != expectedState) {
-                throw new DynamicTabletJobException("Unexpected table state " + olapTable.getState() + ". " + this);
+                throw new TabletReshardJobException("Unexpected table state " + olapTable.getState() + ". " + this);
             }
             olapTable.setState(newState);
         }
@@ -454,7 +454,7 @@ public class DynamicTabletJob implements Writable {
             txnInfo.txnId = watershedTxnId;
             txnInfo.combinedTxnLog = false;
             txnInfo.commitTime = stateStartedTimeMs / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_DYNAMIC_TABLET;
+            txnInfo.txnType = TxnTypePB.TXN_TABLET_RESHARD;
             txnInfo.gtid = watershedGtid;
 
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, distributionColumns,
@@ -462,7 +462,7 @@ public class DynamicTabletJob implements Writable {
 
             return true;
         } catch (Exception e) {
-            LOG.warn("Failed to publish version for dynamic tablet job {}. ", this, e);
+            LOG.warn("Failed to publish version for tablet reshard job {}. ", this, e);
             return false;
         }
     }
@@ -531,7 +531,7 @@ public class DynamicTabletJob implements Writable {
         if (table == null) { // Table is dropped
             errorMessage = "Table not found";
             setJobState(JobState.ABORTING);
-            throw new DynamicTabletJobException("Table not found. " + this);
+            throw new TabletReshardJobException("Table not found. " + this);
         }
 
         OlapTable olapTable = (OlapTable) table;
@@ -539,51 +539,51 @@ public class DynamicTabletJob implements Writable {
         return new LockedObject<OlapTable>(dbId, List.of(tableId), lockType, olapTable);
     }
 
-    protected void registerDynamicTabletsOnRestart() {
+    protected void registerReshardingTabletsOnRestart() {
         if (jobState == JobState.PENDING) {
             return;
         }
 
-        registerDynamicTablets();
+        registerReshardingTablets();
     }
 
-    private void registerDynamicTablets() {
-        DynamicTabletJobMgr dynamicTabletJobMgr = GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr();
+    private void registerReshardingTablets() {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         for (PhysicalPartitionContext physicalPartitionContext : physicalPartitionContexts.values()) {
             long visibleVersion = physicalPartitionContext.getCommitVersion();
 
-            for (DynamicTablets dynamicTablets : physicalPartitionContext.getDynamicTabletses().values()) {
-                for (SplittingTablet splittingTablet : dynamicTablets.getSplittingTablets()) {
-                    dynamicTabletJobMgr.registerDynamicTablet(splittingTablet.getOldTabletId(),
+            for (ReshardingTablets reshardingTablets : physicalPartitionContext.getReshardingTabletses().values()) {
+                for (SplittingTablet splittingTablet : reshardingTablets.getSplittingTablets()) {
+                    tabletReshardJobMgr.registerReshardingTablet(splittingTablet.getOldTabletId(),
                             splittingTablet, visibleVersion);
                 }
-                for (MergingTablet mergingTablet : dynamicTablets.getMergingTablets()) {
+                for (MergingTablet mergingTablet : reshardingTablets.getMergingTablets()) {
                     for (Long tabletId : mergingTablet.getOldTabletIds()) {
-                        dynamicTabletJobMgr.registerDynamicTablet(tabletId, mergingTablet, visibleVersion);
+                        tabletReshardJobMgr.registerReshardingTablet(tabletId, mergingTablet, visibleVersion);
                     }
                 }
-                for (IdenticalTablet identicalTablet : dynamicTablets.getIdenticalTablets()) {
-                    dynamicTabletJobMgr.registerDynamicTablet(identicalTablet.getOldTabletId(),
+                for (IdenticalTablet identicalTablet : reshardingTablets.getIdenticalTablets()) {
+                    tabletReshardJobMgr.registerReshardingTablet(identicalTablet.getOldTabletId(),
                             identicalTablet, visibleVersion);
                 }
             }
         }
     }
 
-    protected void unregisterDynamicTablets() {
-        DynamicTabletJobMgr dynamicTabletJobMgr = GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr();
+    protected void unregisterReshardingTablets() {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         for (PhysicalPartitionContext physicalPartitionContext : physicalPartitionContexts.values()) {
-            for (DynamicTablets dynamicTablets : physicalPartitionContext.getDynamicTabletses().values()) {
-                for (SplittingTablet splittingTablet : dynamicTablets.getSplittingTablets()) {
-                    dynamicTabletJobMgr.unregisterDynamicTablet(splittingTablet.getOldTabletId());
+            for (ReshardingTablets reshardingTablets : physicalPartitionContext.getReshardingTabletses().values()) {
+                for (SplittingTablet splittingTablet : reshardingTablets.getSplittingTablets()) {
+                    tabletReshardJobMgr.unregisterReshardingTablet(splittingTablet.getOldTabletId());
                 }
-                for (MergingTablet mergingTablet : dynamicTablets.getMergingTablets()) {
+                for (MergingTablet mergingTablet : reshardingTablets.getMergingTablets()) {
                     for (Long tabletId : mergingTablet.getOldTabletIds()) {
-                        dynamicTabletJobMgr.unregisterDynamicTablet(tabletId);
+                        tabletReshardJobMgr.unregisterReshardingTablet(tabletId);
                     }
                 }
-                for (IdenticalTablet identicalTablet : dynamicTablets.getIdenticalTablets()) {
-                    dynamicTabletJobMgr.unregisterDynamicTablet(identicalTablet.getOldTabletId());
+                for (IdenticalTablet identicalTablet : reshardingTablets.getIdenticalTablets()) {
+                    tabletReshardJobMgr.unregisterReshardingTablet(identicalTablet.getOldTabletId());
                 }
             }
         }
@@ -591,7 +591,7 @@ public class DynamicTabletJob implements Writable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("DynamicTabletJob: {");
+        StringBuilder sb = new StringBuilder("TabletReshardJob: {");
         sb.append("job_id: ").append(jobId);
         sb.append(", job_type: ").append(jobType);
         sb.append(", job_state: ").append(jobState);
@@ -612,14 +612,14 @@ public class DynamicTabletJob implements Writable {
         return sb.toString();
     }
 
-    public TDynamicTabletJobsItem getInfo() {
-        TDynamicTabletJobsItem item = new TDynamicTabletJobsItem();
+    public TTabletReshardJobsItem getInfo() {
+        TTabletReshardJobsItem item = new TTabletReshardJobsItem();
         item.setJob_id(jobId);
         item.setDb_id(dbId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             item.setDb_name("");
-            LOG.warn("Failed to get database name for dynamic tablet job. {}", this);
+            LOG.warn("Failed to get database name for tablet reshard job. {}", this);
         } else {
             item.setDb_name(db.getFullName());
         }
@@ -628,7 +628,7 @@ public class DynamicTabletJob implements Writable {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) {
             item.setTable_name("");
-            LOG.warn("Failed to get table name for dynamic tablet job. {}", this);
+            LOG.warn("Failed to get table name for tablet reshard job. {}", this);
         } else {
             item.setTable_name(table.getName());
         }

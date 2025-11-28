@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -25,18 +25,18 @@ public class PublishTabletsInfoTest {
         PublishTabletsInfo publishTabletsInfo = new PublishTabletsInfo();
 
         Assertions.assertTrue(publishTabletsInfo.getTabletIds().isEmpty());
-        Assertions.assertTrue(publishTabletsInfo.isDynamicTabletsEmpty());
-        Assertions.assertTrue(publishTabletsInfo.getDynamicTablets() == null);
+        Assertions.assertTrue(publishTabletsInfo.isReshardingTabletsEmpty());
+        Assertions.assertTrue(publishTabletsInfo.getReshardingTablets() == null);
         Assertions.assertTrue(publishTabletsInfo.getOldTabletIds().isEmpty());
 
         publishTabletsInfo.addTabletId(1);
-        publishTabletsInfo.addDynamicTablet(new SplittingTablet(2, List.of(21L, 22L)));
-        publishTabletsInfo.addDynamicTablet(new MergingTablet(List.of(31L, 32L), 3));
-        publishTabletsInfo.addDynamicTablet(new IdenticalTablet(4, 4));
+        publishTabletsInfo.addReshardingTablet(new SplittingTablet(2, List.of(21L, 22L)));
+        publishTabletsInfo.addReshardingTablet(new MergingTablet(List.of(31L, 32L), 3));
+        publishTabletsInfo.addReshardingTablet(new IdenticalTablet(4, 4));
 
         Assertions.assertFalse(publishTabletsInfo.getTabletIds().isEmpty());
-        Assertions.assertFalse(publishTabletsInfo.isDynamicTabletsEmpty());
-        Assertions.assertTrue(publishTabletsInfo.getDynamicTablets() != null);
+        Assertions.assertFalse(publishTabletsInfo.isReshardingTabletsEmpty());
+        Assertions.assertTrue(publishTabletsInfo.getReshardingTablets() != null);
         Assertions.assertFalse(publishTabletsInfo.getOldTabletIds().isEmpty());
     }
 }
