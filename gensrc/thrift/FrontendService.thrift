@@ -1524,7 +1524,7 @@ struct TPartitionMetaInfo {
     29: optional i64 storage_size
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
-    32: optional i64 path_id
+    32: optional i64 path_id // deprecated
 }
 
 struct TGetPartitionsMetaResponse {
