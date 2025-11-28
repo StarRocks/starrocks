@@ -20,11 +20,11 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Ignore;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
+import org.junit.Ignore;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
