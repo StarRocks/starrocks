@@ -851,7 +851,19 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canOrderBy();
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+
+        if (isStructType()) {
+            // Struct can be ordered if all its fields can be ordered
+            StructType structType = (StructType) this;
+            for (StructField field : structType.getFields()) {
+                if (!field.getType().canOrderBy()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isMapType();
     }
 
     public boolean canPartitionBy() {
