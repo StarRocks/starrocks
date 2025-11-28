@@ -15,7 +15,6 @@
 package com.starrocks.common;
 
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,10 +99,6 @@ public class LogCleaner extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         if (!Config.log_cleaner_disk_util_based_enable) {
-            return;
-        }
-
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
 
