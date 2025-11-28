@@ -35,7 +35,7 @@ public class PaimonWriterFactory implements ScannerFactory {
     }
 
     @Override
-    public Class getScannerClass() throws ClassNotFoundException {
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
         try {
             return classLoader.loadClass("com.starrocks.paimon.reader.PaimonWriter");
         } catch (ClassNotFoundException e) {
