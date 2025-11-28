@@ -2650,6 +2650,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "MVRefreshPrepareRefreshPlan",
                             "MVRefreshParser",
                             "MVRefreshAnalyzer",
+                            "MVRefreshPartitionInfo",
                             "AnalyzeDatabase",
                             "AnalyzeTemporaryTable",
                             "AnalyzeTable",
