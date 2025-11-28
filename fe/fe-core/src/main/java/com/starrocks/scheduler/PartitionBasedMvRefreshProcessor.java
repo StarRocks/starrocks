@@ -34,6 +34,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -1420,10 +1421,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             partitionName, baseTable.getName(), refreshedPartitionNames);
                     continue;
                 }
+                PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
                 MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
                         partition.getId(),
-                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                        partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+                        defaultPartition.getVisibleVersion(),
+                        defaultPartition.getVisibleVersionTime());
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
             if (logger.isDebugEnabled()) {
