@@ -1054,4 +1054,47 @@ public class RuntimeProfileTest {
         Assertions.assertTrue(output.contains("__MAX_OF_TestCounter"), 
                 "MAX counter should appear in output for compatibility");
     }
+
+    @Test
+    public void testPrettyPrintFormatVersion2() {
+        // Test that format version 2 shows inline min/max and hides __MIN_OF_/__MAX_OF_ counters
+        RuntimeProfile profile = new RuntimeProfile("TestProfile");
+        
+        // Add a main counter with embedded min/max values
+        Counter counter = profile.addCounter("TestCounter", TUnit.UNIT, null);
+        counter.setValue(100);
+        counter.setMinValue(50);
+        counter.setMaxValue(150);
+        
+        // Also add the legacy __MIN_OF_/__MAX_OF_ counters
+        Counter minCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MIN + "TestCounter", TUnit.UNIT, null);
+        minCounter.setValue(50);
+        
+        Counter maxCounter = profile.addCounter(
+                RuntimeProfile.MERGED_INFO_PREFIX_MAX + "TestCounter", TUnit.UNIT, null);
+        maxCounter.setValue(150);
+        
+        // Test format version 1 (legacy) - shows separate MIN/MAX counters
+        StringBuilder builderV1 = new StringBuilder();
+        profile.prettyPrint(builderV1, "", 1);
+        String outputV1 = builderV1.toString();
+        Assertions.assertTrue(outputV1.contains("__MIN_OF_TestCounter"), 
+                "Format v1 should show MIN counter separately");
+        Assertions.assertTrue(outputV1.contains("__MAX_OF_TestCounter"), 
+                "Format v1 should show MAX counter separately");
+        Assertions.assertFalse(outputV1.contains("[50, 150]"),
+                "Format v1 should NOT show inline min/max");
+        
+        // Test format version 2 (compact) - shows inline min/max, hides separate counters
+        StringBuilder builderV2 = new StringBuilder();
+        profile.prettyPrint(builderV2, "", 2);
+        String outputV2 = builderV2.toString();
+        Assertions.assertFalse(outputV2.contains("__MIN_OF_TestCounter"), 
+                "Format v2 should NOT show MIN counter separately");
+        Assertions.assertFalse(outputV2.contains("__MAX_OF_TestCounter"), 
+                "Format v2 should NOT show MAX counter separately");
+        Assertions.assertTrue(outputV2.contains("TestCounter: 100 [50, 150]"),
+                "Format v2 should show inline min/max");
+    }
 }
