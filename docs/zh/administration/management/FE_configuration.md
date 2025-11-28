@@ -145,7 +145,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### internal_log_modules
 
-- 默认值: {"base", "statistic"}
+- 默认值: `{"base", "statistic"}`
 - 类型: String[]
 - 単位: -
 - 是否可变: No
@@ -158,7 +158,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 単位: -
 - 是否可变: No
-- 描述: 控制 FE 内部日志 appender 的基于时间的滚动间隔。接受（不区分大小写）的值为 `HOUR` 和 `DAY`。`HOUR` 生成每小时的文件模式 ("%d{yyyyMMddHH}")，`DAY` 生成每日的文件模式 ("%d{yyyyMMdd}")，这些模式由 RollingFile TimeBasedTriggeringPolicy 用于命名旋转后的 `fe.internal.log` 文件。无效的值会导致初始化失败（在构建活动 Log4j 配置时会抛出 IOException）。滚动行为还取决于相关设置，例如 `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num` 和 `internal_log_delete_age`。
+- 描述: 控制 FE 内部日志 appender 的基于时间的滚动间隔。接受（不区分大小写）的值为 `HOUR` 和 `DAY`。`HOUR` 生成每小时的文件模式 (`"%d{yyyyMMddHH}"`)，`DAY` 生成每日的文件模式 (`"%d{yyyyMMdd}"`)，这些模式由 RollingFile TimeBasedTriggeringPolicy 用于命名旋转后的 `fe.internal.log` 文件。无效的值会导致初始化失败（在构建活动 Log4j 配置时会抛出 IOException）。滚动行为还取决于相关设置，例如 `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num` 和 `internal_log_delete_age`。
 - 引入版本: v3.2.4
 
 ##### log_roll_size_mb
@@ -172,11 +172,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### profile_log_dir
 
-- 默认值: Config.STARROCKS_HOME_DIR + "/log"
+- 默认值: `Config.STARROCKS_HOME_DIR + "/log"`
 - 类型: String
 - 单位: -
 - 是否可变: No
-- 描述: FE profile 日志写入的目录路径。`Log4jConfig` 使用此值来放置与 profile 相关的 appender（在该目录下创建类似 fe.profile.log 和 fe.features.log 的文件）。这些文件的轮换和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认值位于 `STARROCKS_HOME_DIR` 内，请确保 FE 进程对该目录具有写入及轮换/删除权限。
+- 描述: FE profile 日志写入的目录路径。`Log4jConfig` 使用此值来放置与 profile 相关的 appender（在该目录下创建类似 `fe.profile.log` 和 `fe.features.log` 的文件）。这些文件的轮换和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认值位于 `STARROCKS_HOME_DIR` 内，请确保 FE 进程对该目录具有写入及轮换/删除权限。
 - 引入版本: v3.2.5
 
 ##### profile_log_roll_num
@@ -185,7 +185,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Number of files
 - 是否可变: No
-- 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 ${profile_log_roll_num} 注入到日志 XML 中（例如 &lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
+- 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 ${profile_log_roll_num} 注入到日志 XML 中（例如 `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
 - 引入版本: v3.2.5
 
 ##### qe_slow_log_ms
@@ -203,7 +203,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 単位: 毫秒
 - 是否可变: 是
-- 描述: 在对同一个 SlowLockLogStats 实例再次输出“慢锁”警告之前，至少要等待的最小间隔（毫秒）。当锁等待时间超过 slow_lock_threshold_ms 后，LockUtils 会检查此值并在最近一次记录的慢锁事件发生到现在未达到 slow_lock_log_every_ms 毫秒时抑制额外警告。在长时间争用期间使用较大的值以减少日志量，或使用较小的值以获取更频繁的诊断信息。更改在运行时对后续检查生效。
+- 描述: 在对同一个 SlowLockLogStats 实例再次输出“慢锁”警告之前，至少要等待的最小间隔（毫秒）。当锁等待时间超过 `slow_lock_threshold_ms` 后，LockUtils 会检查此值并在最近一次记录的慢锁事件发生到现在未达到 `slow_lock_log_every_ms` 毫秒时抑制额外警告。在长时间争用期间使用较大的值以减少日志量，或使用较小的值以获取更频繁的诊断信息。更改在运行时对后续检查生效。
 - 引入版本: v3.2.0
 
 ##### slow_lock_threshold_ms
@@ -212,7 +212,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: long
 - 単位: 毫秒
 - 是否可变: 是
-- 描述: 用于将一个锁操作或持有的锁归类为“慢”的阈值（毫秒）。当锁的等待时间或持有时间超过此值时，StarRocks 将（视上下文）输出诊断日志、包含堆栈跟踪或 waiter/owner 信息，并且在 LockManager 中在该延迟后启动死锁检测。此配置由 LockUtils（慢锁日志）、QueryableReentrantReadWriteLock（筛选慢读取者）、LockManager（死锁检测延迟和慢锁跟踪）、LockChecker（周期性慢锁检测）以及其他调用方（例如 DiskAndTabletLoadReBalancer 日志）使用。降低该值会提高敏感度并增加日志/诊断开销；将其设置为 0 或负值会禁用基于初始等待的死锁检测延迟行为。请与 slow_lock_log_every_ms、slow_lock_print_stack 和 slow_lock_stack_trace_reserve_levels 一起调整。
+- 描述: 用于将一个锁操作或持有的锁归类为“慢”的阈值（毫秒）。当锁的等待时间或持有时间超过此值时，StarRocks 将（视上下文）输出诊断日志、包含堆栈跟踪或 waiter/owner 信息，并且在 LockManager 中在该延迟后启动死锁检测。此配置由 LockUtils（慢锁日志）、QueryableReentrantReadWriteLock（筛选慢读取者）、LockManager（死锁检测延迟和慢锁跟踪）、LockChecker（周期性慢锁检测）以及其他调用方（例如 DiskAndTabletLoadReBalancer 日志）使用。降低该值会提高敏感度并增加日志/诊断开销；将其设置为 0 或负值会禁用基于初始等待的死锁检测延迟行为。请与 `slow_lock_log_every_ms`、`slow_lock_print_stack` 和 `slow_lock_stack_trace_reserve_levels` 一起调整。
 - 引入版本: 3.2.0
 
 ##### sys_log_delete_age
@@ -239,7 +239,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 単位: -
 - 是否可变: No
-- 描述: 当此项设置为 `true` 时，系统会在轮转的系统日志文件名后追加 ".gz" 后缀，从而使 Log4j 在轮转时生成 gzip 压缩的 FE 系统日志（例如，fe.log.*）。此值在生成 Log4j 配置时读取（Log4jConfig.initLogging / generateActiveLog4jXmlConfig），并控制用于 RollingFile filePattern 的 `sys_file_postfix` 属性。启用此功能可减少保留日志的磁盘占用，但会在轮转期间增加 CPU 和 I/O 开销，并改变日志文件名，因此读取日志的工具或脚本必须能够处理 .gz 文件。注意，审计日志使用单独的压缩配置，即 `audit_log_enable_compress`。
+- 描述: 当此项设置为 `true` 时，系统会在轮转的系统日志文件名后追加 ".gz" 后缀，从而使 Log4j 在轮转时生成 gzip 压缩的 FE 系统日志（例如，`fe.log.*`）。此值在生成 Log4j 配置时读取（Log4jConfig.initLogging / generateActiveLog4jXmlConfig），并控制用于 RollingFile filePattern 的 `sys_file_postfix` 属性。启用此功能可减少保留日志的磁盘占用，但会在轮转期间增加 CPU 和 I/O 开销，并改变日志文件名，因此读取日志的工具或脚本必须能够处理 .gz 文件。注意，审计日志使用单独的压缩配置，即 `audit_log_enable_compress`。
 - 引入版本: v3.2.12
 
 ##### sys_log_json_max_string_length
@@ -300,7 +300,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### sys_log_warn_modules
 
-- 默认值: {}
+- 默认值: `{}`
 - 类型: String[]
 - 単位: -
 - 是否可变: No
