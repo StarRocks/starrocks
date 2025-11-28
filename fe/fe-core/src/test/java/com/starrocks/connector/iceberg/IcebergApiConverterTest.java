@@ -248,12 +248,12 @@ public class IcebergApiConverterTest {
         byte[] bytes = new byte[] {1, 2, 3, 4, 5};
         ByteBuffer byteBuffer = ByteBuffer.wrap(bytes);
         IcebergApiConverter.reverseBuffer(byteBuffer);
-        assertEquals(5, byteBuffer.remaining());
-        assertEquals(5, byteBuffer.get(0));
-        assertEquals(4, byteBuffer.get(1));
-        assertEquals(3, byteBuffer.get(2));
-        assertEquals(2, byteBuffer.get(3));
-        assertEquals(1, byteBuffer.get(4));
+        Assertions.assertEquals(5, byteBuffer.remaining());
+        Assertions.assertEquals(5, byteBuffer.get(0));
+        Assertions.assertEquals(4, byteBuffer.get(1));
+        Assertions.assertEquals(3, byteBuffer.get(2));
+        Assertions.assertEquals(2, byteBuffer.get(3));
+        Assertions.assertEquals(1, byteBuffer.get(4));
     }
 
     @Test
