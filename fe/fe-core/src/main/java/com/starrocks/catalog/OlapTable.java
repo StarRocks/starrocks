@@ -3151,6 +3151,7 @@ public class OlapTable extends Table {
         return !tempPartitions.isEmpty();
     }
 
+<<<<<<< HEAD
     public PhysicalPartition replacePhysicalPartition(long oldPhysicalPartitionId,
             PhysicalPartition newPhysicalPartition, boolean moveOldToTemp) {
         Partition partition = getPartition(newPhysicalPartition.getParentId());
@@ -3197,6 +3198,8 @@ public class OlapTable extends Table {
         return physicalPartition;
     }
 
+=======
+>>>>>>> 0a27ec0553 ([Refactor] Remove temp physical partition (#66024))
     public void setCompressionType(TCompressionType compressionType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
