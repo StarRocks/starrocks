@@ -50,6 +50,8 @@ public:
 
     bool try_put(const std::shared_ptr<arrow::RecordBatch>& val) { return _queue.try_put(val); }
 
+    bool is_shutdown() const { return _queue.is_shutdown(); }
+
     // Shut down the queue. Wakes up all threads waiting on blocking_get or blocking_put.
     void shutdown();
 
