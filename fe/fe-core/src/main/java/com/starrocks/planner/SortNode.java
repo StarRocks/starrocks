@@ -91,6 +91,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     private List<SlotId> preAggOutputColumnId;
 
+    private boolean perPipeline;
+
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
     }
@@ -145,6 +147,14 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     public void setPreAggFnCalls(List<Expr> preAggFnCalls) {
         this.preAggFnCalls = preAggFnCalls;
+    }
+
+    public boolean isPerPipeline() {
+        return perPipeline;
+    }
+
+    public void setPerPipeline(boolean perPipeline) {
+        this.perPipeline = perPipeline;
     }
 
     @Override
@@ -287,6 +297,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     Collectors.toList());
             msg.sort_node.setPre_agg_output_slot_id(outputColumnsId);
         }
+
+        msg.sort_node.setPer_pipeline(perPipeline);
     }
 
     @Override
