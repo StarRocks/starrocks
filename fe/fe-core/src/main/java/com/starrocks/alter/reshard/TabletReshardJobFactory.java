@@ -12,26 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.alter.reshard;
 
-#include "exec/schema_scanner.h"
-#include "gen_cpp/FrontendService_types.h"
+import com.starrocks.common.StarRocksException;
 
-namespace starrocks {
+/*
+ * TabletReshardJobFactory is for creating TabletReshardJob.
+ * This is the base class of SplitTabletJobFactory and MergeTabletJobFactory.
+ */
+public interface TabletReshardJobFactory {
 
-class SchemaDynamicTabletJobsScanner : public SchemaScanner {
-public:
-    SchemaDynamicTabletJobsScanner();
-    ~SchemaDynamicTabletJobsScanner() override;
-    Status start(RuntimeState* state) override;
-    Status get_next(ChunkPtr* chunk, bool* eos) override;
-
-private:
-    Status _fill_chunk(ChunkPtr* chunk);
-
-    size_t _index = 0;
-    TDynamicTabletJobsResponse _result;
-    static SchemaScanner::ColumnDesc _s_columns[];
-};
-
-} // namespace starrocks
+    TabletReshardJob createTabletReshardJob() throws StarRocksException;
+}

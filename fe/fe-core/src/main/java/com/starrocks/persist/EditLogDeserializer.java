@@ -17,7 +17,7 @@ package com.starrocks.persist;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -265,8 +265,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
-            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
-            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
+            .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
+            .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {
