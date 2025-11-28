@@ -31,11 +31,7 @@ import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.Schema;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.SortOrder;
->>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
@@ -225,22 +221,10 @@ public interface IcebergCatalog extends MemoryTrackable {
                     CloseableIterable<StructLike> rows = task.asDataTask().rows();
                     for (StructLike row : rows) {
                         // Get the last updated time of the table according to the table schema
-<<<<<<< HEAD
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(7, Long.class);
-                        } catch (NullPointerException e) {
-                            // It is a known issue but we do not hanle it right now. If the refresh frequency of 
-                            // the materialized view is very high, an excessive number of error logs will be printed. 
-                            // Therefore, only brief logs are printed now.
-                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId);
-                        }
-=======
                         // last_updated_at can be null if the referenced snapshot has been expired.
                         // Use Long wrapper to avoid NPE during auto-unboxing.
                         long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row, 7,
                                 EMPTY_PARTITION_NAME, snapshotId);
->>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
                         partition = new Partition(lastUpdated);
                         break;
                     }
@@ -279,23 +263,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                         PartitionSpec spec = nativeTable.specs().get(specId);
 
                         String partitionName =
-<<<<<<< HEAD
                                 PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
 
-                        long lastUpdated = -1;
-                        try {
-                            lastUpdated = row.get(9, Long.class);
-                        } catch (NullPointerException e) {
-                            logger.error("The table [{}.{}] snapshot [{}] has been expired", nativeTable.name(), partitionName,
-                                    snapshotId, e);
-                        }
-                        Partition partition = new Partition(lastUpdated);
-=======
-                                PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
                         long lastUpdated =
                                 getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
-                        Partition partition = new Partition(lastUpdated, specId);
->>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
+                        Partition partition = new Partition(lastUpdated);
                         partitionMap.put(partitionName, partition);
                     }
                 }

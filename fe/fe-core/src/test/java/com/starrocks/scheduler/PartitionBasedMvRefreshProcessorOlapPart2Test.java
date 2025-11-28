@@ -284,15 +284,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         RuntimeProfile runtimeProfile = processor.getRuntimeProfile();
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
-<<<<<<< HEAD
                         Assert.assertTrue(queryCacheStats != null);
                         Assert.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assert.assertTrue(queryCacheStats.getCounter().get(key) == 1);
-=======
-                        Assertions.assertTrue(queryCacheStats != null);
-                        Assertions.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
->>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
+                        Assert.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
                     }
 
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);

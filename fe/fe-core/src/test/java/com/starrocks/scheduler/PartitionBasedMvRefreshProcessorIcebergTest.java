@@ -342,14 +342,6 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         Assert.assertTrue(queryCacheStats != null);
                         queryCacheStats.getCounter().forEach((key, value) -> {
-<<<<<<< HEAD
-                            if (key.contains("cache_partitionNames")) {
-                                Assert.assertEquals(1L, value.longValue());
-                            } else if (key.contains("cache_getPartitionKeyRange")) {
-                                Assert.assertEquals(3L, value.longValue());
-                            } else {
-                                Assert.assertEquals(1L, value.longValue());
-=======
                             if (key.contains("cache_partitionNames_")) {
                                 Assertions.assertEquals(1L, value.longValue());
                             } else if (key.contains("cache_getPartitionKeyRange_")) {
@@ -358,7 +350,6 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                                 Assertions.assertEquals(1L, value.longValue());
                             } else if (key.contains("cache_getUpdatedPartitionNames_")) {
                                 Assertions.assertEquals(2L, value.longValue());
->>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
                             }
                         });
                         Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);

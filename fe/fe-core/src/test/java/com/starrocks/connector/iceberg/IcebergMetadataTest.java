@@ -1143,64 +1143,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
 
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
-<<<<<<< HEAD
-        Assert.assertEquals(2, partitions.size());
-        Assert.assertTrue(partitions.stream().anyMatch(x -> x.getModifiedTime() == -1));
-=======
         Assertions.assertEquals(2, partitions.size());
         // partition's modified time should not be -1 even if snapshot has been expired
         Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getModifiedTime() == -1));
-    }
-
-    @Test
-    public void testPartitionWithReservedName() {
-        // Create a schema with a column named "partition" (which is a reserved word)
-        Schema schemaWithPartitionColumn = new Schema(
-                required(1, "id", Types.IntegerType.get()),
-                required(2, "partition", Types.StringType.get())
-        );
-
-        PartitionSpec specWithPartitionColumn = PartitionSpec.builderFor(schemaWithPartitionColumn)
-                .identity("partition")
-                .bucket("partition", 32)
-                .truncate("partition", 32)
-                .build();
-
-        TestTables.TestTable testTable = create(schemaWithPartitionColumn, specWithPartitionColumn, "test_partition_table", 1);
-
-        List<Column> columns = Lists.newArrayList(
-                new Column("id", INT),
-                new Column("partition", STRING)
-        );
-
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
-                "table_name", "", columns, testTable, Maps.newHashMap());
-
-        List<String> partitionColumnNames = icebergTable.getPartitionColumnNames();
-
-        Assertions.assertNotNull(partitionColumnNames);
-        Assertions.assertEquals(3, partitionColumnNames.size());
-        Assertions.assertEquals("partition", partitionColumnNames.get(0));
-        Assertions.assertEquals("partition", partitionColumnNames.get(1));
-        Assertions.assertEquals("partition", partitionColumnNames.get(2));
-
-        List<String> partitionColumnNamesWithTransform = icebergTable.getPartitionColumnNamesWithTransform();
-        Assertions.assertNotNull(partitionColumnNamesWithTransform);
-        Assertions.assertEquals(3, partitionColumnNamesWithTransform.size());
-        Assertions.assertEquals("`partition`", partitionColumnNamesWithTransform.get(0));
-        Assertions.assertEquals("bucket(`partition`, 32)", partitionColumnNamesWithTransform.get(1));
-        Assertions.assertEquals("truncate(`partition`, 32)", partitionColumnNamesWithTransform.get(2));
-
-        // convert the icebergTable into a thrift value 
-        List<DescriptorTable.ReferencedPartitionInfo> partitions = Lists.newArrayList();
-        TTableDescriptor tableDescriptor = icebergTable.toThrift(partitions);
-        Assertions.assertNotNull(tableDescriptor);
-        TIcebergTable tIcebergTable = tableDescriptor.icebergTable;
-        Assertions.assertEquals(3, tIcebergTable.getPartition_column_names().size());
-        Assertions.assertEquals("partition", tIcebergTable.getPartition_column_names().get(0));
-        Assertions.assertEquals("partition", tIcebergTable.getPartition_column_names().get(1));
-        Assertions.assertEquals("partition", tIcebergTable.getPartition_column_names().get(2));
->>>>>>> 8ce999211f ([BugFix] Fix mv refresh skipped when iceberg table contains expired snapshots (#65969))
     }
 
     @Test
