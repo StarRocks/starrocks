@@ -525,10 +525,10 @@ public class ResourceGroupMgr implements Writable {
 
     public void dropResourceGroupUnlocked(String name) {
         ResourceGroup wg = resourceGroupMap.get(name);
+        wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
         ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logResourceGroupOp(workGroupOp, wal -> removeResourceGroupInternal(name));
-        wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
         resourceGroupOps.add(workGroupOp.toThrift());
     }
 
