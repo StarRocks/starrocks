@@ -337,7 +337,7 @@ In data management, partitioning based on different time granularity is crucial 
 ```SQL
 ALTER TABLE [<db_name>.]<table_name>
 PARTITION BY <time_expr>
-BETWEEN <start_time> AND <end_time>
+[WHERE <time_range_column>] BETWEEN <start_time> AND <end_time>
 ```
 
 #### Parameters

@@ -342,7 +342,7 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 ```sql
 ALTER TABLE [<db_name>.]<table_name>
 PARTITION BY <time_expr>
-BETWEEN <start_time> AND <end_time>
+[WHERE <time_range_column>] BETWEEN <start_time> AND <end_time>
 ```
 
 #### 参数解释
