@@ -2322,6 +2322,29 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
 
+    def wait_alter_table_waiting_txn(self, alter_type="COLUMN", timeout=120):
+        """
+        wait until the status of the latest alter table job becomes WAITING_TXN
+        """
+        status = ""
+        elapsed_time = 0
+        while elapsed_time < timeout:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                time.sleep(0.5)
+                elapsed_time += 0.5
+                continue
+
+            status = res["result"][0][9]
+            if status == "WAITING_TXN":
+                return status
+            time.sleep(0.5)
+            elapsed_time += 0.5
+        tools.assert_true(False, "wait alter table WAITING_TXN timeout after %d seconds, current status: %s" % (timeout, status))
+
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
         wait alter table job finish and return status
