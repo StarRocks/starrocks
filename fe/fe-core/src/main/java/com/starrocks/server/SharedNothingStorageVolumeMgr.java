@@ -70,28 +70,24 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
                                           String comment) throws DdlException {
         String id = UUID.randomUUID().toString();
         StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv);
-        idToSV.put(id, sv);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv, wal -> idToSV.put(id, sv));
         return id;
     }
 
     @Override
     protected void updateInternalNoLock(StorageVolume sv) {
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv);
-        idToSV.put(sv.getId(), sv);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv, wal -> idToSV.put(sv.getId(), sv));
     }
 
     @Override
     protected void replaceInternalNoLock(StorageVolume sv) {
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv);
-        idToSV.put(sv.getId(), sv);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv, wal -> idToSV.put(sv.getId(), sv));
     }
 
     @Override
     protected void removeInternalNoLock(StorageVolume sv) {
         DropStorageVolumeLog log = new DropStorageVolumeLog(sv.getId());
-        GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log);
-        idToSV.remove(sv.getId());
+        GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log, wal -> idToSV.remove(sv.getId()));
     }
 
     @Override
