@@ -170,6 +170,30 @@ public class SchemaInfo {
         return tSchema;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        SchemaInfo that = (SchemaInfo) o;
+        return id == that.id && shortKeyColumnCount == that.shortKeyColumnCount && version == that.version &&
+                schemaHash == that.schemaHash && Double.compare(bloomFilterFpp, that.bloomFilterFpp) == 0 &&
+                compressionLevel == that.compressionLevel && keysType == that.keysType &&
+                storageType == that.storageType &&
+                Objects.equals(columns, that.columns) &&
+                Objects.equals(sortKeyIndexes, that.sortKeyIndexes) &&
+                Objects.equals(sortKeyUniqueIds, that.sortKeyUniqueIds) &&
+                Objects.equals(indexes, that.indexes) &&
+                Objects.equals(bloomFilterColumnNames, that.bloomFilterColumnNames) &&
+                compressionType == that.compressionType;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, shortKeyColumnCount, keysType, storageType, version, schemaHash, columns, sortKeyIndexes,
+                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionType, compressionLevel);
+    }
+
     public static Builder newBuilder() {
         return new Builder();
     }
@@ -228,9 +252,11 @@ public class SchemaInfo {
         }
 
         public Builder addColumns(List<Column> columns) {
-            for (Column col : columns) {
-                addColumn(col);
+            Objects.requireNonNull(columns, "column list is null");
+            if (this.columns == null) {
+                this.columns = new ArrayList<>();
             }
+            this.columns.addAll(columns);
             return this;
         }
 
@@ -288,5 +314,26 @@ public class SchemaInfo {
             Preconditions.checkState(storageType != null);
             return new SchemaInfo(this);
         }
+    }
+
+    public static SchemaInfo fromMaterializedIndex(OlapTable table, long indexId, MaterializedIndexMeta indexMeta) {
+        List<Index> indexes = table.getBaseIndexId() == indexId ? table.getCopiedIndexes() :
+                OlapTable.getIndexesBySchema(table.getCopiedIndexes(), indexMeta.getSchema());
+        return SchemaInfo.newBuilder()
+                .setId(indexMeta.getSchemaId())
+                .setVersion(indexMeta.getSchemaVersion())
+                .setSchemaHash(indexMeta.getSchemaHash())
+                .setKeysType(indexMeta.getKeysType())
+                .setShortKeyColumnCount(indexMeta.getShortKeyColumnCount())
+                .setStorageType(table.getStorageType())
+                .addColumns(indexMeta.getSchema())
+                .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
+                .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                .setIndexes(indexes)
+                .setBloomFilterColumnNames(table.getBfColumnIds())
+                .setBloomFilterFpp(table.getBfFpp())
+                .setCompressionType(table.getCompressionType())
+                .setCompressionLevel(table.getCompressionLevel())
+                .build();
     }
 }

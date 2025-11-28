@@ -23,7 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 public class GlobalStateCheckpointWorker extends CheckpointWorker {
 
     public GlobalStateCheckpointWorker(Journal journal) {
-        super("global_state_checkpoint_worker", journal);
+        super("global-state-checkpoint-worker", journal);
     }
 
     @Override

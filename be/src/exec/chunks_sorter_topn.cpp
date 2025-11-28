@@ -443,6 +443,7 @@ Status ChunksSorterTopn::_build_filter_from_high_low_comparison(const DataSegmen
     // First compare the chunk with last row of this segment.
     const size_t max_value_row_id = _get_number_of_rows_to_sort() - 1;
     const auto& [run, max_rid] = _get_run_by_row_id(max_value_row_id);
+
     get_compare_results_colwise(max_rid, run->orderby, compare_results_array, data_segments, sort_descs);
 
     include_num = 0;

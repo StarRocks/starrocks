@@ -71,10 +71,10 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
-import com.starrocks.alter.dynamictablet.DynamicTablet;
-import com.starrocks.alter.dynamictablet.IdenticalTablet;
-import com.starrocks.alter.dynamictablet.MergingTablet;
-import com.starrocks.alter.dynamictablet.SplittingTablet;
+import com.starrocks.alter.reshard.IdenticalTablet;
+import com.starrocks.alter.reshard.MergingTablet;
+import com.starrocks.alter.reshard.ReshardingTablet;
+import com.starrocks.alter.reshard.SplittingTablet;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.JWTSecurityIntegration;
@@ -448,8 +448,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
 
-    public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY =
-            RuntimeTypeAdapterFactory.of(DynamicTablet.class, "clazz")
+    public static final RuntimeTypeAdapterFactory<ReshardingTablet> TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ReshardingTablet.class, "clazz")
                     .registerSubtype(SplittingTablet.class, "SplittingTablet")
                     .registerSubtype(MergingTablet.class, "MergingTablet")
                     .registerSubtype(IdenticalTablet.class, "IdenticalTablet");
@@ -533,7 +533,7 @@ public class GsonUtils {
                 .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
-                .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(VARIANT_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)

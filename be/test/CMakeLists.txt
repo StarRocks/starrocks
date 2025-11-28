@@ -211,6 +211,7 @@ set(EXEC_FILES
         ./formats/csv/default_value_converter_test.cpp
         ./formats/csv/string_converter_test.cpp
         ./formats/csv/varbinary_converter_test.cpp
+        ./formats/csv/csv_reader_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -467,6 +468,7 @@ SET(DW_TEST_FILES
     ./storage/conjunctive_predicates_test.cpp
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
+    ./storage/data_dir_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp

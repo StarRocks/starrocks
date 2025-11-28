@@ -1629,7 +1629,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testSetGlobalVar() throws Exception {
         ctxToRoot();
         verifyGrantRevoke(
-                "SET global enable_cbo = true",
+                "SET global enable_cross_join = true",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation");

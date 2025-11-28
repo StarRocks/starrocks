@@ -82,7 +82,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     private static final AtomicBoolean IS_METRIC_REGISTERED = new AtomicBoolean(false);
 
     public StarMgrMetaSyncer() {
-        super("StarMgrMetaSyncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
+        super("star-mgr-meta-syncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
 
     @Override

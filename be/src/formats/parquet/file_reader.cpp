@@ -285,6 +285,10 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
+        if (_file_metadata->t_metadata().row_groups[i].num_rows == 0) {
+            continue;
+        }
+
         auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx,
                                                               row_group_first_row, row_group_first_row_id);
         RETURN_IF_ERROR(row_group_reader->init());
