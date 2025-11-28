@@ -618,7 +618,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
 StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::string& path, bool fill_cache) {
     TEST_ERROR_POINT("TabletManager::get_combined_txn_log");
     auto log = std::make_shared<CombinedTxnLogPB>();
-    ProtobufFile file(path);
+    ProtobufFile file(path, OperationKind::TXN_LOG);
     RETURN_IF_ERROR(file.load(log.get(), fill_cache));
     if (fill_cache) {
         _metacache->cache_combined_txn_log(path, log);
@@ -708,7 +708,7 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     }
 #endif
     auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
-    ProtobufFile file(path);
+    ProtobufFile file(path, OperationKind::TXN_LOG);
     return file.save(logs);
 }
 

@@ -264,9 +264,9 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     }
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
-    int64_t start = MonotonicNanos() ASSIGN_OR_RETURN(
-            auto length,
-            Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    int64_t start = MonotonicNanos();
+    ASSIGN_OR_RETURN(auto length, Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint,
+                                                                partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     int64_t end = MonotonicNanos();
     auto cost = (end - start) / 1000000;

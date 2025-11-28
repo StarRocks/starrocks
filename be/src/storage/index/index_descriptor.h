@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <string>
 
+#include "gen_cpp/olap_file.pb.h"
+
 #define INVERTED_INDEX_MARK_NAME "ivt"
 
 namespace starrocks {
