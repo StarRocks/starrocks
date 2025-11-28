@@ -2836,6 +2836,18 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ("missing min_version", cntl.ErrorText());
     }
 
+    {
+        brpc::Controller cntl;
+        GetTabletMetadatasRequest request;
+        GetTabletMetadatasResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_max_version(3);
+        request.set_min_version(4);
+        _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("max_version should be >= min_version", cntl.ErrorText());
+    }
+
     // thread pool is null
     {
         SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",

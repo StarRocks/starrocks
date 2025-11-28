@@ -1394,6 +1394,10 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         cntl->SetFailed("missing min_version");
         return;
     }
+    if (request->max_version() < request->min_version()) {
+        cntl->SetFailed("max_version should be >= min_version");
+        return;
+    }
 
     auto thread_pool = get_tablet_stats_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
