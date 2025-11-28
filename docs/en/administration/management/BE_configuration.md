@@ -118,6 +118,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: When a single allocation request exceeds the configured large-allocation threshold (g_large_memory_alloc_failure_threshold `>` 0 and requested size `>` threshold), this flag controls how the process responds. If true, StarRocks calls std::abort() immediately (hard crash) when such a large allocation is detected. If false, the allocation is blocked and the allocator returns failure (nullptr or ENOMEM) so callers can handle the error. This check only takes effect for allocations that are not wrapped with the TRY_CATCH_BAD_ALLOC path (the mem hook uses a different flow when bad-alloc is being caught). Enable for fail-fast debugging of unexpected huge allocations; keep disabled in production unless you want an immediate process abort on over-large allocation attempts.
 - Introduced in: v3.4.3, 3.5.0, 4.0.0
 
+##### arrow_flight_port
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: TCP port for the BE Arrow Flight SQL server. `-1` indicaes to disable the Arrow Flight service. On non-macOS builds, BE invokes Arrow Flight SQL Server with this port during startup; if the port is unavailable, the server startup fails and the BE process exits. The configured port is reported to the FE in the heartbeat payload.
+- Introduced in: v3.4.0, v3.5.0
+
 ##### be_exit_after_disk_write_hang_second
 
 - Default: 60
@@ -350,6 +359,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: Seconds
 - Is mutable: No
 - Description: Connection timeout (in seconds) used when creating Thrift clients. ClientCacheHelper::_create_client multiplies this value by 1000 and passes it to ThriftClientImpl::set_conn_timeout(), so it controls the TCP/connect handshake timeout for new Thrift connections opened by the BE client cache. This setting affects only connection establishment; send/receive timeouts are configured separately. Very small values can cause spurious connection failures on high-latency networks, while large values delay detection of unreachable peers.
+- Introduced in: v3.2.0
+
+##### thrift_port
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Port used to export the internal Thrift-based BackendService. When the process runs as a Compute Node and this item is set to a non-zero value, it overrides `be_port` and the Thrift server binds to this value; otherwise `be_port` is used. This configuration is deprecated — setting a non-zero `thrift_port` logs a warning advising to use `be_port` instead.
 - Introduced in: v3.2.0
 
 ##### thrift_rpc_connection_max_valid_time_ms
@@ -1105,6 +1123,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Timeout (in seconds) used by backend broker operations for write/IO RPCs. The value is multiplied by 1000 to produce millisecond timeouts and is passed as the default timeout_ms to BrokerFileSystem and BrokerServiceConnection instances (e.g., file export and snapshot upload/download). Increase this when brokers or network are slow or when transferring large files to avoid premature timeouts; decreasing it may cause broker RPCs to fail earlier. This value is defined in common/config and is applied at process start (not dynamically reloadable).
 - Introduced in: v3.2.0
+
+##### enable_load_channel_rpc_async
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
+- Introduced in: v3.5.0
 
 ##### pull_load_task_dir
 
