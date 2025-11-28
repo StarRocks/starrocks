@@ -75,6 +75,18 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         return refs;
     }
 
+    public ColumnRefSet getJoinConditionUsedColumns() {
+        ColumnRefSet refs = new ColumnRefSet();
+        if (predicate != null) {
+            refs.union(predicate.getUsedColumns());
+        }
+        if (onPredicate != null) {
+            refs.union(onPredicate.getUsedColumns());
+        }
+        return refs;
+    }
+
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();

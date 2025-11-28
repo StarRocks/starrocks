@@ -532,6 +532,11 @@ public class IcebergTable extends Table {
                 .equalsIgnoreCase(PARQUET_FORMAT);
     }
 
+    public boolean isParquetFormat() {
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+                .equalsIgnoreCase(PARQUET_FORMAT);
+    }
+
     @Override
     public boolean supportPreCollectMetadata() {
         return true;

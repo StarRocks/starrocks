@@ -34,6 +34,7 @@
 
 #include "runtime/descriptors.h"
 
+#include <protocol/TDebugProtocol.h>
 #include <util/timezone_utils.h>
 
 #include <boost/algorithm/string/join.hpp>
@@ -882,6 +883,45 @@ std::string DescriptorTbl::debug_string() const {
     }
 
     return out.str();
+}
+
+std::string RowPositionDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "RowPositionDescriptor(type=" << _type << " row_source_slot_id=" << _row_source_slot_id
+        << " fetch_ref_slot_ids=[";
+    for (const auto& slot_id : _fetch_ref_slot_ids) {
+        out << slot_id << ", ";
+    }
+    out << "], lookup_ref_slot_ids=[";
+    for (const auto& slot_id : _lookup_ref_slot_ids) {
+        out << slot_id << ", ";
+    }
+    out << "])";
+    return out.str();
+}
+
+RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool) {
+    RowPositionDescriptor* desc = nullptr;
+    switch (t_desc.row_position_type) {
+    case TRowPositionType::ICEBERG_V3_ROW_POSITION: {
+        std::vector<SlotId> fetch_ref_slot_ids;
+        for (const auto& slot_id : t_desc.fetch_ref_slots) {
+            fetch_ref_slot_ids.emplace_back(slot_id);
+        }
+        std::vector<SlotId> lookup_ref_slot_ids;
+        for (const auto& slot_id : t_desc.lookup_ref_slots) {
+            lookup_ref_slot_ids.emplace_back(slot_id);
+        }
+        desc = pool->add(
+                new IcebergV3RowPositionDescriptor(t_desc.row_source_slot, fetch_ref_slot_ids, lookup_ref_slot_ids));
+        break;
+    }
+    default: {
+        DCHECK(false) << "Unknown row position type: " << t_desc.row_position_type;
+        break;
+    }
+    }
+    return desc;
 }
 
 } // namespace starrocks
