@@ -485,8 +485,8 @@ public class CreateFunctionStmtAnalyzerTest {
                                 + "    \"type\" = \"StarrocksJar\",\n"
                                 + "    \"storageVolumeName\" = \"test\",\n"
                                 + "    \"file\" = \"%s\"\n"
-                                + ");", "GLOBAL", "com.cisco.pda.starrocks.udf.PiiDecrypt",
-                        "s3://useast1/udf/sr-udf.jar");
+                                + ");", "GLOBAL", "com.starrocks.udf.decrypt",
+                        "s3://test-bucket/starrocks/udf/test.jar");
                 CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                         createFunctionSql, 32).get(0);
                 new CreateFunctionAnalyzer().analyze(stmt, connectContext);
