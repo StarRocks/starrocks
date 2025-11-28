@@ -14,7 +14,6 @@
 
 package com.starrocks.alter.reshard;
 
-import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
@@ -31,20 +30,8 @@ public class MergingTablet implements ReshardingTablet {
     protected final long newTabletId;
 
     public MergingTablet(List<Long> oldTabletIds, long newTabletId) {
-        // Old tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(TabletReshardUtils.isPowerOfTwo(oldTabletIds.size()),
-                "Old tablet size must be a power of 2, actual: " + oldTabletIds.size());
-
         this.oldTabletIds = oldTabletIds;
         this.newTabletId = newTabletId;
-    }
-
-    public List<Long> getOldTabletIds() {
-        return oldTabletIds;
-    }
-
-    public long getNewTabletId() {
-        return newTabletId;
     }
 
     @Override
@@ -65,6 +52,19 @@ public class MergingTablet implements ReshardingTablet {
     @Override
     public long getFirstOldTabletId() {
         return oldTabletIds.get(0);
+    }
+
+    @Override
+    public List<Long> getOldTabletIds() {
+        return oldTabletIds;
+    }
+
+    public long getNewTabletId() {
+        return newTabletId;
+    }
+
+    public List<Long> getNewTabletIds() {
+        return List.of(newTabletId);
     }
 
     @Override

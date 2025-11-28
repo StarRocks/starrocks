@@ -30,6 +30,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.FindSplitPointRequest;
+import com.starrocks.proto.FindSplitPointResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -176,5 +178,11 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
         increaseMetrics();
         return lakeService.vacuumFull(request);
+    }
+
+    @Override
+    public Future<FindSplitPointResponse> findSplitPoint(FindSplitPointRequest request) {
+        increaseMetrics();
+        return lakeService.findSplitPoint(request);
     }
 }

@@ -86,6 +86,13 @@ public class Status {
         }
     }
 
+    public Status(StatusPB status) {
+        this.errorCode = TStatusCode.findByValue(status.statusCode);
+        if (status.errorMsgs != null && !status.errorMsgs.isEmpty()) {
+            this.errorMsg = status.errorMsgs.get(0);
+        }
+    }
+
     public TStatus toThrift() {
         TStatus tstatus = new TStatus(errorCode);
         if (!StringUtils.isEmpty(errorMsg)) {

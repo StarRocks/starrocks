@@ -14,23 +14,79 @@
 
 package com.starrocks.alter.reshard;
 
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.common.AggregateFuture;
 import com.starrocks.common.Config;
+import com.starrocks.common.Status;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.FindSplitPointRequest;
+import com.starrocks.proto.FindSplitPointResponse;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 public class TabletReshardUtils {
 
-    public static boolean isPowerOfTwo(long n) {
-        return n > 1 && (n & (n - 1)) == 0;
+    public static int calcSplitCount(long dataSize, long splitSize) {
+        int splitCount = (int) (dataSize / splitSize + 1);
+        return Math.min(splitCount, Config.tablet_reshard_max_split_count);
     }
 
-    public static int calcSplitCount(long dataSize, long splitSize) {
-        int splitCount = 1;
-        for (long size = dataSize; size >= splitSize; size /= 2) {
-            int newSplitCount = splitCount * 2;
-            if (newSplitCount > Config.tablet_reshard_max_split_count) {
-                break;
+    public static Future<Map<Long, List<TabletRange>>> findSplitPoint(List<SplittingTablet> splittingTablets) {
+        try {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            Map<ComputeNode, List<SplittingTablet>> nodeToSplittingTablets = new HashMap<>();
+            for (SplittingTablet splittingTablet : splittingTablets) {
+                ComputeNode cn = Utils.getComputeNode(splittingTablet.getOldTabletId(),
+                        WarehouseManager.DEFAULT_RESOURCE, warehouseManager);
+                nodeToSplittingTablets.computeIfAbsent(cn, k -> new ArrayList<>()).add(splittingTablet);
             }
-            splitCount = newSplitCount;
+
+            List<Future<?>> futures = new ArrayList<>(nodeToSplittingTablets.size());
+            for (var entry : nodeToSplittingTablets.entrySet()) {
+                FindSplitPointRequest findSplitPointRequest = new FindSplitPointRequest();
+                findSplitPointRequest.tabletSplitInfos = new ArrayList<>(splittingTablets.size());
+                for (SplittingTablet splittingTablet : entry.getValue()) {
+                    var tabletSplitInfo = new FindSplitPointRequest.TabletSplitInfo();
+                    tabletSplitInfo.tabletId = splittingTablet.getOldTabletId();
+                    tabletSplitInfo.splitCount = splittingTablet.getNewTabletIds().size();
+                    findSplitPointRequest.tabletSplitInfos.add(tabletSplitInfo);
+                }
+
+                ComputeNode cn = entry.getKey();
+                LakeService lakeService = BrpcProxy.getLakeService(cn.getHost(), cn.getBrpcPort());
+                Future<FindSplitPointResponse> future = lakeService.findSplitPoint(findSplitPointRequest);
+                futures.add(future);
+            }
+
+            return new AggregateFuture<Map<Long, List<TabletRange>>>(futures, responses -> {
+                Map<Long, List<TabletRange>> result = new HashMap<>();
+                for (Object response : responses) {
+                    FindSplitPointResponse findSplitPointResponse = (FindSplitPointResponse) response;
+                    Status status = new Status(findSplitPointResponse.status);
+                    if (!status.ok()) {
+                        throw new TabletReshardException("Failed to find split point: " + status);
+                    }
+                    for (var tabletSplitResult : findSplitPointResponse.tabletSplitResults) {
+                        List<TabletRange> splitRanges = tabletSplitResult.splitRanges.stream()
+                                .map(tabletRangePB -> TabletRange.fromProto(tabletRangePB))
+                                .collect(Collectors.toList());
+                        result.put(tabletSplitResult.tabletId, splitRanges);
+                    }
+                }
+                return result;
+            });
+        } catch (Exception e) {
+            throw new TabletReshardException("Failed to find split point", e);
         }
-        return splitCount;
     }
 }

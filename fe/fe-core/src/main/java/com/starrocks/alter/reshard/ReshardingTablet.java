@@ -14,6 +14,8 @@
 
 package com.starrocks.alter.reshard;
 
+import java.util.List;
+
 /*
  * ReshardingTablet saves the old and new tablets info during tablet splitting or merging
  * ReshardingTablet is the base class of SplittingTablet, MergingTablet and IdenticalTablet.
@@ -27,6 +29,10 @@ public interface ReshardingTablet {
     IdenticalTablet getIdenticalTablet();
 
     long getFirstOldTabletId();
+
+    List<Long> getOldTabletIds();
+
+    List<Long> getNewTabletIds();
 
     long getParallelTablets();
 }
