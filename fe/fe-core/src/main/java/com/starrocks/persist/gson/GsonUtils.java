@@ -506,13 +506,7 @@ public class GsonUtils {
                 .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
-<<<<<<< HEAD
-                .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
-=======
                 .registerTypeAdapterFactory(TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY)
-                .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
-                .registerTypeAdapterFactory(VARIANT_RUNTIME_TYPE_ADAPTER_FACTORY)
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
                 .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

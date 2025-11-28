@@ -265,20 +265,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
-<<<<<<< HEAD
-            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
-            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
-=======
-            .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
-            .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
             .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
-            .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
-            .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
-            .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)
-            .put(OperationType.OP_DROP_ALL_BROKER_V2, DropBrokerLog.class)
-            .put(OperationType.OP_DROP_REPOSITORY_V2, DropRepositoryLog.class)
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

@@ -44,13 +44,9 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-<<<<<<< HEAD
-import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
-=======
-import com.starrocks.alter.reshard.TabletReshardJobMgr;
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;

@@ -3934,17 +3934,7 @@ public class Config extends ConfigBase {
     public static long default_statistics_output_row_count = 1L;
 
     /**
-<<<<<<< HEAD
-     * The default scheduler interval for dynamic tablet jobs.
-=======
-     * Whether enable range distribution.
-     */
-    @ConfField(mutable = true, comment = "Whether enable range distribution.")
-    public static boolean enable_range_distribution = false;
-
-    /**
      * The default scheduler interval for tablet reshard jobs.
->>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs.")
     public static long tablet_reshard_job_scheduler_interval_ms = 10;
