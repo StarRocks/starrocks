@@ -89,7 +89,6 @@ keywords: ['shen ji ri zhi']
 - `profile_log_roll_num`: 控制保留的profile日志文件数量，以防止无限增长和过多磁盘使用。默认是5
 - `profile_log_roll_interval`: 指定轮换频率。默认是DAY，意味着每天轮换。当满足轮换条件时，保留最新的5个文件，删除旧文件
 - `profile_log_delete_age`: 控制旧文件在删除前保留的时间。默认是1天
-- `enable_profile_log_compress`: 控制是否启用profile日志压缩。默认是false，意味着压缩未启用
 
 ### `fe.internal.log`
 

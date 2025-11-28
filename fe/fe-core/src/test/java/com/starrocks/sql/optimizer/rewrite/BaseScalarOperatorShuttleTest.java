@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -41,6 +40,8 @@ import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -50,10 +51,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import static com.starrocks.catalog.Type.ARRAY_TINYINT;
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.STRING;
-import static com.starrocks.catalog.Type.TINYINT;
+import static com.starrocks.type.ArrayType.ARRAY_TINYINT;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.IntegerType.TINYINT;
+import static com.starrocks.type.StringType.STRING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
@@ -330,7 +331,7 @@ class BaseScalarOperatorShuttleTest {
 
     @Test
     void visitCaseWhenOperator_1() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         BinaryPredicateOperator whenOperator1 =
                 new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
                         ConstantOperator.createInt(1));
@@ -341,11 +342,11 @@ class BaseScalarOperatorShuttleTest {
         ConstantOperator constantOperator2 = ConstantOperator.createChar("2");
 
         CaseWhenOperator operator =
-                new CaseWhenOperator(Type.VARCHAR, null, ConstantOperator.createChar("others", Type.VARCHAR),
+                new CaseWhenOperator(VarcharType.VARCHAR, null, ConstantOperator.createChar("others", VarcharType.VARCHAR),
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         CaseWhenOperator otherOperator =
-                new CaseWhenOperator(Type.VARCHAR, null, null,
+                new CaseWhenOperator(VarcharType.VARCHAR, null, null,
                         ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
 
         BaseScalarOperatorShuttle testShuttle = new BaseScalarOperatorShuttle() {

@@ -4,6 +4,43 @@ displayed_sidebar: docs
 
 # StarRocks version 4.0
 
+:::warning
+
+StarRocks を v4.0 にアップグレードした後、v3.5.0 および v3.5.1 にダウングレードしないでください。そうするとメタデータの非互換性が発生し、FE がクラッシュする可能性があります。これらの問題を回避するには、クラスタを v3.5.2 以降にダウングレードする必要があります。
+
+:::
+
+## 4.0.1
+
+リリース日：2025年11月17日
+
+### 改善点
+
+- TaskRun セッション変数の処理を最適化し、既知の変数のみを処理するようにしました。 [#64150](https://github.com/StarRocks/starrocks/pull/64150)
+- デフォルトで Iceberg および Delta Lake テーブルの統計情報をメタデータから収集できるようになりました。 [#64140](https://github.com/StarRocks/starrocks/pull/64140)
+- bucket および truncate パーティション変換を使用する Iceberg テーブルの統計情報収集をサポートしました。 [#64122](https://github.com/StarRocks/starrocks/pull/64122)
+- デバッグのために FE `/proc` プロファイルの確認をサポートしました。 [#63954](https://github.com/StarRocks/starrocks/pull/63954)
+- Iceberg REST カタログでの OAuth2 および JWT 認証サポートを強化しました。 [#63882](https://github.com/StarRocks/starrocks/pull/63882)
+- バンドルタブレットのメタデータ検証およびリカバリ処理を改善しました。 [#63949](https://github.com/StarRocks/starrocks/pull/63949)
+- スキャン範囲のメモリ見積もりロジックを改善しました。 [#64158](https://github.com/StarRocks/starrocks/pull/64158)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- バンドルタブレットを公開する際にトランザクションログが削除される問題を修正しました。 [#64030](https://github.com/StarRocks/starrocks/pull/64030)
+- join 後にソートプロパティがリセットされないため、join アルゴリズムがソート特性を保持できない問題を修正しました。 [#64086](https://github.com/StarRocks/starrocks/pull/64086)
+- 透過的なマテリアライズドビューのリライトに関連する問題を修正しました。 [#63962](https://github.com/StarRocks/starrocks/pull/63962)
+
+### 動作変更
+
+- Iceberg カタログに `enable_iceberg_table_cache` プロパティを追加し、Iceberg テーブルキャッシュを無効化して常に最新データを読み込むように設定可能にしました。 [#64082](https://github.com/StarRocks/starrocks/pull/64082)
+- `INSERT ... SELECT` 実行前に外部テーブルをリフレッシュし、最新のメタデータを読み取るようにしました。 [#64026](https://github.com/StarRocks/starrocks/pull/64026)
+- ロックテーブルスロット数を 256 に増加し、スロー・ロックログに `rid` フィールドを追加しました。 [#63945](https://github.com/StarRocks/starrocks/pull/63945)
+- イベントベースのスケジューリングとの非互換性により、`shared_scan` を一時的に無効化しました。 [#63543](https://github.com/StarRocks/starrocks/pull/63543)
+- Hive カタログのキャッシュ TTL のデフォルト値を 24 時間に変更し、未使用のパラメータを削除しました。 [#63459](https://github.com/StarRocks/starrocks/pull/63459)
+- セッション変数および挿入列数に基づいて Partial Update モードを自動判定するようにしました。 [#62091](https://github.com/StarRocks/starrocks/pull/62091)
+
 ## 4.0.0
 
 リリース日：2025年10月17日
@@ -38,7 +75,7 @@ displayed_sidebar: docs
 
 ### ストレージ最適化とクラスタ管理
 
-- 共有データクラスタのクラウドネイティブテーブルにファイルバンドル（File Bundling）最適化を導入。ロード、Compaction、Publish 操作によって生成されるデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減。[#58316](https://github.com/StarRocks/starrocks/issues/58316)
+- 共有データクラスタのクラウドネイティブテーブルにファイルバンドル（File Bundling）最適化を導入。ロード、Compaction、Publish 操作によって生成されるデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減。ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。[#58316](https://github.com/StarRocks/starrocks/issues/58316)
 - 複数テーブル間の Write-Write トランザクション（Multi-Table Write-Write Transaction）をサポートし、INSERT、UPDATE、DELETE 操作のアトミックコミットを制御可能。Stream Load および INSERT INTO インターフェイスをサポートし、ETL やリアルタイム書き込みシナリオにおけるクロステーブルの一貫性を保証。[#61362](https://github.com/StarRocks/starrocks/issues/61362)
 - Routine Load で Kafka 4.0 をサポート。
 - 共有なしクラスタの主キーテーブルに対する全文インバーテッドインデックスをサポート。
@@ -103,3 +140,4 @@ displayed_sidebar: docs
   - `TABLET_STATUS` 列を `SCHEDULE_REASON` に、`CLONE_SRC` 列を `SRC_BE_ID` に、`CLONE_DEST` 列を `DEST_BE_ID` に名称変更しました。
   - `CREATE_TIME`、`SCHEDULE_TIME` および `FINISH_TIME` 列のデータ型を `DOUBLE` から `DATETIME` に変更しました。
 - 一部の FE メトリクスに `is_leader` ラベルを追加しました。[#63004](https://github.com/StarRocks/starrocks/pull/63004)
+- Microsoft Azure Blob Storage および Data Lake Storage Gen 2 をオブジェクト ストレージとして使用する共有データクラスターは、v4.0 へのアップグレード後にデータキャッシュの障害が発生します。システムは自動的にキャッシュを再読み込みします。

@@ -50,7 +50,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
-                "root", "", "default_catalog");
+                "root", "", "default_catalog", "MySQL.Query", null);
         startQueryDetail.setScanRows(100);
         startQueryDetail.setScanBytes(10001);
         startQueryDetail.setReturnRows(1);
@@ -85,8 +85,10 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 "\"cpuCostNs\":1002," +
                 "\"memCostBytes\":100003," +
                 "\"spillBytes\":-1," +
+                "\"cacheMissRatio\":0.0," +
                 "\"warehouse\":\"default_warehouse\"," +
                 "\"catalog\":\"default_catalog\"," +
+                "\"command\":\"MySQL.Query\"," +
                 "\"queryFeMemory\":0}]";
         Assertions.assertEquals(queryDetailString, jsonString);
 

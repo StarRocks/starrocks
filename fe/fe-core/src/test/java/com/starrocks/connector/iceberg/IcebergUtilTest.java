@@ -15,10 +15,13 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.thrift.TExprMinMaxValue;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
@@ -46,11 +49,11 @@ public class IcebergUtilTest {
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(5, "date", Types.StringType.get()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(3), "id", Type.INT, true),
-                new SlotDescriptor(new SlotId(5), "date", Type.STRING, true)
+                new SlotDescriptor(new SlotId(3), "id", IntegerType.INT, true),
+                new SlotDescriptor(new SlotId(5), "date", StringType.STRING, true)
         );
-        slots.get(0).setColumn(new Column("id", Type.INT, true));
-        slots.get(1).setColumn(new Column("date", Type.STRING, true));
+        slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
+        slots.get(1).setColumn(new Column("date", StringType.STRING, true));
         var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
                 5, ByteBuffer.wrap("2023-01-01".getBytes()));
         var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
@@ -92,6 +95,86 @@ public class IcebergUtilTest {
             assertEquals(10, result.get(3).maxValue);
             assertEquals(1, result.get(3).nullValueCount);
             assertEquals(10, result.get(3).valueCount);
+        }
+    }
+
+    @Test
+    public void testTableDataLocationDefaultAndCustom() {
+        org.apache.iceberg.Table table = org.mockito.Mockito.mock(org.apache.iceberg.Table.class);
+
+        org.mockito.Mockito.when(table.location()).thenReturn("s3://bucket/path/");
+        Map<String, String> properties = new HashMap<>();
+        org.mockito.Mockito.when(table.properties()).thenReturn(properties);
+
+        String defaultLocation = IcebergUtil.tableDataLocation(table);
+        assertEquals("s3://bucket/path/data", defaultLocation);
+
+        properties.put(TableProperties.WRITE_DATA_LOCATION, "s3://bucket/custom_data");
+        String customLocation = IcebergUtil.tableDataLocation(table);
+        assertEquals("s3://bucket/custom_data", customLocation);
+    }
+
+    @Test
+    public void testParseMinMaxValuesFromDisorderedSlots() {
+        Schema schema =
+                new Schema(required(3, "id", Types.IntegerType.get()),
+                        required(5, "date", Types.StringType.get()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(5), "id", IntegerType.INT, true),
+                new SlotDescriptor(new SlotId(3), "date", StringType.STRING, true)
+        );
+        slots.get(0).setColumn(new Column("id", IntegerType.INT, true));
+        slots.get(1).setColumn(new Column("date", StringType.STRING, true));
+        var lowerBounds = Map.of(3, ByteBuffer.wrap(new byte[] {1, 0, 0, 0}),
+                5, ByteBuffer.wrap("2023-01-01".getBytes()));
+        var upperBounds = Map.of(3, ByteBuffer.wrap(new byte[] {10, 0, 0, 0}),
+                5, ByteBuffer.wrap("2023-01-10".getBytes()));
+        var valueCounts = Map.of(3, (long) 10, 5, (long) 10);
+
+        {
+            var nullValueCounts = Map.of(3, (long) 0, 5, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(0, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(0, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = new HashMap<Integer, Long>();
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(0, result.size());
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
+            var result =
+                    IcebergUtil.parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(1, result.size());
+            assertEquals(1, result.get(3).minValue);
+            assertEquals(10, result.get(3).maxValue);
+            assertEquals(1, result.get(3).nullValueCount);
+            assertEquals(10, result.get(3).valueCount);
+        }
+        {
+            var nullValueCounts = Map.of(3, (long) 1, 5, (long) 0);
+            Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds,
+                    nullValueCounts, valueCounts, slots);
+            assertEquals(1, tExprMinMaxValueMap.size());
+            assertEquals(1, tExprMinMaxValueMap.get(5).min_int_value);
+            assertEquals(10, tExprMinMaxValueMap.get(5).max_int_value);
         }
     }
 }

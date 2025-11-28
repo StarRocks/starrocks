@@ -174,10 +174,27 @@ install_homebrew_deps() {
         "zstd"
         "lz4"
         "bzip2"
+        "zlib"
 
         # Other libraries
+        "boost"          # Required by vectorscan build for CMake config files
         "icu4c"
         "xsimd"
+        "gperftools"
+        "re2"
+        "rapidjson"
+        "simdjson"
+        "libevent"
+        "fast_float"
+        "googletest"
+        "apache-arrow"
+        "abseil"
+        "streamvbyte"
+        "ragel"
+        "opentelemetry-cpp"
+        "libpulsar"
+        "librdkafka"
+        "poco"
     )
 
     for dep in "${homebrew_deps[@]}"; do
@@ -200,6 +217,7 @@ install_homebrew_deps() {
 GFLAGS_VERSION="2.2.2"
 GLOG_VERSION="0.7.1"
 PROTOBUF_VERSION="3.14.0"
+BOOST_VERSION="1.86.0"
 THRIFT_VERSION="0.20.0"
 LEVELDB_VERSION="1.20"
 BRPC_VERSION="1.9.0"
@@ -208,6 +226,12 @@ BITSHUFFLE_VERSION="0.5.1"
 VECTORSCAN_VERSION="5.4.12"
 VELOCYPACK_VERSION="XYZ1.0"
 ASYNC_PROFILER_VERSION="4.1"
+
+# Boost
+BOOST_DOWNLOAD="https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.gz"
+BOOST_NAME="boost_1_86_0.tar.gz"
+BOOST_SOURCE="boost_1_86_0"
+BOOST_MD5SUM="2575e74ffc3ef1cd0babac2c1ee8bdb5"
 
 # Thrift
 THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
@@ -261,6 +285,19 @@ ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releas
 ASYNC_PROFILER_NAME="async-profiler-4.1-macos.zip"
 ASYNC_PROFILER_SOURCE="async-profiler-4.1-macos"
 
+# FMT
+FMT_VERSION="8.1.1"
+FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/8.1.1/fmt-8.1.1.zip"
+FMT_NAME="fmt-8.1.1.zip"
+FMT_SOURCE="fmt-8.1.1"
+FMT_MD5SUM="16dcd48ecc166f10162450bb28aabc87"
+
+# CCTZ (Google's C++ time zone library)
+CCTZ_VERSION="2.3"
+CCTZ_DOWNLOAD="https://github.com/google/cctz/archive/v2.3.tar.gz"
+CCTZ_NAME="cctz-2.3.tar.gz"
+CCTZ_SOURCE="cctz-2.3"
+CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
 download_source() {
     local name="$1"
@@ -332,7 +369,7 @@ build_gflags() {
     fi
 
     cd "gflags-$GFLAGS_VERSION"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -384,7 +421,7 @@ build_glog() {
         log_success "glog patches applied successfully"
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -431,6 +468,68 @@ __hash_memory(const void* __ptr, size_t __size) noexcept
 EOF
 
     log_success "shim created at $shim_file"
+}
+
+build_boost() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libboost_system.a" && -f "$INSTALL_DIR/include/boost/version.hpp" ]]; then
+        log_success "boost already built, skipping"
+        return 0
+    fi
+
+    log_info "Building boost $BOOST_VERSION..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/boost"
+
+    download_source "boost" "$BOOST_VERSION" \
+        "$BOOST_DOWNLOAD" \
+        "$BOOST_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$BOOST_SOURCE" ]]; then
+        tar -xzf "$src_dir/$BOOST_NAME"
+    fi
+
+    cd "$BOOST_SOURCE"
+
+    # Bootstrap boost build system using Xcode's Apple Clang (not Homebrew LLVM 21)
+    # LLVM 21.1.1's libc++ removed __hash_memory which B2 needs
+    # B2 is just a build tool, not linked to StarRocks, so ABI compatibility is not an issue
+    if [[ ! -f "./b2" ]]; then
+        log_info "Running bootstrap.sh with Xcode clang..."
+        # Temporarily modify PATH to use Xcode's clang first, and explicitly set CC/CXX
+        PATH="/usr/bin:$PATH" CC=/usr/bin/clang CXX=/usr/bin/clang++ ./bootstrap.sh --prefix="$INSTALL_DIR" \
+            --with-toolset=clang \
+            --without-libraries=python
+    fi
+
+    # Build boost with static linking and C++11
+    # Use clang from homebrew LLVM for the actual libraries (ABI compatibility with StarRocks)
+    # Exclude contract library due to compatibility issues with newer Clang on macOS ARM64
+    log_info "Building boost libraries (this may take a while)..."
+    ./b2 \
+        toolset=clang \
+        link=static \
+        runtime-link=static \
+        threading=multi \
+        variant=release \
+        cxxflags="-std=c++11 -fPIC -march=armv8-a -O3 -I$INSTALL_DIR/include -stdlib=libc++ -D_LIBCPP_HAS_NO_HASH_MEMORY=1" \
+        linkflags="-L$INSTALL_DIR/lib -stdlib=libc++" \
+        --prefix="$INSTALL_DIR" \
+        --layout=system \
+        --without-test \
+        --without-mpi \
+        --without-graph \
+        --without-graph_parallel \
+        --without-python \
+        --without-contract \
+        -j"$PARALLEL_JOBS" \
+        install
+
+    log_success "boost built successfully"
 }
 
 build_protobuf() {
@@ -560,9 +659,11 @@ EOF
     $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
 
     # Configure for macOS ARM64 with static libraries
-    ./configure LDFLAGS="-L${INSTALL_DIR}/lib -L${OPENSSL_ROOT_DIR}/lib" \
+    # Use our compiled boost instead of homebrew's to ensure ABI compatibility
+    # libevent is from homebrew since it's just for the nonblocking library
+    ./configure LDFLAGS="-L${INSTALL_DIR}/lib -L${OPENSSL_ROOT_DIR}/lib -L${HOMEBREW_PREFIX}/lib" \
         LIBS="-lssl -lcrypto -ldl $shim_obj" \
-        CPPFLAGS="-DTHRIFT_STATIC_DEFINE $CPPFLAGS" \
+        CPPFLAGS="-DTHRIFT_STATIC_DEFINE -I${INSTALL_DIR}/include -I${HOMEBREW_PREFIX}/include $CPPFLAGS" \
         --prefix="$INSTALL_DIR" \
         --docdir="$INSTALL_DIR/doc" \
         --enable-static \
@@ -588,9 +689,9 @@ EOF
         --without-java \
         --without-rs \
         --with-cpp \
-        --with-libevent="$INSTALL_DIR" \
-        --with-boost="$HOMEBREW_PREFIX" \
-        CXXFLAGS="$CXXFLAGS -DUSE_BOOST_THREAD"
+        --with-libevent="${HOMEBREW_PREFIX}" \
+        --with-boost="$INSTALL_DIR" \
+        --with-openssl="$OPENSSL_ROOT_DIR"
 
     # Fix naming issue for macOS
     if [[ -f compiler/cpp/thrifty.hh ]]; then
@@ -741,20 +842,45 @@ build_brpc() {
         log_success "brpc patches applied successfully"
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     # Use our compiled protobuf-3.14.0 and glog-0.7.1
+    # CRITICAL: Put our bin directory first in PATH to use local protoc 3.14.0
+    # instead of Homebrew's protoc, which would generate incompatible .pb.h files
+    export PATH="$INSTALL_DIR/bin:$PATH"
     export PKG_CONFIG_PATH="$INSTALL_DIR/lib/pkgconfig:$PKG_CONFIG_PATH"
     export PROTOBUF_ROOT="$INSTALL_DIR"
+
+    # Set CPLUS_INCLUDE_PATH and C_INCLUDE_PATH to ensure local headers are found first
+    export CPLUS_INCLUDE_PATH="$INSTALL_DIR/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
+    export C_INCLUDE_PATH="$INSTALL_DIR/include${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
+
+    # Verify we're using the correct protoc
+    log_info "Using protoc: $(which protoc) - $(protoc --version | head -1)"
+
+    # Prepend our include directory to ensure local headers are used first
+    local brpc_include_flag="-isystem $INSTALL_DIR/include"
+    local CXX_FLAGS="$brpc_include_flag"
+    local C_FLAGS="$brpc_include_flag"
+    if [[ -n "${CXXFLAGS:-}" ]]; then
+        CXX_FLAGS+=" $CXXFLAGS"
+    fi
+    if [[ -n "${CFLAGS:-}" ]]; then
+        C_FLAGS+=" $CFLAGS"
+    fi
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
+        -DCMAKE_CXX_FLAGS="$CXX_FLAGS" \
+        -DCMAKE_C_FLAGS="$C_FLAGS" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DWITH_GLOG=ON \
         -DBRPC_WITH_GLOG=ON \
         -DWITH_THRIFT=OFF \
+        -Dgflags_DIR="$INSTALL_DIR/lib/cmake/gflags" \
         -DProtobuf_DIR="$INSTALL_DIR/lib/cmake/protobuf" \
         -Dglog_DIR="$INSTALL_DIR/lib/cmake/glog" \
         -DGLOG_INCLUDE_PATH="$INSTALL_DIR/include" \
@@ -781,6 +907,7 @@ build_rocksdb() {
 
     local src_dir="$THIRDPARTY_DIR/src"
     local build_dir="$THIRDPARTY_DIR/build/rocksdb"
+    local PATCHED_MARK="patched_mark"
 
     download_source "rocksdb" "$ROCKSDB_VERSION" \
         "https://github.com/facebook/rocksdb/archive/v$ROCKSDB_VERSION.tar.gz" \
@@ -797,23 +924,21 @@ build_rocksdb() {
 
     # Apply RocksDB metadata header patch for macOS libc++ compatibility
     local patch_file="$THIRDPARTY_DIR/patches/rocksdb-6.22.1-metadata-header.patch"
-    if [[ -f "$patch_file" ]]; then
-        # Check if patch is already applied by looking for our marker comment
-        if ! grep -q "The metadata that describes a SST file" include/rocksdb/metadata.h 2>/dev/null; then
-            log_info "Applying RocksDB metadata header patch..."
-            if patch -p1 --forward --batch < "$patch_file" >/dev/null; then
-                log_success "RocksDB metadata patch applied successfully"
-            else
-                log_warn "RocksDB metadata patch could not be applied (maybe already applied). Proceeding."
-            fi
+    if [[ ! -f "$PATCHED_MARK" && -f "$patch_file" ]]; then
+        log_info "Applying RocksDB metadata header patch..."
+        if patch -p1 --forward --batch < "$patch_file" >/dev/null 2>&1; then
+            touch "$PATCHED_MARK"
+            log_success "RocksDB metadata patch applied successfully"
         else
-            log_success "RocksDB metadata patch already applied, skipping"
+            log_warn "RocksDB metadata patch could not be applied (maybe already applied). Proceeding."
         fi
+    elif [[ -f "$PATCHED_MARK" ]]; then
+        log_success "RocksDB metadata patch already applied, skipping"
     else
         log_warn "RocksDB metadata patch not found at $patch_file"
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -865,7 +990,7 @@ build_velocypack() {
     fi
 
     cd "velocypack-$VELOCYPACK_VERSION"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1157,13 +1282,13 @@ build_icu() {
     sed -i '' 's/\r$//' ./configure
     sed -i '' 's/\r$//' ./mkinstalldirs
 
-    # Clear compile flags to use ICU defaults
-    unset CPPFLAGS
-    unset CXXFLAGS
-    unset CFLAGS
-
     # Use a subshell to prevent environment variable leakage
     (
+        # Clear compile flags to use ICU defaults (only affects this subshell)
+        unset CPPFLAGS
+        unset CXXFLAGS
+        unset CFLAGS
+
         export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
         export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
         ./runConfigureICU macOS --prefix="$INSTALL_DIR" --enable-static --disable-shared
@@ -1216,8 +1341,8 @@ build_vectorscan() {
     cd "vectorscan-vectorscan-$VECTORSCAN_VERSION"
 
     # Clean and rebuild
-    rm -rf build
-    mkdir -p build && cd build
+    rm -rf cmake_build
+    mkdir -p cmake_build && cd cmake_build
 
     # Dynamically detect Boost version
     local boost_version
@@ -1369,7 +1494,7 @@ build_simdutf() {
     fi
 
     cd "$SIMDUTF_SOURCE"
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1385,6 +1510,127 @@ build_simdutf() {
     make install
 
     log_success "simdutf built successfully"
+}
+
+build_fmt() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libfmt.a" && -f "$INSTALL_DIR/include/fmt/format.h" ]]; then
+        log_success "fmt already built, skipping"
+        return 0
+    fi
+
+    log_info "Building fmt $FMT_VERSION..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/fmt"
+
+    download_source "fmt" "$FMT_VERSION" \
+        "$FMT_DOWNLOAD" \
+        "$FMT_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$FMT_SOURCE" ]]; then
+        unzip -q "$src_dir/$FMT_NAME"
+    fi
+
+    cd "$FMT_SOURCE"
+    mkdir -p cmake_build && cd cmake_build
+
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DFMT_TEST=OFF \
+        -DFMT_DOC=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+    make -j"$PARALLEL_JOBS"
+    make install
+
+    log_success "fmt built successfully"
+}
+
+build_cctz() {
+    # Check if already built
+    if [[ -f "$INSTALL_DIR/lib/libcctz.a" && -f "$INSTALL_DIR/include/cctz/civil_time.h" ]]; then
+        log_success "cctz already built, skipping"
+        return 0
+    fi
+
+    log_info "Building cctz $CCTZ_VERSION..."
+
+    local src_dir="$THIRDPARTY_DIR/src"
+    local build_dir="$THIRDPARTY_DIR/build/cctz"
+
+    download_source "cctz" "$CCTZ_VERSION" \
+        "$CCTZ_DOWNLOAD" \
+        "$CCTZ_NAME"
+
+    mkdir -p "$build_dir"
+    cd "$build_dir"
+
+    if [[ ! -d "$CCTZ_SOURCE" ]]; then
+        tar xzf "$src_dir/$CCTZ_NAME"
+    fi
+
+    cd "$CCTZ_SOURCE"
+
+    # Build only the library (not examples/tools which require CoreFoundation)
+    # Compile object files
+    local obj_files=(
+        "civil_time_detail.o"
+        "time_zone_fixed.o"
+        "time_zone_format.o"
+        "time_zone_if.o"
+        "time_zone_impl.o"
+        "time_zone_info.o"
+        "time_zone_libc.o"
+        "time_zone_lookup.o"
+        "time_zone_posix.o"
+        "zone_info_source.o"
+    )
+
+    log_info "Compiling cctz object files..."
+    for src in src/*.cc; do
+        obj=$(basename "$src" .cc).o
+        # Skip tool, test, and benchmark files
+        if [[ "$obj" == "time_tool.o" || "$obj" == "cctz_benchmark.o" || "$obj" =~ _test\.o$ ]]; then
+            continue
+        fi
+        $CXX -march=armv8-a -O3 -stdlib=libc++ -g -Wall -Iinclude -std=c++11 -fPIC -c -o "$obj" "$src"
+    done
+
+    # Create static library
+    log_info "Creating static library libcctz.a..."
+    $AR rcs libcctz.a ${obj_files[@]}
+
+    # Install manually (cctz Makefile doesn't have install target)
+    mkdir -p "$INSTALL_DIR/lib"
+    mkdir -p "$INSTALL_DIR/include/cctz"
+
+    # Copy library
+    if [[ -f libcctz.a ]]; then
+        cp -f libcctz.a "$INSTALL_DIR/lib/"
+        log_info "Installed libcctz.a to $INSTALL_DIR/lib/"
+    else
+        log_error "libcctz.a not found"
+        return 1
+    fi
+
+    # Copy headers from source directory
+    if [[ -d include ]]; then
+        cp -f include/cctz/*.h "$INSTALL_DIR/include/cctz/"
+        log_info "Installed headers to $INSTALL_DIR/include/cctz/"
+    else
+        log_error "include directory not found"
+        return 1
+    fi
+
+    log_success "cctz built and installed successfully"
 }
 
 build_croaringbitmap() {
@@ -1424,7 +1670,7 @@ build_croaringbitmap() {
         fi
     fi
 
-    mkdir -p build && cd build
+    mkdir -p cmake_build && cd cmake_build
 
     # Configure AVX support for macOS ARM64
     local FORCE_AVX=FALSE
@@ -1469,6 +1715,12 @@ build_croaringbitmap() {
 
             # Copy headers
             cp -r include/roaring/* "$INSTALL_DIR/include/roaring/"
+
+            # Copy C++ header if exists
+            if [[ -f "cpp/roaring.hh" ]]; then
+                cp cpp/roaring.hh "$INSTALL_DIR/include/roaring/"
+                log_info "Copied C++ header roaring.hh"
+            fi
 
             # Compile the static library manually with proper include paths
             local object_files=()
@@ -1563,6 +1815,12 @@ EOF
         make -j"$PARALLEL_JOBS"
         make install
 
+        # Copy C++ header if exists (CMake might not install it)
+        if [[ -f "../cpp/roaring.hh" ]]; then
+            cp ../cpp/roaring.hh "$INSTALL_DIR/include/roaring/"
+            log_info "Copied C++ header roaring.hh"
+        fi
+
         # Inject libc++ hash memory shim for macOS compatibility if needed
         if [[ -f "$INSTALL_DIR/lib/libroaring.a" ]]; then
             local shim_src="$build_dir/hash_memory_impl.cc"
@@ -1599,6 +1857,7 @@ build_source_deps() {
     # Layer 1: Basic libraries (no dependencies)
     build_gflags
     build_glog
+    build_boost
     build_protobuf
     build_thrift
     build_leveldb
@@ -1609,6 +1868,8 @@ build_source_deps() {
     build_croaringbitmap
     build_curl
     build_simdutf
+    build_fmt
+    build_cctz
     build_async_profiler
 
     # Layer 2: Libraries that depend on Layer 1
@@ -1667,6 +1928,8 @@ main() {
         "libicuuc.a"
         "libicui18n.a"
         "libroaring.a"
+        "libfmt.a"
+        "libcctz.a"
     )
 
     local missing_libs=()

@@ -21,15 +21,11 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -37,11 +33,19 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -161,7 +165,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         BinaryOperator<ConstantOperator> add = (lhs, rhs) -> {
             String opName = ArithmeticExpr.Operator.ADD.getName();
             com.starrocks.catalog.Function fn =
-                    Expr.getBuiltinFunction(opName, new Type[] {lhs.getType(), rhs.getType()},
+                    ExprUtils.getBuiltinFunction(opName, new Type[] {lhs.getType(), rhs.getType()},
                             com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF);
             // for decimal types, add function should be rectified.
             if (call.getType().isDecimalV3()) {
@@ -220,17 +224,17 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
         String opName = ArithmeticExpr.Operator.DIVIDE.getName();
         com.starrocks.catalog.Function
-                fn = Expr.getBuiltinFunction(opName, new Type[] {call.getType(), call.getType()},
+                fn = ExprUtils.getBuiltinFunction(opName, new Type[] {call.getType(), call.getType()},
                 com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF);
 
         // for decimal types, divide function should be rectified.
         if (call.getType().isDecimalV3()) {
             Preconditions.checkArgument(sum.getType().isDecimalV3());
             ScalarType sumType = (ScalarType) sum.getType();
-            sumType = ScalarType.createDecimalV3Type(call.getType().getPrimitiveType(), sumType.getScalarPrecision(),
+            sumType = TypeFactory.createDecimalV3Type(call.getType().getPrimitiveType(), sumType.getScalarPrecision(),
                     sumType.getScalarScale());
             int precision = PrimitiveType.getMaxPrecisionOfDecimal(call.getType().getPrimitiveType());
-            ScalarType countType = ScalarType.createDecimalV3Type(call.getType().getPrimitiveType(), precision, 0);
+            ScalarType countType = TypeFactory.createDecimalV3Type(call.getType().getPrimitiveType(), precision, 0);
             fn = new ScalarFunction(fn.getFunctionName(), new Type[] {sumType, countType}, call.getType(),
                     fn.hasVarArgs());
         }
@@ -349,7 +353,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         ScalarOperator c1 = predicate.getChild(0);
         if (c1.isConstantRef() && ((ConstantOperator) c1).isNull()) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
 
         if (notAllConstant(predicate.getChildren())) {
@@ -364,10 +368,15 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         if (hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
 
         return ConstantOperator.createBoolean(predicate.isNotIn());
+    }
+
+    @Override
+    public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        return predicate;
     }
 
     //
@@ -390,7 +399,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        if (predicate.getChild(0).getType().equals(Type.NULL)) {
+        if (predicate.getChild(0).getType().equals(NullType.NULL)) {
             return ConstantOperator.createBoolean(!predicate.isNotNull());
         }
 
@@ -483,7 +492,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                                                ScalarOperatorRewriteContext context) {
         if (!BinaryType.EQ_FOR_NULL.equals(predicate.getBinaryType())
                 && hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
 
         if (notAllConstant(predicate.getChildren())) {
@@ -524,7 +533,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
                                                      ScalarOperatorRewriteContext context) {
         if (hasNull(predicate.getChildren())) {
-            return ConstantOperator.createNull(Type.BOOLEAN);
+            return ConstantOperator.createNull(BooleanType.BOOLEAN);
         }
         if (notAllConstant(predicate.getChildren()) || predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
             return predicate;

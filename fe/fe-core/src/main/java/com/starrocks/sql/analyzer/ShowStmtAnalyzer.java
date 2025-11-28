@@ -25,7 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -36,7 +36,6 @@ import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
@@ -46,8 +45,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -83,13 +82,15 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.DateType;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -563,11 +564,7 @@ public class ShowStmtAnalyzer {
         }
 
         private void analyzeShowPredicate(ShowStmt showStmt) {
-            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
-                return;
-            }
-
-            Predicate predicate = sortedShowStmt.getPredicate();
+            Predicate predicate = showStmt.getPredicate();
             if (predicate == null) {
                 return;
             }
@@ -578,18 +575,18 @@ public class ShowStmtAnalyzer {
                         !(expr instanceof LikePredicate)) {
                     throw new SemanticException(
                             "Invalid predicate in SHOW statement. Only '=' and 'LIKE' operators are supported. " +
-                                    "Found: '" + expr.toSql() + "'");
+                                    "Found: '" + ExprToSql.toSql(expr) + "'");
                 }
 
                 if (!(expr.getChild(0) instanceof SlotRef)) {
                     throw new SemanticException(
-                            "Invalid left operator in predicate '" + expr.toSql() + "'. " +
+                            "Invalid left operator in predicate '" + ExprToSql.toSql(expr) + "'. " +
                                     "Left side must be a column reference");
                 }
 
                 if (!(expr.getChild(1) instanceof StringLiteral)) {
                     throw new SemanticException(
-                            "Invalid right operator in predicate '" + expr.toSql() + "'. " +
+                            "Invalid right operator in predicate '" + ExprToSql.toSql(expr) + "'. " +
                                     "Right side must be a string literal. " +
                                     "Example: column = 'value' or column LIKE 'pattern%'");
                 }
@@ -709,7 +706,8 @@ public class ShowStmtAnalyzer {
                             + "\"2019-12-22|2019-12-22 22:22:00\"");
                 }
                 try {
-                    subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
+                    subExpr.setChild(1,
+                            ExprCastFunction.castTo(subExpr.getChild(1), DateType.DATETIME));
                 } catch (AnalysisException e) {
                     throw new SemanticException("expression %s cast to datetime error: %s",
                             subExpr.getChild(1).toString(), e.getMessage());
@@ -805,7 +803,7 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
-        public void analyzeOrderByItems(EnhancedShowStmt node) {
+        public void analyzeOrderByItems(ShowStmt node) {
             ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(node);
             List<OrderByElement> orderByElements = node.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {

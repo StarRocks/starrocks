@@ -198,6 +198,9 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+    // When the mem_tracker is destroyed, manually setting _consumption to null can easily
+    // trigger a use-after-free bug in MemTracker.
+    _consumption = nullptr;
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {
@@ -268,6 +271,9 @@ std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) con
             str << "Mem usage has exceed the limit of the resource group [" << label() << "]. "
                 << "You can change the limit by modifying [mem_limit] of this group";
         }
+        break;
+    case MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL:
+        str << "Mem usage has exceed the limit of resource group memory pool [" << label() << "]. ";
         break;
     case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
         str << "Mem usage has exceed the big query limit of the resource group [" << label() << "]. "

@@ -42,7 +42,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -53,6 +52,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.TestWithFeService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
@@ -151,8 +151,8 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         LinkedList<Column> schemaList = new LinkedList<>();
         String colName1 = "__starrocks_shadow_c1";
         String colName2 = "__starrocks_shadow_c2";
-        Column col1 = new Column(colName1, Type.INT);
-        Column col2 = new Column(colName2, Type.INT);
+        Column col1 = new Column(colName1, IntegerType.INT);
+        Column col2 = new Column(colName2, IntegerType.INT);
         schemaList.add(col1);
         schemaList.add(col2);
 
@@ -428,25 +428,25 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         List<Index> newIndexes = tbl.getCopiedIndexes();
 
         Assertions.assertDoesNotThrow(
-                    () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100, 100,
-                                            indexToNewSchemaId, false));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 100,
+                                            indexToNewSchemaId, false, -1));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
-                    () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101, 101,
-                                            indexToNewSchemaId, true));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 101,
+                                            indexToNewSchemaId, true, 101));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         OlapTableState beforeState = tbl.getState();
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
-                    () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, 102, indexToNewSchemaId,
-                                            false));
+                    () -> GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler()
+                                .modifyTableAddOrDrop(db, tbl, indexSchemaMap, newIndexes, 102, indexToNewSchemaId,
+                                            false, -1));
         tbl.setState(beforeState);
     }
 

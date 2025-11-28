@@ -21,6 +21,7 @@
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/global_dict/parser.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
@@ -121,7 +122,7 @@ void LakeDataSource::close(RuntimeState* state) {
     if (_reader) {
         // close reader to update statistics before update counters
         _reader->close();
-        update_counter();
+        update_counter(state);
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -133,8 +134,9 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
-    auto* chunk_ptr = chunk->get();
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
@@ -696,7 +698,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
-void LakeDataSource::update_counter() {
+void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
@@ -891,6 +893,9 @@ void LakeDataSource::update_counter() {
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
+    if (state && state->query_ctx()) {
+        state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);
     }
 }
 

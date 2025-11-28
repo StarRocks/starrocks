@@ -1,4 +1,4 @@
--- name: test_range_predicate_rewrite
+-- name: test_range_predicate_rewrite @slow
 create database db_${uuid0};
 use db_${uuid0};
 CREATE TABLE `t0` (
@@ -125,5 +125,5 @@ and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col ord
 select sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
 and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col order by 1;
 
-function: check_hit_materialized_view("select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */ sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10) and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;", "date_mv", "month_mv", "year_mv")
+function: print_hit_materialized_view("select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */ sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10) and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;", "date_mv", "month_mv", "year_mv")
 

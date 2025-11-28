@@ -4,6 +4,38 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.9
+
+Release Date: November 24, 2025
+
+### Behavior Changes
+
+- Changed the return type of `json_extract` in the Trino dialect from STRING to JSON. This may cause incompatibility in CAST, UNNEST, and type check logic. [#59718](https://github.com/StarRocks/starrocks/pull/59718)
+- The metric that reports “connections per user” under `/metrics` now requires admin authentication. Without authentication, only total connection counts are exposed, preventing information leakage of all usernames via metrics. [#64635](https://github.com/StarRocks/starrocks/pull/64635)
+- Removed the deprecated system variable `analyze_mv`. Materialized view refresh no longer automatically triggers ANALYZE jobs, avoiding large numbers of background statistics tasks. This changes expectations for users relying on legacy behavior. [#64863](https://github.com/StarRocks/starrocks/pull/64863)
+- Changed the overflow detection logic of casting from LARGEINT to DECIMAL128 on x86. `INT128_MIN * 1` is no longer considered an overflow to ensure consistent casting semantics for extreme values. [#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- Added a configurable table-level lock timeout to `finishTransaction`. If a table lock cannot be acquired within the timeout, finishing the transaction will fail for this round and be retried later, rather than blocking indefinitely. The final result is unchanged, but the lock behavior is more explicit. [#63981](https://github.com/StarRocks/starrocks/pull/63981)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- During BE start, if loading tablet metadata from RocksDB times out, RocksDB may restart loading from the beginning and accidentally pick up stale tablet entries, risking data version loss. [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- Data corruption issues related to CRC32C checksum for delete-vectors of Lake Primary Key tables. [#65006](https://github.com/StarRocks/starrocks/pull/65006) [#65354](https://github.com/StarRocks/starrocks/pull/65354) [#65442](https://github.com/StarRocks/starrocks/pull/65442) [#65354](https://github.com/StarRocks/starrocks/pull/65354)
+- When the internal `flat_path` string is empty because the JSON hyper extraction path is `$` or all paths are skipped, calling `substr` will throw an exception and cause BE crash. [#65260](https://github.com/StarRocks/starrocks/pull/65260)
+- When spilling large strings to disk, insufficient length checks, using 32‑bit attachment sizes, and issues in the BlockReader could cause crashes. [#65373](https://github.com/StarRocks/starrocks/pull/65373)
+- When multiple HTTP requests reuse the same TCP connection, if a non‑ExecuteSQL request arrives after an ExecuteSQL request, the `HttpConnectContext` cannot be unregistered at channel close, causing HTTP context leaks. [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- Primitive value loss issue under certain circumstances when JSON data is being flattened. [#64939](https://github.com/StarRocks/starrocks/pull/64939) [#64703](https://github.com/StarRocks/starrocks/pull/64703)
+- Crash in `ChunkAccumulator` when chunks are appended with incompatible JSON schemas. [#64894](https://github.com/StarRocks/starrocks/pull/64894)
+- In `AsyncFlushOutputStream`, asynchronous I/O tasks may attempt to access a destroyed `MemTracker`, resulting in use‑after‑free crashes. [#64735](https://github.com/StarRocks/starrocks/pull/64735) 
+- Concurrent Compaction tasks against the same Lake Primary Key table lack integrity checks, which could leave metadata in an inconsistent state after a failed publish.  [#65005](https://github.com/StarRocks/starrocks/pull/65005)
+- When spilling Hash Joins, if the build side’s `set_finishing` task failed, it only recorded the status in the spiller, allowing the Probe side to continue, and eventually causing a crash or an indefinite loop. [#65027](https://github.com/StarRocks/starrocks/pull/65027)
+- During tablet migration, if the only newest replica is marked as DECOMMISSION, the version of the target replica is outdated and stuck at VERSION_INCOMPLETE. [#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- Use-after-free issue because the relevant Block Group is not released when `PartitionedSpillerWriter` is removing partitions. [#63903](https://github.com/StarRocks/starrocks/pull/63903) [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- BE crash caused by MorselQueue's failure to get splits. [#62753](https://github.com/StarRocks/starrocks/pull/62753)
+- In shared-data clusters, Sorted-by-key Scans with multiple I/O tasks could produce wrong results in sort-based aggregations. [#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- On ARM, reading Parquet columns for certain Hive external tables could crash in LZ4 conversion when copying NULL bitmaps because the destination null buffer pointer was stale due to out-of-order execution. [#63294](https://github.com/StarRocks/starrocks/pull/63294)
+
 ## 3.4.8
 
 Release Date: September 30, 2025

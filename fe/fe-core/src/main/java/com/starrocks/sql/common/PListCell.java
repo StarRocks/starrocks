@@ -22,14 +22,16 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -105,19 +107,13 @@ public final class PListCell extends PCell {
     public Set<PListCell> toSingleValueCells() {
         if (partitionItems == null) {
             return Sets.newHashSet();
+        } else if (partitionItems.size() == 1) {
+            return Set.of(this);
+        } else {
+            return partitionItems.stream()
+                    .map(item -> new PListCell(ImmutableList.of(item)))
+                    .collect(Collectors.toSet());
         }
-        return partitionItems.stream()
-                .map(item -> new PListCell(ImmutableList.of(item)))
-                .collect(Collectors.toSet());
-    }
-
-    public Set<PListAtom> toAtoms() {
-        if (partitionItems == null) {
-            return Sets.newHashSet();
-        }
-        return partitionItems.stream()
-                .map(item -> new PListAtom(item))
-                .collect(Collectors.toSet());
     }
 
     public List<PartitionKey> toPartitionKeys(List<Column> columns) throws AnalysisException {
@@ -129,7 +125,7 @@ public final class PListCell extends PCell {
                     String.format("item size %s is not equal to columns size %s", item.size(), columns.size()));
             List<LiteralExpr> literalExprs = Lists.newArrayList();
             for (int i = 0; i < item.size(); i++) {
-                literalExprs.add(LiteralExpr.create(item.get(i), columns.get(i).getType()));
+                literalExprs.add(LiteralExprFactory.create(item.get(i), columns.get(i).getType()));
             }
             partitionKeys.add(new PartitionKey(literalExprs, types));
         }
@@ -171,10 +167,15 @@ public final class PListCell extends PCell {
                 String value1 = atom1.get(j);
                 String value2 = atom2.get(j);
                 // if one of the partition item is default partition value, prefer the other one
-                if (isDefaultPartitionValue(value1)) {
+                boolean isValue1Default = isDefaultPartitionValue(value1);
+                boolean isValue2Default = isDefaultPartitionValue(value2);
+                if (isValue1Default && isValue2Default) {
+                    continue;
+                }
+                if (isValue1Default) {
                     return -1;
                 }
-                if (isDefaultPartitionValue(value2)) {
+                if (isValue2Default) {
                     return 1;
                 }
                 ans = atom1.get(j).compareTo(atom2.get(j));
@@ -213,9 +214,46 @@ public final class PListCell extends PCell {
 
     @Override
     public String toString() {
-        return "PListCell{" +
-                "items=" + partitionItems +
-                '}';
+        if (CollectionUtils.isEmpty(partitionItems)) {
+            return "";
+        }
+        int maxLen = Config.max_mv_task_run_meta_message_values_length;
+        int size = partitionItems.size();
+        StringBuilder result = new StringBuilder();
+        if (size <= maxLen) {
+            // Join all names if under limit
+            for (int i = 0; i < size; i++) {
+                List<String> item = partitionItems.get(i);
+                result.append("(");
+                result.append(String.join(",", item));
+                result.append(")");
+                if (i != size - 1) {
+                    result.append(",");
+                }
+            }
+        } else {
+            int half = maxLen / 2;
+            // prefix
+            for (int i = 0; i < half; i++) {
+                List<String> item = partitionItems.get(i);
+                result.append("(");
+                result.append(String.join(",", item));
+                result.append(")");
+                result.append(",");
+            }
+            result.append("...,");
+            // suffix
+            for (int i = size - half; i < size; i++) {
+                List<String> item = partitionItems.get(i);
+                result.append("(");
+                result.append(String.join(",", item));
+                result.append(")");
+                if (i != size - 1) {
+                    result.append(",");
+                }
+            }
+        }
+        return result.toString();
     }
 
     /**

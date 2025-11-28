@@ -36,6 +36,7 @@
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
+#include "exprs/agg/histogram_hll_ndv.h"
 #include "exprs/agg/hll_ndv.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
@@ -178,6 +179,8 @@ public:
     static auto MakeSumDistinctAggregateFunctionV2();
     template <LogicalType LT>
     static auto MakeDecimalSumDistinctAggregateFunction();
+    template <LogicalType LT, int compute_bits>
+    static auto MakeFusedMultiDistinctAggregateFunction();
 
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
     static AggregateFunctionPtr MakeRetentionAggregateFunction();
@@ -201,7 +204,11 @@ public:
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
+    static AggregateFunctionPtr MakePercentileApproxArrayAggregateFunction();
+
     static AggregateFunctionPtr MakePercentileApproxWeightedAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileApproxWeightedArrayAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
@@ -258,6 +265,11 @@ public:
     template <LogicalType LT>
     static AggregateFunctionPtr MakeHistogramAggregationFunction() {
         return std::make_shared<HistogramAggregationFunction<LT>>();
+    }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeHistogramHllNdvAggregationFunction() {
+        return std::make_shared<HistogramHllNdvAggregateFunction<LT>>();
     }
 
     // Stream MV Retractable Agg Functions
@@ -394,6 +406,11 @@ auto AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
 template <LogicalType LT>
 auto AggregateFactory::MakeDecimalSumDistinctAggregateFunction() {
     return std::make_shared<DecimalDistinctAggregateFunction<LT, AggDistinctType::SUM>>();
+}
+
+template <LogicalType LT, int compute_bits>
+auto AggregateFactory::MakeFusedMultiDistinctAggregateFunction() {
+    return std::make_shared<FusedMultiDistinctFunction<LT, compute_bits>>();
 }
 
 template <LogicalType LT>

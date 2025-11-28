@@ -58,8 +58,8 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -104,7 +104,6 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -116,6 +115,9 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -156,8 +158,8 @@ public class ShowExecutorSimpleTest {
     public static void beforeClass() {
         FeConstants.runningUnitTest = true;
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -809,11 +811,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
+                Column columnYear = new Column("year", IntegerType.INT);
+                Column columnDt = new Column("dt", IntegerType.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -863,11 +865,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
+                Column columnYear = new Column("year", IntegerType.INT);
+                Column columnDt = new Column("dt", IntegerType.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);

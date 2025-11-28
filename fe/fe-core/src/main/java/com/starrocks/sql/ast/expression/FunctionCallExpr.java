@@ -39,15 +39,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TAggregateExpr;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 import java.util.Objects;
@@ -56,6 +52,7 @@ import java.util.Set;
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 
 public class FunctionCallExpr extends Expr {
+    protected Function fn;
     private FunctionName fnName;
     // private BuiltinAggregateFunction.Operator aggOp;
     private FunctionParams fnParams;
@@ -87,6 +84,10 @@ public class FunctionCallExpr extends Expr {
 
     public Function getFn() {
         return fn;
+    }
+
+    public void setFn(Function fn) {
+        this.fn = fn;
     }
 
     public FunctionName getFnName() {
@@ -163,6 +164,7 @@ public class FunctionCallExpr extends Expr {
 
     protected FunctionCallExpr(FunctionCallExpr other) {
         super(other);
+        fn = other.fn;
         fnName = other.fnName;
         isAnalyticFnCall = other.isAnalyticFnCall;
         //   aggOp = other.aggOp;
@@ -177,7 +179,6 @@ public class FunctionCallExpr extends Expr {
         }
         this.isMergeAggFn = other.isMergeAggFn;
         this.mergeAggFnHasNullableChild = other.mergeAggFnHasNullableChild;
-        fn = other.fn;
     }
 
     public static final Set<String> NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS =
@@ -237,17 +238,6 @@ public class FunctionCallExpr extends Expr {
         return fnParams.isDistinct();
     }
 
-    @Override
-    protected void toThrift(TExprNode msg) {
-        // TODO: we never serialize this to thrift if it's an aggregate function
-        // except in test cases that do it explicitly.
-        if (isAggregate() || isAnalyticFnCall) {
-            msg.node_type = TExprNodeType.AGG_EXPR;
-            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
-        } else {
-            msg.node_type = TExprNodeType.FUNCTION_CALL;
-        }
-    }
 
     public void setMergeAggFnHasNullableChild(boolean value) {
         this.mergeAggFnHasNullableChild = value;
@@ -336,7 +326,7 @@ public class FunctionCallExpr extends Expr {
     @Override
     public int hashCode() {
         // @Note: fnParams is different with children Expr. use children plz.
-        return Objects.hash(super.hashCode(), type, opcode, fnName, nondeterministicId);
+        return Objects.hash(super.hashCode(), type, fnName, nondeterministicId, fn);
     }
 
     @Override
@@ -349,7 +339,8 @@ public class FunctionCallExpr extends Expr {
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
                 && nondeterministicId.equals(o.nondeterministicId)
-                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements())
+                && Objects.equals(fn, o.fn);
     }
 
     /**
@@ -373,13 +364,4 @@ public class FunctionCallExpr extends Expr {
         return false;
     }
 
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        Type type = getFn().getReturnType();
-        if (!type.equals(targetType)) {
-            return super.uncheckedCastTo(targetType);
-        } else {
-            return this;
-        }
-    }
 }

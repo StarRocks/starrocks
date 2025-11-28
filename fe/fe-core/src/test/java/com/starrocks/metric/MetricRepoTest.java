@@ -14,6 +14,7 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -69,7 +70,7 @@ public class MetricRepoTest extends PlanTestBase {
 
         // verify metric
         JsonMetricVisitor visitor = new JsonMetricVisitor("m");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
         MetricRepo.getMetric(visitor, params);
         String json = visitor.build();
         Assertions.assertTrue(StringUtils.isNotEmpty(json));
@@ -263,7 +264,7 @@ public class MetricRepoTest extends PlanTestBase {
             Config.enable_routine_load_lag_time_metrics = true;
             
             JsonMetricVisitor visitor = new JsonMetricVisitor("test");
-            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true);
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
             
             // This should execute line 914 and call RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor)
             String result = MetricRepo.getMetric(visitor, params);
@@ -283,6 +284,107 @@ public class MetricRepoTest extends PlanTestBase {
         } finally {
             // Restore original config value
             Config.enable_routine_load_lag_time_metrics = originalConfigValue;
+        }
+    }
+
+    @Test
+    public void testTotalDataSizeBytesMetric() throws Exception {
+        // Test that total_data_size_bytes correctly aggregates across multiple databases
+        starRocksAssert.withDatabase("test_multi_1").useDatabase("test_multi_1")
+                .withTable("create table t1(c1 int, c2 int) properties('replication_num' = '1')");
+        starRocksAssert.withDatabase("test_multi_2").useDatabase("test_multi_2")
+                .withTable("create table t2(c1 int, c2 int) properties('replication_num' = '1')");
+
+        try {
+            // Get the databases and update their used quota
+            Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_multi_1");
+            Database db2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_multi_2");
+            // Set some test values
+            db1.usedDataQuotaBytes.set(1000L);
+            db2.usedDataQuotaBytes.set(2000L);
+
+            // Collect metrics
+            PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("test");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+            MetricRepo.getMetric(visitor, params);
+            String output = visitor.build();
+
+            // Verify total_data_size_bytes metric exists, the actual metric name will be prefixed with "test_"
+            Assertions.assertTrue(output.contains("test_total_data_size_bytes"),
+                    "Metric output should contain total_data_size_bytes");
+
+            // Verify it's a gauge metric
+            Assertions.assertTrue(output.contains("# TYPE test_total_data_size_bytes gauge"),
+                    "Should be declared as a gauge metric");
+
+            for (String line : output.split("\n")) {
+                if (line.startsWith("test_total_data_size_bytes")) {
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        long totalValue = Long.parseLong(parts[1]);
+                        // The total should at least include our two test databases
+                        // Note: It may include other databases from the test framework
+                        Assertions.assertTrue(totalValue >= 3000L,
+                                "Total should be at least 3000 (1000 + 2000 from our test databases)");
+                    }
+                }
+            }
+        } finally {
+            starRocksAssert.dropDatabase("test_multi_1");
+            starRocksAssert.dropDatabase("test_multi_2");
+        }
+    }
+
+    @Test
+    public void testTotalDataSizeBytesMetric_PrometheusFormat() throws Exception {
+        // Test that the metric is correctly formatted in Prometheus format
+        starRocksAssert.withDatabase("test_prometheus").useDatabase("test_prometheus")
+                .withTable("create table t1(c1 int, c2 int) properties('replication_num' = '1')");
+
+        try {
+            PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("starrocks");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+            MetricRepo.getMetric(visitor, params);
+            String output = visitor.build();
+
+            // Parse the output to find our metric
+            String[] lines = output.split("\n");
+            boolean foundTypeDeclaration = false;
+            boolean foundMetricValue = false;
+
+            for (String line : lines) {
+                if (line.contains("# TYPE") && line.contains("total_data_size_bytes")) {
+                    foundTypeDeclaration = true;
+                    Assertions.assertTrue(line.contains("gauge"),
+                            "Should be declared as gauge type");
+                }
+                if (line.contains("# HELP") && line.contains("total_data_size_bytes")) {
+                    Assertions.assertTrue(line.contains("total size of all databases"),
+                            "Help text should describe the metric");
+                }
+                if (line.startsWith("starrocks_total_data_size_bytes")) {
+                    foundMetricValue = true;
+                    // Extract the value and verify it's a number
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        try {
+                            long value = Long.parseLong(parts[1]);
+                            Assertions.assertTrue(value >= 0,
+                                    "Metric value should be non-negative");
+                        } catch (NumberFormatException e) {
+                            Assertions.fail("Metric value should be a valid number: " + parts[1]);
+                        }
+                    }
+                }
+            }
+
+            Assertions.assertTrue(foundTypeDeclaration,
+                    "Should have TYPE declaration for total_data_size_bytes");
+            Assertions.assertTrue(foundMetricValue,
+                    "Should have the actual metric value in output");
+
+        } finally {
+            starRocksAssert.dropDatabase("test_prometheus");
         }
     }
 }

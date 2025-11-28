@@ -23,7 +23,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OdpsTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -39,6 +38,8 @@ import com.starrocks.sql.optimizer.rule.implementation.OdpsScanImplementationRul
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -53,13 +54,13 @@ import static org.mockito.Mockito.when;
 
 public class OdpsScanTest extends MockedBase {
 
-    static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
-    static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
+    static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+    static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, StringType.STRING, "name", true);
 
     static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<>() {
         {
-            put(intColumnOperator, new Column("id", Type.INT));
-            put(strColumnOperator, new Column("name", Type.STRING));
+            put(intColumnOperator, new Column("id", IntegerType.INT));
+            put(strColumnOperator, new Column("name", StringType.STRING));
         }
     };
 
@@ -78,7 +79,7 @@ public class OdpsScanTest extends MockedBase {
         logicalOdpsScanOperator = new LogicalOdpsScanOperator(odpsTable,
                 scanColumnMap, Maps.newHashMap(), -1,
                 new BinaryPredicateOperator(BinaryType.EQ,
-                        new ColumnRefOperator(1, Type.INT, "id", true),
+                        new ColumnRefOperator(1, IntegerType.INT, "id", true),
                         ConstantOperator.createInt(1)));
         OptExpression scan = new OptExpression(logicalOdpsScanOperator);
         List<OptExpression> transform = odpsRule.transform(scan, optimizerContext);

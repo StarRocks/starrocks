@@ -338,6 +338,9 @@ public class OperationType {
     public static final short OP_MODIFY_ENABLE_LOAD_PROFILE = 11142;
 
     @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_DEFAULT_BUCKET_NUM = 11144;
+
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 11143;
 
     // external table analyze
@@ -632,10 +635,10 @@ public class OperationType {
     public static final short OP_DISABLE_SPM_BASELINE_LOG = 13544;
 
     @IgnorableOnReplayFailed
-    public static final short OP_UPDATE_DYNAMIC_TABLET_JOB_LOG = 13550;
+    public static final short OP_UPDATE_TABLET_RESHARD_JOB_LOG = 13550;
 
     @IgnorableOnReplayFailed
-    public static final short OP_REMOVE_DYNAMIC_TABLET_JOB_LOG = 13551;
+    public static final short OP_REMOVE_TABLET_RESHARD_JOB_LOG = 13551;
 
     // New V2 operations for logEdit to logJsonObject migration
     public static final short OP_SAVE_NEXTID_V2 = 13552;

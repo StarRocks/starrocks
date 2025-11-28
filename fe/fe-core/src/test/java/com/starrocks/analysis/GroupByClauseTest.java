@@ -17,11 +17,12 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,7 @@ public class GroupByClauseTest {
             groupingExprs.add(expr);
         }
 
-        GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
+        GroupByClause groupByClause = new GroupByClause(ExprUtils.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
         Assertions.assertEquals("`testdb`.`t`.`k2`, `testdb`.`t`.`k2`, `testdb`.`t`.`k3`, `testdb`.`t`.`k1`",
                 groupByClause.toSql());
@@ -62,7 +63,7 @@ public class GroupByClauseTest {
             groupingExprs.add(expr);
         }
 
-        GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
+        GroupByClause groupByClause = new GroupByClause(ExprUtils.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
         try {
             groupByClause.reset();
@@ -79,7 +80,7 @@ public class GroupByClauseTest {
             Expr expr = new SlotRef(new TableName("testdb", "t"), col);
             groupingExprs.add(expr);
         }
-        GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
+        GroupByClause groupByClause = new GroupByClause(ExprUtils.cloneList(groupingExprs),
                 GroupByClause.GroupingType.GROUP_BY);
     }
 }

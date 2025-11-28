@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -33,19 +33,19 @@ public class KeyColumnUsageSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("COLUMN_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("COLUMN_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ORDINAL_POSITION", IntegerType.BIGINT)
                         .column("POSITION_IN_UNIQUE_CONSTRAINT",
-                                ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("REFERENCED_TABLE_SCHEMA", ScalarType.createVarchar(64))
-                        .column("REFERENCED_TABLE_NAME", ScalarType.createVarchar(64))
-                        .column("REFERENCED_COLUMN_NAME", ScalarType.createVarchar(64))
+                                IntegerType.BIGINT)
+                        .column("REFERENCED_TABLE_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("REFERENCED_TABLE_NAME", TypeFactory.createVarchar(64))
+                        .column("REFERENCED_COLUMN_NAME", TypeFactory.createVarchar(64))
                         .build(), TSchemaTableType.SCH_KEY_COLUMN_USAGE);
     }
 }

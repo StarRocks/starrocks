@@ -19,8 +19,8 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,9 +36,10 @@ import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -224,8 +225,8 @@ public class RBACExecutorTest {
         CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
 
         Type[] arg = new Type[1];
-        arg[0] = Type.INT;
-        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
+        arg[0] = IntegerType.INT;
+        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, IntegerType.INT,
                 false, TFunctionBinaryType.SRJAR,
                 "objectFile", "mainClass.getCanonicalName()", "", "");
         function.setChecksum("checksum");

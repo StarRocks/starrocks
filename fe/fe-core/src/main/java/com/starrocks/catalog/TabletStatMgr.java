@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -57,7 +56,6 @@ import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -91,7 +89,7 @@ public class TabletStatMgr extends FrontendDaemon {
     private LocalDateTime lastWorkTimestamp = LocalDateTime.MIN;
 
     public TabletStatMgr() {
-        super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
+        super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
     public LocalDateTime getLastWorkTimestamp() {
@@ -99,6 +97,9 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     public boolean workTimeIsMustAfter(LocalDateTime time) {
+        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
+            return false;
+        }
         return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 
@@ -183,9 +184,9 @@ public class TabletStatMgr extends FrontendDaemon {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 }
 
-                // Trigger dynamic tablet splitting
+                // Trigger tablet reshard
                 if (GlobalStateMgr.getCurrentState().isLeader()) {
-                    triggerDynamicTablet(db, olapTable, maxTabletSize);
+                    triggerTabletReshard(db, olapTable, maxTabletSize);
                 }
             }
         }
@@ -194,19 +195,8 @@ public class TabletStatMgr extends FrontendDaemon {
         lastWorkTimestamp = LocalDateTime.now();
     }
 
-    private void triggerDynamicTablet(Database db, OlapTable table, long maxTabletSize) {
-        if (maxTabletSize >= Config.dynamic_tablet_split_size && table.isEnableDynamicTablet()) {
-            try {
-                GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr().createDynamicTabletJob(
-                        db, table, new SplitTabletClause());
-            } catch (StarRocksException e) {
-                LOG.info("Failed to create split tablet job for table {}.{}. ",
-                        db.getFullName(), table.getName(), e);
-            } catch (Exception e) {
-                LOG.warn("Failed to create split tablet job for table {}.{}. ",
-                        db.getFullName(), table.getName(), e);
-            }
-        }
+    private void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize) {
+        // TODO(TackY)
     }
 
     private void updateLocalTabletStat() {

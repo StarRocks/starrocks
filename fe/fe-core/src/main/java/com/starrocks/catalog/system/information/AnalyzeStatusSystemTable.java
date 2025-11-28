@@ -17,8 +17,8 @@ package com.starrocks.catalog.system.information;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.MetaNotFoundException;
@@ -26,7 +26,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -35,7 +34,10 @@ import com.starrocks.thrift.TAnalyzeStatusItem;
 import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
@@ -46,22 +48,23 @@ import java.util.Optional;
  */
 public class AnalyzeStatusSystemTable extends SystemTable {
 
+    private static final Logger LOG = LogManager.getLogger(AnalyzeStatusSystemTable.class);
     private static final String NAME = "analyze_status";
     private static final List<Column> COLUMNS;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StartTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
+                    .addColumn(new Column("Id", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Database", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Table", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Columns", TypeFactory.createVarchar(200)))
+                    .addColumn(new Column("Type", TypeFactory.createVarchar(20)))
+                    .addColumn(new Column("Schedule", TypeFactory.createVarchar(20)))
+                    .addColumn(new Column("Status", TypeFactory.createVarchar(20)))
+                    .addColumn(new Column("StartTime", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("EndTime", TypeFactory.createVarchar(60)))
+                    .addColumn(new Column("Properties", TypeFactory.createVarchar(200)))
+                    .addColumn(new Column("Reason", TypeFactory.createVarchar(100)))
                     .build();
     static {
         COLUMNS = Lists.newArrayList(META_DATA.getColumns());
@@ -117,6 +120,13 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                     continue;
                 }
             } catch (MetaNotFoundException ignored) {
+                continue;
+            } catch (Throwable e) {
+                // TODO: change the exception into an checked exception in MetadataMgr.getTable
+                // The underlying SDK might throw an deep exception with this message
+                if (!(e.getMessage() != null && e.getMessage().contains("table not found"))) {
+                    LOG.warn("failed to get table meta", e);
+                }
                 continue;
             }
 

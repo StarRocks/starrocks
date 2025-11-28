@@ -21,9 +21,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
@@ -349,12 +350,14 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                         QueryMaterializationContext.QueryCacheStats queryCacheStats = getQueryCacheStats(runtimeProfile);
                         Assertions.assertTrue(queryCacheStats != null);
                         queryCacheStats.getCounter().forEach((key, value) -> {
-                            if (key.contains("cache_partitionNames")) {
+                            if (key.contains("cache_partitionNames_")) {
                                 Assertions.assertEquals(1L, value.longValue());
-                            } else if (key.contains("cache_getPartitionKeyRange")) {
+                            } else if (key.contains("cache_getPartitionKeyRange_")) {
                                 Assertions.assertEquals(3L, value.longValue());
-                            } else {
+                            } else if (key.contains("cache_getPartitionNameWithPartitionInfo_")) {
                                 Assertions.assertEquals(1L, value.longValue());
+                            } else if (key.contains("cache_getUpdatedPartitionNames_")) {
+                                Assertions.assertEquals(2L, value.longValue());
                             }
                         });
                         Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
@@ -486,9 +489,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                 "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day` as a;");
 
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView partitionedMaterializedView =
-                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(testDb.getFullName(), "iceberg_day_mv1"));
+        MaterializedView partitionedMaterializedView = getMv(testDb.getFullName(), "iceberg_day_mv1");
         triggerRefreshMv(testDb, partitionedMaterializedView);
 
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
@@ -585,8 +586,10 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
         partitions = partitionedMaterializedView.getPartitions();
         Assertions.assertEquals(0, partitions.size());
+        FeConstants.enablePruneEmptyOutputScan = true;
         starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz`")
                 .explainWithout(mvName);
         starRocksAssert.dropMaterializedView(mvName);
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 }

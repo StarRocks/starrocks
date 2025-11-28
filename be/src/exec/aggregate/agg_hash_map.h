@@ -735,13 +735,13 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
                 } else {
-                    _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                    _find_key((*agg_states)[i], (*not_founds)[i], key);
                 }
             } else if constexpr (HTBuildOp::allocate) {
                 _emplace_key(key, pool, allocate_func, (*agg_states)[i],
                              FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
         }
     }

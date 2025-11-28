@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -29,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
@@ -37,6 +37,10 @@ import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -52,16 +56,16 @@ public class ScalarOperatorRewriterTest {
     @Test
     public void testRewrite() {
         ScalarOperator root = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
-                new BetweenPredicateOperator(false, new ColumnRefOperator(3, Type.INT, "test3", true),
-                        new ColumnRefOperator(4, Type.INT, "test4", true),
-                        new ColumnRefOperator(5, Type.INT, "test5", true)),
+                new BetweenPredicateOperator(false, new ColumnRefOperator(3, IntegerType.INT, "test3", true),
+                        new ColumnRefOperator(4, IntegerType.INT, "test4", true),
+                        new ColumnRefOperator(5, IntegerType.INT, "test5", true)),
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                         new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
-                                new ColumnRefOperator(1, Type.INT, "test1", true)),
+                                new ColumnRefOperator(1, IntegerType.INT, "test1", true)),
                         new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
-                                new ColumnRefOperator(2, Type.INT, "test2", true))
+                                new ColumnRefOperator(2, IntegerType.INT, "test2", true))
                 ));
 
         ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
@@ -92,12 +96,12 @@ public class ScalarOperatorRewriterTest {
         ScalarOperator root = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
                 new BinaryPredicateOperator(BinaryType.EQ,
                         ConstantOperator.createInt(1),
-                        new ColumnRefOperator(0, Type.VARCHAR, "test0", true)),
+                        new ColumnRefOperator(0, VarcharType.VARCHAR, "test0", true)),
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                         new BinaryPredicateOperator(BinaryType.EQ,
                                 ConstantOperator.createInt(1),
-                                new ColumnRefOperator(1, Type.BIGINT, "test1", true)),
-                        new CastOperator(Type.BOOLEAN, ConstantOperator.createNull(Type.BIGINT))));
+                                new ColumnRefOperator(1, IntegerType.BIGINT, "test1", true)),
+                        new CastOperator(BooleanType.BOOLEAN, ConstantOperator.createNull(IntegerType.BIGINT))));
 
         ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator result = operatorRewriter.rewrite(root,
@@ -108,8 +112,8 @@ public class ScalarOperatorRewriterTest {
         assertEquals(OperatorType.VARIABLE, result.getChild(0).getChild(0).getOpType());
         assertEquals(OperatorType.CALL, result.getChild(0).getChild(1).getOpType());
 
-        assertEquals(Type.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(0).getType().getPrimitiveType());
-        assertEquals(Type.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(1).getType().getPrimitiveType());
+        assertEquals(VarcharType.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(0).getType().getPrimitiveType());
+        assertEquals(VarcharType.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(1).getType().getPrimitiveType());
 
         assertEquals(OperatorType.COMPOUND, result.getChild(1).getOpType());
         assertEquals(OperatorType.BINARY, result.getChild(1).getChild(0).getOpType());
@@ -117,7 +121,7 @@ public class ScalarOperatorRewriterTest {
         assertEquals(OperatorType.CONSTANT, result.getChild(1).getChild(0).getChild(1).getOpType());
 
         assertEquals(OperatorType.CALL, result.getChild(1).getChild(1).getOpType());
-        assertEquals(Type.BOOLEAN, result.getChild(1).getChild(1).getType());
+        assertEquals(BooleanType.BOOLEAN, result.getChild(1).getChild(1).getType());
     }
 
     @Test
@@ -136,8 +140,8 @@ public class ScalarOperatorRewriterTest {
         // b > a => a < b
         {
             BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GT,
-                    new ColumnRefOperator(0, Type.VARCHAR, "b", true),
-                    new ColumnRefOperator(1, Type.BIGINT, "a", true)
+                    new ColumnRefOperator(0, VarcharType.VARCHAR, "b", true),
+                    new ColumnRefOperator(1, IntegerType.BIGINT, "a", true)
             );
 
             ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
@@ -149,8 +153,8 @@ public class ScalarOperatorRewriterTest {
         // b:101 > b:2 => b:2 < b:101
         {
             BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GT,
-                    new ColumnRefOperator(101, Type.VARCHAR, "b", true),
-                    new ColumnRefOperator(2, Type.BIGINT, "b", true)
+                    new ColumnRefOperator(101, VarcharType.VARCHAR, "b", true),
+                    new ColumnRefOperator(2, IntegerType.BIGINT, "b", true)
             );
 
             ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
@@ -162,7 +166,7 @@ public class ScalarOperatorRewriterTest {
 
     @Test
     public void testNormalizeIsNull() {
-        ColumnRefOperator column1 = new ColumnRefOperator(0, Type.INT, "test0", false);
+        ColumnRefOperator column1 = new ColumnRefOperator(0, IntegerType.INT, "test0", false);
         IsNullPredicateOperator isnotNull = new IsNullPredicateOperator(true, column1);
         ScalarOperator rewritten = new ScalarOperatorRewriter()
                 .rewrite(isnotNull, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
@@ -176,15 +180,15 @@ public class ScalarOperatorRewriterTest {
     @Test
     public void testRangeExtract() {
         Supplier<ScalarOperator> predicate1Maker = () -> {
-            ColumnRefOperator col1 = new ColumnRefOperator(1, Type.DATE, "dt", false);
-            CallOperator call = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE,
+            ColumnRefOperator col1 = new ColumnRefOperator(1, DateType.DATE, "dt", false);
+            CallOperator call = new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATE,
                     Arrays.asList(ConstantOperator.createVarchar("YEAR"), col1));
             return new BinaryPredicateOperator(BinaryType.EQ, call, ConstantOperator.createDate(
                     LocalDateTime.of(2024, 1, 1, 0, 0, 0)));
         };
 
         Supplier<ScalarOperator> predicate2Maker = () -> {
-            ColumnRefOperator col2 = new ColumnRefOperator(2, Type.VARCHAR, "mode", false);
+            ColumnRefOperator col2 = new ColumnRefOperator(2, VarcharType.VARCHAR, "mode", false);
             return new BinaryPredicateOperator(BinaryType.EQ, col2, ConstantOperator.createVarchar("Buzz"));
         };
 
@@ -199,5 +203,30 @@ public class ScalarOperatorRewriterTest {
         String expect = "date_trunc(YEAR, 1: dt) = 2024-01-01 AND 2: mode = Buzz";
         String actual = result.toString();
         Assertions.assertEquals(expect, actual, actual);
+    }
+
+    @Test
+    public void testDictMappingBothSidesInfiniteLoop() {
+        ColumnRefOperator dictColumn1 = new ColumnRefOperator(21, IntegerType.INT, "FIO_MANAGER_DICT", false);
+        ColumnRefOperator dictColumn2 = new ColumnRefOperator(24, IntegerType.INT, "MANAGER_DRBP_DICT", false);
+
+        ColumnRefOperator originColumn1 = new ColumnRefOperator(10, VarcharType.VARCHAR, "FIO_MANAGER", true);
+        ColumnRefOperator originColumn2 = new ColumnRefOperator(4, VarcharType.VARCHAR, "MANAGER_DRBP", true);
+
+        CallOperator upperCall1 = new CallOperator(FunctionSet.UPPER, VarcharType.VARCHAR,
+                Lists.newArrayList(originColumn1));
+        CallOperator upperCall2 = new CallOperator(FunctionSet.UPPER, VarcharType.VARCHAR,
+                Lists.newArrayList(originColumn2));
+
+        DictMappingOperator dictMapping1 = new DictMappingOperator(dictColumn1, upperCall1, IntegerType.INT);
+        DictMappingOperator dictMapping2 = new DictMappingOperator(dictColumn2, upperCall2, IntegerType.INT);
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.NE, dictMapping1, dictMapping2);
+
+        ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+        ScalarOperator result = operatorRewriter.rewrite(predicate,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        Assertions.assertEquals(predicate, result);
+
     }
 }

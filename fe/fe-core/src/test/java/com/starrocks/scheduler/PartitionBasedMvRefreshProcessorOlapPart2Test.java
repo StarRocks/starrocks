@@ -26,7 +26,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -285,7 +285,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
                         Assertions.assertTrue(queryCacheStats != null);
                         Assertions.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) == 1);
+                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
                     }
 
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
@@ -297,7 +297,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
-                    Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
+                    Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
                     Assertions.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
                     Assertions.assertFalse(partitionsToRefresh1.isEmpty());
@@ -861,7 +861,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
         }
         for (String query : traceQueries) {
             String plan = explainMVRefreshExecPlan(mv, query);
-            Assertions.assertTrue(plan.isEmpty());
+            Assertions.assertFalse(plan.isEmpty());
         }
     }
 }

@@ -60,6 +60,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -77,6 +78,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -87,8 +89,8 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -179,6 +181,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // and we need to disable it.
     @SerializedName(value = "disableReplicatedStorageForGIN")
     private boolean disableReplicatedStorageForGIN = false;
+    @SerializedName(value = "historySchema")
+    private OlapTableHistorySchema historySchema;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -272,6 +276,35 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
         this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
+    }
+
+    public void setHistorySchema(OlapTableHistorySchema historySchema) {
+        this.historySchema = historySchema;
+    }
+
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.ofNullable(historySchema);
+    }
+
+    @Override
+    public boolean isExpire() {
+        boolean expiredByTime = super.isExpire();
+        boolean expiredByHistorySchema = true;
+        if (historySchema != null && !historySchema.isExpired()) {
+            try {
+                expiredByHistorySchema = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+                    isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId, Lists.newArrayList(tableId));
+            } catch (Exception e) {
+                // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
+                // so could clean the history schema safely
+            }
+            if (expiredByHistorySchema) {
+                historySchema.setExpire();
+                LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
+                        jobId, tableName, historySchema.getHistoryTxnIdThreshold());
+            }
+        }
+        return expiredByTime && expiredByHistorySchema;
     }
 
     /**
@@ -647,7 +680,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                             Expr generatedColumnExpr = expr.accept(visitor, null);
 
-                            generatedColumnExpr = Expr.analyzeAndCastFold(generatedColumnExpr);
+                            generatedColumnExpr = ExprUtils.analyzeAndCastFold(generatedColumnExpr);
 
                             int columnIndex = -1;
                             if (generatedColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
@@ -657,7 +690,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                 columnIndex = tbl.getFullSchema().indexOf(generatedColumn);
                             }
 
-                            mcExprs.put(columnIndex, generatedColumnExpr.treeToThrift());
+                            mcExprs.put(columnIndex, ExprToThrift.treeToThrift(generatedColumnExpr));
                         }
                         // we need this thing, otherwise some expr evalution will fail in BE
                         TQueryGlobals queryGlobals = new TQueryGlobals();
@@ -802,7 +835,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(tbl, modifiedColumns);
 
             pruneMeta();
             tbl.onReload();

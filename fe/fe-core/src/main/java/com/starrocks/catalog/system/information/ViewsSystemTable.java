@@ -23,9 +23,8 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
@@ -38,7 +37,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -50,6 +48,8 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,18 +78,18 @@ public class ViewsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TABLE_CATALOG", ScalarType.createVarchar(512))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
-                        .column("TABLE_NAME", ScalarType.createVarchar(64))
+                        .column("TABLE_CATALOG", TypeFactory.createVarchar(512))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(64))
                         // TODO: Type for EVENT_DEFINITION should be `longtext`, but `varchar(65535)` was set at this stage.
                         .column("VIEW_DEFINITION",
-                                ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("CHECK_OPTION", ScalarType.createVarchar(8))
-                        .column("IS_UPDATABLE", ScalarType.createVarchar(3))
-                        .column("DEFINER", ScalarType.createVarchar(77))
-                        .column("SECURITY_TYPE", ScalarType.createVarchar(7))
-                        .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(32))
-                        .column("COLLATION_CONNECTION", ScalarType.createVarchar(32))
+                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("CHECK_OPTION", TypeFactory.createVarchar(8))
+                        .column("IS_UPDATABLE", TypeFactory.createVarchar(3))
+                        .column("DEFINER", TypeFactory.createVarchar(77))
+                        .column("SECURITY_TYPE", TypeFactory.createVarchar(7))
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(32))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarchar(32))
                         .build(), TSchemaTableType.SCH_VIEWS);
     }
 
@@ -117,13 +117,20 @@ public class ViewsSystemTable extends SystemTable {
         return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
+    /**
+     * Get the information_schema.views's result.
+     * @param dbName db's name of the current view
+     * @param status the view's status info
+     */
+    public record GetViewResult(String dbName, TTableStatus status) {
+    }
+
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
-        params.setDb(context.getDatabase());
         params.setType(VIEW);
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
@@ -143,14 +150,13 @@ public class ViewsSystemTable extends SystemTable {
         }
 
         try {
-            TListTableStatusResult result = query(params, context);
-            return result.getTables().stream()
-                    .map(t -> infoToScalar(this, t, params.db))
+            return queryImpl(params, context)
+                    .stream()
+                    .map(t -> infoToScalar(this, t))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("Failed to query views ", e);
-            // Return empty result if query failed
-            return Lists.newArrayList();
+            throw new SemanticException("Failed to query views ", e);
         }
     }
 
@@ -170,8 +176,7 @@ public class ViewsSystemTable extends SystemTable {
     );
 
     public static List<ScalarOperator> infoToScalar(SystemTable systemTable,
-                                                    TTableStatus status,
-                                                    String dbName) {
+                                                    GetViewResult viewResult) {
         List<ScalarOperator> result = Lists.newArrayList();
         for (Column column : systemTable.getBaseSchema()) {
             String name = column.getName().toLowerCase();
@@ -188,7 +193,7 @@ public class ViewsSystemTable extends SystemTable {
             }
             if ("table_schema".equals(name)) {
                 // For TABLE_SCHEMA, we return the database name
-                ConstantOperator scalar = ConstantOperator.createNullableObject(dbName, column.getType());
+                ConstantOperator scalar = ConstantOperator.createNullableObject(viewResult.dbName, column.getType());
                 result.add(scalar);
                 continue;
             }
@@ -198,7 +203,7 @@ public class ViewsSystemTable extends SystemTable {
             TTableStatus._Fields field = TTableStatus._Fields.findByName(name);
             Preconditions.checkArgument(field != null, "Unknown field: " + name);
             FieldValueMetaData meta = TTableStatus.metaDataMap.get(field).valueMetaData;
-            Object obj = status.getFieldValue(field);
+            Object obj = viewResult.status.getFieldValue(field);
             Type valueType = thriftToScalarType(meta.type);
             if (valueType.isStringType() && obj == null) {
                 obj = ""; // Convert null string to empty string
@@ -218,10 +223,15 @@ public class ViewsSystemTable extends SystemTable {
 
     public static TListTableStatusResult query(TGetTablesParams params,
                                                ConnectContext context) throws TException {
-        LOG.debug("get list table request: {}", params);
         TListTableStatusResult result = new TListTableStatusResult();
-        List<TTableStatus> tablesResult = Lists.newArrayList();
-        result.setTables(tablesResult);
+        List<GetViewResult> views = queryImpl(params, context);
+        result.setTables(views.stream().map(GetViewResult::status).collect(Collectors.toList()));
+        return result;
+    }
+
+    private static List<GetViewResult> queryImpl(TGetTablesParams params,
+                                                 ConnectContext context) throws TException {
+        LOG.debug("get list table request: {}", params);
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
         if (params.isSetPattern()) {
@@ -231,9 +241,6 @@ public class ViewsSystemTable extends SystemTable {
                 throw new TException("Pattern is in bad format " + params.getPattern());
             }
         }
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(params.db);
-        long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
@@ -241,78 +248,107 @@ public class ViewsSystemTable extends SystemTable {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         String tableNameParam = params.isSetTable_name() ? params.getTable_name() : null;
-        if (db != null) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
-                List<Table> tables = listingViews ? db.getViews() :
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-                OUTER:
-                for (Table table : tables) {
-                    try {
-                        context.setCurrentUserIdentity(currentUser);
-                        context.setCurrentRoleIds(currentUser);
-                        Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
+        boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
+        String pattern = params.pattern;
+        List<Database> databases = Lists.newArrayList();
+        if (Strings.isNullOrEmpty(params.db)) {
+            databases.addAll(GlobalStateMgr.getCurrentState().getLocalMetastore().getAllDbs());
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(params.db);
+            databases.add(db);
+        }
 
-                    if (!PatternMatcher.matchPattern(params.getPattern(), table.getName(), matcher, caseSensitive)) {
-                        continue;
-                    }
-                    if (!Strings.isNullOrEmpty(tableNameParam) &&
-                            !table.getName().equalsIgnoreCase(tableNameParam)) {
-                        continue;
-                    }
-
-                    TTableStatus status = new TTableStatus();
-                    status.setName(table.getName());
-                    status.setType(table.getMysqlType());
-                    status.setEngine(table.getEngine());
-                    status.setComment(table.getComment());
-                    status.setCreate_time(table.getCreateTime());
-                    status.setLast_check_time(table.getLastCheckTime());
-                    if (listingViews) {
-                        View view = (View) table;
-                        String ddlSql = view.getInlineViewDef();
-
-                        ConnectContext connectContext = ConnectContext.buildInner();
-                        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-                        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
-                        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-
-                        try {
-                            List<TableName> allTables = view.getTableRefs();
-                            for (TableName tableName : allTables) {
-                                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getFullName(), tableName.getTbl());
-                                if (tbl != null) {
-                                    try {
-                                        context.setCurrentUserIdentity(currentUser);
-                                        context.setCurrentRoleIds(currentUser);
-                                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
-                                    } catch (AccessDeniedException e) {
-                                        continue OUTER;
-                                    }
-                                }
-                            }
-                        } catch (SemanticException e) {
-                            // ignore semantic exception because view maybe invalid
-                        }
-                        status.setDdl_sql(ddlSql);
-                    }
-
-                    tablesResult.add(status);
-                    // if user set limit, then only return limit size result
-                    if (limit > 0 && tablesResult.size() >= limit) {
-                        break;
-                    }
-                }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+        long limit = params.isSetLimit() ? params.getLimit() : -1;
+        List<GetViewResult> result = Lists.newArrayList();
+        for (Database db : databases) {
+            if (!collectViewsInDb(context, db, currentUser, tableNameParam, pattern, matcher,
+                    limit, listingViews, caseSensitive, result)) {
+                break;
             }
         }
         return result;
+    }
+
+    /**
+     * if the limit is reached, false is returned, otherwise true will be returned.
+     */
+    private static boolean collectViewsInDb(ConnectContext context, Database db, UserIdentity currentUser,
+                                            String paramTableName, String paramPattern, PatternMatcher matcher,
+                                            long limit, boolean listingViews, boolean caseSensitive,
+                                            List<GetViewResult> result) {
+        if (db == null) {
+            return true;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        String dbName = db.getFullName();
+        try {
+            List<Table> tables = listingViews ? db.getViews() :
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            OUTER:
+            for (Table table : tables) {
+                try {
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
+                    continue;
+                }
+                if (!Strings.isNullOrEmpty(paramTableName) &&
+                        !table.getName().equalsIgnoreCase(paramTableName)) {
+                    continue;
+                }
+
+                TTableStatus status = new TTableStatus();
+                status.setName(table.getName());
+                status.setType(table.getMysqlType());
+                status.setEngine(table.getEngine());
+                status.setComment(table.getComment());
+                status.setCreate_time(table.getCreateTime());
+                status.setLast_check_time(table.getLastCheckTime());
+                if (listingViews) {
+                    View view = (View) table;
+                    String ddlSql = view.getInlineViewDef();
+
+                    ConnectContext connectContext = ConnectContext.buildInner();
+                    connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+                    connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+                    connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+                    try {
+                        List<TableName> allTables = view.getTableRefs();
+                        for (TableName tableName : allTables) {
+                            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(db.getFullName(), tableName.getTbl());
+                            if (tbl != null) {
+                                try {
+                                    context.setCurrentUserIdentity(currentUser);
+                                    context.setCurrentRoleIds(currentUser);
+                                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
+                                } catch (AccessDeniedException e) {
+                                    continue OUTER;
+                                }
+                            }
+                        }
+                    } catch (SemanticException e) {
+                        // ignore semantic exception because view maybe invalid
+                    }
+                    status.setDdl_sql(ddlSql);
+                }
+
+                result.add(new GetViewResult(dbName, status));
+                // if user set limit, then only return limit size result
+                if (limit > 0 && result.size() >= limit) {
+                    return false;
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+        return true;
     }
 }

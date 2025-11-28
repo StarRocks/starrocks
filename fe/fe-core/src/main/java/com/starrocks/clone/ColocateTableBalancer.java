@@ -87,7 +87,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
 
     private ColocateTableBalancer(long intervalMs) {
-        super("colocate group clone checker", intervalMs);
+        super("colocate-group-clone-checker", intervalMs);
     }
 
     private static ColocateTableBalancer INSTANCE = null;
@@ -801,7 +801,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
 
                         int idx = 0;
-                        for (Long tabletId : index.getTabletIds()) {
+                        for (Long tabletId : index.getTabletIdsInOrder()) {
                             LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
                             Set<Long> bucketSeq = backendBucketsSeq.get(idx);
 

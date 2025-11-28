@@ -14,7 +14,7 @@
 
 package com.starrocks.statistic.sample;
 
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 
 public abstract class ColumnStats {
@@ -36,7 +36,7 @@ public abstract class ColumnStats {
 
     public abstract String getRowCount();
 
-    public abstract String getDateSize();
+    public abstract String getDataSize();
 
     public abstract String getNullCount();
 

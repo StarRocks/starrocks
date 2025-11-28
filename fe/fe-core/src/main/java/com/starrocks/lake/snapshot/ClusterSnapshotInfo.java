@@ -14,8 +14,10 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 
+import java.util.List;
 import java.util.Map;
 
 public class ClusterSnapshotInfo {
@@ -35,7 +37,21 @@ public class ClusterSnapshotInfo {
         if (physicalPartInfo == null) {
             return 0;
         }
-        return physicalPartInfo.version;
+        return physicalPartInfo.visibleVersion;
+    }
+
+    public List<Long> getCommittedVersionsAfterVisible(long dbId, long tableId, long partId, long physicalPartId) {
+        List<Long> committedVersions = Lists.newArrayList();
+        PhysicalPartitionSnapshotInfo physicalPartInfo = getPhysicalPartitionInfo(dbId, tableId, partId, physicalPartId);
+        if (physicalPartInfo == null) {
+            return committedVersions;
+        }
+        long visibleVersion = physicalPartInfo.visibleVersion;
+        long committedVersion = physicalPartInfo.committedVersion;
+        for (long version = visibleVersion + 1; version <= committedVersion; version++) {
+            committedVersions.add(version);
+        }
+        return committedVersions;
     }
 
     public boolean containsDb(long dbId) {

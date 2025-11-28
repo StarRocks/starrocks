@@ -56,6 +56,7 @@ public enum OperatorType {
     LOGICAL_EXCEPT,
     LOGICAL_INTERSECT,
     LOGICAL_VALUES,
+    LOGICAL_RAW_VALUES,
     LOGICAL_REPEAT,
     LOGICAL_TABLE_FUNCTION,
     LOGICAL_CTE_ANCHOR,
@@ -100,6 +101,7 @@ public enum OperatorType {
     PHYSICAL_ASSERT_ONE_ROW,
     PHYSICAL_WINDOW,
     PHYSICAL_VALUES,
+    PHYSICAL_RAW_VALUES,
     PHYSICAL_REPEAT,
     PHYSICAL_FILTER,
     PHYSICAL_TABLE_FUNCTION,
@@ -165,6 +167,7 @@ public enum OperatorType {
     private static final Set<OperatorType> PHYSICAL_SCANS =
             Arrays.stream(OperatorType.values())
                     .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .filter(x -> !x.equals(PHYSICAL_STREAM_SCAN))
                     .collect(Collectors.toUnmodifiableSet());
 
     public boolean isPhysicalScan() {

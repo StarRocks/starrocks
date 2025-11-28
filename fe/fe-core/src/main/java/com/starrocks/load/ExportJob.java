@@ -45,13 +45,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -68,6 +67,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.persist.BrokerPropertiesPersistInfo;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -93,11 +93,8 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.expression.BaseTableRefPersist;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -110,6 +107,8 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.CharType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
@@ -294,12 +293,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     private void registerToDesc() throws StarRocksException {
-        TableRefPersist
-                ref = new TableRefPersist(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
-        BaseTableRefPersist tableRef = new BaseTableRefPersist(ref, exportTable, tableName);
+        TableRefPersist ref =
+                new TableRefPersist(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
         exportTupleDesc = desc.createTupleDescriptor();
         exportTupleDesc.setTable(exportTable);
-        exportTupleDesc.setRef(tableRef);
+        exportTupleDesc.setRef(ref);
 
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         List<Column> tableColumns = exportTable.getBaseSchema();
@@ -480,7 +478,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             SlotDescriptor slotDesc = exportTupleDesc.getSlots().get(i);
             SlotRef slotRef = new SlotRef(slotDesc);
             if (slotDesc.getType().getPrimitiveType() == PrimitiveType.CHAR) {
-                slotRef.setType(Type.CHAR);
+                slotRef.setType(CharType.CHAR);
             }
             outputExprs.add(slotRef);
         }
@@ -728,20 +726,28 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public synchronized boolean updateState(JobState newState) {
-        return this.updateState(newState, false, System.currentTimeMillis());
+        return this.updateState(newState, System.currentTimeMillis());
     }
 
     public ComputeResource getComputeResource() {
         return computeResource;
     }
 
-    public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
+    public synchronized boolean updateState(JobState newState, long stateChangeTime) {
         if (isExportDone()) {
             LOG.warn("export job state is finished or cancelled");
             return false;
         }
 
-        state = newState;
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(id, newState, stateChangeTime,
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logExportUpdateState(updateInfo, wal -> changeState(newState, stateChangeTime));
+        return true;
+    }
+
+    protected void changeState(JobState newState, long stateChangeTime) {
+        this.state = newState;
         switch (newState) {
             case PENDING:
                 progress = 0;
@@ -754,15 +760,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 finishTimeMs = stateChangeTime;
                 progress = 100;
                 break;
-            default:
-                Preconditions.checkState(false, "wrong job state: " + newState.name());
-                break;
         }
-        if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        }
-        return true;
     }
 
     public Status releaseSnapshots() {

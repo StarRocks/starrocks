@@ -17,10 +17,8 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -32,6 +30,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
 
@@ -46,9 +51,10 @@ public class ImplicitCastRuleTest {
 
     @Test
     public void testCall() {
-        Function fn = new Function(new FunctionName("add"), new Type[] {Type.BIGINT, Type.BIGINT}, Type.BIGINT, true);
+        Function fn = new Function(new FunctionName("add"), new Type[] {
+                IntegerType.BIGINT, IntegerType.BIGINT}, IntegerType.BIGINT, true);
 
-        CallOperator op = new CallOperator("add", Type.BIGINT, Lists.newArrayList(
+        CallOperator op = new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(
                 ConstantOperator.createVarchar("1"),
                 ConstantOperator.createBoolean(true),
                 ConstantOperator.createBigint(1),
@@ -72,14 +78,14 @@ public class ImplicitCastRuleTest {
         assertFalse(result.getChild(2) instanceof CastOperator);
         assertTrue(result.getChild(3) instanceof CastOperator);
 
-        assertEquals(Type.BIGINT, result.getChild(0).getType());
-        assertEquals(Type.BIGINT, result.getChild(1).getType());
-        assertEquals(Type.BIGINT, result.getChild(2).getType());
-        assertEquals(Type.BIGINT, result.getChild(3).getType());
+        assertEquals(IntegerType.BIGINT, result.getChild(0).getType());
+        assertEquals(IntegerType.BIGINT, result.getChild(1).getType());
+        assertEquals(IntegerType.BIGINT, result.getChild(2).getType());
+        assertEquals(IntegerType.BIGINT, result.getChild(3).getType());
 
-        assertEquals(Type.VARCHAR, result.getChild(0).getChild(0).getType());
-        assertEquals(Type.BOOLEAN, result.getChild(1).getChild(0).getType());
-        assertEquals(Type.INT, result.getChild(3).getChild(0).getType());
+        assertEquals(VarcharType.VARCHAR, result.getChild(0).getChild(0).getType());
+        assertEquals(BooleanType.BOOLEAN, result.getChild(1).getChild(0).getType());
+        assertEquals(IntegerType.INT, result.getChild(3).getChild(0).getType());
     }
 
     @Test
@@ -94,12 +100,12 @@ public class ImplicitCastRuleTest {
         assertTrue(result.getChild(1) instanceof CastOperator);
         assertTrue(result.getChild(2) instanceof CastOperator);
 
-        assertEquals(Type.DOUBLE, result.getChild(0).getType());
-        assertEquals(Type.DOUBLE, result.getChild(1).getType());
-        assertEquals(Type.DOUBLE, result.getChild(2).getType());
+        assertEquals(FloatType.DOUBLE, result.getChild(0).getType());
+        assertEquals(FloatType.DOUBLE, result.getChild(1).getType());
+        assertEquals(FloatType.DOUBLE, result.getChild(2).getType());
 
-        assertEquals(Type.VARCHAR, result.getChild(1).getChild(0).getType());
-        assertEquals(Type.DATE, result.getChild(2).getChild(0).getType());
+        assertEquals(VarcharType.VARCHAR, result.getChild(1).getChild(0).getType());
+        assertEquals(DateType.DATE, result.getChild(2).getChild(0).getType());
     }
 
     @Test
@@ -125,9 +131,9 @@ public class ImplicitCastRuleTest {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("a"),
-                        ConstantOperator.createNull(Type.DOUBLE)),
+                        ConstantOperator.createNull(FloatType.DOUBLE)),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                        ConstantOperator.createNull(Type.DOUBLE),
+                        ConstantOperator.createNull(FloatType.DOUBLE),
                         ConstantOperator.createVarchar("a")),
         };
         for (BinaryPredicateOperator op : ops) {
@@ -147,18 +153,18 @@ public class ImplicitCastRuleTest {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createDate(LocalDateTime.of(2022, Month.JANUARY, 01, 0, 0, 0)),
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true)
+                        new ColumnRefOperator(1, DateType.DATE, "date_col", true)
                 ),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true),
+                        new ColumnRefOperator(1, DateType.DATE, "date_col", true),
                         ConstantOperator.createInt(20220111)
                 ),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("2022-01-01"),
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true)
+                        new ColumnRefOperator(1, DateType.DATE, "date_col", true)
                 ),
                 new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
-                        new ColumnRefOperator(1, Type.DATE, "date_col", true),
+                        new ColumnRefOperator(1, DateType.DATE, "date_col", true),
                         ConstantOperator.createVarchar("2022-01-01")
                 ),
         };
@@ -202,9 +208,9 @@ public class ImplicitCastRuleTest {
         assertTrue(result.getChild(1) instanceof ConstantOperator);
         assertTrue(result.getChild(2) instanceof CastOperator);
 
-        assertEquals(Type.VARCHAR, result.getChild(0).getType());
-        assertEquals(Type.VARCHAR, result.getChild(1).getType());
-        assertEquals(Type.VARCHAR, result.getChild(2).getType());
+        assertEquals(VarcharType.VARCHAR, result.getChild(0).getType());
+        assertEquals(VarcharType.VARCHAR, result.getChild(1).getType());
+        assertEquals(VarcharType.VARCHAR, result.getChild(2).getType());
 
         assertTrue(result.getChild(0).getChild(0).getType().isBigint());
         assertTrue(result.getChild(2).getChild(0).getType().isDate());

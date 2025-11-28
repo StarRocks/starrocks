@@ -15,7 +15,6 @@ package com.starrocks.connector.partitiontraits;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -25,7 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,7 +53,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
         if (!((OlapTable) table).getPartitionInfo().isRangePartition()) {
             throw new IllegalArgumentException("Must be range partitioned table");
         }
@@ -62,7 +61,7 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
         return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
     }
 
@@ -133,10 +132,12 @@ public class OlapPartitionTraits extends DefaultTraits {
      */
     public static boolean isBaseTableChanged(Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
-        return mvRefreshedPartitionInfo.getId() != partition.getId()
-                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
-                > mvRefreshedPartitionInfo.getLastRefreshTime();
+        if (mvRefreshedPartitionInfo.getId() != partition.getId()) {
+            return true;
+        }
+        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
+        return defaultPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || defaultPartition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {

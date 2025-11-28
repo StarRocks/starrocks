@@ -27,7 +27,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -53,6 +52,8 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -61,6 +62,8 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
 
@@ -182,7 +185,6 @@ public class PartitionDescAnalyzer {
     public static void analyzeMultiRangePartitionDescWithExistsTable(MultiRangePartitionDesc multiRangePartitionDesc,
                                                                      PartitionInfo partitionInfo,
                                                                      Map<ColumnId, Column> idToColumn) {
-
 
         List<Column> partitionColumns = partitionInfo.getPartitionColumns(idToColumn);
         if (partitionColumns.size() != 1) {
@@ -402,7 +404,8 @@ public class PartitionDescAnalyzer {
             for (MultiRangePartitionDesc multiRangePartitionDesc : desc.getMultiRangePartitionDescs()) {
                 TimestampArithmeticExpr.TimeUnit timeUnit = TimestampArithmeticExpr.TimeUnit
                         .fromName(multiRangePartitionDesc.getTimeUnit());
-                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR && firstPartitionColumn.getType() != Type.DATETIME) {
+                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR
+                        && firstPartitionColumn.getType() != DateType.DATETIME) {
                     throw new AnalysisException("Batch build partition for hour interval only supports " +
                             "partition column as DATETIME type");
                 }
@@ -482,14 +485,14 @@ public class PartitionDescAnalyzer {
 
                     String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
                     if (functionName.equals(FunctionSet.STR2DATE)) {
-                        desc.setPartitionType(Type.DATE);
+                        desc.setPartitionType(DateType.DATE);
                         if (!PartitionFunctionChecker.checkStr2date(expr)) {
                             throw new SemanticException("partition function check fail, only supports the result " +
                                     "of the function str2date(VARCHAR str, VARCHAR format) as a strict DATE type");
                         }
                     }
                 } else {
-                    throw new AnalysisException("Unsupported expr:" + expr.toSql());
+                    throw new AnalysisException("Unsupported expr:" + ExprToSql.toSql(expr));
                 }
             }
             rangePartitionDesc.setPartitionType(desc.getPartitionType());
@@ -586,11 +589,12 @@ public class PartitionDescAnalyzer {
             return;
         }
         List<String> slotRefs = desc.getPartitionExprs().stream()
-                .flatMap(e -> e.collectAllSlotRefs().stream())
+                .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
                 .map(SlotRef::getColumnName)
                 .collect(Collectors.toList());
+        
         for (ColumnDef columnDef : columnDefs) {
-            if (slotRefs.contains(columnDef.getName()) && !columnDef.isKey()
+            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName())) && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
                 throw new AnalysisException("The partition expr should base on key column");
             }
@@ -726,7 +730,7 @@ public class PartitionDescAnalyzer {
                     DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
                     LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
                     LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, DateType.DATETIME);
                     long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
                     partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                 }

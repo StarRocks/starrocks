@@ -36,7 +36,7 @@ public class ShowFunctionsStmt extends ShowStmt {
     public ShowFunctionsStmt(String dbName, boolean isBuiltin, boolean isGlobal, boolean isVerbose, String wild,
                              Expr expr, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.isBuiltin = isBuiltin;
         this.isGlobal = isGlobal;
         this.isVerbose = isVerbose;

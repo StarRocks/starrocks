@@ -18,10 +18,13 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.planner.DataSink;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
@@ -31,11 +34,12 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -54,6 +58,8 @@ import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+
+import static com.starrocks.sql.ast.LoadStmt.MERGE_CONDITION;
 
 public class InsertPlanTest extends PlanTestBase {
     @BeforeAll
@@ -377,6 +383,19 @@ public class InsertPlanTest extends PlanTestBase {
                 "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
         Assertions.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
+    }
+
+    public static DataSink getDataSink(String originStmt) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
+                        .get(0);
+        connectContext.getDumpInfo().setOriginStmt(originStmt);
+        ExecPlan execPlan = new StatementPlanner().plan(statementBase, connectContext);
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        return sinkFragment.getSink();
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
@@ -810,8 +829,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         Table nativeTable = new BaseTable(null, null);
 
-        Column k1 = new Column("k1", Type.INT);
-        Column k2 = new Column("k2", Type.INT);
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
         builder.setCatalogDBName("iceberg_db");
@@ -913,8 +932,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         Table nativeTable = new BaseTable(null, null);
 
-        Column k1 = new Column("k1", Type.INT);
-        Column k2 = new Column("k2", Type.INT);
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog_shuffle");
         builder.setCatalogDBName("iceberg_db");
@@ -1209,5 +1228,32 @@ public class InsertPlanTest extends PlanTestBase {
         starRocksAssert.withTable(sql);
         String explainString = getInsertExecPlan("insert into test_create_default_current_timestamp_6(k1) values(1)");
         Assertions.assertTrue(hasMicroseconds(explainString));
+    }
+
+    @Test
+    public void testInsertConditionalUpdate() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tc` (\n" +
+                "  `v1` bigint COMMENT \"\",\n" +
+                "  `v2` bigint COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`v1`, `v2`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+        DataSink sink = getDataSink("INSERT INTO tc properties(\"" + MERGE_CONDITION + "\" = \"v3\") select 1,2,3");
+        Assertions.assertInstanceOf(OlapTableSink.class, sink);
+        TDataSink tDataSink = ((OlapTableSink) sink).toThrift();
+        String mergeCondition = tDataSink.getOlap_table_sink().getMerge_condition();
+        Assertions.assertEquals("v3", mergeCondition);
+
+        try {
+            getDataSink("INSERT INTO tc properties (\"" + MERGE_CONDITION + "\" = \"v4\") select 1,2,3");
+            Assertions.fail("Conditional update use nonexistent column.");
+        } catch (SemanticException e) {
+            // ignore.
+        }
     }
 }

@@ -25,6 +25,7 @@
 
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "gen_cpp/InternalService_types.h"
 #include "util/blocking_priority_queue.hpp"
 #include "util/defer_op.h"
 #include "util/race_detect.h"
@@ -107,6 +108,9 @@ public:
 
     const YieldContext& get_work_context() const { return work_context; }
 
+    void set_query_type(TQueryType::type type) { _query_type = type; }
+    TQueryType::type query_type() const { return _query_type; }
+
 public:
     WorkGroupPtr workgroup;
     YieldContext work_context;
@@ -115,6 +119,9 @@ public:
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
+
+private:
+    TQueryType::type _query_type = TQueryType::EXTERNAL;
 };
 
 /// There are two types of ScanTaskQueue:

@@ -33,6 +33,7 @@
 
 namespace starrocks {
 struct FileInfo;
+struct TabletBasicInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -40,6 +41,7 @@ class TCreateTabletReq;
 
 namespace starrocks::lake {
 
+struct CacheOptions;
 template <typename T>
 class MetadataIterator;
 class UpdateManager;
@@ -73,7 +75,8 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version, bool fill_meta_cache = true,
+                                         bool fill_data_cache = true);
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
@@ -90,14 +93,26 @@ public:
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_meta_cache,
+                                                    bool fill_data_cache, int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, const CacheOptions& cache_opts,
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     // Do not use this function except in a list dir
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, const CacheOptions& cache_opts,
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
                                                            int64_t expected_gtid = 0,
+                                                           const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                           const CacheOptions& cache_opts, int64_t expected_gtid = 0,
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
 
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
@@ -163,6 +178,7 @@ public:
     }
 
     std::string tablet_root_location(int64_t tablet_id) const;
+    std::string real_tablet_root_location(int64_t tablet_id) const;
 
     std::string tablet_metadata_root_location(int64_t tablet_id) const;
 
@@ -220,11 +236,11 @@ public:
     void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
-                                      const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                      const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
                                       TabletSchemaPtr tablet_schema);
     // for load segment parallel
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
-                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
@@ -232,6 +248,11 @@ public:
     StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version, int64_t to_version);
 
     int64_t get_average_row_size_from_latest_metadata(int64_t tablet_id);
+
+    void get_tablets_basic_info(int64_t table_id, int64_t partition_id, int64_t tablet_id,
+                                const std::set<int64_t>& authorized_table_ids,
+                                const std::unordered_map<int64_t, int64_t>& partition_versions,
+                                std::vector<TabletBasicInfo>& tablet_infos);
 
     void stop();
 
@@ -245,11 +266,17 @@ private:
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
-    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache,
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    StatusOr<TabletBasicInfo> get_tablet_basic_info(int64_t tablet_id, int64_t table_id, int64_t partition_id,
+                                                    const std::set<int64_t>& authorized_table_ids,
+                                                    const std::unordered_map<int64_t, int64_t>& partition_versions);
+#endif // USE_STAROS
 
 private:
     std::shared_ptr<LocationProvider> _location_provider;

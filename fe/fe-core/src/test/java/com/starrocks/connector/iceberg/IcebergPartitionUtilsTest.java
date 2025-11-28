@@ -14,10 +14,10 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.type.DateType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -56,15 +56,15 @@ public class IcebergPartitionUtilsTest extends TableTestBase {
         String partitionName = "2020";
         PartitionField partitionField = SPEC_D_2.fields().get(0);
         String result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-01-01 06:00:00", result);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATE);
+                DateType.DATE);
         Assertions.assertEquals("2020-01-01", result);
         // without time zone
         partitionField = SPEC_E_2.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_E,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-01-01 00:00:00", result);
 
         // month
@@ -72,15 +72,15 @@ public class IcebergPartitionUtilsTest extends TableTestBase {
         partitionName = "2020-02";
         partitionField = SPEC_D_3.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-02-01 06:00:00", result);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATE);
+                DateType.DATE);
         Assertions.assertEquals("2020-02-01", result);
         // without time zone
         partitionField = SPEC_E_3.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_E,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-02-01 00:00:00", result);
 
         // day
@@ -88,30 +88,30 @@ public class IcebergPartitionUtilsTest extends TableTestBase {
         partitionName = "2020-01-02";
         partitionField = SPEC_D_4.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-01-02 06:00:00", result);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATE);
+                DateType.DATE);
         Assertions.assertEquals("2020-01-02", result);
         // without time zone
         partitionField = SPEC_E_4.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_E,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-01-02 00:00:00", result);
 
         // hour
         partitionName = "2020-01-02-12";
         partitionField = SPEC_D_5.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-01-02 18:00:00", result);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_D,
-                Type.DATE);
+                DateType.DATE);
         Assertions.assertEquals("2020-01-02", result);
         // without time zone
         partitionField = SPEC_E_5.fields().get(0);
         result = IcebergPartitionUtils.normalizeTimePartitionName(partitionName, partitionField, SCHEMA_E,
-                Type.DATETIME);
+                DateType.DATETIME);
         Assertions.assertEquals("2020-01-02 12:00:00", result);
     }
 

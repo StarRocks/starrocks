@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.List;
@@ -81,6 +81,11 @@ public class DictMappingOperator extends ScalarOperator {
     @Override
     public boolean isConstant() {
         return false;
+    }
+
+    @Override
+    public boolean isVariable() {
+        return true;
     }
 
     @Override

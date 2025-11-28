@@ -1211,8 +1211,8 @@ struct ZoneMapFilterEvaluator {
             const ColumnPredicate* del_pred = iter != del_preds.end() ? &(iter->second) : nullptr;
 
             SparseRange<> cur_row_ranges;
-            RETURN_IF_ERROR(
-                    column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges, Type));
+            RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges,
+                                                                              Type, &src_range));
             _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
         }
 
@@ -1232,8 +1232,8 @@ struct ZoneMapFilterEvaluator {
                     const ColumnPredicate* del_pred = &(iter->second);
 
                     SparseRange<> cur_row_ranges;
-                    RETURN_IF_ERROR(
-                            column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges, Type));
+                    RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges,
+                                                                                      Type, &src_range));
                     _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
                 }
             }
@@ -1267,6 +1267,7 @@ struct ZoneMapFilterEvaluator {
 
     const std::map<ColumnId, ColumnOrPredicate>& del_preds;
     const std::set<ColumnId>& del_columns;
+    const Range<> src_range;
     bool has_apply_only_del_columns = false;
 };
 
@@ -1299,9 +1300,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // prune data pages by zone map index.
     // -------------------------------------------------------------
 
-    ASSIGN_OR_RETURN(auto hit_row_ranges,
-                     _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
-                             _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates, del_columns}));
+    ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                                                  _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
+                                                  del_columns, Range<>{_scan_range.begin(), _scan_range.end()}}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
@@ -1748,12 +1749,13 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     if (to->_read_chunk == nullptr) {
-        to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_read_chunk, ChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _reserve_chunk_size);
+            ASSIGN_OR_RETURN(to->_dict_chunk,
+                             ChunkHelper::new_chunk_checked(to->_dict_decode_schema, _reserve_chunk_size));
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -1788,15 +1790,16 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                 output_schema_idx++;
             }
         }
-
-        to->_final_chunk = ChunkHelper::new_chunk(final_chunk_schema, _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(final_chunk_schema, _reserve_chunk_size));
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
+        ASSIGN_OR_RETURN(to->_final_chunk, ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     }
-
-    to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size)
-                                           : to->_final_chunk;
+    if (to->_has_force_dict_encode) {
+        ASSIGN_OR_RETURN(to->_adapt_global_dict_chunk,
+                         ChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
+    } else {
+        to->_adapt_global_dict_chunk = to->_final_chunk;
+    }
 
     _context = to;
     return Status::OK();

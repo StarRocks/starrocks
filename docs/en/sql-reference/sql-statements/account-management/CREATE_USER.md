@@ -25,7 +25,7 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   For the naming conventions of usernames, see [System limits](../../System_limit.md).
 
-- `auth_option` specifies the authentication method. Currently, three authentication methods are supported: StarRocks native password, mysql_native_password, and "authentication_ldap_simple". StarRocks native password is the same as mysql_native_password in logic but slightly differs in syntax. One user identity can use only one authentication method.
+- `auth_option` specifies the authentication method. Currently, five authentication methods are supported: StarRocks native password, `mysql_native_password`, `authentication_ldap_simple`, JSON Web Token (JWT) Authentication, and OAuth 2.0 Authentication. StarRocks native password is the same as `mysql_native_password` in logic but slightly differs in syntax. One user identity can use only one authentication method.
 
     ```SQL
     auth_option: {
@@ -33,7 +33,8 @@ CREATE USER [IF NOT EXISTS] <user_identity>
         IDENTIFIED WITH mysql_native_password BY 'auth_string'
         IDENTIFIED WITH mysql_native_password AS 'auth_string'
         IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
-        
+        IDENTIFIED WITH authentication_jwt [AS 'auth_properties']
+        IDENTIFIED WITH authentication_oauth2 [AS 'auth_properties']
     }
     ```
 
@@ -44,7 +45,13 @@ CREATE USER [IF NOT EXISTS] <user_identity>
     | `mysql_native_password WITH` | Ciphertext                     | Plaintext              |
     | `authentication_ldap_simple` | Plaintext                      | Plaintext              |
 
-> Note: StarRocks encrypts users' passwords before storing them.
+    :::note
+    StarRocks encrypts users' passwords before storing them.
+    :::
+
+    For details of `auth_properties` for JSON Web Token (JWT) Authentication and OAuth 2.0 Authentication, see the corresponding documents:
+    - [JSON Web Token Authentication](../../../administration/user_privs/authentication/jwt_authentication.md)
+    - [OAuth 2.0 Authentication](../../../administration/user_privs/authentication/oauth2_authentication.md)
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: If this parameter is specified, the roles are automatically assigned to the user and activated by default when the user logs in. If not specified, this user does not have any privileges. Make sure that all the roles that are specified already exist.
 
@@ -137,4 +144,33 @@ Example 11: Create a user and set the session variable `query_timeout` to `600` 
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
+```
+
+Example 12: Create a user with JSON Web Token Authentication.
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_jwt AS
+'{
+  "jwks_url": "http://localhost:38080/realms/master/protocol/jwt/certs",
+  "principal_field": "preferred_username",
+  "required_issuer": "http://localhost:38080/realms/master",
+  "required_audience": "starrocks"
+}';
+```
+
+Example 13: Create a user with OAuth 2.0 Authentication.
+
+```SQL
+CREATE USER tom IDENTIFIED WITH authentication_oauth2 AS 
+'{
+  "auth_server_url": "http://localhost:38080/realms/master/protocol/openid-connect/auth",
+  "token_server_url": "http://localhost:38080/realms/master/protocol/openid-connect/token",
+  "client_id": "12345",
+  "client_secret": "LsWyD9vPcM3LHxLZfzJsuoBwWQFBLcoR",
+  "redirect_url": "http://localhost:8030/api/oauth2",
+  "jwks_url": "http://localhost:38080/realms/master/protocol/openid-connect/certs",
+  "principal_field": "preferred_username",
+  "required_issuer": "http://localhost:38080/realms/master",
+  "required_audience": "12345"
+}';
 ```

@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
@@ -47,7 +48,10 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
-import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -83,7 +87,8 @@ public class OlapTableTest {
             if (table.getType() != TableType.OLAP) {
                 continue;
             }
-            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3, new MvRestoreContext());
+            RestoreJob restoreJob = new RestoreJob();
+            restoreJob.resetIdsForRestore(GlobalStateMgr.getCurrentState(), (OlapTable) table, db, 3, new MvRestoreContext());
         }
     }
 
@@ -157,11 +162,11 @@ public class OlapTableTest {
         PeriodDuration duration1 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
+        p2.pushColumn(LiteralExprFactory.create(LocalDate.now().toString(), DateType.DATE), PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
         OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
@@ -193,11 +198,11 @@ public class OlapTableTest {
         PeriodDuration duration2 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration2).toString(), Type.DATE),
+        p2.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration2).toString(), DateType.DATE),
                 PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
@@ -419,13 +424,13 @@ public class OlapTableTest {
         schema.add(k3);
 
         Index index1 = new Index(1L, "index1", Lists.newArrayList(ColumnId.create("k1"), ColumnId.create("k2")),
-                                 IndexDef.IndexType.BITMAP, "comment", null);
+                IndexDef.IndexType.BITMAP, "comment", null);
 
         Index index2 = new Index(2L, "index2", Lists.newArrayList(ColumnId.create("k2"), ColumnId.create("k3")),
-                                 IndexDef.IndexType.BITMAP, "comment", null);
+                IndexDef.IndexType.BITMAP, "comment", null);
 
         Index index3 = new Index(3L, "index3", Lists.newArrayList(ColumnId.create("k4")), IndexDef.IndexType.BITMAP,
-                                 "comment", null);
+                "comment", null);
         indexesInTable.add(index1);
         indexesInTable.add(index2);
         indexesInTable.add(index3);

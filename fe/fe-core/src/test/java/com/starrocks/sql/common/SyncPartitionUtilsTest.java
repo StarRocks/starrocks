@@ -25,10 +25,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
@@ -39,9 +37,12 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.mv.MVEagerRangePartitionMapper;
 import com.starrocks.sql.common.mv.MVLazyRangePartitionMapper;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -56,9 +57,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.PRangeCell.toRangeMap;
-
-public class SyncPartitionUtilsTest {
+public class SyncPartitionUtilsTest extends StarRocksTestBase {
 
     private static final TableName TABLE_NAME = new TableName("db1", "table1");
     private static SlotRef slotRef;
@@ -67,7 +66,7 @@ public class SyncPartitionUtilsTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         slotRef = new SlotRef(TABLE_NAME, "k1");
-        partitionColumn = new Column("k1", ScalarType.DATETIME);
+        partitionColumn = new Column("k1", DateType.DATETIME);
     }
 
     private static Range<PartitionKey> createRangeImpl(PartitionValue lowerValue, PartitionValue upperValue)
@@ -109,13 +108,39 @@ public class SyncPartitionUtilsTest {
         children.add(new StringLiteral(granularity));
         children.add(slotRef);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("date_trunc", children);
-        functionCallExpr.setType(Type.fromPrimitiveType(type));
+        functionCallExpr.setType(TypeFactory.createType(type));
         return functionCallExpr;
+    }
+    public static PCellSortedSet toPCellSortedSet(Map<String, Range<PartitionKey>> rangeMap) {
+        PCellSortedSet result = PCellSortedSet.of();
+        for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
+            result.add(entry.getKey(), PRangeCell.of(entry.getValue()));
+        }
+        return result;
     }
 
     private static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                 Map<String, Range<PartitionKey>> mvRangeMap) {
-        return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(baseRangeMap, mvRangeMap, null);
+        PCellSortedSet srcRangeSet = toPCellSortedSet(baseRangeMap);
+        PCellSortedSet dstRangeSet = toPCellSortedSet(mvRangeMap);
+        return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(srcRangeSet, dstRangeSet, null);
+    }
+
+    private static PartitionNameSetMap getIntersectedPartitions(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                                Map<String, Range<PartitionKey>> dstRangeMap) {
+        PCellSortedSet srcRangeSet = toPCellSortedSet(srcRangeMap);
+        PCellSortedSet dstRangeSet = toPCellSortedSet(dstRangeMap);
+        return SyncPartitionUtils.getIntersectedPartitions(srcRangeSet, dstRangeSet);
+    }
+
+    public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+                                                            FunctionCallExpr functionCallExpr,
+                                                            RangePartitionDiffer differ) {
+        PCellSortedSet srcRangeSet = toPCellSortedSet(baseRangeMap);
+        PCellSortedSet dstRangeSet = toPCellSortedSet(mvRangeMap);
+        return SyncPartitionUtils.getRangePartitionDiffOfExpr(srcRangeSet, dstRangeSet,
+                functionCallExpr, differ);
     }
 
     @Test
@@ -130,14 +155,14 @@ public class SyncPartitionUtilsTest {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assertions.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202010_202011"));
         Assertions.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202011_202012"));
         Assertions.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202011_202012"));
         Assertions.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202012_202101"));
 
-        partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(dstRangeMap, srcRangeMap);
+        partitionRefMap = getIntersectedPartitions(dstRangeMap, srcRangeMap);
 
         Assertions.assertTrue(partitionRefMap.get("p202010_202011").contains("p20201015_20201115"));
         Assertions.assertTrue(partitionRefMap.get("p202011_202012").contains("p20201015_20201115"));
@@ -151,10 +176,10 @@ public class SyncPartitionUtilsTest {
         dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
 
-        partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
         Assertions.assertEquals(0, partitionRefMap.get("p20201015").size());
 
-        partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(dstRangeMap, srcRangeMap);
+        partitionRefMap = getIntersectedPartitions(dstRangeMap, srcRangeMap);
         Assertions.assertEquals(0, partitionRefMap.get("p202011_202012").size());
 
     }
@@ -171,7 +196,7 @@ public class SyncPartitionUtilsTest {
         dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
         dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assertions.assertEquals(1, partitionRefMap.get("p202010_202011").size());
         Assertions.assertEquals(1, partitionRefMap.get("p202011_202012").size());
@@ -184,15 +209,17 @@ public class SyncPartitionUtilsTest {
 
     private Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRange,
                                                        Map<String, Range<PartitionKey>> dstRange) {
-        Map<String, PCell> result = RangePartitionDiffer.diffRange(srcRange, dstRange);
-        return toRangeMap(result);
+        PCellSortedSet srcRangeSet = toPCellSortedSet(srcRange);
+        PCellSortedSet dstRangeSet = toPCellSortedSet(dstRange);
+        return toRangeMap(PCellSortedSet.of(RangePartitionDiffer.diffRange(srcRangeSet, dstRangeSet)));
     }
 
-    private Map<String, PListCell> diffList(Map<String, PCell> baseListMap,
-                                            Map<String, PCell> mvListMap) {
-        Map<String, PCell> result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
-                mvListMap.keySet().stream().collect(Collectors.toSet()));
-        return result.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> (PListCell) entry.getValue()));
+    private Map<String, PListCell> diffList(PCellSortedSet baseListMap,
+                                            PCellSortedSet mvListMap) {
+        PCellSortedSet result = ListPartitionDiffer.diffList(baseListMap, mvListMap,
+                mvListMap.getPartitionNames());
+        return result.getPartitions().stream()
+                .collect(Collectors.toMap(PCellWithName::name, entry -> (PListCell) entry.cell()));
     }
 
     @Test
@@ -256,19 +283,19 @@ public class SyncPartitionUtilsTest {
         return new PListCell(items);
     }
 
-    private void addIntoListPartitionMap(Map<String, PCell> map, String partitionName, String... values) {
-        map.put(partitionName, makeCell(values));
+    private void addIntoListPartitionMap(PCellSortedSet map, String partitionName, String... values) {
+        map.add(partitionName, makeCell(values));
     }
 
     @Test
     public void testDiffList() {
         // same
-        Map<String, PCell> baseListMap = Maps.newHashMap();
+        PCellSortedSet baseListMap = PCellSortedSet.of();
         addIntoListPartitionMap(baseListMap, "p20230619", "2023-06-19");
         addIntoListPartitionMap(baseListMap, "p20230620", "2023-06-20");
         addIntoListPartitionMap(baseListMap, "p20230621", "2023-06-21");
 
-        Map<String, PCell> mvListMap = Maps.newHashMap();
+        PCellSortedSet mvListMap = PCellSortedSet.of();
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
         addIntoListPartitionMap(mvListMap, "p20230621", "2023-06-21");
         addIntoListPartitionMap(mvListMap, "p20230620", "2023-06-20");
@@ -276,21 +303,21 @@ public class SyncPartitionUtilsTest {
         Map<String, PListCell> diff = diffList(baseListMap, mvListMap);
         Assertions.assertEquals(0, diff.size());
 
-        baseListMap = Maps.newHashMap();
+        baseListMap = PCellSortedSet.of();
         addIntoListPartitionMap(baseListMap, "p20230619", "2023-06-19");
         addIntoListPartitionMap(baseListMap, "p20230620", "2023-06-20");
 
-        mvListMap = Maps.newHashMap();
+        mvListMap = PCellSortedSet.of();
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
 
         diff = diffList(baseListMap, mvListMap);
         Assertions.assertEquals(1, diff.size());
         Assertions.assertEquals("2023-06-20", diff.get("p20230620").getPartitionItems().iterator().next().get(0));
 
-        baseListMap = Maps.newHashMap();
+        baseListMap = PCellSortedSet.of();
         addIntoListPartitionMap(baseListMap, "p20230619", "2023-06-19");
 
-        mvListMap = Maps.newHashMap();
+        mvListMap = PCellSortedSet.of();
         addIntoListPartitionMap(mvListMap, "p20230619", "2023-06-19");
         addIntoListPartitionMap(mvListMap, "p20230620", "2023-06-20");
 
@@ -374,7 +401,9 @@ public class SyncPartitionUtilsTest {
 
     public static Map<String, Range<PartitionKey>> toEagerMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                         String granularity, PrimitiveType partitionType) {
-        return MVEagerRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeMap, granularity, partitionType);
+        PCellSortedSet baseRangeSet = toPCellSortedSet(baseRangeMap);
+        PCellSortedSet result = MVEagerRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeSet, granularity, partitionType);
+        return toRangeMap(result);
     }
 
     private static List<PartitionMapping> toPartitionMappings(Range<PartitionKey> baseRange, String granularity) {
@@ -447,7 +476,7 @@ public class SyncPartitionUtilsTest {
     @Test
     public void testMappingRangeRollupWithMaxValue() throws AnalysisException {
         String maxValueDate =
-                new DateLiteral(Type.DATE, true).toLocalDateTime().format(DateTimeFormatter.ISO_DATE_TIME);
+                new DateLiteral(DateType.DATE, true).toLocalDateTime().format(DateTimeFormatter.ISO_DATE_TIME);
         // minute
         Range<PartitionKey> baseRange = createMaxValueRange("2020-05-03 12:34:56");
         PartitionMapping mappedRange = toPartitionMapping(baseRange, "minute");
@@ -579,7 +608,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        PartitionDiff diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc("month", PrimitiveType.DATETIME), null);
         Map<String, Range<PartitionKey>> adds = toRangeMap(diff.getAdds());
         Map<String, Range<PartitionKey>> deletes = toRangeMap(diff.getDeletes());
@@ -603,7 +632,7 @@ public class SyncPartitionUtilsTest {
 
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
-        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc("day", PrimitiveType.DATETIME), null);
         adds = toRangeMap(diff.getAdds());
         deletes = toRangeMap(diff.getDeletes());
@@ -672,7 +701,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p1", createRange("2020-09-12", "2020-10-12"));
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
-        PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        PartitionDiff diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc(granularity, PrimitiveType.DATETIME), null);
 
         Map<String, Range<PartitionKey>> adds = toRangeMap(diff.getAdds());
@@ -693,7 +722,7 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
-        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc(granularity, PrimitiveType.DATETIME), null);
         adds = toRangeMap(diff.getAdds());
         deletes = toRangeMap(diff.getDeletes());
@@ -704,7 +733,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc("month", PrimitiveType.DATETIME), null);
         adds = toRangeMap(diff.getAdds());
         deletes = toRangeMap(diff.getDeletes());
@@ -720,7 +749,7 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
+        diff = getRangePartitionDiffOfExpr(baseRange, mvRange,
                 createDateTruncFunc("month", PrimitiveType.DATETIME), null);
         adds = toRangeMap(diff.getAdds());
         deletes = toRangeMap(diff.getDeletes());
@@ -736,31 +765,33 @@ public class SyncPartitionUtilsTest {
         Assertions.assertEquals(0, deletes.size());
     }
 
-    private PRangeCellPlus buildPartitionRange(String name, String start, String end) throws AnalysisException {
-        return new PRangeCellPlus(name, Range.closedOpen(
+    private PCellWithName buildPartitionRange(String name, String start, String end) throws AnalysisException {
+        return new PCellWithName(name, new PRangeCell(Range.closedOpen(
                 PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(start)),
-                PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(end))));
+                PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(end)))));
     }
 
     @Test
     public void test_getIntersectedPartitions() throws AnalysisException {
-        List<PRangeCellPlus> srcs = Arrays.asList(
+        List<PCellWithName> srcs = Arrays.asList(
                 buildPartitionRange("p20230801", "00000101", "20230801"),
                 buildPartitionRange("p20230802", "20230801", "20230802"),
                 buildPartitionRange("p20230803", "20230802", "20230803")
         );
-        List<PRangeCellPlus> dsts = Arrays.asList(
+        List<PCellWithName> dsts = Arrays.asList(
                 buildPartitionRange("p000101_202308", "0001-01-01", "2023-08-01"),
                 buildPartitionRange("p202308_202309", "2023-08-01", "2023-09-01")
         );
-        Map<String, Set<String>> res = SyncPartitionUtils.getIntersectedPartitions(srcs, dsts);
+        PCellSortedSet srcSet = PCellSortedSet.of(srcs);
+        PCellSortedSet dstSet = PCellSortedSet.of(dsts);
+        PartitionNameSetMap res = SyncPartitionUtils.getIntersectedPartitions(srcSet, dstSet);
         Assertions.assertEquals(
                 ImmutableMap.of(
                         "p20230801", ImmutableSet.of("p000101_202308"),
                         "p20230802", ImmutableSet.of("p202308_202309"),
                         "p20230803", ImmutableSet.of("p202308_202309")
                 ),
-                res);
+                res.getBasePartitionsToRefreshMap());
     }
 
     @Test
@@ -822,7 +853,7 @@ public class SyncPartitionUtilsTest {
             // WEEK
             Pair<String, String> result = getDateTruncFuncTransform(baseRange, "WEEK");
             Assertions.assertEquals("2019-12-30 00:00:00", result.first);
-            Assertions.assertEquals("2020-01-09 00:00:00", result.second);
+            Assertions.assertEquals("2020-01-06 00:00:00", result.second);
         }
 
         {
@@ -871,7 +902,7 @@ public class SyncPartitionUtilsTest {
     private DateLiteral plusDay(DateLiteral dateLiteral, int diff) {
         try {
             LocalDateTime date = dateLiteral.toLocalDateTime().plusDays(diff);
-            return new DateLiteral(date, Type.DATE);
+            return new DateLiteral(date, DateType.DATE);
         } catch (Exception e) {
             Assertions.fail();
             return null;
@@ -880,7 +911,7 @@ public class SyncPartitionUtilsTest {
 
     @Test
     public void transferRangeHandlesMinValue() throws AnalysisException {
-        final DateLiteral minValue = DateLiteral.createMinValue(Type.DATE);
+        final DateLiteral minValue = DateLiteral.createMinValue(DateType.DATE);
         Range<PartitionKey> range = createRange(minValue, plusDay(minValue, 1));
         {
             Expr partitionExpr = new SlotRef(TABLE_NAME, "column");
@@ -902,7 +933,7 @@ public class SyncPartitionUtilsTest {
 
     @Test
     public void transferRangeHandlesMaxValue() throws AnalysisException {
-        final DateLiteral maxValue = DateLiteral.createMaxValue(Type.DATE);
+        final DateLiteral maxValue = DateLiteral.createMaxValue(DateType.DATE);
         Range<PartitionKey> range = createRange(plusDay(maxValue, -1), maxValue);
         {
             Expr partitionExpr = new SlotRef(TABLE_NAME, "column");
@@ -935,7 +966,7 @@ public class SyncPartitionUtilsTest {
         srcRangeMap.put("p202001", createRange("2020-01-01", "2020-02-01"));
         Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202002", createRange("2020-02-01", "2020-03-01"));
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
         Assertions.assertTrue(partitionRefMap.get("p202001").isEmpty());
     }
 
@@ -947,7 +978,7 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
         dstRangeMap.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
-        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.getIntersectedPartitions(srcRangeMap, dstRangeMap);
+        PartitionNameSetMap partitionRefMap = getIntersectedPartitions(srcRangeMap, dstRangeMap);
 
         Assertions.assertEquals(1, partitionRefMap.size());
         Assertions.assertTrue(partitionRefMap.get("p202001").contains("p202001"));
@@ -955,7 +986,7 @@ public class SyncPartitionUtilsTest {
 
     @Test
     public void transferRangeHandlesMaxValueRange() throws AnalysisException {
-        final DateLiteral maxValue = DateLiteral.createMaxValue(Type.DATE);
+        final DateLiteral maxValue = DateLiteral.createMaxValue(DateType.DATE);
         final Range<PartitionKey> maxValueRange = createRange(plusDay(maxValue, -1), maxValue);
         FunctionCallExpr dateTruncFunction = createDateTruncFunc("year", PrimitiveType.DATE);
         Range<PartitionKey> result = SyncPartitionUtils.transferRange(maxValueRange, dateTruncFunction);
@@ -1021,17 +1052,17 @@ public class SyncPartitionUtilsTest {
         Assertions.assertFalse(result, "Exact overlap should return true");
     }
 
-    private static Map<Table, PCellSortedSet> buildChangedPartitionMap(Table mvTable, Map<String, PCell> mvPartitionMap,
+    private static Map<Table, PCellSortedSet> buildChangedPartitionMap(Table mvTable, PCellSortedSet mvPartitionMap,
                                                                        Set<String> changedPartitions) {
         Map<Table, PCellSortedSet> mvPartitionToCells = Maps.newHashMap();
-        Map<String, PCell> changedPCells = Maps.newHashMap();
+        PCellSortedSet changedPCells = PCellSortedSet.of();
         for (String partName : changedPartitions) {
-            PCell pCell = mvPartitionMap.get(partName);
+            PCellWithName pCell = mvPartitionMap.getPCellWithName(partName);
             if (pCell != null) {
-                changedPCells.put(partName, pCell);
+                changedPCells.add(pCell);
             }
         }
-        mvPartitionToCells.put(mvTable, PCellSortedSet.of(changedPCells));
+        mvPartitionToCells.put(mvTable, changedPCells);
         return mvPartitionToCells;
     }
 
@@ -1039,62 +1070,62 @@ public class SyncPartitionUtilsTest {
     public void testIsCalcPotentialRefreshPartition() throws AnalysisException {
         // Test case 1: One-to-One mapping (should return false)
         Table mockTable1 = new OlapTable();
-        Map<String, PCell> basePartitionMap = Maps.newHashMap();
-        basePartitionMap.put("p1", createPRangeCell("2023-07-27", "2023-07-28"));
-        basePartitionMap.put("p2", createPRangeCell("2023-07-28", "2023-07-29"));
+        PCellSortedSet basePartitionMap = PCellSortedSet.of();
+        basePartitionMap.add("p1", createPRangeCell("2023-07-27", "2023-07-28"));
+        basePartitionMap.add("p2", createPRangeCell("2023-07-28", "2023-07-29"));
 
-        Map<String, PCell> mvPartitionMap = Maps.newHashMap();
-        mvPartitionMap.put("mv_p1", createPRangeCell("2023-07-27", "2023-07-28"));
-        mvPartitionMap.put("mv_p2", createPRangeCell("2023-07-28", "2023-07-29"));
+        PCellSortedSet mvPartitionMap = PCellSortedSet.of();
+        mvPartitionMap.add("mv_p1", createPRangeCell("2023-07-27", "2023-07-28"));
+        mvPartitionMap.add("mv_p2", createPRangeCell("2023-07-28", "2023-07-29"));
 
         Map<Table, PCellSortedSet> baseChangedPartitions =
                 buildChangedPartitionMap(mockTable1, basePartitionMap, Set.of("p1"));
 
         boolean result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
-                baseChangedPartitions, PCellSortedSet.of(mvPartitionMap));
+                baseChangedPartitions, mvPartitionMap);
         Assertions.assertFalse(result, "One-to-one mapping should return false");
 
         // Test case 2: Many-to-One mapping (should return false)
-        Map<String, PCell> manyToOneBasePartitionMap = Maps.newHashMap();
-        manyToOneBasePartitionMap.put("p1", createPRangeCell("2023-07-01", "2023-07-15"));
-        manyToOneBasePartitionMap.put("p2", createPRangeCell("2023-07-15", "2023-07-31"));
+        PCellSortedSet manyToOneBasePartitionMap = PCellSortedSet.of();
+        manyToOneBasePartitionMap.add("p1", createPRangeCell("2023-07-01", "2023-07-15"));
+        manyToOneBasePartitionMap.add("p2", createPRangeCell("2023-07-15", "2023-07-31"));
 
-        Map<String, PCell> manyToOneMvPartitionMap = Maps.newHashMap();
-        manyToOneMvPartitionMap.put("mv_p1", createPRangeCell("2023-07-01", "2023-08-01"));
+        PCellSortedSet manyToOneMvPartitionMap = PCellSortedSet.of();
+        manyToOneMvPartitionMap.add("mv_p1", createPRangeCell("2023-07-01", "2023-08-01"));
 
-        Map<Table, Map<String, PCell>> manyToOneRefBaseTablePartitionToCells = Maps.newHashMap();
+        Map<Table, PCellSortedSet> manyToOneRefBaseTablePartitionToCells = Maps.newHashMap();
         manyToOneRefBaseTablePartitionToCells.put(mockTable1, manyToOneBasePartitionMap);
         Map<Table, PCellSortedSet> manyToOneBaseChangedPartitions =
                 buildChangedPartitionMap(mockTable1, manyToOneBasePartitionMap, Set.of("p1"));
 
         result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
-                manyToOneBaseChangedPartitions, PCellSortedSet.of(manyToOneMvPartitionMap));
+                manyToOneBaseChangedPartitions, manyToOneMvPartitionMap);
         Assertions.assertTrue(result, "Many-to-one mapping should return true");
 
         // Test case 3: Many-to-Many mapping (should return true)
         // Base table partitions: 3-day intervals
         // MV partitions: monthly intervals
-        Map<String, PCell> manyToManyBasePartitionMap = Maps.newHashMap();
-        manyToManyBasePartitionMap.put("p1", createPRangeCell("2023-07-27", "2023-07-30"));
-        manyToManyBasePartitionMap.put("p2", createPRangeCell("2023-07-30", "2023-08-02"));
-        manyToManyBasePartitionMap.put("p3", createPRangeCell("2023-08-02", "2023-08-05"));
+        PCellSortedSet manyToManyBasePartitionMap = PCellSortedSet.of();
+        manyToManyBasePartitionMap.add("p1", createPRangeCell("2023-07-27", "2023-07-30"));
+        manyToManyBasePartitionMap.add("p2", createPRangeCell("2023-07-30", "2023-08-02"));
+        manyToManyBasePartitionMap.add("p3", createPRangeCell("2023-08-02", "2023-08-05"));
 
-        Map<String, PCell> manyToManyMvPartitionMap = Maps.newHashMap();
-        manyToManyMvPartitionMap.put("mv_p1", createPRangeCell("2023-07-01", "2023-08-01"));
-        manyToManyMvPartitionMap.put("mv_p2", createPRangeCell("2023-08-01", "2023-09-01"));
+        PCellSortedSet manyToManyMvPartitionMap = PCellSortedSet.of();
+        manyToManyMvPartitionMap.add("mv_p1", createPRangeCell("2023-07-01", "2023-08-01"));
+        manyToManyMvPartitionMap.add("mv_p2", createPRangeCell("2023-08-01", "2023-09-01"));
 
         Map<Table, PCellSortedSet> manyToManyBaseChangedPartitions =
                 buildChangedPartitionMap(mockTable1, manyToManyBasePartitionMap, Set.of("p2"));
 
         result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
-                manyToManyBaseChangedPartitions, PCellSortedSet.of(manyToManyMvPartitionMap));
+                manyToManyBaseChangedPartitions, manyToManyMvPartitionMap);
         Assertions.assertTrue(result, "Many-to-many mapping should return true");
 
         // Test case 4: Empty base changed partitions (should return false)
         Map<Table, PCellSortedSet> emptyBaseChangedPartitions = buildChangedPartitionMap(
                 mockTable1, mvPartitionMap, Set.of());
         result = SyncPartitionUtils.isCalcPotentialRefreshPartition(
-                emptyBaseChangedPartitions, PCellSortedSet.of(mvPartitionMap));
+                emptyBaseChangedPartitions, mvPartitionMap);
         Assertions.assertFalse(result, "Empty base changed partitions should return false");
     }
 }

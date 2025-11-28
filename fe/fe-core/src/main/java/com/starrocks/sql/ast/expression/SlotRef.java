@@ -40,21 +40,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.planner.FragmentNormalizer;
+import com.starrocks.catalog.TableName;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
-import com.starrocks.planner.TupleId;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TSlotRef;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
@@ -147,7 +143,7 @@ public class SlotRef extends Expr {
         this.originType = desc.getOriginType();
         this.label = null;
         if (this.type.isChar()) {
-            this.type = Type.VARCHAR;
+            this.type = VarcharType.VARCHAR;
         }
         analysisDone();
     }
@@ -169,7 +165,7 @@ public class SlotRef extends Expr {
     }
 
     public SlotRef(SlotId slotId) {
-        this(new SlotDescriptor(slotId, "", Type.INVALID, false));
+        this(new SlotDescriptor(slotId, "", InvalidType.INVALID, false));
     }
 
     public void setBackQuoted(boolean isBackQuoted) {
@@ -225,8 +221,6 @@ public class SlotRef extends Expr {
     }
 
     public SlotDescriptor getDesc() {
-        Preconditions.checkState(isAnalyzed);
-        Preconditions.checkNotNull(desc);
         return desc;
     }
 
@@ -293,14 +287,6 @@ public class SlotRef extends Expr {
         return tblName != null && !isFromLambda();
     }
 
-    @Override
-    public String toMySql() {
-        if (label == null) {
-            throw new IllegalArgumentException("should set label for cols in MySQLScanNode. SlotRef: " + debugString());
-        }
-        return label;
-    }
-
     public TableName getTableName() {
         Preconditions.checkState(isAnalyzed);
         Preconditions.checkNotNull(desc);
@@ -312,38 +298,6 @@ public class SlotRef extends Expr {
             return desc.getParent().getRef().getName();
         }
         return tblName;
-    }
-
-    @Override
-    protected void toThrift(TExprNode msg) {
-        msg.node_type = TExprNodeType.SLOT_REF;
-        if (desc != null) {
-            if (desc.getParent() != null) {
-                msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
-            } else {
-                // tuple id is meaningless here
-                msg.slot_ref = new TSlotRef(desc.getId().asInt(), 0);
-            }
-        } else {
-            // slot id and tuple id are meaningless here
-            msg.slot_ref = new TSlotRef(0, 0);
-        }
-
-        msg.setOutput_column(outputColumn);
-    }
-
-    @Override
-    public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {
-        msg.node_type = TExprNodeType.SLOT_REF;
-        if (desc != null) {
-            SlotId slotId = normalizer.isNotRemappingSlotId() ? desc.getId() : normalizer.remapSlotId(desc.getId());
-            // tuple id is meaningless here
-            msg.slot_ref = new TSlotRef(slotId.asInt(), 0);
-        } else {
-            // slot id and tuple id are meaningless here
-            msg.slot_ref = new TSlotRef(0, 0);
-        }
-        msg.setOutput_column(outputColumn);
     }
 
     @Override
@@ -401,32 +355,6 @@ public class SlotRef extends Expr {
         return nullable;
     }
 
-    @Override
-    public boolean isBoundByTupleIds(List<TupleId> tids) {
-        Preconditions.checkState(desc != null);
-        if (isFromLambda()) {
-            return true;
-        }
-        for (TupleId tid : tids) {
-            if (tid.equals(desc.getParent().getId())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isBound(SlotId slotId) {
-        Preconditions.checkState(isAnalyzed);
-        return desc.getId().equals(slotId);
-    }
-
-    public Table getTable() {
-        Preconditions.checkState(desc != null);
-        Table table = desc.getParent().getTable();
-        return table;
-    }
-
     public String getColumnName() {
         return colName;
     }
@@ -456,14 +384,11 @@ public class SlotRef extends Expr {
         return true;
     }
 
-
-
-
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitSlot(this, context);
     }
 

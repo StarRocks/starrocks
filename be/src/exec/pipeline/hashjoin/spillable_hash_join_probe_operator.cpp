@@ -18,19 +18,16 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
-#include <optional>
 
 #include "common/config.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -332,6 +329,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
         auto yield_func = [&](workgroup::ScanTask&& task) { spill::IOTaskExecutor::force_submit(std::move(task)); };
         auto io_task =
                 workgroup::ScanTask(_join_builder->spiller()->options().wg, std::move(task), std::move(yield_func));
+        io_task.set_query_type(state->query_options().query_type);
         RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     }
     return Status::OK();
@@ -345,6 +343,7 @@ void SpillableHashJoinProbeOperator::_update_status(Status&& status) const {
 }
 
 Status SpillableHashJoinProbeOperator::_status() const {
+    RETURN_IF_ERROR(_join_builder->spiller()->task_status());
     std::lock_guard guard(_mutex);
     return _operator_status;
 }

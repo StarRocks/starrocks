@@ -19,8 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.BoolLiteral;
@@ -31,10 +29,18 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
@@ -224,6 +230,11 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         @Override
+        public Expression visitLargeInPredicate(LargeInPredicateOperator operator, IcebergContext context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ScalarOperatorToIcebergExpr");
+        }
+
+        @Override
         public Expression visitInPredicate(InPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
@@ -339,13 +350,13 @@ public class ScalarOperatorToIcebergExpr {
             Optional<ConstantOperator> res = Optional.empty();
             switch (resultTypeID) {
                 case BOOLEAN:
-                    res = operator.castTo(com.starrocks.catalog.Type.BOOLEAN);
+                    res = operator.castTo(BooleanType.BOOLEAN);
                     break;
                 case DATE:
-                    res = operator.castTo(com.starrocks.catalog.Type.DATE);
+                    res = operator.castTo(DateType.DATE);
                     break;
                 case TIMESTAMP:
-                    res = operator.castTo(com.starrocks.catalog.Type.DATETIME);
+                    res = operator.castTo(DateType.DATETIME);
                     break;
                 case STRING:
                 case UUID:
@@ -353,16 +364,16 @@ public class ScalarOperatorToIcebergExpr {
                     if (operator.getType().isNumericType()) {
                         return null;
                     } else {
-                        res = operator.castTo(com.starrocks.catalog.Type.VARCHAR);
+                        res = operator.castTo(VarcharType.VARCHAR);
                     }
                     break;
                 case BINARY:
-                    res = operator.castTo(com.starrocks.catalog.Type.VARBINARY);
+                    res = operator.castTo(VarbinaryType.VARBINARY);
                     break;
                     // num usually don't need cast, and num and string has different comparator
                     // cast is dangerous.
                 case DECIMAL:
-                    res = operator.castTo(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
+                    res = operator.castTo(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
                     break;
                 case INTEGER:
                 case LONG:

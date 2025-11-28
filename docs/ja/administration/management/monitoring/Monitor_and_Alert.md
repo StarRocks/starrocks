@@ -139,6 +139,10 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/promethe
              group: be
    ```
 
+   :::note
+   クラスタのスケーリング（スケールイン/スケールアウト）後、Prometheus はサービス（`targets`）変更を検出できないことにご注意ください。例えば、AWS 上にデプロイされたクラスターの場合、Prometheus サービスをホストする EC2 インスタンスに `ec2:DescribeInstances` および `ec2:DescribeTags` 権限を付与し、**prometheus/prometheus.yml** に `ec2_sd_configs` および `relabel_configs` プロパティを追加できます。詳細な手順については、[付録 - Prometheus のサービス検出を有効にする](#prometheus-のサービス検出を有効にする)を参照してください。
+   :::
+
    設定ファイルを変更した後、`promtool` を使用して変更が有効かどうかを確認できます。
 
    ```Bash
@@ -773,6 +777,81 @@ Backends Status メトリック項目の設定を編集します。
 3. **Alert evaluation behavior** セクションで、以前に作成した **PROD** ディレクトリと Evaluation group **01** を選択し、持続時間を 30 秒に設定します。
 4. **Add details for your alert rule** セクションで、**Add annotation** をクリックし、**Description** を選択してアラート内容を入力します。たとえば、「FE ヒープメモリ使用量が高いことが検出されました。FE 設定ファイル **fe.conf** でヒープメモリ制限を調整してください」。
 5. **Notifications** セクションで、FE アラートルールと同じように **Labels** を設定します。Labels が設定されていない場合、Grafana は Default policy を使用し、「StarRocksOp」アラートチャネルにアラートメールを送信します。
+
+## 付録
+
+### Prometheus のサービス検出を有効にする
+
+Prometheus のサービス検出を有効にすると、クラスタのスケーリング（スケールイン/スケールアウト）後にサービス（ノード）を自動的に検出できるようになります。
+
+:::note
+以下の部分では、AWSを例として使用します。
+:::
+
+1. IAM Policy を使用して、Prometheus サービスをホストする EC2 インスタンスに以下の権限を付与してください：
+
+   ```JSON
+   {
+         "Version": "2012-10-17",
+         "Statement": [
+                  {
+                           "Effect": "Allow",
+                           "Action": [
+                                 "ec2:DescribeInstances",
+                                 "ec2:DescribeTags"
+                           ],
+                           "Resource": "*"
+                  }
+         ]
+   }
+   ```
+
+   AWS リソースへの認証に関する詳細な手順については、[AWS リソースへの認証](../../../integrations/authenticate_to_aws_resources.md)を参照してください。
+
+   これらの権限により、Prometheus はリージョン内のインスタンスとそのタグを一覧表示できます。
+
+2. **prometheus/prometheus.yml** に `ec2_sd_configs` セクションと `relabel_configs` セクションを追加してください。
+
+   例：
+
+   ```Yaml
+   global:
+   scrape_interval: 15s # Set the global scrape interval to 15s. The default is 1 min.
+   evaluation_interval: 15s # Set the global rule evaluation interval to 15s. The default is 1 min.
+   scrape_configs:
+   - job_name: 'StarRocks_Cluster01'
+      metrics_path: '/metrics'
+      # highlight-start
+      ec2_sd_configs:
+         - region: us-west-2
+         port: 8030
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['FE']
+         - region: us-west-2
+         port: 8040
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['BE']
+      relabel_configs:
+         - source_labels: [__meta_ec2_tag_ClusterName]
+         regex: test-stage-20251021
+         target_label: cluster
+         replacement: test-stage-20251021
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: FE
+         target_label: group
+         replacement: fe
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: BE
+         target_label: group
+         replacement: be
+      # highlight-end
+   ```
 
 ## Q&A
 

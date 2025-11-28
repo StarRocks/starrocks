@@ -17,9 +17,11 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 
 import java.util.Set;
 
@@ -30,6 +32,8 @@ public class DistributionDescAnalyzer {
             analyzeHashDistribution((HashDistributionDesc) distributionDesc, colSet);
         } else if (distributionDesc instanceof RandomDistributionDesc) {
             analyzeRandomDistribution((RandomDistributionDesc) distributionDesc, colSet);
+        } else if (distributionDesc instanceof RangeDistributionDesc) {
+            // Nothing need to be analyzed for range distribution
         }
     }
 
@@ -61,6 +65,8 @@ public class DistributionDescAnalyzer {
         if (distributionDesc instanceof HashDistributionDesc && distributionInfo instanceof HashDistributionInfo) {
             return false;
         } else if (distributionDesc instanceof RandomDistributionDesc && distributionInfo instanceof RandomDistributionInfo) {
+            return false;
+        } else if (distributionDesc instanceof RangeDistributionDesc && distributionInfo instanceof RangeDistributionInfo) {
             return false;
         }
         return true;

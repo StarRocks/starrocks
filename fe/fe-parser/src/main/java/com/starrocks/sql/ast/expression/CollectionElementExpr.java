@@ -1,0 +1,73 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast.expression;
+
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
+
+public class CollectionElementExpr extends Expr {
+
+    // For trino and presto, access out of bound in map/array, it will throw error msg
+    private final boolean checkIsOutOfBounds;
+
+    public CollectionElementExpr(Expr expr, Expr subscript, boolean checkIsOutOfBounds) {
+        super(NodePosition.ZERO);
+        this.children.add(expr);
+        this.children.add(subscript);
+        this.checkIsOutOfBounds = checkIsOutOfBounds;
+    }
+
+    public CollectionElementExpr(Type type, Expr expr, Expr subscript, boolean checkIsOutOfBounds) {
+        this(type, expr, subscript, checkIsOutOfBounds, NodePosition.ZERO);
+    }
+
+    public CollectionElementExpr(Type type, Expr expr, Expr subscript, boolean checkIsOutOfBounds, NodePosition pos) {
+        super(pos);
+        this.type = type;
+        this.children.add(expr);
+        this.children.add(subscript);
+        this.checkIsOutOfBounds = checkIsOutOfBounds;
+    }
+
+    public CollectionElementExpr(CollectionElementExpr other) {
+        super(other);
+        this.checkIsOutOfBounds = other.checkIsOutOfBounds;
+    }
+
+
+    @Override
+    public Expr clone() {
+        return new CollectionElementExpr(this);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCollectionElementExpr(this, context);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        boolean ret = true;
+        for (Expr child : children) {
+            ret &= child.isSelfMonotonic();
+        }
+        return ret;
+    }
+
+    public boolean isCheckIsOutOfBounds() {
+        return checkIsOutOfBounds;
+    }
+}

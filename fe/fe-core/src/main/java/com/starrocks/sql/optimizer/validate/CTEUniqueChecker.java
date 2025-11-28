@@ -43,7 +43,6 @@ public class CTEUniqueChecker implements PlanValidator.Checker {
         return INSTANCE;
     }
 
-
     @Override
     public void validate(OptExpression physicalPlan, TaskContext taskContext) {
         CTEUniqueChecker.Visitor visitor = new CTEUniqueChecker.Visitor();

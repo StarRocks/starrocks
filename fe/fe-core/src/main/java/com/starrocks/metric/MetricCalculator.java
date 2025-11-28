@@ -101,31 +101,35 @@ public class MetricCalculator extends TimerTask {
         // internal err rate
         long currentInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
         double internalErrRate = (double) (currentInternalErrCounter - lastQueryInternalErrCounter) / interval;
-        MetricRepo.GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(errRate < 0 ? 0.0 : internalErrRate);
-        lastQueryInternalErrCounter = currentErrCounter;
+        MetricRepo.GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(internalErrRate < 0 ? 0.0 : internalErrRate);
+        lastQueryInternalErrCounter = currentInternalErrCounter;
 
         // analysis error rate
         long currentAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
         double analysisErrRate = (double) (currentAnalysisErrCounter - lastQueryAnalysisErrCounter) / interval;
-        MetricRepo.GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(errRate < 0 ? 0.0 : analysisErrRate);
-        lastQueryAnalysisErrCounter = currentErrCounter;
+        MetricRepo.GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(analysisErrRate < 0 ? 0.0 : analysisErrRate);
+        lastQueryAnalysisErrCounter = currentAnalysisErrCounter;
 
         // query timeout rate
         long currentTimeoutErrCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
         double timeoutErrRate = (double) (currentTimeoutErrCounter - lastQueryTimeOutCounter) / interval;
-        MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(errRate < 0 ? 0.0 : timeoutErrRate);
-        lastQueryTimeOutCounter = currentErrCounter;
+        MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(timeoutErrRate < 0 ? 0.0 : timeoutErrRate);
+        lastQueryTimeOutCounter = currentTimeoutErrCounter;
 
         lastTs = currentTs;
 
         // query latency
         List<QueryDetail> queryList = QueryDetailQueue.getQueryDetailsAfterTime(lastQueryEventTime);
         List<Long> latencyList = new ArrayList<>();
+        List<Float> cacheMissRatioList = new ArrayList<>();
         double latencySum = 0L;
+        float cacheMissRatioSum = 0L;
         for (QueryDetail queryDetail : queryList) {
             if (queryDetail.isQuery() && queryDetail.getState() == QueryDetail.QueryMemState.FINISHED) {
                 latencyList.add(queryDetail.getLatency());
+                cacheMissRatioList.add(queryDetail.getCacheMissRatio());
                 latencySum += queryDetail.getLatency();
+                cacheMissRatioSum += queryDetail.getCacheMissRatio();
             }
         }
         if (queryList.size() > 0) {
@@ -148,6 +152,15 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.GAUGE_QUERY_LATENCY_P99.setValue((double) latencyList.get(index));
             index = (int) Math.round((latencyList.size() - 1) * 0.999);
             MetricRepo.GAUGE_QUERY_LATENCY_P999.setValue((double) latencyList.get(index));
+
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(cacheMissRatioSum / cacheMissRatioList.size());
+            cacheMissRatioList.sort(Comparator.naturalOrder());
+            index = (int) Math.round((cacheMissRatioList.size() - 1) * 0.5);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P50.setValue(cacheMissRatioList.get(index));
+            index = (int) Math.round((cacheMissRatioList.size() - 1) * 0.9);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P90.setValue(cacheMissRatioList.get(index));
+            index = (int) Math.round((cacheMissRatioList.size() - 1) * 0.99);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P99.setValue(cacheMissRatioList.get(index));
         } else {
             MetricRepo.GAUGE_QUERY_LATENCY_MEAN.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_MEDIAN.setValue(0.0);
@@ -156,6 +169,11 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.GAUGE_QUERY_LATENCY_P95.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_P99.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_P999.setValue(0.0);
+
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(0.0f);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P50.setValue(0.0f);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P90.setValue(0.0f);
+            MetricRepo.GAUGE_CACHE_MISS_RATIO_P99.setValue(0.0f);
         }
 
         if (Config.enable_routine_load_lag_metrics)  {

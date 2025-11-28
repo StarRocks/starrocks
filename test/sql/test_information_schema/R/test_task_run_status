@@ -40,7 +40,7 @@ SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 
 -- !result
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
 -- result:
-mv-28357
+mv-11425
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 -- result:
@@ -55,7 +55,7 @@ admin set frontend config('enable_task_run_fe_evaluation'='false');
 -- !result
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
 -- result:
-a780f383-44da-11ef-a7c8-e2d8918adc6e
+019a8143-9531-7cd3-9983-023d5aeae57e
 -- !result
 SELECT count(1) FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
 -- result:
@@ -72,6 +72,59 @@ SUCCESS
 SELECT count(1) FROM information_schema.task_runs WHERE `STATE` = '${state}' and task_name = '${task_name}' and QUERY_ID = '${query_id}';
 -- result:
 1
+-- !result
+set enable_evaluate_schema_scan_rule=true;
+-- result:
+-- !result
+[UC] select count(*) from information_schema.task_runs;
+-- result:
+7
+-- !result
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+-- result:
+OK
+-- !result
+set enable_evaluate_schema_scan_rule=false;
+-- result:
+-- !result
+[UC] select count(*) from information_schema.task_runs;
+-- result:
+7
+-- !result
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+-- result:
+OK
+-- !result
+create database if not exists test_information_schema_task_runs;
+-- result:
+-- !result
+use test_information_schema_task_runs;
+-- result:
+-- !result
+set enable_evaluate_schema_scan_rule=true;
+-- result:
+-- !result
+[UC] select count(*) from information_schema.task_runs;
+-- result:
+7
+-- !result
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+-- result:
+OK
+-- !result
+set enable_evaluate_schema_scan_rule=false;
+-- result:
+-- !result
+[UC] select count(*) from information_schema.task_runs;
+-- result:
+7
+-- !result
+select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
+-- result:
+OK
+-- !result
+drop database if exists test_information_schema_task_runs;
+-- result:
 -- !result
 drop database db_${uuid0};
 -- result:

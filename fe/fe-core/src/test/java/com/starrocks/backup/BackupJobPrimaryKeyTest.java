@@ -41,6 +41,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -48,9 +49,11 @@ import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -69,6 +72,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -112,6 +116,8 @@ public class BackupJobPrimaryKeyTest {
 
     private MockRepositoryMgr repoMgr;
 
+    private static boolean origin_enable_metric_calculator_value;
+
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
         public MockBackupHandler(GlobalStateMgr globalStateMgr) {
@@ -140,7 +146,7 @@ public class BackupJobPrimaryKeyTest {
     private EditLog editLog;
 
     private Repository repo = new Repository(repoId, "repo_pk", false, "my_repo_pk",
-                new BlobStorage("broker", Maps.newHashMap()));
+            new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeAll
     public static void start() {
@@ -149,8 +155,6 @@ public class BackupJobPrimaryKeyTest {
         if (!backupDir.exists()) {
             backupDir.mkdirs();
         }
-
-        MetricRepo.init();
     }
 
     @AfterAll
@@ -159,7 +163,7 @@ public class BackupJobPrimaryKeyTest {
             File backupDir = new File(path.toString());
             if (backupDir.exists()) {
                 Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                            .forEach(File::delete);
+                        .forEach(File::delete);
             }
         }
     }
@@ -174,9 +178,18 @@ public class BackupJobPrimaryKeyTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         db = UnitTestUtil.createDbByName(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS,
-                    testDbName, testTableName);
+                testDbName, testTableName);
 
         LockManager lockManager = new LockManager();
+
+        // Setup default NodeMgr with SystemInfoService
+        SystemInfoService infoService = new SystemInfoService();
+        Backend backend = new Backend(backendId, "127.0.0.1", 9050);
+        backend.setAlive(true);
+        infoService.addBackend(backend);
+
+        NodeMgr nodeMgr = new NodeMgr();
+        Deencapsulation.setField(nodeMgr, "systemInfo", infoService);
 
         new Expectations(globalStateMgr) {
             {
@@ -199,6 +212,10 @@ public class BackupJobPrimaryKeyTest {
                 globalStateMgr.getGtidGenerator();
                 minTimes = 0;
                 result = new GtidGenerator();
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
                 globalStateMgr.getLocalMetastore().getTable(testDbName, testTableName);
                 minTimes = 0;
@@ -246,6 +263,15 @@ public class BackupJobPrimaryKeyTest {
         tableRefs.add(new TableRefPersist(new TableName(testDbName, testTableName), null));
         job = new BackupJob("label_pk", dbId, testDbName, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.setTestPrimaryKey();
+
+        origin_enable_metric_calculator_value = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
+        MetricRepo.init();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        Config.enable_metric_calculator = origin_enable_metric_calculator_value;
     }
 
     @Test
@@ -261,8 +287,8 @@ public class BackupJobPrimaryKeyTest {
         OlapTable backupTbl = (OlapTable) backupMeta.getTable(testTableName);
         List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
         Assertions.assertNotNull(backupTbl);
-        Assertions.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                ((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                RestoreJob.getSignature(((OlapTable) db.getTable(tblId)), BackupHandler.SIGNATURE_VERSION, partNames, true));
         Assertions.assertEquals(1, AgentTaskQueue.getTaskNum());
         AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.MAKE_SNAPSHOT, tabletId);
         Assertions.assertTrue(task instanceof SnapshotTask);
@@ -281,7 +307,7 @@ public class BackupJobPrimaryKeyTest {
         TStatus taskStatus = new TStatus(TStatusCode.OK);
         TBackend tBackend = new TBackend("", 0, 1);
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    snapshotTask.getSignature(), taskStatus);
+                snapshotTask.getSignature(), taskStatus);
         request.setSnapshot_files(snapshotFiles);
         request.setSnapshot_path(snapshotPath);
         Assertions.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
@@ -312,7 +338,7 @@ public class BackupJobPrimaryKeyTest {
         Assertions.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
         request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
-                    upTask.getSignature(), taskStatus);
+                upTask.getSignature(), taskStatus);
         request.setTablet_files(tabletFileMap);
 
         Assertions.assertFalse(job.finishSnapshotUploadTask(upTask, request));
@@ -348,8 +374,9 @@ public class BackupJobPrimaryKeyTest {
             Assertions.assertNotNull(olapTable);
             Assertions.assertNotNull(restoreMetaInfo.getTable(testTableName));
             List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
-            Assertions.assertEquals(((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
-                    olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+            Assertions.assertEquals(
+                    RestoreJob.getSignature(((OlapTable) db.getTable(tblId)), BackupHandler.SIGNATURE_VERSION, names, true),
+                    RestoreJob.getSignature(olapTable, BackupHandler.SIGNATURE_VERSION, names, true));
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());
             Assertions.assertEquals(testDbName, restoreJobInfo.dbName);

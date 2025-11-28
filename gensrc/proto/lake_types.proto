@@ -33,6 +33,9 @@ message DelvecPagePB {
     // position in file
     optional uint64 offset = 2;
     optional uint64 size = 3;
+    optional uint32 crc32c = 4;
+    // For upgrade compatibility.
+    optional int64 crc32c_gen_version = 5;
 }
 
 message PersistentIndexSstablePB {
@@ -319,7 +322,7 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message DynamicTabletsInfoPB {
+message ReshardingTabletsInfoPB {
     repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
     repeated MergingTabletInfoPB merging_tablet_infos = 2;
     repeated IdenticalTabletInfoPB identical_tablet_infos = 3;

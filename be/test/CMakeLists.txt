@@ -61,6 +61,8 @@ set(EXEC_FILES
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
+        ./exec/workgroup/work_group_manager_test.cpp
+        ./exec/workgroup/mem_tracker_manager_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -103,6 +105,7 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/multi_olap_table_sink_test.cpp
+        ./exec/parquet_schema_builder_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
@@ -116,11 +119,13 @@ set(EXEC_FILES
         ./exec/file_scanner/orc_scanner_test.cpp
         ./exec/file_scanner/parquet_scanner_test.cpp
         ./exec/hdfs_scanner/cache_select_scanner_test.cpp
+        ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_test.cpp
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/ai_functions_test.cpp
@@ -206,6 +211,7 @@ set(EXEC_FILES
         ./formats/csv/default_value_converter_test.cpp
         ./formats/csv/string_converter_test.cpp
         ./formats/csv/varbinary_converter_test.cpp
+        ./formats/csv/csv_reader_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -255,6 +261,7 @@ set(EXEC_FILES
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/update_config_action_test.cpp
+        ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/io_profiler_test.cpp
@@ -310,6 +317,7 @@ set(EXEC_FILES
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./runtime/load_fail_point_test.cpp
+        ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
@@ -403,13 +411,14 @@ set(EXEC_FILES
         ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
+        service/backend_base_test.cpp
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
-        ./cache/disk_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
@@ -459,6 +468,7 @@ SET(DW_TEST_FILES
     ./storage/conjunctive_predicates_test.cpp
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
+    ./storage/data_dir_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
@@ -485,6 +495,7 @@ SET(DW_TEST_FILES
     ./storage/lake/condition_update_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/lake_data_source_test.cpp
+    ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp

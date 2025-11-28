@@ -94,7 +94,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
     }
 
     public LoadsHistorySyncer() {
-        super("Load history syncer", Config.loads_history_sync_interval_second * 1000L);
+        super("load-history-syncer", Config.loads_history_sync_interval_second * 1000L);
     }
 
     public void syncData() {

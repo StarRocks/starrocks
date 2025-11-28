@@ -71,6 +71,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    auto num_heavy_exprs = down_cast<ScanOperatorFactory*>(_factory)->scan_node()->get_heavy_expr_ctxs().size();
+    _unique_metrics->add_info_string("NumHeavyExprs", std::to_string(num_heavy_exprs));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
@@ -475,8 +477,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // kick start this chunk source
             auto start_status = chunk_source->start(state);
             if (!start_status.ok()) {
-                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
-                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                LOG(WARNING) << "start chunk_source failed, fragment_instance_id="
+                             << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
                 _set_scan_status(start_status);
             }
             Status status;
@@ -486,8 +488,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
-                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
+                LOG_IF(WARNING, !status.is_suppressed())
+                        << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                        << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -501,6 +504,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             (void)query_trace_ctx;
         }
     };
+
+    task.set_query_type(state->query_options().query_type);
 
     bool submit_success;
     {
@@ -662,6 +667,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     TEST_SUCC_POINT("ScanOperatorFactory::prepare");
 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(Expr::open(_scan_node->get_heavy_expr_ctxs(), state));
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -673,7 +680,9 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
-
+    // Do not call Expr::close, since async io task would access heavy exprs after
+    // they are closed; exprs in scan operators are auto-closed by ExprContext.
+    // Expr::close(_scan_node->get_heavy_expr_ctxs(), state);
     OperatorFactory::close(state);
 }
 

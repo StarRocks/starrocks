@@ -229,6 +229,7 @@ public class ConfigBase {
 
     private static void validateConfValue(Field f, String[] arrayArgs, String confVal)
             throws InvalidConfException {
+        // TODO: refactor to allow register custom validator for each config field
         switch (f.getName()) {
             case "authentication_chain":
                 Set<String> argsSet = new HashSet<>(Arrays.asList(arrayArgs));
@@ -238,6 +239,13 @@ public class ConfigBase {
                     throw new InvalidConfException("'authentication_chain' configuration invalid, " +
                             "'native' must be in the list, and cannot have duplicates, current value: "
                             + confVal);
+                }
+                break;
+            case "db_used_data_quota_update_interval_secs":
+                int intVal = Integer.parseInt(confVal);
+                if (intVal < 30) {
+                    throw new InvalidConfException("'db_used_data_quota_update_interval_secs' configuration " +
+                            "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
             default:

@@ -361,16 +361,26 @@ public:
         return !_all_local_rf_ready;
     }
 
-    bool global_rf_block() {
+    bool global_rf_block(std::string* rf_waiting_set = nullptr) {
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout =
-                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
-                }); // or all the remote RFs are ready.
+        _all_global_rf_ready_or_timeout = true;
 
+        // timeout check
+        if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
+            return false;
+        }
+        // check if all the remote RFs are ready.
+        for (auto* rf_desc : _global_rf_descriptors) {
+            if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
+                continue;
+            }
+            if (rf_waiting_set != nullptr) {
+                rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
+            }
+            _all_global_rf_ready_or_timeout = false;
+        }
         return !_all_global_rf_ready_or_timeout;
     }
 
@@ -403,8 +413,9 @@ public:
 
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
+            std::string rf_waiting_set;
             return std::string(dependencies_block() ? "(dependencies," : "(") +
-                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(global_rf_block(&rf_waiting_set) ? "global runtime filter:" + rf_waiting_set : "") +
                    std::string(local_rf_block() ? "local runtime filter)" : ")");
         } else {
             return "";
@@ -426,8 +437,6 @@ public:
                 return false;
             }
 
-            // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
-            //  This writing method is a bit tricky, and when there is a better way, replace it
             mark_precondition_ready();
 
             RETURN_IF_ERROR(check_short_circuit());
@@ -436,6 +445,40 @@ public:
             }
             // Driver state must be set to a state different from PRECONDITION_BLOCK bellow,
             // to avoid call mark_precondition_ready() and check_short_circuit() multiple times.
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            set_driver_state(DriverState::OUTPUT_FULL);
+            return false;
+        }
+
+        // INPUT_EMPTY
+        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            set_driver_state(DriverState::INPUT_EMPTY);
+            return false;
+        }
+
+        return true;
+    }
+
+    // used in event scheduler
+    // check driver is ready for schedule
+    // similar to is_not_blocked but without check short_circuit.
+    bool check_is_ready() {
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
+        }
+        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
+            return true;
+        }
+
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+            mark_precondition_ready();
         }
 
         // OUTPUT_FULL
