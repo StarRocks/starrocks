@@ -16,8 +16,11 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.proto.VariantPB;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 
 import java.util.List;
 
@@ -72,6 +75,14 @@ public abstract class Variant implements Comparable<Variant> {
             default:
                 throw new IllegalArgumentException("Type[" + type.toSql() + "] not supported.");
         }
+    }
+
+    public static Variant fromThrift(TVariant tVariant) {
+        return Variant.of(TypeDeserializer.fromThrift(tVariant.type), tVariant.string_value);
+    }
+
+    public static Variant fromProto(VariantPB variantPB) {
+        return Variant.of(TypeDeserializer.fromProtobuf(variantPB.type), variantPB.stringValue);
     }
 
     public static int compatibleCompare(Variant key1, Variant key2) {
