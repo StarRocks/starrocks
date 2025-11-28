@@ -487,7 +487,14 @@ public class TabletReshardJob implements Writable {
                 oldPhysicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
                 newPhysicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
 
-                olapTable.replacePhysicalPartition(oldPhysicalPartition.getId(), newPhysicalPartition, true);
+                // Temporary code, ignore, will be replaced later
+                var partition = olapTable.getPartition(oldPhysicalPartition.getParentId());
+                if (partition != null) {
+                    partition.removeSubPartition(oldPhysicalPartition.getId());
+                    partition.addSubPartition(newPhysicalPartition);
+                    olapTable.removePhysicalPartition(oldPhysicalPartition);
+                    olapTable.addPhysicalPartition(newPhysicalPartition);
+                }
             }
         }
     }
@@ -497,7 +504,8 @@ public class TabletReshardJob implements Writable {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
             for (long physicalPartitionId : physicalPartitionContexts.keySet()) {
-                PhysicalPartition physicalPartition = olapTable.removePhysicalPartition(physicalPartitionId);
+                // Temporary code, ignore, will be replaced later
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition == null) {
                     continue;
                 }
