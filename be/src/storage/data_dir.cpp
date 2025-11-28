@@ -382,9 +382,8 @@ void DataDir::load() {
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
                 rowset_meta->set_skip_tablet_schema(true);
             }
-            Status commit_txn_status = _txn_manager->commit_txn(tablet, rowset_meta->partition_id(),
-                                                                rowset_meta->txn_id(), rowset_meta->load_id(), rowset,
-                                                                true);
+            Status commit_txn_status = _txn_manager->commit_txn(
+                    tablet, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->load_id(), rowset, true);
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
                              << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
