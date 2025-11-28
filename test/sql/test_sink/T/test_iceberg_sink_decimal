@@ -21,7 +21,20 @@ insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 values(10.23);
 
 select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 where c1=10.23;
 
+create table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 (
+    c1 decimal(23,3)
+);
+
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(10);
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=10;
+
+insert into iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 values(30);
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1=30;
+
+select * from iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 where c1<=30;
+
 drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t1 force;
+drop table iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0}.t2 force;
 
 drop database iceberg_sink_${uuid0}.iceberg_sink_db_${uuid0};
 drop catalog iceberg_sink_${uuid0};
