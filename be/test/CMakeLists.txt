@@ -379,6 +379,7 @@ set(EXEC_FILES
         ./storage/column_predicate_test.cpp
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
+        ./storage/data_dir_test.cpp
         ./storage/merge_iterator_test.cpp
         ./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
