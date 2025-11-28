@@ -567,14 +567,13 @@ void MapColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
         size_t map_size = offsets_data[i + 1] - offset;
         hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&map_size, sizeof(map_size), hash[i]));
         uint32_t base_hash = hash[i];
-        for (size_t j = 0; j < map_size; ++j) {
-            uint32_t pair_hash = base_hash;
-            uint32_t ele_offset = offset + static_cast<uint32_t>(j);
-            _keys->xxh3_hash(&pair_hash, ele_offset, ele_offset + 1);
-            _values->xxh3_hash(&pair_hash, ele_offset, ele_offset + 1);
-            // for get same hash on un-order map, we need to satisfies the commutative law
-            hash[i] += pair_hash;
-        }
+        // Hash all keys at once, then all values at once to reduce function calls
+        uint32_t keys_hash = base_hash;
+        _keys->xxh3_hash(&keys_hash, offset, offset + static_cast<uint32_t>(map_size));
+        uint32_t values_hash = base_hash;
+        _values->xxh3_hash(&values_hash, offset, offset + static_cast<uint32_t>(map_size));
+        // Combine keys and values hash (commutative operation)
+        hash[i] = keys_hash + values_hash;
     }
 }
 

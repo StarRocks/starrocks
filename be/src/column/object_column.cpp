@@ -275,12 +275,7 @@ void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const
 
 template <typename T>
 void ObjectColumn<T>::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    std::string s;
-    for (uint32_t i = from; i < to; ++i) {
-        s.resize(_pool[i].serialize_size());
-        size_t size = _pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
-        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(s.data(), static_cast<int32_t>(size), hash[i]));
-    }
+    throw std::runtime_error("xxh3_hash is not supported for ObjectColumn");
 }
 
 template <typename T>

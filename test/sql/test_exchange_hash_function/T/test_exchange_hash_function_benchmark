@@ -1,0 +1,82 @@
+-- name: test_exchange_hash_function_benchmark
+-- Benchmark test comparing fnv_hash vs xxh3_hash performance
+
+-- Create test table with moderate size data (several million rows)
+CREATE TABLE `t_hash_benchmark` (
+  `c0` int DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` string DEFAULT NULL,
+  `c3` double DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 8
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- Insert test data (5 million rows)
+insert into t_hash_benchmark 
+SELECT 
+    generate_series % 10000 as c0,
+    generate_series as c1,
+    concat('str_', generate_series) as c2,
+    generate_series * 1.5 as c3
+FROM TABLE(generate_series(1, 5000000));
+
+-- Test with fnv_hash (version 0) - measure time
+set exchange_hash_function_version = 0;
+select /*+SET_VAR(query_timeout=3600)*/ count(*) from (
+    select c0, c1, c2, sum(c3) 
+    from t_hash_benchmark 
+    group by c0, c1, c2
+) t;
+
+-- Test with xxh3_hash (version 1) - measure time
+set exchange_hash_function_version = 1;
+select /*+SET_VAR(query_timeout=3600)*/ count(*) from (
+    select c0, c1, c2, sum(c3) 
+    from t_hash_benchmark 
+    group by c0, c1, c2
+) t;
+
+-- Test shuffle join with fnv_hash
+set exchange_hash_function_version = 0;
+select /*+SET_VAR(query_timeout=3600)*/ count(*) from 
+    t_hash_benchmark a join [shuffle] t_hash_benchmark b 
+    on a.c0 = b.c0 and a.c1 = b.c1;
+
+-- Test shuffle join with xxh3_hash
+set exchange_hash_function_version = 1;
+select /*+SET_VAR(query_timeout=3600)*/ count(*) from 
+    t_hash_benchmark a join [shuffle] t_hash_benchmark b 
+    on a.c0 = b.c0 and a.c1 = b.c1;
+
+-- Test complex aggregation with fnv_hash
+set exchange_hash_function_version = 0;
+select /*+SET_VAR(query_timeout=3600)*/ 
+    c0 % 100 as bucket,
+    count(*) as cnt,
+    sum(c1) as sum_c1,
+    avg(c3) as avg_c3
+from t_hash_benchmark 
+group by c0 % 100
+order by bucket;
+
+-- Test complex aggregation with xxh3_hash
+set exchange_hash_function_version = 1;
+select /*+SET_VAR(query_timeout=3600)*/ 
+    c0 % 100 as bucket,
+    count(*) as cnt,
+    sum(c1) as sum_c1,
+    avg(c3) as avg_c3
+from t_hash_benchmark 
+group by c0 % 100
+order by bucket;
+
+-- Reset to default
+set exchange_hash_function_version = 0;
+
+-- Clean up
+DROP TABLE t_hash_benchmark;
+
