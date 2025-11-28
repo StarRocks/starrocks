@@ -250,7 +250,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
     public static final String ENABLE_LAMBDA_PUSHDOWN = "enable_lambda_pushdown";
-    
+
     // Large IN predicate optimization: special fast path for queries with large IN constant lists.
     // When enabled, IN predicates with many constants will be converted to a special streamlined format
     // to avoid high overhead in FE parse/Analyzer/Planner/Deploy phases.
@@ -947,6 +947,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH = "enable_insert_select_external_auto_refresh";
 
+<<<<<<< HEAD
+=======
+    public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
+
+    public static final String ENABLE_PRE_AGG_TOP_N_PUSH_DOWN = "enable_pre_agg_top_n_push_down";
+
+>>>>>>> a0a8b571bd ([Enhancement] Add rule to push down topN to pre-aggregation (#61497))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1109,15 +1116,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
-    
+
     /**
      * Comma-separated list of optimizer rule types to disable
-     * 
+     *
      * This is used to temporarily disable specific optimizer rules when they cause query errors,
      * allowing queries to complete successfully while the rule bug is being fixed.
-     * 
+     *
      * Supports TF_ (Transformation rules) and GP_ (Group combination rules) rule types.
-     * 
+     *
      * Example:
      *   SET cbo_disabled_rules = 'TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS';
      */
@@ -1934,6 +1941,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
+    private boolean pushDownHeavyExprs = true;
+
+    @VarAttr(name = ENABLE_PRE_AGG_TOP_N_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enablePreAggTopNPushDown = true;
+
+>>>>>>> a0a8b571bd ([Enhancement] Add rule to push down topN to pre-aggregation (#61497))
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
     }
@@ -3194,11 +3210,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setSqlMode(long sqlMode) {
         this.sqlMode = sqlMode;
     }
-    
+
     public String getCboDisabledRules() {
         return cboDisabledRules;
     }
-    
+
     public void setCboDisabledRules(String rulesStr) {
         this.cboDisabledRules = rulesStr;
     }
@@ -5222,6 +5238,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPushDownHeavyExprs(boolean flag) {
+        this.pushDownHeavyExprs = flag;
+    }
+
+    public boolean isPushDownHeavyExprs() {
+        return this.pushDownHeavyExprs;
+    }
+
+    public void setEnablePreAggTopNPushDown(boolean enablePreAggTopNPushDown) {
+        this.enablePreAggTopNPushDown = enablePreAggTopNPushDown;
+    }
+
+    public boolean isEnablePreAggTopNPushDown() {
+        return enablePreAggTopNPushDown;
+    }
+
+>>>>>>> a0a8b571bd ([Enhancement] Add rule to push down topN to pre-aggregation (#61497))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

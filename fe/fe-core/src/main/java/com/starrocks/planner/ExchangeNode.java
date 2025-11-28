@@ -115,7 +115,7 @@ public class ExchangeNode extends PlanNode {
             if (inputNode instanceof SortNode) {
                 SortNode sortNode = (SortNode) inputNode;
                 if (Objects.equals(TopNType.ROW_NUMBER, sortNode.getTopNType()) &&
-                        CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs())) {
+                        CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs()) && !sortNode.isPerPipeline()) {
                     limit = inputNode.limit;
                 } else {
                     unsetLimit();
