@@ -11,11 +11,43 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.9
+
+发布日期：2025 年 11 月 26 日
+
+### 功能优化
+
+- 在 FE 中新增事务延迟指标，用于观察事务各阶段的耗时。[#64948](https://github.com/StarRocks/starrocks/pull/64948)
+- 支持覆盖写入 S3 上的非分区 Hive 表，简化数据湖场景下的整表重写。[#65340](https://github.com/StarRocks/starrocks/pull/65340)
+- 引入 CacheOptions，以提供对 Tablet 元数据缓存的更细粒度控制。[#65222](https://github.com/StarRocks/starrocks/pull/65222)
+- 支持对 INSERT OVERWRITE 采集样本统计，以确保统计信息与最新数据一致。[#65363](https://github.com/StarRocks/starrocks/pull/65363)
+- 优化 INSERT OVERWRITE 后的统计信息收集策略，避免因 Tablet 异步上报导致统计信息缺失或不正确。[#65327](https://github.com/StarRocks/starrocks/pull/65327)
+- 对 INSERT OVERWRITE 或物化视图刷新操作中被删除或替换的分区引入保留期，在回收站中保留一段时间以提升可恢复性。[#64779](https://github.com/StarRocks/starrocks/pull/64779)
+
+### 问题修复
+
+以下问题已修复：
+
+- 与 `LocalMetastore.truncateTable()` 相关的锁竞争和并发问题。[#65191](https://github.com/StarRocks/starrocks/pull/65191)
+- 与 TabletChecker 相关的锁竞争及副本检查性能问题。[#65312](https://github.com/StarRocks/starrocks/pull/65312)
+- 通过 HTTP SQL 切换用户时日志记录错误。[#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- 由于 DelVec CRC32 升级兼容性问题导致的校验失败。[#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- 因 RocksDB 迭代器超时导致的 Tablet 元数据加载失败。[#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- 当 JSON 超路径 `$` 或所有路径被跳过导致内部 `flat_path` 字符串为空时，调用 `substr` 会抛异常并导致 BE 崩溃。[#65260](https://github.com/StarRocks/starrocks/pull/65260)
+- Fragment 执行中的 PREPARED 标记未正确设置。[#65423](https://github.com/StarRocks/starrocks/pull/65423)
+- 由于重复的 Load Profile 计数导致 Write 和 Flush 指标不准确。[#65252](https://github.com/StarRocks/starrocks/pull/65252)
+- 当多个 HTTP 请求复用同一 TCP 连接时，如果在 ExecuteSQL 请求后到达一个非 ExecuteSQL 请求，会导致通道关闭时 `HttpConnectContext` 无法注销，从而引发 HTTP Context 泄漏。[#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- MySQL 8.0 架构探查错误（通过添加会话变量 `default_authentication_plugin` 和 `authentication_policy` 修复）。[#65330](https://github.com/StarRocks/starrocks/pull/65330)
+- 在分区重写后创建的临时分区上多余的统计收集导致 SHOW ANALYZE STATUS 报错。[#65298](https://github.com/StarRocks/starrocks/pull/65298)
+- Event Scheduler 中 Global Runtime Filter 的竞争问题。[#65200](https://github.com/StarRocks/starrocks/pull/65200)
+- 由于 Data Cache 的最小磁盘大小限制过大，导致 Data Cache 被过度禁用。[#64909](https://github.com/StarRocks/starrocks/pull/64909)
+- 与 `gold` Linker 自动回退相关的 aarch64 构建问题。[#65156](https://github.com/StarRocks/starrocks/pull/65156)
+
 ## 3.5.8
 
 发布日期：2025 年 11 月 10 日
 
-### 功能改进
+### 功能优化
 
 - 将 Arrow 升级至 19.0.1，以支持 Parquet 旧版 LIST 编码格式，从而兼容嵌套和复杂文件。 [#64238](https://github.com/StarRocks/starrocks/pull/64238)
 - FILES() 支持 Parquet 旧版 LIST 编码。 [#64160](https://github.com/StarRocks/starrocks/pull/64160)
@@ -67,7 +99,7 @@ displayed_sidebar: docs
 
 发布日期：2025年10月21日
 
-### 功能增强
+### 功能优化
 
 - 通过在内存竞争严重的情况下引入重试回退机制，提升了 Scan Operator 的内存统计准确性。[#63788](https://github.com/StarRocks/starrocks/pull/63788)
 - 通过利用现有的分区分布，优化了物化视图桶的推理，防止了过多桶的创建。[#63367](https://github.com/StarRocks/starrocks/pull/63367)
@@ -102,7 +134,7 @@ displayed_sidebar: docs
 
 发布日期: 2025年9月22日
 
-### 功能增强
+### 功能优化
 
 - 当被 Decommission 的 BE 的所有 Tablet 都在回收站中时，会强制删除该 BE，以避免 Decommission 过程被这些 Tablet 阻塞。 [#62781](https://github.com/StarRocks/starrocks/pull/62781)
 - 当 Vacuum 成功时会更新 Vacuum 指标。 [#62540](https://github.com/StarRocks/starrocks/pull/62540)
@@ -176,7 +208,7 @@ displayed_sidebar: docs
 
 发布日期: 2025 年 9 月 5 日
 
-### 功能增强
+### 功能优化
 
 - 新增系统变量 `enable_drop_table_check_mv_dependency`（默认值：`false`）。设置为 `true` 后，若被删除的对象被下游物化视图所依赖，系统将阻止执行该 `DROP TABLE` / `DROP VIEW` / `DROP MATERIALIZED VIEW` 操作。错误信息会列出依赖的物化视图，并提示查看 `sys.object_dependencies` 视图获取详细信息。[#61584](https://github.com/StarRocks/starrocks/pull/61584)
 - 日志新增构建的 Linux 发行版与 CPU 架构信息，便于问题复现与排障。相关日志格式为 `... build <hash> distro <id> arch <arch>`。[#62017](https://github.com/StarRocks/starrocks/pull/62017)
@@ -202,7 +234,7 @@ displayed_sidebar: docs
 
 发布日期: 2025年8月22日
 
-### 功能增强
+### 功能优化
 
 - 增加日志以明确 Tablet 无法修复的原因。 [#61959](https://github.com/StarRocks/starrocks/pull/61959)
 - 优化日志中的 DROP PARTITION 信息。 [#61787](https://github.com/StarRocks/starrocks/pull/61787)
@@ -248,7 +280,7 @@ displayed_sidebar: docs
 
 发布日期： 2025 年 8 月 11 日
 
-### 功能增强
+### 功能优化
 
 - Lake Compaction 增加 Segment 写入耗时统计信息。[#60891](https://github.com/StarRocks/starrocks/pull/60891)
 - 禁用 Data Cache 写入的 inline 模式以避免性能下降。[#60530](https://github.com/StarRocks/starrocks/pull/60530)
@@ -288,7 +320,7 @@ displayed_sidebar: docs
 
 发布日期： 2025 年 7 月 18 日
 
-### 功能增强
+### 功能优化
 
 - 为数组列实现了 NDV 统计信息采集，以提高查询计划的准确性。[#60623](https://github.com/StarRocks/starrocks/pull/60623)
 - 禁止存算分离集群中 Colocate 表的副本均衡以及 Tablet 调度，减少无用的日志输出。[#60737](https://github.com/StarRocks/starrocks/pull/60737)

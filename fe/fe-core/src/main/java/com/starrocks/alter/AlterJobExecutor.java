@@ -31,6 +31,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -98,7 +99,6 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -249,7 +249,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
         if (statement.getAlterClause() == null) {
             AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(), statement.isSecurity());
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo, false);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().setViewSecurity(alterViewInfo);
             return null;
         }
 
@@ -432,9 +432,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 }
 
                 // inactive the related MVs
-                AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
-                AlterMVJobExecutor.inactiveRelatedMaterializedView(olapNewTbl,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapNewTbl,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
@@ -467,7 +467,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)
-                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
                     locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -586,6 +587,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else {
                         schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
                     }
@@ -644,7 +647,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
 
             // If modified columns are already done, inactive related mv
-            AlterMVJobExecutor.inactiveRelatedMaterializedViews(db, (OlapTable) table, modifiedColumns);
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) table, modifiedColumns);
 
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -702,8 +705,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
     @Override
     public Void visitSplitTabletClause(SplitTabletClause clause, ConnectContext context) {
-        ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr()
-                .createDynamicTabletJob(db, (OlapTable) table, clause));
+        ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                .createTabletReshardJob(db, (OlapTable) table, clause));
         return null;
     }
 

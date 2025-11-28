@@ -58,7 +58,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -331,6 +330,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    @SerializedName(value = "enableStatisticCollectOnFirstLoad")
+    private boolean enableStatisticCollectOnFirstLoad = true;
+
+    /**
+     * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
+     * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
+     * It is disabled by default for existing tables to ensure backward compatibility after an upgrade.
+     * New tables will have this property explicitly set to true upon creation.
+     */
+    private boolean cloudNativeFastSchemaEvolutionV2 = false;
+
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -419,6 +429,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
+                buildEnableStatisticCollectOnFirstLoad();
+                buildCloudNativeFastSchemaEvolutionV2();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -467,13 +479,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
             
-            // If flat_json.enable is false, only allow setting the enable property
-            if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
-                throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
-            }
-            
+            // In gsonPostProcess, we should be tolerant of existing properties even when flat_json.enable is false.
+            // The validation should be done at ALTER TABLE time, not during deserialization/copy.
+            // If flat_json.enable is false, ignore other flat JSON properties and use default values.
             try {
                 double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
                         PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
@@ -1113,6 +1121,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return location;
     }
 
+    public boolean enableStatisticCollectOnFirstLoad() {
+        return enableStatisticCollectOnFirstLoad;
+    }
+
+    public void setEnableStatisticCollectOnFirstLoad(boolean enableStatisticCollectOnFirstLoad) {
+        this.enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad;
+    }
+
     public TWriteQuorumType writeQuorum() {
         return writeQuorum;
     }
@@ -1229,6 +1245,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
+    public TableProperty buildEnableStatisticCollectOnFirstLoad() {
+        enableStatisticCollectOnFirstLoad = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true"));
+        return this;
+    }
+
+    public TableProperty buildCloudNativeFastSchemaEvolutionV2() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+            cloudNativeFastSchemaEvolutionV2 = Boolean.parseBoolean(
+                    properties.get(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2));
+        }
+        return this;
+    }
+
+    public boolean isCloudNativeFastSchemaEvolutionV2() {
+        return cloudNativeFastSchemaEvolutionV2;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1256,6 +1290,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();
         buildUseFastSchemaEvolution();
+        buildCloudNativeFastSchemaEvolutionV2();
         buildStorageType();
         buildMvProperties();
         buildLocation();
@@ -1263,5 +1298,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildEnableStatisticCollectOnFirstLoad();
     }
 }

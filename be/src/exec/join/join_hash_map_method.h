@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "join_hash_table_descriptor.h"
+#include "exec/join/join_hash_table_descriptor.h"
 
 namespace starrocks {
 
@@ -115,7 +115,7 @@ public:
 //                             │              ├──►│   ├────┘
 //                             └──────────────┘   └───┘
 template <LogicalType LT, bool NeedBuildChained = true>
-class LinearChainedJoinHashMap {
+class TLinearChainedJoinHashMap {
 public:
     using CppType = typename RunTimeTypeTraits<LT>::CppType;
     using ColumnType = typename RunTimeTypeTraits<LT>::ColumnType;
@@ -148,7 +148,7 @@ private:
 };
 
 template <LogicalType LT>
-using LinearChainedJoinHashSet = LinearChainedJoinHashMap<LT, false>;
+using LinearChainedJoinHashSet = TLinearChainedJoinHashMap<LT, false>;
 
 // The `LinearChainedAsofJoinHashMap` is specifically designed for ASOF JOIN operations on time-series data.
 // It uses linear probing with separated fingerprint storage and maintains ASOF temporal indexes for efficient

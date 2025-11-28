@@ -103,7 +103,6 @@ import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -199,7 +198,7 @@ public class OlapTable extends Table {
          */
         UPDATING_META,
         OPTIMIZE,
-        DYNAMIC_TABLET
+        TABLET_RESHARD
     }
 
     @SerializedName(value = "state")
@@ -1223,6 +1222,8 @@ public class OlapTable extends Table {
                 numBucket = CatalogUtils.calPhysicalPartitionBucketNum();
                 info.setBucketNum((int) numBucket);
             }
+        } else if (info.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            // Range distribution, do nothing
         } else {
             throw new DdlException("Unknown distribution info type: " + info.getType());
         }
@@ -2313,6 +2314,22 @@ public class OlapTable extends Table {
         tableProperty.buildReplicatedStorage();
     }
 
+    public boolean enableStatisticCollectOnFirstLoad() {
+        if (tableProperty != null) {
+            return tableProperty.enableStatisticCollectOnFirstLoad();
+        }
+        return true;
+    }
+
+    public void setEnableStatisticCollectOnFirstLoad(boolean enable) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD,
+                Boolean.valueOf(enable).toString());
+        tableProperty.buildEnableStatisticCollectOnFirstLoad();
+    }
+
     public boolean allowBucketSizeSetting() {
         return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
     }
@@ -3075,7 +3092,11 @@ public class OlapTable extends Table {
     }
 
     public void removeTableBinds(boolean isReplay) {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId(), isReplay);
+        if (isReplay) {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().deleteAutoIncrementIdForTable(getId());
+        } else {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId());
+        }
         GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
         GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
     }
@@ -3163,6 +3184,11 @@ public class OlapTable extends Table {
         Boolean enableLoadProfile = enableLoadProfile();
         if (enableLoadProfile) {
             properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE, "true");
+        }
+
+        Boolean enableStatisticCollectOnFirstLoad = enableStatisticCollectOnFirstLoad();
+        if (!enableStatisticCollectOnFirstLoad) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
         }
 
         // base compaction forbidden time ranges

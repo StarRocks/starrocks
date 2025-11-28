@@ -36,6 +36,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
@@ -59,7 +61,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -198,7 +200,10 @@ public class CreateRoutineLoadStmtTest {
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
             ImportWhereStmt whereStmt = createRoutineLoadStmt.getRoutineLoadDesc().getWherePredicate();
-            Assertions.assertEquals(false, whereStmt.isContainSubquery());
+
+            ArrayList<Expr> matched = new ArrayList<>();
+            whereStmt.getExpr().collect(Subquery.class, matched);
+            Assertions.assertEquals(0, matched.size());
         }
         
 

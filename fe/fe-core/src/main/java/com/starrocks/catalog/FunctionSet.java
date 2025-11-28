@@ -51,7 +51,6 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyMapType;
@@ -338,6 +337,10 @@ public class FunctionSet {
     public static final String NDV = "ndv";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
+    public static final String FUSED_MULTI_DISTINCT_COUNT = "fused_multi_distinct_count";
+    public static final String FUSED_MULTI_DISTINCT_COUNT_SUM = "fused_multi_distinct_count_sum";
+    public static final String FUSED_MULTI_DISTINCT_COUNT_AVG = "fused_multi_distinct_count_avg";
+    public static final String FUSED_MULTI_DISTINCT_COUNT_SUM_AVG = "fused_multi_distinct_count_sum_avg";
     public static final String DICT_MERGE = "dict_merge";
     public static final String WINDOW_FUNNEL = "window_funnel";
     public static final String DISTINCT_PC = "distinct_pc";
@@ -531,6 +534,9 @@ public class FunctionSet {
 
     public static final String MAP_FROM_ARRAYS = "map_from_arrays";
     public static final String MAP_KEYS = "map_keys";
+    public static final String MAP_ENTRIES = "map_entries";
+    public static final String ARRAYS_ZIP = "arrays_zip";
+
     public static final String MAP_SIZE = "map_size";
 
     public static final String MAP_AGG = "map_agg";
@@ -1369,6 +1375,22 @@ public class FunctionSet {
 
         }
 
+        for (Type type : MULTI_DISTINCT_COUNT_TYPES) {
+            Type returnType = createFusedMultiDistinctReturnType(type);
+            for (String name : new String[] {
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT,
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM,
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT_AVG,
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM_AVG
+            }) {
+                addBuiltin(AggregateFunction.createBuiltin(name,
+                        Lists.newArrayList(type),
+                        returnType,
+                        VarbinaryType.VARBINARY,
+                        false, true, true));
+            }
+        }
+
         addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COMBINE,
                 Lists.newArrayList(VarbinaryType.VARBINARY), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
                 true, false, true));
@@ -1607,6 +1629,35 @@ public class FunctionSet {
                 Lists.newArrayList(DecimalType.DECIMALV2), DecimalType.DECIMALV2, DecimalType.DECIMALV2, false, true, false));
     }
 
+    private static Type createFusedMultiDistinctReturnType(Type type) {
+        StructField countField = new StructField(FunctionSet.COUNT, IntegerType.BIGINT);
+        Type sumType = type.clone();
+        Type avgType = type.clone();
+        if (type.isBoolean()) {
+            sumType = IntegerType.BIGINT;
+            avgType = FloatType.DOUBLE;
+        } else if (type.isLargeint()) {
+            sumType = IntegerType.LARGEINT;
+            avgType = FloatType.DOUBLE;
+        } else if (type.isIntegerType()) {
+            sumType = IntegerType.BIGINT;
+            avgType = FloatType.DOUBLE;
+        } else if (type.isDecimal256()) {
+            sumType = DecimalType.DECIMAL256;
+            avgType = DecimalType.DECIMAL256;
+        } else if (type.isDecimalV3()) {
+            sumType = DecimalType.DECIMAL128;
+            avgType = DecimalType.DECIMAL128;
+        } else if (type.isFloatingPointType()) {
+            sumType = FloatType.DOUBLE;
+            avgType = FloatType.DOUBLE;
+        }
+
+        StructField sumField = new StructField(FunctionSet.SUM, sumType);
+        StructField avgField = new StructField(FunctionSet.AVG, avgType);
+        return new StructType(List.of(countField, sumField, avgField), true);
+    }
+
     private void registerBuiltinMultiDistinctSumAggFunction() {
         for (ScalarType type : FloatType.FLOAT_TYPES) {
             addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
@@ -1798,6 +1849,14 @@ public class FunctionSet {
                 Lists.newArrayList(FloatType.DOUBLE, FloatType.DOUBLE, FloatType.DOUBLE), FloatType.DOUBLE,
                 VarbinaryType.VARBINARY,
                 false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
+                Lists.newArrayList(FloatType.DOUBLE, new ArrayType(FloatType.DOUBLE)),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
+                Lists.newArrayList(FloatType.DOUBLE, new ArrayType(FloatType.DOUBLE), FloatType.DOUBLE),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
+                false, false, false));
         // percentile_approx_weighted
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
                 Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, FloatType.DOUBLE), FloatType.DOUBLE,
@@ -1807,6 +1866,14 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
                 Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, FloatType.DOUBLE, FloatType.DOUBLE), FloatType.DOUBLE,
                 VarbinaryType.VARBINARY,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, new ArrayType(FloatType.DOUBLE)),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(FloatType.DOUBLE, IntegerType.BIGINT, new ArrayType(FloatType.DOUBLE), FloatType.DOUBLE),
+                new ArrayType(FloatType.DOUBLE), VarbinaryType.VARBINARY,
                 false, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_UNION,

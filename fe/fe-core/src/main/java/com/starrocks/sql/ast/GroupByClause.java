@@ -42,7 +42,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.VirtualSlotRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -131,14 +130,17 @@ public class GroupByClause implements ParseNode {
         groupingExprs = new ArrayList<>();
         exprGenerated = false;
         if (oriGroupingExprs != null) {
-            Expr.resetList(oriGroupingExprs);
+            for (int i = 0; i < oriGroupingExprs.size(); ++i) {
+                oriGroupingExprs.set(i, ExprUtils.reset(oriGroupingExprs.get(i)));
+            }
+
             groupingExprs.addAll(oriGroupingExprs);
         }
         if (groupingSetList != null) {
             for (List<Expr> s : groupingSetList) {
                 for (Expr e : s) {
                     if (e != null) {
-                        e.reset();
+                        ExprUtils.reset(e);
                     }
                 }
             }
@@ -293,16 +295,14 @@ public class GroupByClause implements ParseNode {
             case CUBE:
                 if (groupingExprs != null) {
                     strBuilder.append("CUBE (");
-                    strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
-                            .map(ExprToSql::toSql).collect(Collectors.joining(", ")));
+                    strBuilder.append(groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;
             case ROLLUP:
                 if (groupingExprs != null) {
                     strBuilder.append("ROLLUP (");
-                    strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
-                            .map(ExprToSql::toSql).collect(Collectors.joining(", ")));
+                    strBuilder.append(groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;

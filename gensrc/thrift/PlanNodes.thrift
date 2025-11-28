@@ -977,6 +977,7 @@ struct TSortNode {
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
   40: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
+  41: optional bool per_pipeline;
 }
 
 enum TAnalyticWindowType {
@@ -1285,6 +1286,7 @@ struct TMetaScanNode {
     2: optional list<Descriptors.TColumn> columns
     3: optional i32 low_cardinality_threshold
     4: optional list<TColumnAccessPath> column_access_paths
+    5: optional i64 schema_id
 }
 
 struct TDecodeNode {

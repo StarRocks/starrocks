@@ -89,7 +89,7 @@ public class TabletStatMgr extends FrontendDaemon {
     private LocalDateTime lastWorkTimestamp = LocalDateTime.MIN;
 
     public TabletStatMgr() {
-        super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
+        super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
     public LocalDateTime getLastWorkTimestamp() {
@@ -97,6 +97,9 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     public boolean workTimeIsMustAfter(LocalDateTime time) {
+        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
+            return false;
+        }
         return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 
@@ -181,9 +184,9 @@ public class TabletStatMgr extends FrontendDaemon {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                 }
 
-                // Trigger dynamic tablet splitting
+                // Trigger tablet reshard
                 if (GlobalStateMgr.getCurrentState().isLeader()) {
-                    triggerDynamicTablet(db, olapTable, maxTabletSize);
+                    triggerTabletReshard(db, olapTable, maxTabletSize);
                 }
             }
         }
@@ -192,7 +195,7 @@ public class TabletStatMgr extends FrontendDaemon {
         lastWorkTimestamp = LocalDateTime.now();
     }
 
-    private void triggerDynamicTablet(Database db, OlapTable table, long maxTabletSize) {
+    private void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize) {
         // TODO(TackY)
     }
 

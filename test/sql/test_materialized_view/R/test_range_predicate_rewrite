@@ -131,19 +131,19 @@ PROPERTIES (
 refresh materialized view year_mv with sync mode;
 [UC]analyze table join_filter_mv with sync mode;
 -- result:
-db_89866d8037f446228d95db141eeec734.join_filter_mv	analyze	status	OK
+db_1e8cbbde334b49139f01f757cdb4f884.join_filter_mv	analyze	status	OK
 -- !result
 [UC]analyze table date_mv with sync mode;
 -- result:
-db_89866d8037f446228d95db141eeec734.date_mv	analyze	status	OK
+db_1e8cbbde334b49139f01f757cdb4f884.date_mv	analyze	status	OK
 -- !result
 [UC]analyze table month_mv with sync mode;
 -- result:
-db_89866d8037f446228d95db141eeec734.month_mv	analyze	status	OK
+db_1e8cbbde334b49139f01f757cdb4f884.month_mv	analyze	status	OK
 -- !result
 [UC]analyze table year_mv with sync mode;
 -- result:
-db_89866d8037f446228d95db141eeec734.year_mv	analyze	status	OK
+db_1e8cbbde334b49139f01f757cdb4f884.year_mv	analyze	status	OK
 -- !result
 select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */
 sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)
@@ -158,7 +158,7 @@ and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col ord
 777700.0188827515	1
 789599.9851226807	0
 -- !result
-function: check_hit_materialized_view("select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */ sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10) and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;", "date_mv", "month_mv", "year_mv")
+function: print_hit_materialized_view("select /*+ set_Var(enable_fine_grained_range_predicate = true, enable_force_rule_based_mv_rewrite = true, nested_mv_rewrite_max_level = 10) */ sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10) and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col;", "date_mv", "month_mv", "year_mv")
 -- result:
-None
+True
 -- !result

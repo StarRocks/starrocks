@@ -17,7 +17,7 @@ package com.starrocks.persist;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -169,7 +169,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_TASK_RUN_STATE, TaskRunPeriodStatusChange.class)
             .put(OperationType.OP_ARCHIVE_TASK_RUNS, ArchiveTaskRunsLog.class)
             .put(OperationType.OP_CREATE_SMALL_FILE_V2, SmallFileMgr.SmallFile.class)
-            .put(OperationType.OP_DROP_SMALL_FILE_V2, SmallFileMgr.SmallFile.class)
+            .put(OperationType.OP_DROP_SMALL_FILE_V2, RemoveSmallFileLog.class)
             .put(OperationType.OP_ALTER_JOB_V2, AlterJobV2.class)
             .put(OperationType.OP_BATCH_ADD_ROLLUP_V2, BatchAlterJobPersistInfo.class)
             .put(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, TableInfo.class)
@@ -194,7 +194,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_REPLACE_TEMP_PARTITION, ReplacePartitionOperationLog.class)
             .put(OperationType.OP_INSTALL_PLUGIN, PluginInfo.class)
-            .put(OperationType.OP_UNINSTALL_PLUGIN, PluginInfo.class)
+            .put(OperationType.OP_UNINSTALL_PLUGIN, UninstallPluginLog.class)
             .put(OperationType.OP_REMOVE_ALTER_JOB_V2, RemoveAlterJobV2OperationLog.class)
             .put(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, AlterRoutineLoadJobOperationLog.class)
             .put(OperationType.OP_ALTER_LOAD_JOB, AlterLoadJobOperationLog.class)
@@ -265,8 +265,10 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
-            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
-            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
+            .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
+            .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
             .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)

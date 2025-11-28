@@ -411,8 +411,13 @@ void FileScanner::sample_files(size_t total_file_count, int64_t sample_file_coun
     } else {
         step = static_cast<double>(total_file_count - 1) / (sample_file_count - 1);
     }
-    for (size_t i = 0; i < sample_file_count - 1; ++i) {
-        sample_file_indexes->emplace_back(std::round(i * step));
+
+    double next_index = 0;
+    size_t i = 0;
+    while (i < total_file_count - 1) {
+        sample_file_indexes->emplace_back(i);
+        next_index += step;
+        i = static_cast<size_t>(std::round(next_index));
     }
     sample_file_indexes->emplace_back(total_file_count - 1);
 }

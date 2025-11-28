@@ -51,6 +51,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -85,6 +86,7 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
@@ -99,7 +101,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
@@ -769,7 +770,8 @@ public class MaterializedViewAnalyzer {
             }
             List<String> sortKeys = new ArrayList<>();
             for (OrderByElement orderByElement : orderByElements) {
-                String column = orderByElement.castAsSlotRef();
+                Expr expr = orderByElement.getExpr();
+                String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in order by clause",
                             ExprToSql.toSql(orderByElement.getExpr()));
@@ -926,7 +928,7 @@ public class MaterializedViewAnalyzer {
                                           QueryStatement queryStatement,
                                           Map<TableName, Table> aliasTableMap) {
             Expr expr = getResolvedPartitionByExpr(partitionColumnExpr, queryStatement);
-            List<SlotRef> slotRefs = expr.collectAllSlotRefs();
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(expr);
             if (slotRefs.size() != 1) {
                 throw new SemanticException("Materialized view partition expression %s must ref to one column",
                         ExprToSql.toSql(partitionColumnExpr));
@@ -973,7 +975,7 @@ public class MaterializedViewAnalyzer {
             }
             Expr partitionByExpr = partitionByExprs.get(0);
             Expr resolvedPartitionByExpr = getResolvedPartitionByExpr(partitionByExpr, queryStatement);
-            List<SlotRef> slotRefs = resolvedPartitionByExpr.collectAllSlotRefs();
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(resolvedPartitionByExpr);
             if (slotRefs.size() != 1) {
                 throw new SemanticException("Materialized view partition expression %s must ref to one column",
                         ExprToSql.toSql(partitionByExpr));
@@ -1568,21 +1570,30 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            // If the key type is primary key, the distribution must be hash distribution.
-            if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
-                distributionDesc = checkDistributionForPrimaryKey(statement);
-            } else {
-                // for non primary key tables, if user not specify distribution, we use hash distribution
+            if (Config.enable_range_distribution) {
                 if (distributionDesc == null) {
-                    if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
-                        distributionDesc = new HashDistributionDesc(0,
-                                Lists.newArrayList(mvColumnItems.get(0).getName()));
-                    } else {
-                        distributionDesc = new RandomDistributionDesc();
-                    }
+                    // If no distribution specified, use range distribution
+                    distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
+            } else {
+                // If the key type is primary key, the distribution must be hash distribution.
+                if  (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
+                    distributionDesc = checkDistributionForPrimaryKey(statement);
+                } else {
+                    // for non primary key tables, if user not specify distribution, we use hash distribution
+                    if (distributionDesc == null) {
+                        if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
+                            distributionDesc = new HashDistributionDesc(0,
+                                    Lists.newArrayList(mvColumnItems.get(0).getName()));
+                        } else {
+                            distributionDesc = new RandomDistributionDesc();
+                        }
+                        statement.setDistributionDesc(distributionDesc);
+                    }
+                }
             }
+
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (Column columnDef : mvColumnItems) {
                 if (!columnSet.add(columnDef.getName())) {
@@ -1851,7 +1862,7 @@ public class MaterializedViewAnalyzer {
         String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId;
         TypeDef typeDef = new TypeDef(type);
         try {
-            typeDef.analyze();
+            TypeDefAnalyzer.analyze(typeDef);
         } catch (Exception e) {
             throw new ParsingException("Generate partition column " + columnName
                     + " for multi expression partition error: " + e.getMessage());
@@ -1877,7 +1888,7 @@ public class MaterializedViewAnalyzer {
                                                     Map<Integer, Expr> changedPartitionByExprs,
                                                     Map<Expr, Expr> partitionByExprToAdjustExprMap) {
         // what if partitionByExpr is not slot ref, eg: date_trunc('day', dt)
-        List<SlotRef> slotRefs = partitionByExpr.collectAllSlotRefs();
+        List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(partitionByExpr);
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
                     ExprToSql.toSql(partitionByExpr));
@@ -1941,7 +1952,7 @@ public class MaterializedViewAnalyzer {
                                                              Expr originalPartitionByExpr,
                                                              Expr adjustedPartitionByExpr,
                                                              Map<Expr, Expr> partitionByExprToAdjustExprMap) {
-        List<SlotRef> slotRefs = originalPartitionByExpr.collectAllSlotRefs();
+        List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(originalPartitionByExpr);
         if (slotRefs.size() != 1) {
             throw new SemanticException("Partition expr only can ref one slot refs:",
                     ExprToSql.toSql(originalPartitionByExpr));
@@ -1998,7 +2009,7 @@ public class MaterializedViewAnalyzer {
         for (int i = 0; i < refBaseTablePartitionExprs.size(); i++) {
             Expr expr = refBaseTablePartitionExprs.get(i);
             Expr cloned = expr.clone();
-            List<SlotRef> slotRefs = cloned.collectAllSlotRefs();
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(cloned);
             if (slotRefs.size() != 1) {
                 continue;
             }
@@ -2085,7 +2096,6 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkNotNull(dateSubFn, "date_sub function is not found");
             TimestampArithmeticExpr newChild = new TimestampArithmeticExpr(FunctionSet.DATE_SUB, slotRef,
                     interval, "HOUR");
-            newChild.setFn(dateSubFn);
             newChild.setType(slotRef.getType());
             partitionByExpr.setChild(1, newChild);
         }
@@ -2099,7 +2109,6 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkNotNull(dateAddFn, "date_add function is not found");
             TimestampArithmeticExpr dateAddFunc = new TimestampArithmeticExpr(FunctionSet.DATE_ADD, partitionByExpr,
                     interval, "HOUR");
-            dateAddFunc.setFn(dateAddFn);
             dateAddFunc.setType(slotRef.getType());
 
             return dateAddFunc;
@@ -2157,10 +2166,10 @@ public class MaterializedViewAnalyzer {
         if (retentionCondtiionExpr == null) {
             return Optional.empty();
         }
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
-                refBaseTable.getBaseSchema().stream()
-                        .map(col -> new Field(col.getName(), col.getType(), null, null))
-                        .collect(Collectors.toList())));
+        List<Field> fields = new ArrayList<>();
+        mv.getBaseSchema().forEach(col ->
+                fields.add(new Field(col.getName(), col.getType(), null, null)));
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
         ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
         Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
         retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
@@ -2177,7 +2186,7 @@ public class MaterializedViewAnalyzer {
         }
         Expr retentionCondtiionExpr = exprOpt.get();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        List<ColumnRefOperator> columnRefOperators = refBaseTable.getBaseSchema()
+        List<ColumnRefOperator> columnRefOperators = mv.getBaseSchema()
                 .stream()
                 .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
                 .collect(Collectors.toList());

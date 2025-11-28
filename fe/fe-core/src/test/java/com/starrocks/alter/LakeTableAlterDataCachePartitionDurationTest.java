@@ -34,6 +34,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
@@ -46,12 +47,13 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.NextIdLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
@@ -105,8 +107,8 @@ public class LakeTableAlterDataCachePartitionDurationTest {
             }
 
             @Mock
-            public void logSaveNextId(long nextId) {
-
+            public void logSaveNextId(long nextId, WALApplier applier) {
+                applier.apply(new NextIdLog(nextId));
             }
         };
 

@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.TableFunction;
@@ -41,7 +42,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
@@ -297,15 +297,6 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function",
                         functionCallExpr.getPos());
-            } else {
-                if (functionCallExpr.getChildren().size() > 2) {
-                    if (!functionCallExpr.getChild(2).isConstant()) {
-                        throw new SemanticException(
-                                "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(2).getPos());
-                    }
-                }
-                return;
             }
         }
 
@@ -492,50 +483,48 @@ public class FunctionAnalyzer {
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
         }
 
+        // Validate percentile_approx function parameters
+        // Note: Constant validation and value range checks are performed in TypeChecker during optimization phase
         if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX)) {
             List<Expr> children = functionCallExpr.getChildren();
             if (children.size() != 2 && children.size() != 3) {
-                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
-                        functionCallExpr.getPos());
+                throw new SemanticException("percentile_approx(expr, DOUBLE|ARRAY<DOUBLE> [, DOUBLE compression]) " +
+                        "requires two or three parameters", functionCallExpr.getPos());
             }
-            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
-                throw new SemanticException(
-                        "percentile_approx requires the first parameter's type is numeric type");
-            }
-            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
-                throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
-            }
+            // Validate first parameter (value expression) is numeric type
+            validateNumericParameter(functionCallExpr.getChild(0), "first", "value", 
+                    "percentile_approx", functionCallExpr.getPos());
+            // Validate second parameter (percentile) is numeric or array type
+            validatePercentileParameter(functionCallExpr.getChild(1), "second", 
+                    "percentile_approx", functionCallExpr.getPos());
+            // Validate optional third parameter (compression) is numeric type
             if (children.size() == 3) {
-                if (!functionCallExpr.getChild(2).getType().isNumericType()) {
-                    throw new SemanticException(
-                            "percentile_approx requires the third parameter's type is numeric type");
-                }
+                validateNumericParameter(functionCallExpr.getChild(2), "third", "compression", 
+                        "percentile_approx", functionCallExpr.getPos());
             }
         }
 
+        // Validate percentile_approx_weighted function parameters
+        // Note: Constant validation and value range checks are performed in TypeChecker during optimization phase
         if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX_WEIGHTED)) {
             List<Expr> children = functionCallExpr.getChildren();
             if (children.size() != 3 && children.size() != 4) {
-                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
-                        functionCallExpr.getPos());
+                throw new SemanticException("percentile_approx_weighted(expr, weight, DOUBLE|ARRAY<DOUBLE> percentile " +
+                        "[, DOUBLE compression]) requires three or four parameters", functionCallExpr.getPos());
             }
-            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
-                throw new SemanticException(
-                        "percentile_approx requires the first parameter's type is numeric type");
-            }
-            // 1th column cannot be constant
-            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
-                throw new SemanticException("percentile_approx requires the second parameter's type is bigint type column");
-            }
-            if (!functionCallExpr.getChild(2).getType().isNumericType()) {
-                throw new SemanticException(
-                        "percentile_approx requires the third parameter's type is numeric type");
-            }
+            // Validate first parameter (value expression) is numeric type
+            validateNumericParameter(functionCallExpr.getChild(0), "first", "value", 
+                    "percentile_approx_weighted", functionCallExpr.getPos());
+            // Validate second parameter (weight) is numeric type
+            validateNumericParameter(functionCallExpr.getChild(1), "second", "weight", 
+                    "percentile_approx_weighted", functionCallExpr.getPos());
+            // Validate third parameter (percentile) is numeric or array type
+            validatePercentileParameter(functionCallExpr.getChild(2), "third", 
+                    "percentile_approx_weighted", functionCallExpr.getPos());
+            // Validate optional fourth parameter (compression) is numeric type
             if (children.size() == 4) {
-                if (!functionCallExpr.getChild(3).getType().isNumericType()) {
-                    throw new SemanticException(
-                            "percentile_approx requires the fourth parameter's type is numeric type");
-                }
+                validateNumericParameter(functionCallExpr.getChild(3), "fourth", "compression", 
+                        "percentile_approx_weighted", functionCallExpr.getPos());
             }
         }
 
@@ -702,6 +691,68 @@ public class FunctionAnalyzer {
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Validate that a function parameter is of numeric type.
+     * 
+     * @param paramExpr The parameter expression to validate
+     * @param paramPosition The position description (e.g., "first", "second")
+     * @param paramName The parameter name (e.g., "value", "weight", "compression")
+     * @param functionName The function name for error messages
+     * @param pos The position in the source code for error reporting
+     * @throws SemanticException if the parameter is not numeric type
+     */
+    private static void validateNumericParameter(Expr paramExpr, String paramPosition, 
+                                                  String paramName, String functionName, 
+                                                  NodePosition pos) {
+        if (!paramExpr.getType().isNumericType()) {
+            throw new SemanticException(
+                    String.format("%s requires the %s parameter (%s) to be numeric type, but got: %s",
+                            functionName, paramPosition, paramName, paramExpr.getType().toSql()),
+                    pos);
+        }
+    }
+
+    /**
+     * Validate that a percentile parameter is either numeric type or array of numeric type.
+     * <p>
+     * The percentile parameter can be:
+     * - A single numeric value (e.g., 0.5 for median)
+     * - An array of numeric values (e.g., [0.25, 0.5, 0.75] for quartiles)
+     * <p>
+     * Note: This method only validates the type. Constant validation and value range checks
+     * (ensuring values are between 0 and 1) are performed in TypeChecker during the optimization phase.
+     * 
+     * @param percentileExpr The percentile parameter expression to validate
+     * @param paramPosition The position description (e.g., "second", "third")
+     * @param functionName The function name for error messages
+     * @param pos The position in the source code for error reporting
+     * @throws SemanticException if the parameter is not numeric or array type, or if array elements are not numeric
+     */
+    private static void validatePercentileParameter(Expr percentileExpr, String paramPosition, 
+                                                     String functionName, NodePosition pos) {
+        Type percentileType = percentileExpr.getType();
+        
+        // Check if parameter is numeric or array type
+        if (!percentileType.isNumericType() && !percentileType.isArrayType()) {
+            throw new SemanticException(
+                    String.format("%s requires the %s parameter (percentile) to be numeric type or array type, but got: %s",
+                            functionName, paramPosition, percentileType.toSql()),
+                    pos);
+        }
+        
+        // If it's an array, validate that array elements are numeric type
+        if (percentileType.isArrayType()) {
+            ArrayType arrayType = (ArrayType) percentileType;
+            Type itemType = arrayType.getItemType();
+            if (!itemType.isNumericType()) {
+                throw new SemanticException(
+                        String.format("%s requires the %s parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<%s>",
+                                functionName, paramPosition, itemType.toSql()),
+                        pos);
+            }
+        }
     }
 
     /**
@@ -1019,28 +1070,59 @@ public class FunctionAnalyzer {
         return fn;
     }
 
-    private static Function getArrayGenerateFunction(FunctionCallExpr node) {
-        // add the default parameters for array_generate
-        if (node.getChildren().size() == 1) {
-            Expr secondParam = node.getChild(0);
-            node.clearChildren();
-            node.addChild(new IntLiteral(1));
-            node.addChild(secondParam);
+    /**
+     * Check if array_generate function should use date function signature.
+     * Date signature is used when the first two parameters are date/datetime types or string types.
+     *
+     * @param node function call expression
+     * @return true if date signature should be used
+     */
+    public static boolean isArrayGenerateDateSignature(FunctionCallExpr node) {
+        if (node.getChildren().size() >= 2) {
+            Type type0 = node.getChild(0).getType();
+            Type type1 = node.getChild(1).getType();
+            return type0.isDateType() || type1.isDateType() ||
+                   type0.isStringType() || type1.isStringType();
         }
-        if (node.getChildren().size() == 2) {
-            Expr startExpr = node.getChild(0);
-            Expr endExpr = node.getChild(1);
+        return false;
+    }
 
-            if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
-                BigInteger start = toBigInteger(startExpr);
-                BigInteger end = toBigInteger(endExpr);
-                if (start != null && end != null) {
-                    node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+    private static Function getArrayGenerateFunction(FunctionCallExpr node) {
+        boolean hasDateFunctionSignatureOverloading = isArrayGenerateDateSignature(node);
+
+        if (hasDateFunctionSignatureOverloading) {
+            if (node.getChildren().size() == 2) {
+                IntLiteral e3 = new IntLiteral(1, IntegerType.INT);
+                node.addChild(e3);
+                node.addChild(new StringLiteral("day"));
+            }
+
+            if (node.getChildren().size() == 3) {
+                node.addChild(new StringLiteral("day"));
+            }
+        } else {
+            // add the default parameters for array_generate
+            if (node.getChildren().size() == 1) {
+                Expr secondParam = node.getChild(0);
+                node.clearChildren();
+                node.addChild(new IntLiteral(1));
+                node.addChild(secondParam);
+            }
+            if (node.getChildren().size() == 2) {
+                Expr startExpr = node.getChild(0);
+                Expr endExpr = node.getChild(1);
+
+                if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
+                    BigInteger start = toBigInteger(startExpr);
+                    BigInteger end = toBigInteger(endExpr);
+                    if (start != null && end != null) {
+                        node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+                    } else {
+                        node.addChild(new IntLiteral(1));
+                    }
                 } else {
                     node.addChild(new IntLiteral(1));
                 }
-            } else {
-                node.addChild(new IntLiteral(1));
             }
         }
 
@@ -1048,7 +1130,7 @@ public class FunctionAnalyzer {
         return ExprUtils.getBuiltinFunction(
             FunctionSet.ARRAY_GENERATE,
             argTypes,
-            Function.CompareMode.IS_SUPERTYPE_OF);
+            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     private static BigInteger toBigInteger(Expr expr) {

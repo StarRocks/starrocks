@@ -21,6 +21,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -42,7 +43,6 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
@@ -355,7 +355,6 @@ public class LoadPlannerTest {
         Assertions.assertEquals(2, k2Expr.nodes.size());
         TExprNode castNode = k2Expr.nodes.get(0);
         Assertions.assertEquals(TExprNodeType.CAST_EXPR, castNode.node_type);
-        Assertions.assertEquals(TPrimitiveType.INT, castNode.fn.ret_type.types.get(0).scalar_type.type);
         node = k2Expr.nodes.get(1);
         Assertions.assertEquals(TExprNodeType.SLOT_REF, node.node_type);
         Assertions.assertEquals(TPrimitiveType.VARCHAR, node.type.types.get(0).scalar_type.type);
@@ -767,8 +766,6 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
-                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-                returns(f1, f2, f3);
 
                 globalStateMgr.getSqlParser();
                 result = new SqlParser(AstBuilder.getInstance());

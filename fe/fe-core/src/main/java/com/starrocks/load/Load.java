@@ -42,10 +42,12 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -73,12 +75,12 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
@@ -87,7 +89,6 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
@@ -850,7 +851,7 @@ public class Load {
                     Expr replaceExpr = exprsByName.get(slot.getColumnName());
                     if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
+                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
                     }
                     smap.put(slot, replaceExpr);
                 } else {
@@ -859,7 +860,7 @@ public class Load {
                     Expr replaceExpr = slotRef;
                     if (replaceExpr.getType().matchesType(VarcharType.VARCHAR) &&
                             !replaceExpr.getType().matchesType(slot.getType())) {
-                        replaceExpr = replaceExpr.castTo(slot.getType());
+                        replaceExpr = ExprCastFunction.castTo(replaceExpr, slot.getType());
                     }
                     smap.put(slot, replaceExpr);
                 }

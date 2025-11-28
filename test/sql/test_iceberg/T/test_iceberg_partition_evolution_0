@@ -1,0 +1,58 @@
+-- name: test_iceberg_partition_evolution_0
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+drop table if exists test_orders;
+CREATE TABLE  test_orders (
+  `order_id`     BIGINT,
+  `user_id`      BIGINT,
+  `amount`       DOUBLE,
+  `ts`           DATETIME
+) PARTITION BY day(ts);
+
+INSERT INTO test_orders VALUES
+ (1, 101, 10.0, '2024-01-01 10:00:00'),
+ (2, 102, 20.0, '2024-01-02 10:00:00'),
+ (3, 103, 30.0, '2024-02-01 10:00:00');
+ 
+ -- day(ts) -> month(ts)
+ALTER TABLE test_orders drop PARTITION column day(ts);
+ALTER TABLE test_orders add PARTITION column month(ts);
+
+INSERT INTO test_orders VALUES
+ (4, 201, 40.0, '2024-03-01 09:00:00'),
+ (5, 202, 50.0, '2024-03-15 12:00:00'),
+ (6, 203, 60.0, '2024-04-01 08:00:00');
+ 
+-- check partition pruning
+select * from test_orders where order_id between 1 and 3 order by order_id;
+
+-- partitions=3/5
+function: assert_explain_verbose_contains("select * from test_orders where order_id between 1 and 3 order by order_id;", "partitions=3/5")
+
+select * from test_orders where order_id between 4 and 6 order by order_id;
+
+-- partitions=2/5
+function: assert_explain_verbose_contains("select * from test_orders where order_id between 4 and 6 order by order_id;", "partitions=2/5")
+
+-- check partition pruning
+SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
+  
+-- partitions=4/5
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=4/5")
+
+SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
+
+-- partitions=1/5
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=1/5")
+
+function: assert_query_contains("analyze table test_orders;", "OK")
+
+drop table test_orders force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};

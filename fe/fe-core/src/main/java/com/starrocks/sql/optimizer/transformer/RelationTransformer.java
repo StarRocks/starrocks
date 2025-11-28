@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
@@ -74,9 +75,9 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.Subquery;
@@ -160,9 +161,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class RelationTransformer implements AstVisitorExtendInterface<LogicalPlan, ExpressionMapping> {
     private static final Logger LOG = LogManager.getLogger(RelationTransformer.class);
@@ -432,7 +433,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         // add projection if order by no-column ref
         final boolean needNotAddProject =
                 !setRelation.hasOrderByClause() || setRelation.getOrderBy().stream().map(OrderByElement::getExpr)
-                        .allMatch(e -> (e instanceof SlotRef) || e.isLiteral());
+                .allMatch(e -> (e instanceof SlotRef) || ExprUtils.isLiteral(e));
         if (needNotAddProject) {
             return root;
         }
@@ -482,7 +483,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             List<Ordering> orderings = new ArrayList<>();
             List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : orderBy) {
-                if (item.getExpr().isLiteral()) {
+                if (ExprUtils.isLiteral(item.getExpr())) {
                     continue;
                 }
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
@@ -575,6 +576,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
+        } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
+            distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else {
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
@@ -642,6 +645,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
                                 node.getPartitionNames().getPartitionNames())
+                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()
@@ -689,7 +693,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.PAIMON.equals(node.getTable().getType())) {
             scanOperator = new LogicalPaimonScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, tableVersionRange);
         } else if (Table.TableType.ODPS.equals(node.getTable().getType())) {
             scanOperator = new LogicalOdpsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
@@ -745,6 +749,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
+        }
+        if (tableVersionRange != null) {
+            scanOperator.setTvrVersionRange(tableVersionRange);
         }
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));

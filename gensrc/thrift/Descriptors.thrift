@@ -190,8 +190,10 @@ enum TSchemaTableType {
     SCH_WAREHOUSE_METRICS,
     SCH_WAREHOUSE_QUERIES,
 
-    SCH_DYNAMIC_TABLET_JOBS,
+    SCH_TABLET_RESHARD_JOBS,
     SCH_RECYCLEBIN_CATALOGS,
+
+    SCH_FE_THREADS,
 }
 
 enum THdfsCompression {
@@ -245,9 +247,15 @@ struct TColumn {
     21: optional Types.TTypeDesc type_desc         
 }
 
+struct TOlapTableTablet {
+    1: optional i64 id // tablet id
+    2: optional Types.TTabletRange range
+}
+
 struct TOlapTableIndexTablets {
     1: required i64 index_id
-    2: required list<i64> tablets
+    2: required list<i64> tablet_ids
+    3: optional list<TOlapTableTablet> tablets
 }
 
 // its a closed-open range

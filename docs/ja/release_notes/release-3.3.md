@@ -11,6 +11,37 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.20
+
+リリース日：2025年11月18日
+
+### バグ修正
+
+以下の問題が修正されました:
+
+- CVE-2024-47561。[#64193](https://github.com/StarRocks/starrocks/pull/64193)
+- CVE-2025-59419。[#64142](https://github.com/StarRocks/starrocks/pull/64142)
+- Lake Primary Key テーブルの行数が正しくない問題。[#64007](https://github.com/StarRocks/starrocks/pull/64007)
+- IGNORE NULLS フラグ付きのウィンドウ関数が、同フラグなしの関数と統合できない問題。[#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- `PartitionedSpillerWriter::_remove_partition` 内の ASAN エラー。[#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- 共有データクラスタにおけるソート集計（sorted aggregation）の結果が誤っている問題。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- パーティション化されたマテリアライズドビュー作成時に NPE が発生する問題。[#63830](https://github.com/StarRocks/starrocks/pull/63830)
+- パーティション削除時に Partitioned Spill がクラッシュする問題。[#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- FE が期限切れのロードジョブを削除する際に NPE が発生する問題。[#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- `ExceptionStackContext` の初期化中にデッドロックが発生する可能性。[#63776](https://github.com/StarRocks/starrocks/pull/63776)
+- 複雑な関数を含む CASE WHEN 式の不適切な簡略化により、スキャン性能が低下する問題。[#63732](https://github.com/StarRocks/starrocks/pull/63732)
+- 型の不一致によりマテリアライズドビューのリライトが失敗する問題。[#63659](https://github.com/StarRocks/starrocks/pull/63659)
+- 特定のプランでマテリアライズドビューのリライトが `IllegalStateException` を投げる問題。[#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- LZ4 圧縮・解凍エラーを検知できない問題。[#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- LARGEINT を DECIMAL128 にキャストする際、符号境界（例：INT128_MIN）でのオーバーフロー検知が誤っていたことによる安定性の問題。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- 結合された述語を用いた `date_trunc` のパーティションプルーニングが誤って EMPTYSET を生成する問題。[#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- ARRAY の低カーディナリティ最適化により `Left Join` の結果が不完全になる問題。[#63419](https://github.com/StarRocks/starrocks/pull/63419)
+- 集約中間型が `ARRAY<NULL_TYPE>` を使用することによる問題。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- オートインクリメント列に基づく部分更新でメタデータ不整合が発生する問題。[#63370](https://github.com/StarRocks/starrocks/pull/63370)
+- 共有データクラスタで Fast Schema Evolution の Bitmap インデックス再利用が非互換である問題。[#63315](https://github.com/StarRocks/starrocks/pull/63315)
+- Pod の再起動・アップグレード時に不要な CN の登録解除が発生する問題。[#63085](https://github.com/StarRocks/starrocks/pull/63085)
+- PREPARE/EXECUTE ステートメントの戻り値が Profile 上で `omit` と表示される問題。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
+
 ## 3.3.19
 
 リリース日: 2025年10月14日

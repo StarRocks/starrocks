@@ -125,9 +125,11 @@ public class QueryHistoryMgr {
             loadQueryHistory(Lists.newArrayList(histories));
             histories.clear();
         }
-        if (ctx.isStatisticsConnection() || ctx.isStatisticsJob() || plan.getScanNodes().size() < 2
-                || StringUtils.containsIgnoreCase(ctx.getExecutor().getOriginStmtInString(),
-                StatsConstants.INFORMATION_SCHEMA)) {
+        if (ctx.isStatisticsConnection() || ctx.isStatisticsJob() || plan.getScanNodes().size() < 2) {
+            return;
+        }
+        String sql = ctx.getExecutor().getOriginStmtInString();
+        if (StatsConstants.STATISTICS_TABLES.stream().anyMatch(c -> StringUtils.containsIgnoreCase(sql, c))) {
             return;
         }
 

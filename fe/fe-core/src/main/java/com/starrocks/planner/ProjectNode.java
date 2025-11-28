@@ -17,9 +17,9 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
@@ -63,9 +63,9 @@ public class ProjectNode extends PlanNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.PROJECT_NODE;
         msg.project_node = new TProjectNode();
-        slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
+        slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), ExprToThrift.treeToThrift(value)));
         commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(
-                key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
+                key.asInt(), ExprToThrift.treeToThrift(value)));
     }
 
     @Override
@@ -147,7 +147,7 @@ public class ProjectNode extends PlanNode {
             // 2. and probe expr slot id == kv.getKey()
             // then replace probeExpr with kv.getValue()
             // and push down kv.getValue()
-            if (expr.isBound(kv.getKey())) {
+            if (ExprUtils.isBound(expr, kv.getKey())) {
                 newExprs.add(kv.getValue());
             }
         }

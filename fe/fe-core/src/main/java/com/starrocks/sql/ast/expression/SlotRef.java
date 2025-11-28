@@ -40,11 +40,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
-import com.starrocks.planner.TupleId;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QualifiedName;
@@ -302,7 +300,6 @@ public class SlotRef extends Expr {
         return tblName;
     }
 
-
     @Override
     public int hashCode() {
         if (desc != null) {
@@ -358,32 +355,6 @@ public class SlotRef extends Expr {
         return nullable;
     }
 
-    @Override
-    public boolean isBoundByTupleIds(List<TupleId> tids) {
-        Preconditions.checkState(desc != null);
-        if (isFromLambda()) {
-            return true;
-        }
-        for (TupleId tid : tids) {
-            if (tid.equals(desc.getParent().getId())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isBound(SlotId slotId) {
-        Preconditions.checkState(isAnalyzed);
-        return desc.getId().equals(slotId);
-    }
-
-    public Table getTable() {
-        Preconditions.checkState(desc != null);
-        Table table = desc.getParent().getTable();
-        return table;
-    }
-
     public String getColumnName() {
         return colName;
     }
@@ -413,14 +384,11 @@ public class SlotRef extends Expr {
         return true;
     }
 
-
-
-
     /**
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitSlot(this, context);
     }
 

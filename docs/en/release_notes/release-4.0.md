@@ -10,6 +10,37 @@ After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5
 
 :::
 
+## 4.0.1
+
+Release Date: November 17, 2025
+
+### Improvements
+
+- Optimized TaskRun session variable handling to process known variables only. [#64150](https://github.com/StarRocks/starrocks/pull/64150)
+- Supports collecting statistics of Iceberg and Delta Lake tables from metadata by default. [#64140](https://github.com/StarRocks/starrocks/pull/64140)
+- Supports collecting statistics of Iceberg tables with bucket and truncate partition transform. [#64122](https://github.com/StarRocks/starrocks/pull/64122)
+- Supports inspecting FE `/proc` profile for debugging. [#63954](https://github.com/StarRocks/starrocks/pull/63954)
+- Enhanced OAuth2 and JWT authentication support for Iceberg REST catalogs. [#63882](https://github.com/StarRocks/starrocks/pull/63882)
+- Improved bundle tablet metadata validation and recovery handling. [#63949](https://github.com/StarRocks/starrocks/pull/63949)
+- Improved scan-range memory estimation logic. [#64158](https://github.com/StarRocks/starrocks/pull/64158)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Transaction logs were deleted when publishing bundle tablets. [#64030](https://github.com/StarRocks/starrocks/pull/64030)
+- The join algorithm cannot guarantee the sort property because, after joining, the sort property is not reset. [#64086](https://github.com/StarRocks/starrocks/pull/64086)
+- Issues related to transparent materialized view rewrite. [#63962](https://github.com/StarRocks/starrocks/pull/63962)
+
+### Behavior Changes
+
+- Added the property `enable_iceberg_table_cache` to Iceberg Catalogs to optionally disable Iceberg table cache and allow it always to read the latest data. [#64082](https://github.com/StarRocks/starrocks/pull/64082)
+- Ensured `INSERT ... SELECT` reads the freshest metadata by refreshing external tables before planning. [#64026](https://github.com/StarRocks/starrocks/pull/64026)
+- Increased lock table slots to 256 and added `rid` to slow-lock logs. [#63945](https://github.com/StarRocks/starrocks/pull/63945)
+- Temporarily disabled `shared_scan` due to incompatibility with event-based scheduling. [#63543](https://github.com/StarRocks/starrocks/pull/63543)
+- Changed the default Hive Catalog cache TTL to 24 hours and removed unused parameters. [#63459](https://github.com/StarRocks/starrocks/pull/63459)
+- Automatically determine the Partial Update mode based on the session variable and the number of inserted columns. [#62091](https://github.com/StarRocks/starrocks/pull/62091)
+
 ## 4.0.0
 
 Release date: October 17, 2025

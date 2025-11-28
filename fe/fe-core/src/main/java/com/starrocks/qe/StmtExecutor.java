@@ -55,6 +55,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -106,8 +107,6 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
-import com.starrocks.persist.DeleteSqlBlackLists;
-import com.starrocks.persist.SqlBlackListPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
@@ -145,6 +144,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.analyzer.ShowStmtToSelectStmtConverter;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -166,7 +166,6 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -180,6 +179,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
@@ -199,7 +199,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableHint;
 import com.starrocks.sql.ast.feedback.PlanAdvisorStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
@@ -288,7 +287,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
 
 // Do one COM_QUERY process.
@@ -320,7 +319,7 @@ public class StmtExecutor {
     private List<StmtExecutor> subStmtExecutors;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
-    private PrepareStmtContext prepareStmtContext;
+    private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
 
     public StmtExecutor(ConnectContext ctx, StatementBase parsedStmt) {
@@ -527,6 +526,26 @@ public class StmtExecutor {
         return parsedStmt;
     }
 
+    public String getPreparedStmtId() {
+        // For EXECUTE, either `parsedStmt` is an `ExecuteStmt`, or `prepareStmtContext` has already been set.
+        // Initially, `parsedStmt` is an `ExecuteStmt`. After it matches the corresponding `PrepareStmt`, `parsedStmt` is replaced
+        // with a `QueryStatement`, while `prepareStmtContext` stores the associated `PrepareStmt` information.
+        if (parsedStmt != null && parsedStmt instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
+            return executeStmt.getStmtName();
+        }
+        if (prepareStmtContext != null) {
+            return prepareStmtContext.getStmt().getName();
+        }
+
+        // For PREPARE.
+        if (parsedStmt != null && parsedStmt instanceof PrepareStmt) {
+            PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
+            return prepareStmt.getName();
+        }
+        return null;
+    }
+
     public int getExecTimeout() {
         if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
             Map<String, String> properties = ctas.getInsertStmt().getProperties();
@@ -582,11 +601,12 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     context.getDumpInfo().setStatement(parsedStmt);
                 }
-                if (parsedStmt instanceof EnhancedShowStmt) {
+                if (parsedStmt instanceof ShowStmt) {
                     com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
                     Authorizer.check(parsedStmt, context);
 
-                    QueryStatement selectStmt = ((EnhancedShowStmt) parsedStmt).toSelectStmt();
+                    QueryStatement selectStmt =
+                            ShowStmtToSelectStmtConverter.toSelectStmt((ShowStmt) parsedStmt);
                     if (selectStmt != null) {
                         parsedStmt = selectStmt;
                         execPlan = StatementPlanner.plan(parsedStmt, context);
@@ -832,6 +852,8 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
+            } else if (parsedStmt instanceof RefreshConnectionsStmt) {
+                handleRefreshConnectionsStmt();
             } else if (parsedStmt instanceof UseDbStmt) {
                 handleUseDbStmt();
             } else if (parsedStmt instanceof SetWarehouseStmt) {
@@ -1204,18 +1226,7 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
                 String jsonString = GSON.toJson(queryDetail);
-                if (Config.enable_profile_log_compress) {
-                    byte[] jsonBytes;
-                    try {
-                        jsonBytes = CompressionUtils.gzipCompressString(jsonString);
-                        PROFILE_LOG.info(jsonBytes);
-                    } catch (IOException e) {
-                        LOG.warn("Compress queryDetail string failed, length: {}, reason: {}",
-                                jsonString.length(), e.getMessage());
-                    }
-                } else {
-                    PROFILE_LOG.info(jsonString);
-                }
+                PROFILE_LOG.info(jsonString);
             }
         };
         return coord.tryProcessProfileAsync(task);
@@ -1364,6 +1375,18 @@ public class StmtExecutor {
             executor.execute();
         } catch (DdlException e) {
             // Return error message to client.
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    // Process refresh connections statement.
+    private void handleRefreshConnectionsStmt() {
+        try {
+            RefreshConnectionsStmt stmt = (RefreshConnectionsStmt) parsedStmt;
+            GlobalStateMgr.getCurrentState().getVariableMgr().refreshConnections(stmt.isForce());
+        } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
         }
@@ -1910,32 +1933,15 @@ public class StmtExecutor {
             throw new SemanticException("Sql pattern cannot be empty");
         }
 
-        long id = GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(new SqlBlackListPersistInfo(id, sqlPattern.pattern()));
+        GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
     }
 
     private void handleDelSqlBlackListStmt() {
-        DelSqlBlackListStmt delSqlBlackListStmt = (DelSqlBlackListStmt) parsedStmt;
-        List<Long> indexs = delSqlBlackListStmt.getIndexs();
-        if (indexs != null) {
-            for (long id : indexs) {
-                GlobalStateMgr.getCurrentState().getSqlBlackList().delete(id);
-            }
-            GlobalStateMgr.getCurrentState().getEditLog()
-                    .logDeleteSQLBlackList(new DeleteSqlBlackLists(indexs));
-        }
+        GlobalStateMgr.getCurrentState().getSqlBlackList().deleteBlackSql((DelSqlBlackListStmt) parsedStmt);
     }
 
     private void handleAddBackendBlackListStmt() throws StarRocksException {
-        AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
-        Authorizer.check(addBackendBlackListStmt, context);
-        for (Long beId : addBackendBlackListStmt.getBackendIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            if (sis.getBackend(beId) == null) {
-                throw new StarRocksException("Not found backend: " + beId);
-            }
-            SimpleScheduler.getHostBlacklist().addByManual(beId);
-        }
+        GlobalStateMgr.getCurrentState().getSqlBlackList().addBlackSql((AddBackendBlackListStmt) parsedStmt, context);
     }
 
     private void handleDelBackendBlackListStmt() throws StarRocksException {
@@ -3192,7 +3198,9 @@ public class StmtExecutor {
                 context.getQualifiedUser(),
                 Optional.ofNullable(context.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
                 context.getCurrentWarehouseName(),
-                context.getCurrentCatalog());
+                context.getCurrentCatalog(),
+                context.getCommandStr(),
+                getPreparedStmtId());
         // Set query source from context
         queryDetail.setQuerySource(context.getQuerySource());
         context.setQueryDetail(queryDetail);

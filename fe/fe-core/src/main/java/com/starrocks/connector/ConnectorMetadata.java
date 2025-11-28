@@ -139,10 +139,24 @@ public interface ConnectorMetadata {
         return TvrTableSnapshot.empty();
     }
 
+    /**
+     * @param dbName database name of the table
+     * @param table table name
+     * @return the current latest snapshot info of the input table.
+     */
     default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
         return TvrTableSnapshot.empty();
     }
 
+    /**
+     * NOTE: ensure the last snapshot is at the last of the collection.
+     *
+     * @param dbName  database name
+     * @param table table name
+     * @param fromSnapshotExclusive from snapshot which is exclusive
+     * @param toSnapshotInclusive  to snapshot which is inclusive
+     * @return ordered delta traits which are from the start snapshot to the start snapshot.
+     */
     default List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
                                                           TvrTableSnapshot fromSnapshotExclusive,
                                                           TvrTableSnapshot toSnapshotInclusive) {

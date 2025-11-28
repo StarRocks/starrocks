@@ -346,6 +346,7 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testProjectFilterRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String queryStr = "select 1 as b, MIN(v1) from t0 having (b + 1) != b;";
         String explainString = getFragmentPlan(queryStr);
         Assertions.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
@@ -481,6 +482,7 @@ public class ScanTest extends PlanTestBase {
     @Test
     public void testPruneColumnTest() throws Exception {
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String[] sqlString = {
                 "select count(*) from lineitem_partition",
                 // for olap, partition key is not partition column.
@@ -526,4 +528,30 @@ public class ScanTest extends PlanTestBase {
                 "     <id 10> : count_v3\n" +
                 "     <id 11> : rows_v1");
     }
+
+    @Test
+    public void testMetaScanWithCount1() throws Exception {
+        String sql = "select count(1) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(rows_v1)");
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id");
+    }
+
+    @Test
+    public void testMetaScanCountStarWithPartition() throws Exception {
+        {
+            String sql = "select cast(count(1) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
+        }
+
+        {
+            String sql = "select cast(count(*) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
+        }
+    }
+
 }

@@ -18,7 +18,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -68,7 +67,6 @@ public class IcebergScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
     private CloudConfiguration cloudConfiguration = null;
-    protected TvrVersionRange tvrVersionRange;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
@@ -148,7 +146,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true,
+                scanOptimizeOption.getCanUseMinMaxOpt());
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -188,7 +187,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
-                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator);
+                remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
+                scanOptimizeOption.getCanUseMinMaxOpt());
     }
 
     private void setupCloudCredential() {
@@ -245,10 +245,6 @@ public class IcebergScanNode extends ScanNode {
     // for unit tests
     public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
-    }
-
-    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
-        this.tvrVersionRange = tvrVersionRange;
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {

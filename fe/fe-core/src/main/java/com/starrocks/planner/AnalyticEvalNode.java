@@ -39,11 +39,11 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TAnalyticNode;
@@ -131,7 +131,7 @@ public class AnalyticEvalNode extends PlanNode {
         List<String> orderByElementStrs = Lists.newArrayList();
 
         for (OrderByElement element : orderByElements) {
-            orderByElementStrs.add(element.toSql());
+            orderByElementStrs.add(ExprToSql.toSql(element));
         }
 
         return MoreObjects.toStringHelper(this)
@@ -161,7 +161,7 @@ public class AnalyticEvalNode extends PlanNode {
             msg.analytic_node.setIntermediate_tuple_id(intermediateTupleDesc.getId().asInt());
         }
         msg.analytic_node.setOutput_tuple_id(outputTupleDesc.getId().asInt());
-        msg.analytic_node.setPartition_exprs(ExprToThriftVisitor.treesToThrift(substitutedPartitionExprs));
+        msg.analytic_node.setPartition_exprs(ExprToThrift.treesToThrift(substitutedPartitionExprs));
         StringBuilder sqlPartitionKeysBuilder = new StringBuilder();
         for (Expr e : substitutedPartitionExprs) {
             if (sqlPartitionKeysBuilder.length() > 0) {
@@ -173,8 +173,8 @@ public class AnalyticEvalNode extends PlanNode {
             msg.analytic_node.setSql_partition_keys(sqlPartitionKeysBuilder.toString());
         }
         msg.analytic_node.setOrder_by_exprs(
-                ExprToThriftVisitor.treesToThrift(OrderByElement.getOrderByExprs(orderByElements)));
-        msg.analytic_node.setAnalytic_functions(ExprToThriftVisitor.treesToThrift(analyticFnCalls));
+                ExprToThrift.treesToThrift(OrderByElement.getOrderByExprs(orderByElements)));
+        msg.analytic_node.setAnalytic_functions(ExprToThrift.treesToThrift(analyticFnCalls));
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (Expr e : analyticFnCalls) {
@@ -192,19 +192,20 @@ public class AnalyticEvalNode extends PlanNode {
 
         if (analyticWindow == null) {
             if (!orderByElements.isEmpty()) {
-                msg.analytic_node.setWindow(AnalyticWindow.DEFAULT_WINDOW.toThrift());
+                msg.analytic_node.setWindow(
+                        ExprToThrift.analyticWindowToThrift(AnalyticWindow.DEFAULT_WINDOW));
             }
         } else {
             // TODO: Window boundaries should have range_offset_predicate set
-            msg.analytic_node.setWindow(analyticWindow.toThrift());
+            msg.analytic_node.setWindow(ExprToThrift.analyticWindowToThrift(analyticWindow));
         }
 
         if (partitionByEq != null) {
-            msg.analytic_node.setPartition_by_eq(ExprToThriftVisitor.treeToThrift(partitionByEq));
+            msg.analytic_node.setPartition_by_eq(ExprToThrift.treeToThrift(partitionByEq));
         }
 
         if (orderByEq != null) {
-            msg.analytic_node.setOrder_by_eq(ExprToThriftVisitor.treeToThrift(orderByEq));
+            msg.analytic_node.setOrder_by_eq(ExprToThrift.treeToThrift(orderByEq));
         }
 
         msg.analytic_node.setUse_hash_based_partition(useHashBasedPartition);
@@ -256,9 +257,9 @@ public class AnalyticEvalNode extends PlanNode {
 
             for (OrderByElement element : orderByElements) {
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    strings.add(element.toSql());
+                    strings.add(ExprToSql.toSql(element));
                 } else {
-                    strings.add(element.explain());
+                    strings.add(ExprToSql.explain(element));
                 }
             }
 
@@ -268,7 +269,7 @@ public class AnalyticEvalNode extends PlanNode {
 
         if (analyticWindow != null) {
             output.append(prefix).append("window: ");
-            output.append(analyticWindow.toSql());
+            output.append(ExprToSql.toSql(analyticWindow));
             output.append("\n");
         }
 
@@ -348,7 +349,7 @@ public class AnalyticEvalNode extends PlanNode {
                 normalizer.normalizeOrderedExprs(OrderByElement.getOrderByExprs(orderByElements)));
         analyticNode.setAnalytic_functions(normalizer.normalizeExprs(analyticFnCalls));
         if (analyticWindow != null) {
-            analyticNode.setWindow(analyticWindow.toThrift());
+            analyticNode.setWindow(ExprToThrift.analyticWindowToThrift(analyticWindow));
         }
         if (intermediateTupleDesc != null) {
             analyticNode.setIntermediate_tuple_id(normalizer.remapTupleId(intermediateTupleDesc.getId()).asInt());

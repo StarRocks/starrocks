@@ -60,8 +60,8 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                 uint16_t selection = validate_select_idx[j];
                 const auto* partition = partitions[selection];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& tablets = partition->indexes[i].tablets;
-                _tablet_ids[selection] = tablets[record_hashes[selection] % tablets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _tablet_ids[selection] = tablet_ids[record_hashes[selection] % tablet_ids.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -72,8 +72,8 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
             for (size_t j = 0; j < num_rows; ++j) {
                 const auto* partition = partitions[j];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& tablets = partition->indexes[i].tablets;
-                _tablet_ids[j] = tablets[record_hashes[j] % tablets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _tablet_ids[j] = tablet_ids[record_hashes[j] % tablet_ids.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }

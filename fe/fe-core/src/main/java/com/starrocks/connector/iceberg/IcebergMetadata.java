@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
@@ -80,7 +81,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -568,7 +568,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
-        final long fromSnapshotIdExclusive = fromSnapshotExclusive.from.getVersion();
+        final long fromSnapshotIdExclusive = fromSnapshotExclusive.getSnapshotId();
         final long toSnapshotIdInclusive =
                 toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
                         "toSnapshotInclusive must have a valid snapshot ID"));
@@ -1081,7 +1081,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                             IcebergMetricsReporter metricsReporter =
                                     ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
                             if (metricsReporter.getScanReport() != null) {
-                                String name = "ICEBERG.ScanMetrics." + 
+                                String name = "ICEBERG.ScanMetrics." +
                                         ((StarRocksIcebergTableScan) tableScan).getIcebergTableName().toString();
                                 String value = metricsReporter.getScanReport().toString();
                                 Tracers.record(Tracers.Module.EXTERNAL, name, value);
@@ -1175,14 +1175,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange version) {
-        boolean useDefaultStats = false;
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
-            useDefaultStats = true;
-        }
-        if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() && session.getSourceTablesCount() == 1) {
-            useDefaultStats = true;
-        }
-        if (useDefaultStats) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }
         IcebergTable icebergTable = (IcebergTable) table;
@@ -1344,7 +1337,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
-                        nativeTbl.location(), dataFile.partition_path);
+                        IcebergUtil.tableDataLocation(nativeTbl), dataFile.partition_path);
                 IcebergPartitionData partitionData = IcebergPartitionData.partitionDataFromPath(
                         relativePartitionLocation, nullFingerprint, partitionSpec);
                 builder.withPartition(partitionData);
@@ -1400,10 +1393,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new Append(transaction);
     }
 
-    public static String getIcebergRelativePartitionPath(String tableLocation, String partitionLocation) {
-        tableLocation = tableLocation.endsWith("/") ? tableLocation.substring(0, tableLocation.length() - 1) : tableLocation;
-        String tableLocationWithData = tableLocation + "/data/";
-        String path = PartitionUtil.getSuffixName(tableLocationWithData, partitionLocation);
+    public static String getIcebergRelativePartitionPath(String tableDataLocation, String partitionLocation) {
+        tableDataLocation = tableDataLocation.endsWith("/") ? tableDataLocation.substring(0, tableDataLocation.length() - 1) :
+                tableDataLocation;
+        String path = PartitionUtil.getSuffixName(tableDataLocation, partitionLocation);
         if (path.startsWith("/")) {
             path = path.substring(1);
         }

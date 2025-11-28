@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -54,6 +55,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -63,7 +65,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
@@ -319,7 +320,7 @@ public class CreateTableAnalyzer {
                         keysColumnNames.add(columnDef.getName());
                     }
                 }
-                keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames);
+                keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames, true);
             } else {
                 int keyLength = 0;
                 for (ColumnDef columnDef : columnDefs) {
@@ -353,7 +354,7 @@ public class CreateTableAnalyzer {
                 if (keysColumnNames.isEmpty()) {
                     throw new SemanticException("Data type of first column cannot be %s", columnDefs.get(0).getType());
                 }
-                keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
+                keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames, true);
             }
         }
 
@@ -434,7 +435,7 @@ public class CreateTableAnalyzer {
     }
 
     private static void analyzeSortKeys(CreateTableStmt stmt) {
-        if (!stmt.isOlapEngine()) {
+        if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
             return;
         }
 
@@ -444,11 +445,54 @@ public class CreateTableAnalyzer {
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
         List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
-        if (orderByElements != null) {
+        if (Config.enable_range_distribution) {
+            // For range distribution, the sort columns must be the same as the key
+            // columns or only in a different order for none duplicate key table
+            if (keysType != KeysType.DUP_KEYS) {
+                List<Integer> sortKeyIdxes = Lists.newArrayList();
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist", column);
+                    }
+                    if (keysType == KeysType.PRIMARY_KEYS) {
+                        ColumnDef cd = columnDefs.get(idx);
+                        Type t = cd.getType();
+                        if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType()
+                                || t.isDate() || t.isDatetime())) {
+                            throw new SemanticException(
+                                    "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
+                        }
+                    }
+                    sortKeyIdxes.add(idx);
+                }
+
+                List<Integer> keyColIdxes = Lists.newArrayList();
+                for (String column : keysDesc.getKeysColumnNames()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist in key columns", column);
+                    }
+                    keyColIdxes.add(idx);
+                }
+
+                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                if (!res) {
+                    throw new SemanticException("The sort columns must be same with key columns");
+                }
+            }
+        } else {
             // we should check sort key column type if table is primary key table
             if (keysType == KeysType.PRIMARY_KEYS) {
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -469,7 +513,8 @@ public class CreateTableAnalyzer {
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -550,7 +595,7 @@ public class CreateTableAnalyzer {
                 }
                 TypeDef typeDef = new TypeDef(type);
                 try {
-                    typeDef.analyze();
+                    TypeDefAnalyzer.analyze(typeDef);
                 } catch (Exception e) {
                     throw new SemanticException("Generate partition column " + columnName
                             + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
@@ -634,6 +679,18 @@ public class CreateTableAnalyzer {
             Map<String, String> properties = stmt.getProperties();
             KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
 
+            if (Config.enable_range_distribution) {
+                if (distributionDesc == null) {
+                    // For duplicate key table, if both duplicate key and order by are not
+                    // specified, use random distribution, otherwise, use range distribution
+                    if (!(keysDesc.getKeysType() == KeysType.DUP_KEYS
+                            && keysDesc.isKeysColumnsDerived()
+                            && stmt.getOrderByElements() == null)) {
+                        distributionDesc = new RangeDistributionDesc();
+                    }
+                }
+            }
+
             // analyze distribution
             if (distributionDesc == null) {
                 if (properties != null && properties.containsKey("colocate_with")) {
@@ -659,7 +716,7 @@ public class CreateTableAnalyzer {
             }
             if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
                 throw new SemanticException(keysDesc.getKeysType().toSql()
-                        + " must use hash distribution", distributionDesc.getPos());
+                        + " cannot use random distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
                     && stmt.getPartitionDesc() != null) {

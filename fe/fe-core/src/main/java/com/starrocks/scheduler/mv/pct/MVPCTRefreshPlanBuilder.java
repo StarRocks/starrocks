@@ -25,6 +25,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -50,7 +51,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
@@ -430,7 +430,7 @@ public class MVPCTRefreshPlanBuilder {
                 }
             } else {
                 // alias name.
-                SlotRef slotRef = expr.unwrapSlotRef();
+                SlotRef slotRef = ExprUtils.unwrapSlotRef(expr);
                 if (slotRef != null && slotRef.getColumnName().equals(mvPartitionInfoRefColName)) {
                     return outputExpressions.get(i);
                 }

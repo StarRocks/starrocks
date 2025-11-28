@@ -29,7 +29,7 @@ public class ShowDeleteStmt extends ShowStmt {
 
     public ShowDeleteStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getDbName() {

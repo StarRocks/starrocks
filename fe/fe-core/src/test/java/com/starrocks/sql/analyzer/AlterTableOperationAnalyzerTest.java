@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
@@ -184,7 +185,7 @@ public class AlterTableOperationAnalyzerTest {
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(new IcebergTable());
 
         // Test with older_than parameter
-        Expr olderThan = new DateLiteral("2024-01-01 00:00:00", DateType.DATETIME);
+        Expr olderThan = new DateLiteral(DateUtils.parseStrictDateTime("2024-01-01 00:00:00"), DateType.DATETIME);
 
         AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "EXPIRE_SNAPSHOTS",
                 List.of(new ProcedureArgument("OLDER_THAN", olderThan)), null);
@@ -235,7 +236,7 @@ public class AlterTableOperationAnalyzerTest {
         AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(new IcebergTable());
 
         // Test with older_than parameter
-        Expr olderThan = new DateLiteral("2024-01-01 00:00:00", DateType.DATETIME);
+        Expr olderThan = new DateLiteral(DateUtils.parseStrictDateTime("2024-01-01 00:00:00"), DateType.DATETIME);
 
         AlterTableOperationClause clause = new AlterTableOperationClause(new NodePosition(1, 1), "REMOVE_ORPHAN_FILES",
                 List.of(new ProcedureArgument("OLDER_THAN", olderThan)), null);

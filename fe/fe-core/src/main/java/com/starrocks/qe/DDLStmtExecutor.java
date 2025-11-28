@@ -20,6 +20,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -33,7 +34,6 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.load.EtlJobType;
-import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -141,7 +141,6 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -857,12 +856,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    PluginInfo info = context.getGlobalStateMgr().getPluginMgr().uninstallPlugin(stmt.getPluginName());
-                    if (null != info) {
-                        GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(info);
-                    }
-                    LOG.info("uninstall plugin = " + stmt.getPluginName());
-
+                    context.getGlobalStateMgr().getPluginMgr().uninstallPluginFromStmt(stmt);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }

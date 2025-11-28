@@ -38,6 +38,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -115,7 +116,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -137,7 +137,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
     private final Table table;
@@ -359,6 +359,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeMutableBucketNum(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
@@ -458,6 +460,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                         "update for a primary key table. ");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+            PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, false);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -768,10 +772,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
         }
 
@@ -1030,10 +1032,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         ColumnPosition colPos = clause.getColPos();
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
@@ -1286,8 +1286,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
-            clause.setDynamicTabletSplitSize(dynamicTabletSplitSize);
+            long tabletReshardSplitSize = PropertyAnalyzer.analyzeTabletReshardSplitSize(copiedProperties, true);
+            clause.setTabletReshardSplitSize(tabletReshardSplitSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }
@@ -1473,7 +1473,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         List<String> sortKeys = new ArrayList<>();
         for (OrderByElement orderByElement : orderByElements) {
-            String column = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             if (column == null) {
                 throw new SemanticException("Unknown column '%s' in order by clause", ExprToSql.toSql(orderByElement.getExpr()));
             }

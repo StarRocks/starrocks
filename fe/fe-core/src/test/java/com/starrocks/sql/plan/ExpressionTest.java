@@ -237,6 +237,14 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testExpression11() throws Exception {
+        String sql = "select cast(v1 as decimal256(58,5)) % cast(v2 as decimal32(9,7)) from t0";
+        String planFragment = getFragmentPlan(sql);
+        Assertions.assertTrue(planFragment.contains("|  <slot 4> : CAST(CAST(1: v1 AS DECIMAL256(58,5)) AS DECIMAL256(76,5)) " +
+                "% CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL256(76,7))"));
+    }
+
+    @Test
     public void testTimestampArithmeticExpr() throws Exception {
         String sql = "select id_date + interval '3' month," +
                 "id_date + interval '1' day," +
@@ -292,7 +300,7 @@ public class ExpressionTest extends PlanTestBase {
         Assertions.assertTrue(slotRef.isFromLambda());
 
         List<TupleId> tids = ImmutableList.of(new TupleId(111));
-        Assertions.assertTrue(lexpr.getChild(1).isBoundByTupleIds(tids));
+        Assertions.assertTrue(ExprUtils.isBoundByTupleIds(lexpr.getChild(1), tids));
     }
 
     @Test

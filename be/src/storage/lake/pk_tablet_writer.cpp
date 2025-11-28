@@ -81,9 +81,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     }
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
-    if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
-        return Status::InternalError("deletes column serialize failed");
-    }
+    RETURN_IF_ERROR(serde::ColumnArraySerde::serialize(deletes, content.data()));
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
     _files.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});

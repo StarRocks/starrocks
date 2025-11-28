@@ -1,6 +1,6 @@
 # Database Introspection Design
 
-This document outlines the design of the database introspection (or reflection) process in the `sqlalchemy-starrocks` dialect. Introspection is the process of examining a live database to determine the schema of its tables, views, and other objects.
+This document outlines the design of the database introspection (or reflection) process in the `starrocks-sqlalchemy` dialect. Introspection is the process of examining a live database to determine the schema of its tables, views, and other objects.
 
 ## Strategy
 
@@ -30,11 +30,20 @@ For information that is not available in `information_schema` (such as StarRocks
 - **`SHOW CREATE TABLE <table>`**: This command provides the full DDL for a table, which contains all the StarRocks-specific clauses.
 - **`SHOW FULL COLUMNS FROM <table>`**: This is used to retrieve column-level details, including key columns and aggregate types for `AGGREGATE KEY` tables.
 
+### Unified Reflection Entry Point: `reflect_table`
+
+Although the raw data is gathered from `information_schema` and `SHOW` commands, the **single entry point** that turns this data into SQLAlchemy objects is `Inspector.reflect_table()`.
+
+- No matter whether the underlying object in StarRocks is a **base table**, **view**, or **materialized view**, the dialect always uses `reflect_table()` to construct a `Table` object.
+- The actual kind of the object is recorded in `table.info['table_kind']` (`TABLE` / `VIEW` / `MATERIALIZED_VIEW`), and additional attributes such as the view definition or MV partitioning/refresh options are populated into `table.info` and `table.dialect_options['starrocks']`.
+
+The detailed design of this unified, table-based reflection model for View / Materialized View is described in `docs/design/view_and_mv.md`.
+
 ### Reflecting Column Aggregate Types
 
 For `AGGREGATE KEY` tables, the aggregate type of each column is not available in `information_schema`. The dialect discovers this information by parsing the `Type` field from the output of `SHOW FULL COLUMNS FROM <table>`.
 
-This parsed aggregate type is then passed into the constructor for the reflected `Column` object as a `starrocks_AGG_TYPE` keyword argument. Because `Column` is also a `DialectKWArgs` object (like a `Table`), SQLAlchemy automatically normalizes this into the `column.dialect_options['starrocks']` dictionary, making it available for the `compare` process.
+This parsed aggregate type is then passed into the constructor for the reflected `Column` object as a `starrocks_agg_type` keyword argument. Because `Column` is also a `DialectKWArgs` object (like a `Table`), SQLAlchemy automatically normalizes this into the `column.dialect_options['starrocks']` dictionary, making it available for the `compare` process.
 
 ### Parsing DDL into Structured Objects
 

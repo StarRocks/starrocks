@@ -90,12 +90,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
-        super("Routine load task scheduler", 0);
+        super("routine-load-task-scheduler", 0);
         this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
     public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
-        super("Routine load task scheduler", 0);
+        super("routine-load-task-scheduler", 0);
         this.routineLoadManager = routineLoadManager;
     }
 
@@ -200,7 +200,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         } catch (RoutineLoadPauseException e) {
             String msg = "FE aborts the task with reason: failed to check task ready to execute, err: " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
-                    JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg), false);
+                    JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                     .add("error_msg", msg)
                     .build());
@@ -232,7 +232,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             // exception happens, PAUSE the job
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(JobState.PAUSED,
                     new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR,
-                            "failed to begin txn for task :" + e.getMessage()), false);
+                            "failed to begin txn for task :" + e.getMessage()));
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId()).add("error_msg",
                     "begin task txn encounter exception: " + e.getMessage()).build());
             throw e;
@@ -250,15 +250,13 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             // this means database or table has been dropped, just stop this routine load job.
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.CANCELLED,
-                            new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
-                            false);
+                            new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()));
             throw e;
         } catch (StarRocksException e) {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,
-                            new ErrorReason(e.getInternalErrorCode(), "failed to create task: " + e.getMessage()),
-                            false);
+                            new ErrorReason(e.getInternalErrorCode(), "failed to create task: " + e.getMessage()));
             throw e;
         }
 

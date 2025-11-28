@@ -228,6 +228,19 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Data type**: Boolean
 
+### cbo_materialized_view_rewrite_related_mvs_limit
+
+* **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
+* **Default**: 16
+* **Introduced in**: v3.1.9, v3.2.5
+
+### cbo_prune_subfield
+
+* **Description**: Whether to enable JSON subfield pruning. This variable must be used with the BE dynamic parameter `enable_json_flat`. Otherwise, it may degrade JSON data query performance.
+* **Default**: false
+* **Data type**: Int
+* **Introduced in**: v3.3.0
+
 ### character_set_database (global)
 
 * **Data type**: StringThe character set supported by StarRocks. Only UTF8 (`utf8`) is supported.

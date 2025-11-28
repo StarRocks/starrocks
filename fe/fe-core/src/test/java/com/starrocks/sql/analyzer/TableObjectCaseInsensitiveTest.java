@@ -27,19 +27,54 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateFileStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropFileStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
+import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
+import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowSmallFilesStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTransactionStmt;
+import com.starrocks.sql.ast.SwapTableClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -52,6 +87,7 @@ public class TableObjectCaseInsensitiveTest {
     public static void beforeClass() throws Exception {
         Config.enable_table_name_case_insensitive = true;
         AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_NOTHING);
+        connectContext.setThreadLocalInfo();
         starRocksAssert.withDatabase("test_db").useDatabase("test_db");
         starRocksAssert.withTable("CREATE TABLE test_db.t0 (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -68,6 +104,7 @@ public class TableObjectCaseInsensitiveTest {
 
     @Test
     public void testModifyConfigFailed() throws Exception {
+        connectContext.setThreadLocalInfo();
         AdminSetConfigStmt adminSetConfigStmt = (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(
                 "admin set frontend config(\"enable_table_name_case_insensitive\" = \"false\");",
                 connectContext);
@@ -102,7 +139,8 @@ public class TableObjectCaseInsensitiveTest {
         analyzeSuccess("with X0 as (select 111 v1) select L.* from X0 l join X0 r on L.v1 = R.V1");
         analyzeSuccess("with cte as (select 222 c2) select C2 from CTE");
 
-        ShowTableStmt stmt = new ShowTableStmt("test_DB", false, null);
+        ShowTableStmt stmt = (ShowTableStmt) SqlParser.parseSingleStatement(
+                "show tables from test_DB", SqlModeHelper.MODE_DEFAULT);
         ShowResultSet res = ShowExecutor.execute(stmt, connectContext);
         Assertions.assertEquals("t0", res.getResultRows().get(0).get(0));
     }
@@ -113,11 +151,13 @@ public class TableObjectCaseInsensitiveTest {
         analyzeSuccess(createView);
         CreateViewStmt createViewStmt =
                 (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
-        connectContext.getGlobalStateMgr().getLocalMetastore().createView(createViewStmt);
+        connectContext.setThreadLocalInfo();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
         analyzeSuccess("select * from test_db.VIEW1");
 
-        ShowTableStmt stmt = new ShowTableStmt("test_DB", false, null);
+        ShowTableStmt stmt = (ShowTableStmt) SqlParser.parseSingleStatement(
+                "show tables from test_DB", SqlModeHelper.MODE_DEFAULT);
         ShowResultSet res = ShowExecutor.execute(stmt, connectContext);
         Assertions.assertEquals("view1", res.getResultRows().get(1).get(0));
     }
@@ -447,5 +487,199 @@ public class TableObjectCaseInsensitiveTest {
         sql = "SHOW CREATE DATABASE TEST_DB";
         showCreateDbStmt = (ShowCreateDbStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         Assertions.assertEquals("test_db", showCreateDbStmt.getDb());
+    }
+
+    @Test
+    public void testAlterDatabaseStatementNormalization() {
+        AlterDatabaseRenameStatement renameStmt =
+                (AlterDatabaseRenameStatement) SqlParser.parseSingleStatement(
+                        "ALTER DATABASE TEST_db RENAME TEST_DB_NEW", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", renameStmt.getDbName());
+        Assertions.assertEquals("test_db_new", renameStmt.getNewDbName());
+
+        AlterDatabaseQuotaStmt quotaStmt = (AlterDatabaseQuotaStmt) SqlParser.parseSingleStatement(
+                "ALTER DATABASE TEST_db SET DATA QUOTA 1024MB", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", quotaStmt.getDbName());
+    }
+
+    @Test
+    public void testShowStatementNormalization() {
+        ShowDbStmt showDbStmt = (ShowDbStmt) SqlParser.parseSingleStatement(
+                "SHOW DATABASES FROM TEST_catalog", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_catalog", showDbStmt.getCatalogName());
+
+        ShowTableStmt showTableStmt = (ShowTableStmt) SqlParser.parseSingleStatement(
+                "SHOW TABLES FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showTableStmt.getDb());
+
+        ShowTableStmt showTableWithCatalog = (ShowTableStmt) SqlParser.parseSingleStatement(
+                "SHOW TABLES FROM DEFAULT_CATALOG.TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("default_catalog", showTableWithCatalog.getCatalogName());
+        Assertions.assertEquals("test_db", showTableWithCatalog.getDb());
+
+        ShowTableStatusStmt showTableStatusStmt = (ShowTableStatusStmt) SqlParser.parseSingleStatement(
+                "SHOW TABLE STATUS FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showTableStatusStmt.getDb());
+
+        ShowMaterializedViewsStmt showMaterializedViewsStmt =
+                (ShowMaterializedViewsStmt) SqlParser.parseSingleStatement(
+                        "SHOW MATERIALIZED VIEWS FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showMaterializedViewsStmt.getDb());
+
+        ShowMaterializedViewsStmt showMaterializedViewsWithCatalog =
+                (ShowMaterializedViewsStmt) SqlParser.parseSingleStatement(
+                        "SHOW MATERIALIZED VIEWS FROM DEFAULT_CATALOG.TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("default_catalog", showMaterializedViewsWithCatalog.getCatalogName());
+        Assertions.assertEquals("test_db", showMaterializedViewsWithCatalog.getDb());
+
+        ShowDynamicPartitionStmt showDynamicPartitionStmt =
+                (ShowDynamicPartitionStmt) SqlParser.parseSingleStatement(
+                        "SHOW DYNAMIC PARTITION TABLES FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showDynamicPartitionStmt.getDb());
+
+        ShowTransactionStmt showTransactionStmt = (ShowTransactionStmt) SqlParser.parseSingleStatement(
+                "SHOW TRANSACTION FROM TEST_db WHERE ID = 1", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showTransactionStmt.getDbName());
+
+        ShowFunctionsStmt showFunctionsStmt = (ShowFunctionsStmt) SqlParser.parseSingleStatement(
+                "SHOW FUNCTIONS FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showFunctionsStmt.getDbName());
+    }
+
+    @Test
+    public void testLoadAndExportStatementNormalization() {
+        ShowLoadStmt showLoadStmt = (ShowLoadStmt) SqlParser.parseSingleStatement(
+                "SHOW LOAD FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showLoadStmt.getDbName());
+
+        ShowLoadWarningsStmt showLoadWarningsStmt = (ShowLoadWarningsStmt) SqlParser.parseSingleStatement(
+                "SHOW LOAD WARNINGS FROM TEST_db WHERE LABEL = 'label'", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showLoadWarningsStmt.getDbName());
+
+        CancelLoadStmt cancelLoadStmt = (CancelLoadStmt) SqlParser.parseSingleStatement(
+                "CANCEL LOAD FROM TEST_db WHERE LABEL = 'label'", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", cancelLoadStmt.getDbName());
+
+        ShowExportStmt showExportStmt = (ShowExportStmt) SqlParser.parseSingleStatement(
+                "SHOW EXPORT FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showExportStmt.getDbName());
+
+        CancelExportStmt cancelExportStmt = (CancelExportStmt) SqlParser.parseSingleStatement(
+                "CANCEL EXPORT FROM TEST_db WHERE queryid = \"921d8f80-7c9d-11eb-9342-acde48001122\"",
+                SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", cancelExportStmt.getDbName());
+
+        ShowBackupStmt showBackupStmt = (ShowBackupStmt) SqlParser.parseSingleStatement(
+                "SHOW BACKUP FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showBackupStmt.getDbName());
+
+        CancelBackupStmt cancelBackupStmt = (CancelBackupStmt) SqlParser.parseSingleStatement(
+                "CANCEL BACKUP FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", cancelBackupStmt.getDbName());
+
+        ShowRestoreStmt showRestoreStmt = (ShowRestoreStmt) SqlParser.parseSingleStatement(
+                "SHOW RESTORE FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showRestoreStmt.getDbName());
+
+        ShowDeleteStmt showDeleteStmt = (ShowDeleteStmt) SqlParser.parseSingleStatement(
+                "SHOW DELETE FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showDeleteStmt.getDbName());
+    }
+
+    @Test
+    public void testFileStatementNormalization() {
+        CreateFileStmt createFileStmt = (CreateFileStmt) SqlParser.parseSingleStatement(
+                "CREATE FILE \"f1\" IN TEST_db PROPERTIES(\"url\"=\"http://example.com\")",
+                SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", createFileStmt.getDbName());
+
+        DropFileStmt dropFileStmt = (DropFileStmt) SqlParser.parseSingleStatement(
+                "DROP FILE \"f1\" FROM TEST_db PROPERTIES(\"catalog\"=\"hdfs\")",
+                SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", dropFileStmt.getDbName());
+
+        ShowSmallFilesStmt showSmallFilesStmt = (ShowSmallFilesStmt) SqlParser.parseSingleStatement(
+                "SHOW FILE FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showSmallFilesStmt.getDbName());
+    }
+
+    @Test
+    public void testGrantNormalization() {
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) SqlParser.parseSingleStatement(
+                "GRANT SELECT ON TABLE TEST_db.T0 TO 'u'@'%'", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals(Arrays.asList(Arrays.asList("test_db", "t0")),
+                grantStmt.getPrivilegeObjectNameTokensList());
+    }
+
+    @Test
+    public void testObjectShowStatementNormalization() {
+        ShowIndexStmt showIndexStmt = (ShowIndexStmt) SqlParser.parseSingleStatement(
+                "SHOW INDEX FROM TEST_db.T0", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showIndexStmt.getTableName().getDb());
+        Assertions.assertEquals("t0", showIndexStmt.getTableName().getTbl());
+
+        ShowColumnStmt showColumnStmt = (ShowColumnStmt) SqlParser.parseSingleStatement(
+                "SHOW COLUMNS FROM TEST_db.T0", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showColumnStmt.getTableName().getDb());
+        Assertions.assertEquals("t0", showColumnStmt.getTableName().getTbl());
+
+        ShowAlterStmt showAlterStmt = (ShowAlterStmt) SqlParser.parseSingleStatement(
+                "SHOW ALTER TABLE COLUMN FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showAlterStmt.getDbName());
+    }
+
+    @Test
+    public void testRoutineLoadAndPipeStatementNormalization() {
+        ShowRoutineLoadTaskStmt showRoutineLoadTaskStmt =
+                (ShowRoutineLoadTaskStmt) SqlParser.parseSingleStatement(
+                        "SHOW ROUTINE LOAD TASK FROM TEST_db WHERE JobName = \"job1\"",
+                        SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showRoutineLoadTaskStmt.getDbFullName());
+
+        ShowPipeStmt showPipeStmt = (ShowPipeStmt) SqlParser.parseSingleStatement(
+                "SHOW PIPES FROM TEST_db", SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", showPipeStmt.getDbName());
+
+        DropPipeStmt dropPipeStmt = (DropPipeStmt) SqlParser.parseSingleStatement(
+                "DROP PIPE TEST_db.my_pipe", SqlModeHelper.MODE_DEFAULT);
+        PipeName pipeName = dropPipeStmt.getPipeName();
+        Assertions.assertEquals("test_db", pipeName.getDbName());
+    }
+
+    @Test
+    public void testCreateRoutineLoadNormalization() {
+        CreateRoutineLoadStmt routineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parseSingleStatement(
+                "CREATE ROUTINE LOAD test_db.rl1 ON TEST_db.T0 FROM KAFKA",
+                SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db.t0", routineLoadStmt.getTableName());
+        Assertions.assertEquals("test_db", routineLoadStmt.getLabelName().getDbName());
+    }
+
+    @Test
+    public void testAlterTableClauseNormalization() {
+        AlterTableStmt renameTableStmt = (AlterTableStmt) SqlParser.parseSingleStatement(
+                "ALTER TABLE TEST_db.T0 RENAME NEW_NAME", SqlModeHelper.MODE_DEFAULT);
+        TableRenameClause tableRenameClause = (TableRenameClause) renameTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals("new_name", tableRenameClause.getNewTableName());
+
+        AlterTableStmt swapTableStmt = (AlterTableStmt) SqlParser.parseSingleStatement(
+                "ALTER TABLE TEST_db.T0 SWAP WITH T1", SqlModeHelper.MODE_DEFAULT);
+        SwapTableClause swapTableClause = (SwapTableClause) swapTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals("t1", swapTableClause.getTblName());
+    }
+
+    @Test
+    public void testLoadStatementNormalization() {
+        String sql = "LOAD LABEL TEST_db.label1 (DATA INFILE(\"hdfs://path/file\") INTO TABLE T0) " +
+                "WITH BROKER \"broker\" (\"username\"=\"u\", \"password\"=\"p\")";
+        LoadStmt loadStmt = (LoadStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", loadStmt.getLabel().getDbName());
+        Assertions.assertEquals("t0", loadStmt.getDataDescriptions().get(0).getTableName());
+
+        String loadFromTable = "LOAD LABEL TEST_db.label2 (DATA FROM TABLE T0 INTO TABLE T0)";
+        LoadStmt loadFromTableStmt = (LoadStmt) SqlParser.parseSingleStatement(loadFromTable, SqlModeHelper.MODE_DEFAULT);
+        Assertions.assertEquals("test_db", loadFromTableStmt.getLabel().getDbName());
+        Assertions.assertEquals("t0", loadFromTableStmt.getDataDescriptions().get(0).getTableName());
+        Assertions.assertEquals("t0", loadFromTableStmt.getDataDescriptions().get(0).getSrcTableName());
     }
 }

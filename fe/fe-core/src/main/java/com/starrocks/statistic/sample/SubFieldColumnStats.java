@@ -45,8 +45,8 @@ public class SubFieldColumnStats extends ColumnStats {
     }
 
     @Override
-    public String getDateSize() {
-        return columnStats.getDateSize();
+    public String getDataSize() {
+        return columnStats.getDataSize();
     }
 
     @Override

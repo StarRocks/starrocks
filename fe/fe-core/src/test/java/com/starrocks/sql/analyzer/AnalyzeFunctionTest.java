@@ -334,4 +334,29 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select sec_to_time(-3024000)");
     }
 
+    @Test
+    public void testLagLeadFunction() throws Exception {
+        analyzeSuccess("select lag(ta, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lead(ta, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lag(ta ignore nulls, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lead(ta ignore nulls, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lag(ta, 1, NULL) over() from test_laglead");
+        analyzeSuccess("select lead(ta, 1, NULL) over() from test_laglead");
+
+        // Prefer third parameter's type when non-null (VARCHAR/ARRAY/JSON),
+        // and cast first/third arguments to the target type
+        analyzeSuccess("select lag(ta, 1, tc) over(order by tb) from test_laglead");
+        analyzeSuccess("select lead(ta, 1, tc) over(order by tb) from test_laglead");
+
+        // IGNORE NULLS with third parameter column
+        analyzeSuccess("select lag(ta ignore nulls, 2, tc) over(order by tb) from test_laglead");
+        analyzeSuccess("select lead(ta ignore nulls, 2, tc) over(order by tb) from test_laglead");
+
+        // Error cases: non-constant offset, invalid arg count
+        analyzeFail("select lag(ta, tb, tc) over() from test_laglead",
+                "The offset parameter of LEAD/LAG must be a constant positive integer");
+        // Single-argument LEAD/LAG is valid: offset/default will be filled by transformer
+        analyzeSuccess("select lead(ta) over() from test_laglead");
+        analyzeSuccess("select lag(ta) over() from test_laglead");
+    }
 }

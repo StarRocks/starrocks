@@ -35,7 +35,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
@@ -66,12 +65,6 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public Expr negate() {
-        return new ExistsPredicate((Subquery) getChild(0), !notExists);
-    }
-
-
-    @Override
     public Expr clone() {
         return new ExistsPredicate(this);
     }
@@ -97,7 +90,7 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context)  {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitExistsPredicate(this, context);
     }
 }

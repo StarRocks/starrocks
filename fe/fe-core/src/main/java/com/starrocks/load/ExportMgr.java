@@ -41,13 +41,13 @@ import com.google.gson.Gson;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -61,7 +61,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -116,8 +116,7 @@ public class ExportMgr implements MemoryTrackable {
         ExportJob job = createJob(jobId, queryId, stmt);
         writeLock();
         try {
-            unprotectAddJob(job);
-            GlobalStateMgr.getCurrentState().getEditLog().logExportCreate(job);
+            GlobalStateMgr.getCurrentState().getEditLog().logExportCreate(job, wal -> unprotectAddJob(job));
         } finally {
             writeUnlock();
         }
@@ -199,7 +198,7 @@ public class ExportMgr implements MemoryTrackable {
     // NOTE: jobid and states may both specified, or only one of them, or neither
     public List<List<String>> getExportJobInfosByIdOrState(
             long dbId, long jobId, Set<ExportJob.JobState> states, UUID queryId,
-            ArrayList<OrderByPair> orderByPairs, long limit) {
+            List<OrderByPair> orderByPairs, long limit) {
 
         long resultNum = limit == -1L ? Integer.MAX_VALUE : limit;
         LinkedList<List<Comparable>> exportJobInfos = new LinkedList<>();
@@ -363,26 +362,11 @@ public class ExportMgr implements MemoryTrackable {
         }
     }
 
-    @Deprecated
-    public void replayUpdateJobState(long jobId, ExportJob.JobState newState) {
-        writeLock();
-        try {
-            ExportJob job = idToJob.get(jobId);
-            job.updateState(newState, true, System.currentTimeMillis());
-            if (isJobExpired(job, System.currentTimeMillis())) {
-                LOG.info("remove expired job: {}", job);
-                idToJob.remove(jobId);
-            }
-        } finally {
-            writeUnlock();
-        }
-    }
-
     public void replayUpdateJobInfo(ExportJob.ExportUpdateInfo info) {
         writeLock();
         try {
             ExportJob job = idToJob.get(info.jobId);
-            job.updateState(info.state, true, info.stateChangeTime);
+            job.changeState(info.state, info.stateChangeTime);
             if (isJobExpired(job, System.currentTimeMillis())) {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(info.jobId);

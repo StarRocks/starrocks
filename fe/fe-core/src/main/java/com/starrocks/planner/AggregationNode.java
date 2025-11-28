@@ -42,14 +42,16 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -226,7 +228,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
-            aggregateFunctions.add(ExprToThriftVisitor.treeToThrift(e));
+            aggregateFunctions.add(ExprToThrift.treeToThrift(e));
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
@@ -247,7 +249,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
-            msg.agg_node.setGrouping_exprs(ExprToThriftVisitor.treesToThrift(groupingExprs));
+            msg.agg_node.setGrouping_exprs(ExprToThrift.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {
                 if (sqlGroupingKeysBuilder.length() > 0) {
@@ -269,12 +271,12 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
                     try {
                         Type type = expr.getType();
-                        LiteralExpr minExpr = LiteralExpr.create(min, type);
-                        LiteralExpr maxExpr = LiteralExpr.create(max, type);
+                        LiteralExpr minExpr = LiteralExprFactory.create(min, type);
+                        LiteralExpr maxExpr = LiteralExprFactory.create(max, type);
                         // cast decimal literal to matched precision type
                         if (minExpr instanceof DecimalLiteral) {
-                            minExpr = (LiteralExpr) minExpr.uncheckedCastTo(type);
-                            maxExpr = (LiteralExpr) maxExpr.uncheckedCastTo(type);
+                            minExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(minExpr, type);
+                            maxExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(maxExpr, type);
                         } 
                         minMaxStats.add(minExpr);
                         minMaxStats.add(maxExpr);
@@ -285,13 +287,13 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             }
 
             if (minMaxStats.size() == 2 * groupingExprs.size()) {
-                msg.agg_node.setGroup_by_min_max(ExprToThriftVisitor.treesToThrift(minMaxStats));
+                msg.agg_node.setGroup_by_min_max(ExprToThrift.treesToThrift(minMaxStats));
             }
         }
 
         List<Expr> intermediateAggrExprs = aggInfo.getIntermediateAggrExprs();
         if (intermediateAggrExprs != null && !intermediateAggrExprs.isEmpty()) {
-            msg.agg_node.setIntermediate_aggr_exprs(ExprToThriftVisitor.treesToThrift(intermediateAggrExprs));
+            msg.agg_node.setIntermediate_aggr_exprs(ExprToThrift.treesToThrift(intermediateAggrExprs));
         }
 
         if (!buildRuntimeFilters.isEmpty()) {

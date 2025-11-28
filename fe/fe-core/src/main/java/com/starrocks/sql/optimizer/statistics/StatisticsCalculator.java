@@ -44,8 +44,8 @@ import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.common.ErrorType;
@@ -647,21 +647,24 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
-        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computePaimonScanNode(node, context, node.getTable(),
+                node.getColRefToColumnMetaMap(), node.getTvrVersionRange());
     }
 
     @Override
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
-        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computePaimonScanNode(node, context, node.getTable(),
+                node.getColRefToColumnMetaMap(), TvrTableSnapshot.empty());
     }
 
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
-                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
+                                       TvrVersionRange tvrVersionRange) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
+                    node.getPredicate(), node.getLimit(), tvrVersionRange);
             context.setStatistics(stats);
             if (node.isLogical()) {
                 boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()

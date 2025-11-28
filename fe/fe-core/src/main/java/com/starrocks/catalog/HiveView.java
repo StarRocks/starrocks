@@ -19,7 +19,6 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.List;

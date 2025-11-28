@@ -16,12 +16,12 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.type.PrimitiveType;
 
 import java.util.List;

@@ -108,6 +108,8 @@ public class SystemId {
 
     public static final long APPLICABLE_ROLES_ID = 45L;
 
+    public static final long FE_THREADS_ID = 46L;
+
     public static final long SYS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;
@@ -134,6 +136,6 @@ public class SystemId {
     public static final long CLUSTER_SNAPSHOTS_ID = 160L;
     public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
 
-    // ==================  Dynamic Tablet  ======================= //
-    public static final long DYNAMIC_TABLET_JOBS_ID = 170L;
+    // ==================  Tablet Reshard  ======================== //
+    public static final long TABLET_RESHARD_JOBS_ID = 170L;
 }

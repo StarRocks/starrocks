@@ -34,7 +34,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
@@ -530,7 +529,7 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs(readTable.getIdToColumn());
-        Function fn = readPartitionExprs.get(0).getFn();
+        Function fn = ((FunctionCallExpr) readPartitionExprs.get(0)).getFn();
         Assertions.assertNotNull(fn);
         starRocksAssert.dropTable("table_hitcount");
     }
@@ -665,7 +664,7 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<ColumnIdExpr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
-        Function fn = readPartitionExprs.get(0).getExpr().getFn();
+        Function fn = ((FunctionCallExpr) readPartitionExprs.get(0).getExpr()).getFn();
         Assertions.assertNotNull(fn);
     }
 
