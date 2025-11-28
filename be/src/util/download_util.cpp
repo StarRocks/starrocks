@@ -25,7 +25,6 @@
 #include "util/uuid_generator.h"
 
 namespace starrocks {
-
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
                               const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration) {
     auto success = false;
@@ -91,7 +90,7 @@ Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url,
     bool is_local = url.starts_with("file://");
     bool is_dfs = (!is_http) && (!is_local);
     if (is_dfs) {
-         return get_java_udf_url(url, real_url, options);
+        return get_java_udf_url(url, real_url, options);
     }
     *real_url = url;
     return Status::OK();

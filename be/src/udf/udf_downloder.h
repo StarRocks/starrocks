@@ -21,22 +21,23 @@
 
 #include "common/status.h"
 
-namespace starrocks {
+namespace starrocks
+{
+    class udf_downloder
+    {
+    public:
+        static Status download_remote_file_2_local(const std::string& remotePath, std::string& localPath,
+                                                   const FSOptions& options);
 
-class udf_downloder {
+    private:
+        Status setup_local_file_path(const std::string& local_path);
 
-public:
-    static Status download_remote_file_2_local(const std::string& remotePath, std::string& localPath, const FSOptions& options);
+        Status do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options);
 
-private:
-    Status setup_local_file_path(const std::string& local_path);
+        static std::unordered_map<std::string, std::shared_ptr<std::mutex>> _path_mutexes;
 
-    Status do_download(const std::string& remotePath, std::string& localPath, const FSOptions& options);
+        static std::mutex _download_mutex;
 
-    static std::unordered_map<std::string, std::shared_ptr<std::mutex>> _path_mutexes;
-
-    static std::mutex _download_mutex;
-
-    static std::shared_ptr<std::mutex> get_mutex_for_path(const std::string& localPath);
-};
+        static std::shared_ptr<std::mutex> get_mutex_for_path(const std::string& localPath);
+    };
 }
