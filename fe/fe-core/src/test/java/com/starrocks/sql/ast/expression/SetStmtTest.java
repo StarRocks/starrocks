@@ -403,6 +403,15 @@ public class SetStmtTest {
     }
 
     @Test
+    public void testNonExistentVariable() {
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "no_exist", new StringLiteral("true"));
+        Throwable exception = assertThrows(SemanticException.class, () ->
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx));
+        assertThat(exception.getMessage(),
+                containsString("Unknown system variable 'no_exist', the most similar variables"));
+    }
+
+    @Test
     public void testCboDisabledRules() {
         {
             SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
