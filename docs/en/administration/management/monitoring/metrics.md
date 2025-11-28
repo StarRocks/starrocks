@@ -651,6 +651,17 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the highest Compaction Score on each BE node.
 
+### starrocks_fe_slow_lock_held_time_ms
+
+- Unit: ms
+- Type: Summary
+- Description: Histogram tracking the lock held time (in milliseconds) when slow locks are detected. This metric is updated when lock wait time exceeds the `slow_lock_threshold_ms` configuration parameter. It tracks the maximum lock held time among all lock owners when a slow lock event is detected. Each metric includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs. Note: This metric may not accurately reflect the exact lock held time under high contention, because the metric is updated once the wait time exceeds the threshold, but the held time may continue to increase until the owner completes its operation and releases the lock. However, this metric can still be updated even when deadlock occurs.
+
+### starrocks_fe_slow_lock_wait_time_ms
+
+- Unit: ms
+- Type: Summary
+- Description: Histogram tracking the lock wait time (in milliseconds) when slow locks are detected. This metric is updated when lock wait time exceeds the `slow_lock_threshold_ms` configuration parameter. It accurately tracks how long threads wait to acquire locks during lock contention scenarios. Each metric includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs. This metric provides precise wait time measurements. Note: This metric cannot be updated when deadlock occurs, hence it cannot be used to detect deadlock situations.
 
 ### update_compaction_outputs_total
 
