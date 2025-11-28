@@ -15,6 +15,8 @@
 package com.starrocks.alter;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -23,7 +25,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -37,7 +38,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -48,9 +51,9 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.validation.constraints.NotNull;
 
@@ -59,7 +62,6 @@ public class LakeTableSchemaChangeJobTest {
     private static ConnectContext connectContext;
     private static final String DB_NAME = "db_lake_schema_change_test";
     private static Database db;
-    private LakeTableSchemaChangeJob schemaChangeJob;
     private LakeTable table;
 
     public LakeTableSchemaChangeJobTest() {
@@ -94,6 +96,11 @@ public class LakeTableSchemaChangeJobTest {
         return (LakeTableSchemaChangeJob) alterJob;
     }
 
+    private LakeTableSchemaChangeJob alterTableAddColumn() throws Exception {
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        return getAlterJob(table);
+    }
+
     @Before
     public void before() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
@@ -103,10 +110,6 @@ public class LakeTableSchemaChangeJobTest {
         db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(DB_NAME);
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
                     + NUM_BUCKETS);
-        Config.enable_fast_schema_evolution_in_share_data_mode = false;
-        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 DOUBLE");
-        schemaChangeJob = getAlterJob(table);
-        Config.enable_fast_schema_evolution_in_share_data_mode = true;
     }
 
     @After
@@ -115,7 +118,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testCancelPendingJob() throws IOException {
+    public void testCancelPendingJob() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
@@ -125,15 +129,16 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testDropTableBeforeCancel() {
+    public void testDropTableBeforeCancel() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         db.dropTable(table.getName());
-
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testPendingJobNoAliveBackend() {
+    public void testPendingJobNoAliveBackend() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -168,7 +173,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testTableDroppedInPending() {
+    public void testTableDroppedInPending() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -198,7 +204,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testCreateTabletFailed() {
+    public void testCreateTabletFailed() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
@@ -220,7 +227,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testCreateTabletSuccess() throws AlterCancelException {
+    public void testCreateTabletSuccess() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
@@ -235,7 +243,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testPreviousTxnNotFinished() throws AlterCancelException {
+    public void testPreviousTxnNotFinished() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
@@ -260,7 +269,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testThrowAnalysisExceptionWhileWaitingTxn() throws AlterCancelException {
+    public void testThrowAnalysisExceptionWhileWaitingTxn() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
@@ -288,7 +298,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
+    public void testTableNotExistWhileWaitingTxn() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
@@ -320,7 +331,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testTableDroppedBeforeRewriting() throws AlterCancelException {
+    public void testTableDroppedBeforeRewriting() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
@@ -354,7 +366,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testAlterTabletFailed() throws AlterCancelException {
+    public void testAlterTabletFailed() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -386,7 +399,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testAlterTabletSuccess() throws AlterCancelException {
+    public void testAlterTabletSuccess() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -426,7 +440,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testPublishVersion() throws AlterCancelException {
+    public void testPublishVersion() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
@@ -526,7 +541,8 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testTransactionRaceCondition() throws AlterCancelException {
+    public void testTransactionRaceCondition() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -583,6 +599,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCancelPendingJobWithFlag() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.setIsCancelling(true);
         schemaChangeJob.runPendingJob();
         schemaChangeJob.setIsCancelling(false);
@@ -590,5 +607,29 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.setWaitingCreatingReplica(true);
         schemaChangeJob.cancel("");
         schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+
+    @Test
+    public void testInsertConcurrent() throws Exception {
+        TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
+                TransactionState.TxnSourceType.BE, "127.0.0.1");
+        // block the schema change job to simulate concurrent insert
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        schemaChangeJob.run();
+        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, "insert into t0 values (1)").second;
+        List<Column> fullSchema = table.getFullSchema();
+        Assert.assertEquals(2, fullSchema.size());
+        Assert.assertEquals("c0", fullSchema.get(0).getName());
+        Assert.assertEquals("c1", fullSchema.get(1).getName());
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Assert.assertEquals(fullSchema.size(), outputExprs.size());
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Assert.assertEquals(fullSchema.get(i).getType(), outputExprs.get(i).getType());
+        }
     }
 }
