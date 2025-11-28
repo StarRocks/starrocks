@@ -275,7 +275,17 @@ bool TypeDescriptor::support_orderby() const {
     if (type == TYPE_ARRAY) {
         return children[0].support_orderby();
     }
+<<<<<<< HEAD
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL && type != TYPE_MAP;
+=======
+    if (type == TYPE_STRUCT) {
+        bool all_support = std::all_of(children.begin(), children.end(),
+                                       [](const TypeDescriptor& t) { return t.support_orderby(); });
+        return all_support;
+    }
+    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
+           type != TYPE_MAP && type != TYPE_VARIANT;
+>>>>>>> 64a9faf2fb ([Enhancement] Query supports ORDER BY on struct data types (#66035))
 }
 
 bool TypeDescriptor::support_groupby() const {
