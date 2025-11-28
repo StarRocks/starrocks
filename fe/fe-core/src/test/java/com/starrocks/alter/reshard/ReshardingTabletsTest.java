@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -20,11 +20,11 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.List;
 
-public class DynamicTabletsTest {
+public class ReshardingTabletsTest {
     @Test
     public void testSplittingTablets() {
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
             Assertions.assertTrue(splittingTablets.isEmpty());
             Assertions.assertTrue(splittingTablets.getSplittingTablets().isEmpty());
@@ -36,7 +36,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(1L,
                                     List.of(101L,
@@ -52,7 +52,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets identicalTablets = new DynamicTablets(
+            ReshardingTablets identicalTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     Collections.emptyList(),
                     List.of(
@@ -70,7 +70,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(1L,
                                     List.of(101L,
@@ -93,7 +93,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(1L,
                                     List.of(101L,
@@ -117,7 +117,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(1L,
                                     List.of(101L,
@@ -147,7 +147,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(2L,
                                     List.of(201L,
@@ -172,7 +172,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(2L,
                                     List.of(201L,
@@ -200,7 +200,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(2L,
                                     List.of(201L,
@@ -232,7 +232,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(2L,
                                     List.of(201L,
@@ -276,7 +276,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(101L,
                                     List.of(10101L,
@@ -310,7 +310,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(101L,
                                     List.of(10101L,
@@ -349,7 +349,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(101L,
                                     List.of(10101L,
@@ -397,7 +397,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets splittingTablets = new DynamicTablets(
+            ReshardingTablets splittingTablets = new ReshardingTablets(
                     List.of(
                             new SplittingTablet(101L,
                                     List.of(10101L,
@@ -471,7 +471,7 @@ public class DynamicTabletsTest {
     @Test
     public void testMergingTablets() {
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
             Assertions.assertTrue(mergingTablets.isEmpty());
             Assertions.assertTrue(mergingTablets.getSplittingTablets().isEmpty());
@@ -481,7 +481,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -499,7 +499,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -523,7 +523,7 @@ public class DynamicTabletsTest {
 
         {
 
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -547,7 +547,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -577,7 +577,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -600,7 +600,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -626,7 +626,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -656,7 +656,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -698,7 +698,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -728,7 +728,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -763,7 +763,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(
@@ -806,7 +806,7 @@ public class DynamicTabletsTest {
         }
 
         {
-            DynamicTablets mergingTablets = new DynamicTablets(
+            ReshardingTablets mergingTablets = new ReshardingTablets(
                     Collections.emptyList(),
                     List.of(
                             new MergingTablet(

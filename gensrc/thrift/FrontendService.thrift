@@ -2171,7 +2171,7 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
-struct TDynamicTabletJobsItem {
+struct TTabletReshardJobsItem {
     1: optional i64 job_id;
     2: optional string db_name;
     3: optional string table_name;
@@ -2187,12 +2187,12 @@ struct TDynamicTabletJobsItem {
     13: optional string error_message;
 }
 
-struct TDynamicTabletJobsRequest {
+struct TTabletReshardJobsRequest {
 }
 
-struct TDynamicTabletJobsResponse {
+struct TTabletReshardJobsResponse {
     1: optional Status.TStatus status;
-    2: optional list<TDynamicTabletJobsItem> items;
+    2: optional list<TTabletReshardJobsItem> items;
 }
 
 service FrontendService {
@@ -2338,6 +2338,12 @@ service FrontendService {
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
+<<<<<<< HEAD
     TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
+=======
+    TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
+
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
+>>>>>>> f1a97e5aef ([Refactor] Rename dynamic tablet to tablet reshard (#65941))
 }
 

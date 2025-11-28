@@ -12,18 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+#pragma once
 
-/*
- * This exception will be thrown when dynamic tablet job execution error
- */
-public class DynamicTabletJobException extends RuntimeException {
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
-    public DynamicTabletJobException(String message) {
-        super(message);
-    }
+namespace starrocks {
 
-    public DynamicTabletJobException(String message, Throwable cause) {
-        super(message, cause);
-    }
-}
+class SchemaTabletReshardJobsScanner : public SchemaScanner {
+public:
+    SchemaTabletReshardJobsScanner();
+    ~SchemaTabletReshardJobsScanner() override;
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+
+private:
+    Status _fill_chunk(ChunkPtr* chunk);
+
+    size_t _index = 0;
+    TTabletReshardJobsResponse _result;
+    static SchemaScanner::ColumnDesc _s_columns[];
+};
+
+} // namespace starrocks
