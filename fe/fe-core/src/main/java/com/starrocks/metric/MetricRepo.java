@@ -170,8 +170,6 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
-<<<<<<< HEAD
-=======
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
      * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
@@ -199,9 +197,6 @@ public final class MetricRepo {
     public static final Histogram HISTO_SLOW_LOCK_WAIT_TIME_MS =
             METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_wait_time_ms"),
                     SlideWindowHistogramCreator.INSTANCE);
-
-    public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
->>>>>>> ac09e7c5b3 ([Enhancement] Add histogram metrics for slow lock monitoring (#66027))
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
