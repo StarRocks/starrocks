@@ -36,18 +36,14 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
-import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
-import mockit.Delegate;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,9 +63,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class ClusterSnapshotTest {
-    @Mocked
-    private EditLog editLog;
-
     private StarOSAgent starOSAgent = new StarOSAgent();
 
     private String storageVolumeName = StorageVolumeMgr.BUILTIN_STORAGE_VOLUME;
@@ -91,23 +84,7 @@ public class ClusterSnapshotTest {
         } catch (Exception ignore) {
         }
 
-        new Expectations() {
-            {
-                editLog.logClusterSnapshotLog((ClusterSnapshotLog) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logClusterSnapshotLog(ClusterSnapshotLog log) {
-                    }
-                };
-            }
-        };
-
         new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-
             @Mock
             public ClusterSnapshotMgr getClusterSnapshotMgr() {
                 return clusterSnapshotMgr;
