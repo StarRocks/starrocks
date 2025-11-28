@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/schema_scanner/schema_dynamic_tablet_jobs_scanner.h"
+#include "exec/schema_scanner/schema_tablet_reshard_jobs_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-SchemaScanner::ColumnDesc SchemaDynamicTabletJobsScanner::_s_columns[] = {
+SchemaScanner::ColumnDesc SchemaTabletReshardJobsScanner::_s_columns[] = {
         {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"DB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
@@ -37,30 +37,30 @@ SchemaScanner::ColumnDesc SchemaDynamicTabletJobsScanner::_s_columns[] = {
         {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
-SchemaDynamicTabletJobsScanner::SchemaDynamicTabletJobsScanner()
+SchemaTabletReshardJobsScanner::SchemaTabletReshardJobsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaDynamicTabletJobsScanner::~SchemaDynamicTabletJobsScanner() = default;
+SchemaTabletReshardJobsScanner::~SchemaTabletReshardJobsScanner() = default;
 
-Status SchemaDynamicTabletJobsScanner::start(RuntimeState* state) {
+Status SchemaTabletReshardJobsScanner::start(RuntimeState* state) {
     RETURN_IF(!_is_init, Status::InternalError("used before initialized."));
     RETURN_IF(!_param->ip || !_param->port, Status::InternalError("IP or port not exists"));
 
     RETURN_IF_ERROR(SchemaScanner::start(state));
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
 
-    TDynamicTabletJobsRequest request;
-    return SchemaHelper::get_dynamic_tablet_jobs_info(_ss_state, request, &_result);
+    TTabletReshardJobsRequest request;
+    return SchemaHelper::get_tablet_reshard_jobs_info(_ss_state, request, &_result);
 }
 
-Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
+Status SchemaTabletReshardJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     if (_result.status.status_code != TStatusCode::OK) {
         return Status::InternalError(
-                fmt::format("get dynamic tablet jobs infos error: {}", _result.status.error_msgs[0]));
+                fmt::format("get tablet reshard jobs infos error: {}", _result.status.error_msgs[0]));
     }
 
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
-    const TDynamicTabletJobsItem& info = _result.items[_index];
+    const TTabletReshardJobsItem& info = _result.items[_index];
     DatumArray datum_array{
             info.job_id,
             info.db_id,
@@ -91,7 +91,7 @@ Status SchemaDynamicTabletJobsScanner::_fill_chunk(ChunkPtr* chunk) {
     return {};
 }
 
-Status SchemaDynamicTabletJobsScanner::get_next(ChunkPtr* chunk, bool* eos) {
+Status SchemaTabletReshardJobsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     RETURN_IF(!_is_init, Status::InternalError("Used before initialized."));
     RETURN_IF((nullptr == chunk || nullptr == eos), Status::InternalError("input pointer is nullptr."));
 

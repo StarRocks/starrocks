@@ -107,7 +107,7 @@ enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
      TXN_EMPTY = 2;
-     TXN_DYNAMIC_TABLET = 3;
+     TXN_TABLET_RESHARD = 3;
 }
 
 enum ReplicationTxnStatePB {

@@ -12,27 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 /*
- * DynamicTabletContext saves the context during tablet splitting or merging for a tablet
+ * ReshardingTabletContext saves the context during tablet splitting or merging for a tablet
  */
-public class DynamicTabletContext {
+public class ReshardingTabletContext {
 
-    protected final DynamicTablet dynamicTablet;
+    protected final ReshardingTablet reshardingTablet;
 
     // The physical partition version of tablet splitting or merging.
-    // Versions greater than it need cross publish until dynamic tablet job finished.
+    // Versions greater than it need cross publish until tablet reshard finished.
     // This field is used to check which versions need cross publish.
     protected final long visibleVersion;
 
-    public DynamicTabletContext(DynamicTablet dynamicTablet, long visibleVersion) {
-        this.dynamicTablet = dynamicTablet;
+    public ReshardingTabletContext(ReshardingTablet reshardingTablet, long visibleVersion) {
+        this.reshardingTablet = reshardingTablet;
         this.visibleVersion = visibleVersion;
     }
 
-    public DynamicTablet getDynamicTablet() {
-        return dynamicTablet;
+    public ReshardingTablet getReshardingTablet() {
+        return reshardingTablet;
     }
 
     public long getVisibleVersion() {

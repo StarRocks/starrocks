@@ -198,7 +198,7 @@ public class OlapTable extends Table {
          */
         UPDATING_META,
         OPTIMIZE,
-        DYNAMIC_TABLET
+        TABLET_RESHARD
     }
 
     @SerializedName(value = "state")

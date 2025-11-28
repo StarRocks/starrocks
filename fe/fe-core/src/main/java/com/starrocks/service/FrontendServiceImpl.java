@@ -203,8 +203,6 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
-import com.starrocks.thrift.TDynamicTabletJobsRequest;
-import com.starrocks.thrift.TDynamicTabletJobsResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
@@ -354,6 +352,8 @@ import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTabletReshardJobsRequest;
+import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
@@ -3150,8 +3150,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TDynamicTabletJobsResponse getDynamicTabletJobsInfo(TDynamicTabletJobsRequest params) {
-        return GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr().getAllJobsInfo();
+    public TTabletReshardJobsResponse getTabletReshardJobsInfo(TTabletReshardJobsRequest params) {
+        return GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getAllJobsInfo();
     }
 
     @NotNull

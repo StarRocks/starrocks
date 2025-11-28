@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -26,10 +26,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 
-public class DynamicTabletJobMgrTest {
-    public static class TestNormalDynamicTabletJob extends DynamicTabletJob {
+public class TabletReshardJobMgrTest {
+    public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
-        public TestNormalDynamicTabletJob(long jobId, DynamicTabletJob.JobType jobType, long dbId, long tableId) {
+        public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType, long dbId, long tableId) {
             super(jobId, jobType, dbId, tableId, Collections.emptyMap());
         }
 
@@ -74,9 +74,9 @@ public class DynamicTabletJobMgrTest {
         }
     }
 
-    public static class TestAbnormalDynamicTabletJob extends TestNormalDynamicTabletJob {
+    public static class TestAbnormalTabletReshardJob extends TestNormalTabletReshardJob {
 
-        public TestAbnormalDynamicTabletJob(long jobId, DynamicTabletJob.JobType jobType, long dbId, long tableId) {
+        public TestAbnormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType, long dbId, long tableId) {
             super(jobId, jobType, dbId, tableId);
         }
 
@@ -87,7 +87,7 @@ public class DynamicTabletJobMgrTest {
 
         @Override
         public long getParallelTablets() {
-            return Config.dynamic_tablet_max_parallel_tablets / 2;
+            return Config.tablet_reshard_max_parallel_tablets / 2;
         }
     }
 
@@ -102,50 +102,52 @@ public class DynamicTabletJobMgrTest {
     }
 
     @Test
-    public void testDynamicTabletJobMgr() throws Exception {
-        DynamicTabletJobMgr jobMgr = new DynamicTabletJobMgr();
+    public void testTabletReshardJobMgr() throws Exception {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
 
-        TestNormalDynamicTabletJob normalJob = new TestNormalDynamicTabletJob(1, null, 0, 0);
-        jobMgr.addDynamicTabletJob(normalJob);
-        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(normalJob));
+        TestNormalTabletReshardJob normalJob = new TestNormalTabletReshardJob(1, null, 0, 0);
+        jobMgr.addTabletReshardJob(normalJob);
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(normalJob));
 
-        TestAbnormalDynamicTabletJob abnormalJob = new TestAbnormalDynamicTabletJob(2, null, 0, 1);
-        jobMgr.addDynamicTabletJob(abnormalJob);
+        TestAbnormalTabletReshardJob abnormalJob = new TestAbnormalTabletReshardJob(2, null, 0, 1);
+        jobMgr.addTabletReshardJob(abnormalJob);
 
-        TestAbnormalDynamicTabletJob abnormalJob2 = new TestAbnormalDynamicTabletJob(3, null, 0, 2);
-        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addDynamicTabletJob(abnormalJob2));
+        TestAbnormalTabletReshardJob abnormalJob2 = new TestAbnormalTabletReshardJob(3, null, 0, 2);
+        Assertions.assertThrows(StarRocksException.class, () -> jobMgr.addTabletReshardJob(abnormalJob2));
 
-        Assertions.assertEquals(2, jobMgr.getDynamicTabletJobs().size());
+        Assertions.assertEquals(2, jobMgr.getTabletReshardJobs().size());
         Assertions.assertEquals(normalJob.getParallelTablets() + abnormalJob.getParallelTablets(),
-                jobMgr.getTotalParalelTablets());
+                jobMgr.getTotalParallelTablets());
 
         jobMgr.runAfterCatalogReady();
 
-        Assertions.assertEquals(DynamicTabletJob.JobState.FINISHED, normalJob.getJobState());
-        Assertions.assertEquals(DynamicTabletJob.JobState.ABORTED, abnormalJob.getJobState());
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, normalJob.getJobState());
+        Assertions.assertEquals(TabletReshardJob.JobState.ABORTED, abnormalJob.getJobState());
         Assertions.assertTrue(normalJob.isDone());
         Assertions.assertTrue(abnormalJob.isDone());
         Assertions.assertFalse(normalJob.isExpired());
         Assertions.assertFalse(abnormalJob.isExpired());
-        Assertions.assertEquals(2, jobMgr.getDynamicTabletJobs().size());
-        Assertions.assertEquals(0, jobMgr.getTotalParalelTablets());
+        Assertions.assertEquals(2, jobMgr.getTabletReshardJobs().size());
+        Assertions.assertEquals(0, jobMgr.getTotalParallelTablets());
 
         abnormalJob.finishedTimeMs = 0;
         Assertions.assertTrue(abnormalJob.isExpired());
 
         jobMgr.runAfterCatalogReady();
 
-        Assertions.assertEquals(1, jobMgr.getDynamicTabletJobs().size());
+        Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
     }
 
     @Test
-    public void testGetDynamicTabletJobsInfo() throws Exception {
-        DynamicTabletJobMgr jobMgr = new DynamicTabletJobMgr();
+    public void testGetTabletReshardJobsInfo() throws Exception {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
 
-        TestNormalDynamicTabletJob job1 = new TestNormalDynamicTabletJob(1, DynamicTabletJob.JobType.SPLIT_TABLET, 0, 1);
-        TestNormalDynamicTabletJob job2 = new TestNormalDynamicTabletJob(2, DynamicTabletJob.JobType.MERGE_TABLET, 0, 2);
-        jobMgr.addDynamicTabletJob(job1);
-        jobMgr.addDynamicTabletJob(job2);
+        TestNormalTabletReshardJob job1 = new TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET, 0,
+                1);
+        TestNormalTabletReshardJob job2 = new TestNormalTabletReshardJob(2, TabletReshardJob.JobType.MERGE_TABLET, 0,
+                2);
+        jobMgr.addTabletReshardJob(job1);
+        jobMgr.addTabletReshardJob(job2);
 
         Assertions.assertEquals(2, jobMgr.getAllJobsInfo().getItems().size());
     }

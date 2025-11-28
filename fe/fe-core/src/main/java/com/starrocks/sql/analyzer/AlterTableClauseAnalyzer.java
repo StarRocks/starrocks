@@ -1286,8 +1286,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
-            clause.setDynamicTabletSplitSize(dynamicTabletSplitSize);
+            long tabletReshardSplitSize = PropertyAnalyzer.analyzeTabletReshardSplitSize(copiedProperties, true);
+            clause.setTabletReshardSplitSize(tabletReshardSplitSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }

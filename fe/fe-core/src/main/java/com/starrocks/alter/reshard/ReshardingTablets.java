@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
@@ -24,9 +24,9 @@ import java.util.ListIterator;
 import java.util.Map;
 
 /*
- * DynamicTablets saves the old and new tabletIds during tablet splitting or merging for a materialized index
+ * ReshardingTablets saves the old and new tabletIds during tablet splitting or merging for a materialized index
  */
-public class DynamicTablets {
+public class ReshardingTablets {
 
     @SerializedName(value = "splittingTablets")
     protected final List<SplittingTablet> splittingTablets;
@@ -37,7 +37,7 @@ public class DynamicTablets {
     @SerializedName(value = "identicalTablets")
     protected final List<IdenticalTablet> identicalTablets;
 
-    public DynamicTablets(
+    public ReshardingTablets(
             List<SplittingTablet> splittingTablets,
             List<MergingTablet> mergingTablets,
             List<IdenticalTablet> identicalTablets) {
@@ -160,7 +160,7 @@ public class DynamicTablets {
             context.counter = 0;
         }
 
-        // Caculate new virtual buckets
+        // Calculate new virtual buckets
         List<Long> newVirtualBuckets = new ArrayList<>(oldVirtualBuckets);
         for (int i = 2; i <= maxTimes; i *= 2) {
             // Double

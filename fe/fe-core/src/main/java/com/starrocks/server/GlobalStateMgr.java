@@ -44,7 +44,7 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
@@ -535,7 +535,7 @@ public class GlobalStateMgr {
 
     private JwkMgr jwkMgr;
 
-    private final DynamicTabletJobMgr dynamicTabletJobMgr;
+    private final TabletReshardJobMgr tabletReshardJobMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -859,7 +859,7 @@ public class GlobalStateMgr {
 
         this.jwkMgr = new JwkMgr();
 
-        this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
+        this.tabletReshardJobMgr = new TabletReshardJobMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1123,8 +1123,8 @@ public class GlobalStateMgr {
         return clusterSnapshotMgr;
     }
 
-    public DynamicTabletJobMgr getDynamicTabletJobMgr() {
-        return dynamicTabletJobMgr;
+    public TabletReshardJobMgr getTabletReshardJobMgr() {
+        return tabletReshardJobMgr;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1483,7 +1483,7 @@ public class GlobalStateMgr {
         tabletCollector.start();
 
         if (RunMode.isSharedDataMode()) {
-            dynamicTabletJobMgr.start();
+            tabletReshardJobMgr.start();
         }
     }
 
@@ -1621,7 +1621,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
-                .put(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, dynamicTabletJobMgr::load)
+                .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1849,7 +1849,7 @@ public class GlobalStateMgr {
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
-                dynamicTabletJobMgr.save(imageWriter);
+                tabletReshardJobMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

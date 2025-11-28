@@ -12,15 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
-import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Config;
 
-/*
- * DynamicTabletJobFactory is for creating DynamicTabletJob.
- * This is the base class of SplitTabletJobFactory and MergeTabletJobFactory.
- */
-public interface DynamicTabletJobFactory {
+public class TabletReshardUtils {
 
-    DynamicTabletJob createDynamicTabletJob() throws StarRocksException;
+    public static boolean isPowerOfTwo(long n) {
+        return n > 1 && (n & (n - 1)) == 0;
+    }
+
+    public static int calcSplitCount(long dataSize, long splitSize) {
+        int splitCount = 1;
+        for (long size = dataSize; size >= splitSize; size /= 2) {
+            int newSplitCount = splitCount * 2;
+            if (newSplitCount > Config.tablet_reshard_max_split_count) {
+                break;
+            }
+            splitCount = newSplitCount;
+        }
+        return splitCount;
+    }
 }
