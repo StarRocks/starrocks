@@ -180,6 +180,7 @@ public class AgentBatchTask implements Runnable {
                 }
 
                 if (computeNode == null || !computeNode.isAlive()) {
+                    LOG.warn("compute node not alive. backend[{}]", backendId);
                     continue;
                 }
 

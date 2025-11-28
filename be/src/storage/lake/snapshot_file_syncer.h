@@ -27,7 +27,7 @@ struct TabletSnapshotInfo {
     int64_t partition_id;
     int64_t physical_partition_id;
     int64_t virtual_tablet_id;
-    TabletDataSnapshotPB tablet_snapshot;
+    const TabletDataSnapshotPB* tablet_snapshot;
 };
 
 class SnapshotFileSyncer {
@@ -35,7 +35,7 @@ public:
     SnapshotFileSyncer(ExecEnv* env) : _env(env) {}
     ~SnapshotFileSyncer() = default;
 
-    Status upload(const TabletSnapshotInfo snapshot_info, UploadSnapshotFilesResponsePB* response);
+    Status upload(const TabletSnapshotInfo& snapshot_info, UploadSnapshotFilesResponsePB* response);
     /*
     Status download(const TClusterSnapshotRequest& request);
     Status move(const TClusterSnapshotRequest& request);

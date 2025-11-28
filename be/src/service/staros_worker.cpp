@@ -131,6 +131,7 @@ absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
     if (!conf.ok()) {
         return conf.status();
     }
+
     erase_fs_cache(get_cache_key(*scheme, *conf));
     return absl::OkStatus();
 }
@@ -287,12 +288,31 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
     if (!localconf.ok()) {
         return localconf.status();
     }
+    auto conf_it = localconf.value().find("sys.root");
+    if (conf_it != localconf.value().end()) {
+        LOG(INFO) << "shard: " << info.id << ", local conf sys.root=" << conf_it->second;
+    } else {
+        LOG(WARNING) << "shard: " << info.id << ", local conf sys.root not set";
+    }
     auto scheme = build_scheme_from_shard_info(info);
     if (!scheme.ok()) {
         return scheme.status();
     }
 
-    return new_shared_filesystem(*scheme, *localconf);
+    auto fs = new_shared_filesystem(*scheme, *localconf);
+    if (!fs.ok()) {
+        return fs.status();
+    }
+
+    auto fs_conf = fs.value().second->configuration();
+    auto it = fs_conf.find("sys.root");
+    if (it != fs_conf.end()) {
+        LOG(INFO) << "shard: " << info.id << ", fs conf sys.root=" << it->second;
+    } else {
+        LOG(WARNING) << "shard: " << info.id << ", fs conf sys.root not set";
+    }
+
+    return fs;
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {

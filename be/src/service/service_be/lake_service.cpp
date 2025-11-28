@@ -1380,10 +1380,15 @@ void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* c
                                             const ::starrocks::UploadSnapshotFilesRequestPB* request,
                                             ::starrocks::UploadSnapshotFilesResponsePB* response,
                                             ::google::protobuf::Closure* done) {
+    LOG(INFO) << "upload_snapshot_files, job_id: " << request->job_id() << ", db_id: " << request->db_id()
+              << ", table_id: " << request->table_id() << ", partition_id: " << request->partition_id()
+              << ", physical_partition_id: " << request->physical_partition_id()
+              << ", tablet_snapshots: " << request->tablet_snapshots().size();
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
     auto thread_pool = _env->snapshot_file_syner_thread_pool();
     if (UNLIKELY(thread_pool == nullptr)) {
+        LOG(ERROR) << "upload cluster snapshot files thread pool is null";
         cntl->SetFailed("upload cluster snapshot files thread pool is null");
         return;
     }
@@ -1392,7 +1397,8 @@ void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* c
     auto table_id = request->table_id();
     auto partition_id = request->partition_id();
     auto physical_partition_id = request->physical_partition_id();
-    auto tablet_snapshots = request->tablet_snapshots();
+    auto virtual_tablet_id = request->virtual_tablet_id();
+    const auto& tablet_snapshots = request->tablet_snapshots();
     bthread::Mutex repsonse_mtx;
 
     auto latch = BThreadCountDownLatch(tablet_snapshots.size());
@@ -1404,20 +1410,25 @@ void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* c
         }
         response->add_failed_tablets(tablet_id);
     };
-    for (auto& tablet_snapshot : tablet_snapshots) {
+    for (const auto& tablet_snapshot : tablet_snapshots) {
         auto tablet_id = tablet_snapshot.tablet_id();
-        auto tablet_snapshot_info = lake::TabletSnapshotInfo(db_id, table_id, partition_id, physical_partition_id,
-                                                             tablet_id, tablet_snapshot);
+        auto tablet_snapshot_info = std::make_shared<lake::TabletSnapshotInfo>();
+        tablet_snapshot_info->db_id = db_id;
+        tablet_snapshot_info->table_id = table_id;
+        tablet_snapshot_info->partition_id = partition_id;
+        tablet_snapshot_info->physical_partition_id = physical_partition_id;
+        tablet_snapshot_info->virtual_tablet_id = virtual_tablet_id;
+        tablet_snapshot_info->tablet_snapshot = &tablet_snapshot;
         auto task = std::make_shared<CancellableRunnable>(
-                [&] {
+                [&, tablet_snapshot_info, tablet_id] {
                     DeferOp defer([&] { latch.count_down(); });
                     auto snapshot_file_syncer = lake::SnapshotFileSyncer(_env);
-                    auto st = snapshot_file_syncer.upload(tablet_snapshot_info, response);
+                    auto st = snapshot_file_syncer.upload(*tablet_snapshot_info, response);
                     if (!st.ok()) {
                         record_failure(st, tablet_id, "Fail to upload cluster snapshot files: ");
                     }
                 },
-                [&] {
+                [&, tablet_id] {
                     Status st = Status::Cancelled("upload cluster snapshot files task has been cancelled");
                     record_failure(st, tablet_id, "");
                     latch.count_down();

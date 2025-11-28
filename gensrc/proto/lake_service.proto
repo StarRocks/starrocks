@@ -280,7 +280,8 @@ message UploadSnapshotFilesRequestPB {
     optional int64 table_id = 3;
     optional int64 partition_id = 4;
     optional int64 physical_partition_id = 5;
-    repeated TabletDataSnapshotPB tablet_snapshots = 6;
+    optional int64 virtual_tablet_id = 6;
+    repeated TabletDataSnapshotPB tablet_snapshots = 7;
 }
 
 message UploadSnapshotFilesResponsePB {

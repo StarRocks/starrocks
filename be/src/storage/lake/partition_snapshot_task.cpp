@@ -196,7 +196,9 @@ void partition_snapshot_rpc_cb(brpc::Controller* cntl, UploadSnapshotFilesRespon
 
 } // namespace
 
-void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecEnv* exec_env) {
+void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, int64_t signature, ExecEnv* exec_env) {
+    LOG(INFO) << "run_partition_snapshot_task, " << request.db_id << ", " << request.table_id << ", "
+              << request.partition_id << ", " << request.physical_partition_id;
     auto* tablet_mgr = exec_env->lake_tablet_manager();
     const int64_t pre_version = request.pre_version;
     const int64_t new_version = request.new_version;
@@ -208,7 +210,7 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
     TFinishTaskRequest finish_task_request;
     finish_task_request.__set_backend(BackendOptions::get_localBackend());
     finish_task_request.__set_task_type(TTaskType::PARTITION_SNAPSHOT);
-    finish_task_request.__set_signature(request.job_id);
+    finish_task_request.__set_signature(signature);
     TPartitionSnapshotInfo info;
     info.__set_db_id(request.db_id);
     info.__set_table_id(request.table_id);
@@ -221,6 +223,7 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
     partition_snapshot_rpc_ctx.finish_task_req = &finish_task_request;
 
     for (const auto& [backend, tablet_ids] : request.node_to_tablets) {
+        LOG(INFO) << "run partition snapshot rpc, backend: " << backend << ", tablet_ids: " << tablet_ids.size();
         if (partition_snapshot_rpc_ctx.has_failure()) {
             partition_snapshot_rpc_ctx.handle_failure("", tablet_ids);
             partition_snapshot_rpc_ctx.count_down();
@@ -232,12 +235,15 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
         node_req.set_table_id(table_id);
         node_req.set_partition_id(request.partition_id);
         node_req.set_physical_partition_id(physical_partition_id);
+        node_req.set_virtual_tablet_id(request.virtual_tablet);
 
         for (int64_t tablet_id : tablet_ids) {
             TabletMetadataPtr pre_tablet_metadata;
             if (pre_version >= 0) {
                 auto meta_or_st = tablet_mgr->get_tablet_metadata(tablet_id, pre_version);
                 if (!meta_or_st.ok()) {
+                    LOG(ERROR) << "get pre tablet metadata failed, tablet_id: " << tablet_id
+                               << ", status: " << meta_or_st.status().to_string();
                     partition_snapshot_rpc_ctx.handle_failure(meta_or_st.status().to_string(), tablet_ids);
                     partition_snapshot_rpc_ctx.count_down();
                     continue;
@@ -247,6 +253,8 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
 
             auto meta_or_st = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
             if (!meta_or_st.ok()) {
+                LOG(ERROR) << "get new tablet metadata failed, tablet_id: " << tablet_id
+                           << ", status: " << meta_or_st.status().to_string();
                 partition_snapshot_rpc_ctx.handle_failure(meta_or_st.status().to_string(), tablet_ids);
                 partition_snapshot_rpc_ctx.count_down();
                 continue;
@@ -261,6 +269,9 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
             FileSet new_dcg_files = collect_dcg_files(new_tablet_metadata);
             FileSet pre_delvec_files = collect_delvec_files(pre_tablet_metadata);
             FileSet new_delvec_files = collect_delvec_files(new_tablet_metadata);
+            // TOOD(zhangqiang)
+            // add meta_file
+            // add schema_file
 
             auto* tablet_pb = node_req.add_tablet_snapshots();
             tablet_pb->set_tablet_id(tablet_id);
@@ -290,6 +301,9 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
                     }
                 }
             }
+            for (const auto& file : tablet_pb->new_data_files()) {
+                LOG(INFO) << "tablet_id: " << tablet_id << ", new_data_file: " << file;
+            }
         }
 
         if (node_req.tablet_snapshots_size() == 0) {
@@ -299,6 +313,8 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
 
         auto stub = LakeServiceBrpcStubCache::getInstance()->get_stub(backend.host, backend.be_port);
         if (!stub.ok()) {
+            LOG(ERROR) << "get stub failed, backend: " << backend.host << ":" << backend.be_port
+                       << ", status: " << stub.status().to_string();
             partition_snapshot_rpc_ctx.handle_failure(stub.status().to_string(), tablet_ids);
             partition_snapshot_rpc_ctx.count_down();
             continue;
@@ -315,6 +331,7 @@ void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecE
     }
 
     partition_snapshot_rpc_ctx.wait();
+    LOG(INFO) << "finish partition snapshot task, status: " << partition_snapshot_rpc_ctx.final_status.to_string();
 
     // TODO(zhangqiang)
     // write delete txn log

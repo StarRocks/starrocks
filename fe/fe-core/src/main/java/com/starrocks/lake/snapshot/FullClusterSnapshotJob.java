@@ -132,7 +132,7 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
 
     @Override
     protected void runUploadingJob(SnapshotJobContext context) throws StarRocksException {
-        //TODO(zhangqiang): implement this
+        //TODO(zhangqiang): remove timeout job
         if (!lakeSnapshotBatchTask.isFinished()) {
             LOG.info("data snapshot tasks not finished. job: {}", getId());
             List<AgentTask> tasks = lakeSnapshotBatchTask.getUnfinishedTasks(2000);
@@ -219,11 +219,13 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
         long vTabletId = getVirtualTabletId();
         for (PartitionVersionInfo partition : snapshotDiff.getAddedPartitions()) {
             Map<TBackend, List<Long>> nodeToTablets = Maps.newHashMap();
-            long aggregatorNodeId = 0;
-            if (!collectNodeToTablets(partition.getTabletIds(), nodeToTablets, aggregatorNodeId)) {
-                throw new StarRocksException("failed to collect node to tablets for partition: " + partition.getPartitionKey());
+            long aggregatorNodeId = chooseAggregatorNodeId();
+            if (aggregatorNodeId == 0) {
+                throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
             }
-
+            collectNodeToTablets(partition.getTabletIds(), nodeToTablets);
+            
+            LOG.info("collect node to tablets for added partition, aggregatorNodeId: {}", aggregatorNodeId); 
             PartitionKey partitionKey = partition.getPartitionKey();
             ClusterSnapshotTask task = new ClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(), 
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), -1, 
@@ -234,12 +236,13 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
 
         for (PartitionVersionChangeInfo partition : snapshotDiff.getChangedPartitions()) {
             Map<TBackend, List<Long>> nodeToTablets = Maps.newHashMap();
-            long aggregatorNodeId = 0;
-            if (!collectNodeToTablets(partition.getCurrentPartitionInfo().getTabletIds(), nodeToTablets, aggregatorNodeId)) {
-                throw new StarRocksException("failed to collect node to tablets for partition: " + 
-                                partition.getCurrentPartitionInfo().getPartitionKey());
+            long aggregatorNodeId = chooseAggregatorNodeId();
+            if (aggregatorNodeId == 0) {
+                throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
             }
+            collectNodeToTablets(partition.getCurrentPartitionInfo().getTabletIds(), nodeToTablets);
 
+            LOG.info("collect node to tablets for changed partition, aggregatorNodeId: {}", aggregatorNodeId); 
             PartitionKey partitionKey = partition.getCurrentPartitionInfo().getPartitionKey();
             ClusterSnapshotTask task = new ClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(), 
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(),
@@ -250,25 +253,26 @@ public class FullClusterSnapshotJob extends ClusterSnapshotJob {
 
         AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
         AgentTaskExecutor.submit(lakeSnapshotBatchTask);
-        LOG.info("Finish create cluster snapshot tasks. job: {}, vTabletId: {}", getId(), vTabletId);
+        LOG.info("Finish create cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId, 
+                lakeSnapshotBatchTask.getAllTasks().size());
     }
 
-    private boolean collectNodeToTablets(List<Long> tabletIds, Map<TBackend, List<Long>> nodeToTablets, long aggregatorNodeId) {
+    private long chooseAggregatorNodeId() {
+        LakeAggregator lakeAggregator = new LakeAggregator();
+        ComputeNode computeNode = lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
+        if (computeNode == null) {
+            return 0;
+        }
+        return computeNode.getId();
+    }
+
+    private void collectNodeToTablets(List<Long> tabletIds, Map<TBackend, List<Long>> nodeToTablets) {
         for (Long tabletId : tabletIds) {
             ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, tabletId);
             TBackend backend = new TBackend(computeNode.getHost(), computeNode.getBrpcPort(), computeNode.getHttpPort());
             nodeToTablets.computeIfAbsent(backend, k -> Lists.newArrayList()).add(tabletId);
         }
-        if (aggregatorNodeId == 0) {
-            LakeAggregator lakeAggregator = new LakeAggregator();
-            ComputeNode computeNode = lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
-            if (computeNode == null) {
-                return false;
-            }
-            aggregatorNodeId = computeNode.getId();
-        }
-        return true;
     }
 
     /**

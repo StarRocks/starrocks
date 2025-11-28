@@ -19,6 +19,6 @@
 
 namespace starrocks::lake {
 
-void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, ExecEnv* exec_env);
+void run_partition_snapshot_task(const TPartitionSnapshotRequest& request, int64_t signature, ExecEnv* exec_env);
 
 } // namespace starrocks::lake

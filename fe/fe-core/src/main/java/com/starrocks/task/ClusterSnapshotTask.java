@@ -14,6 +14,7 @@
 
 package com.starrocks.task;
 
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TPartitionSnapshotRequest;
@@ -30,10 +31,11 @@ public class ClusterSnapshotTask extends AgentTask {
     private final long physicalPartitionId;
     private final long virtualTabletId;
     private Map<TBackend, List<Long>> nodeToTablets;
-    
-    public ClusterSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long physicalPartitionId, 
-                               long jobId, long preVersion, long newVersion, long virtualTabletId) {
-        super(null, backendId, TTaskType.PARTITION_SNAPSHOT, dbId, tableId, partitionId, -1L, -1L, -1L);
+
+    public ClusterSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long physicalPartitionId,
+            long jobId, long preVersion, long newVersion, long virtualTabletId) {
+        super(null, backendId, TTaskType.PARTITION_SNAPSHOT, dbId, tableId, partitionId, -1L, -1L,
+                GlobalStateMgr.getCurrentState().getNextId());
         this.jobId = jobId;
         this.preVersion = preVersion;
         this.newVersion = newVersion;

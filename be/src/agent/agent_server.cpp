@@ -413,6 +413,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::DROP_AUTO_INCREMENT_MAP, drop_auto_increment_map_req);
             HANDLE_TYPE(TTaskType::REMOTE_SNAPSHOT, remote_snapshot_req);
             HANDLE_TYPE(TTaskType::REPLICATE_SNAPSHOT, replicate_snapshot_req);
+            HANDLE_TYPE(TTaskType::PARTITION_SNAPSHOT, partition_snapshot_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -510,6 +511,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         }
         case TTaskType::PARTITION_SNAPSHOT:
+            LOG(INFO) << "receive partition snapshot task";
             HANDLE_TASK(TTaskType::PARTITION_SNAPSHOT, all_tasks, run_partition_snapshot_task,
                         PartitionSnapshotAgentTaskRequest, partition_snapshot_req, _exec_env);
             break;
