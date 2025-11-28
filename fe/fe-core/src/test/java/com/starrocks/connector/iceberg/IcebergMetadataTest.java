@@ -1143,9 +1143,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
 
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
-        Assertions.assertEquals(2, partitions.size());
+        Assert.assertEquals(2, partitions.size());
         // partition's modified time should not be -1 even if snapshot has been expired
-        Assertions.assertTrue(partitions.stream().noneMatch(x -> x.getModifiedTime() == -1));
+        Assert.assertTrue(partitions.stream().noneMatch(x -> x.getModifiedTime() == -1));
     }
 
     @Test
