@@ -351,7 +351,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 // The old and new phsycal partition will share the same storage path.
                 GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
                         oldToNewTabletIds,
-                        table.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        table.getPartitionFilePathInfo(oldPhysicalPartitionId),
                         table.getPartitionFileCacheInfo(oldPhysicalPartitionId),
                         index.getShardGroupId(),
                         properties, WarehouseManager.DEFAULT_RESOURCE);

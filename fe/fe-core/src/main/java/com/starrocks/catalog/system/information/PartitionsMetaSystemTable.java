@@ -63,7 +63,6 @@ public class PartitionsMetaSystemTable {
                         .column("STORAGE_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TABLET_BALANCED", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("METADATA_SWITCH_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PATH_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
