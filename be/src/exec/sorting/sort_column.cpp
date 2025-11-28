@@ -401,8 +401,16 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        // TODO(SmithCruise)
-        return Status::NotSupported("Not support");
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+        };
+
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                            _build_tie, _limit, &_pruned_limit));
+        _prune_limit();
+        return Status::OK();
     }
 
     template <typename T>
