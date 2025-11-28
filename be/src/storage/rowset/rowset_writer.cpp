@@ -1200,13 +1200,15 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
                 if (index.index_type() == VECTOR) {
                     SegmentIndexPB seg_index_pb;
                     seg_index_pb.set_index_id(index.index_id());
-                    auto index_path = IndexDescriptor::vector_index_file_path(
-                            _writer_options.segment_file_mark.rowset_path_prefix,
-                            _writer_options.segment_file_mark.rowset_id, (*segment_writer)->segment_id(),
-                            index.index_id());
-                    seg_index_pb.set_index_path(index_path);
-                    seg_index_pb.set_index_type(index.index_type());
-                    mutable_indexes->Add(std::move(seg_index_pb));
+                    if (const auto* segment_file_mark =
+                                std::get_if<std::pair<std::string, std::string>>(&_writer_options.segment_file_mark)) {
+                        auto index_path = IndexDescriptor::vector_index_file_path(
+                                segment_file_mark->first, segment_file_mark->second, (*segment_writer)->segment_id(),
+                                index.index_id());
+                        seg_index_pb.set_index_path(index_path);
+                        seg_index_pb.set_index_type(index.index_type());
+                        mutable_indexes->Add(std::move(seg_index_pb));
+                    }
                 }
             }
         }

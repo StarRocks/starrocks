@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <string>
 
-#include "storage/olap_common.h"
+#define INVERTED_INDEX_MARK_NAME "ivt"
 
 namespace starrocks {
 class IndexDescriptor {
