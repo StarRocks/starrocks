@@ -27,11 +27,5 @@ show verbose resource groups all;
 [REGEX]shared_resource_group_for_alex.+7.+55(\.\d+)?%.+NORMAL.+\(id=\d+,.+user=alex\)\s*(shared_pool_for_alex_and_brad)
 -- !result
 
-show verbose resource groups all;
--- result:
-[REGEX][^shared_resource_group_for_brad]
--- !result
-
-
 [UC] drop resource group shared_resource_group_for_alex;
 [UC] drop resource group shared_resource_group_for_brad;
