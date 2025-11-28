@@ -73,6 +73,10 @@ public:
     // which is thread-safe. And after that, it should be immutable.
     DelVectorPtr delvec() const { return _delvec; }
 
+    void set_fileset_id(const UniqueId& fileset_id) {
+        _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+    }
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};

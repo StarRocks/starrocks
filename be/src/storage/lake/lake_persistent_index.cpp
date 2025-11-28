@@ -292,6 +292,28 @@ bool LakePersistentIndex::too_many_rebuild_files() const {
     return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
 }
 
+Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    bool need_create_new_fileset = false;
+    if (_sstable_filesets.empty()) {
+        // first fileset
+        need_create_new_fileset = true;
+    }
+    if (!need_create_new_fileset) {
+        auto st = _sstable_filesets.back()->merge_from(sstable);
+        if (!st.ok()) {
+            // create new fileset when merge fail.
+            need_create_new_fileset = true;
+        }
+    }
+    if (need_create_new_fileset) {
+        // create new fileset
+        auto fileset = std::make_unique<PersistentIndexSstableFileset>();
+        RETURN_IF_ERROR(fileset->init(sstable));
+        _sstable_filesets.emplace_back(std::move(fileset));
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
@@ -325,12 +347,10 @@ Status LakePersistentIndex::minor_compact() {
     sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     sstable_pb.mutable_range()->CopyFrom(range_pb);
-    sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
     TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
-    auto fileset = std::make_unique<PersistentIndexSstableFileset>();
-    RETURN_IF_ERROR(fileset->init(sstable));
-    _sstable_filesets.emplace_back(std::move(fileset));
+    // try to merge to a existing fileset
+    RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
     _total_write_bytes += filesize;
     TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
     return Status::OK();
@@ -368,27 +388,10 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     // We don't use UINT32_MAX as max rowid because it is reserved for delete rows.
     sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | (UINT32_MAX - 1));
     sstable_pb.mutable_range()->CopyFrom(sst_range);
-    // Whether can append to latest fileset.
-    bool can_append = false;
-    if (!_sstable_filesets.empty()) {
-        can_append = _sstable_filesets.back()->can_append(sstable_pb);
-    }
-    if (can_append) {
-        // Append to latest fileset.
-        sstable_pb.mutable_fileset_id()->CopyFrom(_sstable_filesets.back()->fileset_id().to_proto());
-    } else {
-        // Create new fileset.
-        sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
-    }
     RETURN_IF_ERROR(
             sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */, std::move(delvec)));
-    if (can_append) {
-        RETURN_IF_ERROR(_sstable_filesets.back()->append(sstable));
-    } else {
-        auto fileset = std::make_unique<PersistentIndexSstableFileset>();
-        RETURN_IF_ERROR(fileset->init(sstable));
-        _sstable_filesets.emplace_back(std::move(fileset));
-    }
+    // try to merge to a existing fileset
+    RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
     _total_write_bytes += sst_meta.size();
     TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();
@@ -650,7 +653,7 @@ Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexPara
     // 2. Do parallel compaction for each candidate set.
     std::vector<PersistentIndexSstablePB> output_sstables;
     RETURN_IF_ERROR(
-            compact_mgr->compact(result.candidate_filesets, metadata->id(), result.merge_base_level, &output_sstables));
+            compact_mgr->compact(result.candidate_filesets, metadata, result.merge_base_level, &output_sstables));
     // 3. Record input sstables to txn log.
     for (const auto& candidate : result.candidate_filesets) {
         for (const auto& sstable_pb : candidate) {

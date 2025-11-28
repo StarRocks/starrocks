@@ -35,8 +35,8 @@ public:
 
     Status init(std::vector<std::unique_ptr<PersistentIndexSstable>>& sstables);
     Status init(std::unique_ptr<PersistentIndexSstable>& sstable);
-    Status append(std::unique_ptr<PersistentIndexSstable>& sstable);
-    bool can_append(const PersistentIndexSstablePB& sstable_pb);
+    // Merge from a new sstable into this fileset.
+    Status merge_from(std::unique_ptr<PersistentIndexSstable>& sstable);
     UniqueId fileset_id() const { return _fileset_id; }
     bool is_standalone_sstable() const { return _standalone_sstable != nullptr; }
     const std::string& standalone_sstable_filename() const;

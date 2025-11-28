@@ -287,7 +287,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_inconsistent_fileset_id_erro
     ASSERT_TRUE(st.is_internal_error());
 }
 
-TEST_F(LakePersistentIndexFilesetTest, test_fileset_append) {
+TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from) {
     auto fileset_id = UniqueId::gen_uid();
 
     // Initialize fileset with first sstable
@@ -298,12 +298,12 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_append) {
     PersistentIndexSstableFileset fileset;
     ASSERT_OK(fileset.init(sst1));
 
-    // Append second sstable
+    // Merge second sstable
     PersistentIndexSstablePB sst_pb2;
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst_pb2, &fileset_id));
     ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
 
-    ASSERT_OK(fileset.append(sst2));
+    ASSERT_OK(fileset.merge_from(sst2));
 
     // Verify both sstables are stored
     std::vector<PersistentIndexSstablePB> retrieved_pbs;
@@ -311,7 +311,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_append) {
     ASSERT_EQ(2, retrieved_pbs.size());
 }
 
-TEST_F(LakePersistentIndexFilesetTest, test_fileset_append_overlapping_error) {
+TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from_overlapping_error) {
     auto fileset_id = UniqueId::gen_uid();
 
     // Initialize fileset with first sstable (0-99)
@@ -322,44 +322,18 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_append_overlapping_error) {
     PersistentIndexSstableFileset fileset;
     ASSERT_OK(fileset.init(sst1));
 
-    // Try to append overlapping sstable (50-149)
+    // Try to merge overlapping sstable (50-149)
     PersistentIndexSstablePB sst_pb2;
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 50, 100, &sst_pb2, &fileset_id));
     ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
 
-    auto st = fileset.append(sst2);
+    auto st = fileset.merge_from(sst2);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_internal_error());
 }
 
-TEST_F(LakePersistentIndexFilesetTest, test_fileset_can_append) {
-    auto fileset_id = UniqueId::gen_uid();
-
-    // Initialize fileset (keys 0-99)
-    PersistentIndexSstablePB sst_pb1;
-    ASSERT_OK(create_test_sstable("test_sst_1.sst", 0, 100, &sst_pb1, &fileset_id));
-    ASSIGN_OR_ABORT(auto sst1, open_sstable(sst_pb1));
-
-    PersistentIndexSstableFileset fileset;
-    ASSERT_OK(fileset.init(sst1));
-
-    // Check can append non-overlapping sstable (keys 1000-1099)
-    PersistentIndexSstablePB sst_pb2;
-    ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst_pb2, &fileset_id));
-    ASSERT_TRUE(fileset.can_append(sst_pb2));
-
-    // Check cannot append overlapping sstable (keys 50-149)
-    PersistentIndexSstablePB sst_pb3;
-    ASSERT_OK(create_test_sstable("test_sst_3.sst", 50, 100, &sst_pb3, &fileset_id));
-    ASSERT_FALSE(fileset.can_append(sst_pb3));
-
-    // Check cannot append sstable before current range (keys -100 to -1)
-    // Note: using negative numbers might not work with the key format, so use 0-50 instead
-    PersistentIndexSstablePB sst_pb4;
-    // This creates keys that come before the last_end_key but overlap with existing
-    ASSERT_OK(create_test_sstable("test_sst_4.sst", 0, 50, &sst_pb4, &fileset_id));
-    ASSERT_FALSE(fileset.can_append(sst_pb4));
-}
+// Note: can_append() method has been removed from the API
+// Validation is now done in merge_from() which returns error on overlap
 
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_multi_get_single_sstable) {
     auto fileset_id = UniqueId::gen_uid();

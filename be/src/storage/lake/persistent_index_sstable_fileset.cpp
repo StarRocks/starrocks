@@ -44,6 +44,7 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
                 return Status::InternalError("more than one standalone sstable in fileset");
             }
             _fileset_id = UniqueId::gen_uid();
+            sstable->set_fileset_id(_fileset_id);
             _standalone_sstable = std::move(sstable);
         }
     }
@@ -52,20 +53,26 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
 
 Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstable>& sstable) {
     if (sstable->sstable_pb().has_range()) {
-        DCHECK(sstable->sstable_pb().has_fileset_id());
-        _fileset_id = sstable->sstable_pb().fileset_id();
+        if (!sstable->sstable_pb().has_fileset_id()) {
+            // New fileset
+            _fileset_id = UniqueId::gen_uid();
+            sstable->set_fileset_id(_fileset_id);
+        } else {
+            _fileset_id = sstable->sstable_pb().fileset_id();
+        }
         // Extract keys before moving sstable to avoid undefined behavior
         std::string start_key = sstable->sstable_pb().range().start_key();
         std::string end_key = sstable->sstable_pb().range().end_key();
         _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
     } else {
         _fileset_id = UniqueId::gen_uid();
+        sstable->set_fileset_id(_fileset_id);
         _standalone_sstable = std::move(sstable);
     }
     return Status::OK();
 }
 
-Status PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstable>& sstable) {
+Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndexSstable>& sstable) {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     DCHECK(sstable->sstable_pb().has_range());
     // Make sure sstable is inorder via comparator
@@ -80,20 +87,10 @@ Status PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSsta
     // Extract keys before moving sstable to avoid undefined behavior
     std::string start_key = sstable->sstable_pb().range().start_key();
     std::string end_key = sstable->sstable_pb().range().end_key();
+    // This sstable belong to same fileset.
+    sstable->set_fileset_id(_fileset_id);
     _sstable_map.emplace(std::move(start_key), std::make_pair(std::move(end_key), std::move(sstable)));
     return Status::OK();
-}
-
-bool PersistentIndexSstableFileset::can_append(const PersistentIndexSstablePB& sstable_pb) {
-    const sstable::Comparator* comparator = sstable::BytewiseComparator();
-    // Make sure sstable is inorder via comparator
-    if (!_sstable_map.empty() && sstable_pb.has_range()) {
-        const auto& last_end_key = _sstable_map.rbegin()->second.first;
-        if (comparator->Compare(Slice(last_end_key), Slice(sstable_pb.range().start_key())) < 0) {
-            return true;
-        }
-    }
-    return false;
 }
 
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,

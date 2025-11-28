@@ -42,11 +42,12 @@ struct SeekRange {
 class LakePersistentIndexParallelCompactTask {
 public:
     LakePersistentIndexParallelCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
-                                           TabletManager* tablet_mgr, int64_t tablet_id, bool merge_base_level,
-                                           const UniqueId& fileset_id, const SeekRange& seek_range)
+                                           TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                           bool merge_base_level, const UniqueId& fileset_id,
+                                           const SeekRange& seek_range)
             : _input_sstables(input_sstables),
               _tablet_mgr(tablet_mgr),
-              _tablet_id(tablet_id),
+              _metadata(metadata),
               _merge_base_level(merge_base_level),
               _output_fileset_id(fileset_id),
               _seek_range(seek_range) {}
@@ -67,7 +68,7 @@ private:
 
     // Context info needed for compaction
     TabletManager* _tablet_mgr = nullptr;
-    int64_t _tablet_id = 0;
+    TabletMetadataPtr _metadata;
     bool _merge_base_level = false;
     UniqueId _output_fileset_id;
     SeekRange _seek_range;
@@ -86,13 +87,14 @@ public:
 
     void shutdown();
 
-    Status compact(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, int64_t tablet_id,
-                   bool merge_base_level, std::vector<PersistentIndexSstablePB>* output_sstables);
+    Status compact(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
+                   const TabletMetadataPtr& metadata, bool merge_base_level,
+                   std::vector<PersistentIndexSstablePB>* output_sstables);
 
     // generate compaction tasks using candidate filesets.
     // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
     void generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
-                                   int64_t tablet_id, bool merge_base_level,
+                                   const TabletMetadataPtr& metadata, bool merge_base_level,
                                    std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
 
 private:

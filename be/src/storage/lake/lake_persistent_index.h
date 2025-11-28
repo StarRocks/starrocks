@@ -227,6 +227,8 @@ private:
             std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
             int64_t tablet_id);
 
+    Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
+
     void print_debug_info() const;
 
 private:

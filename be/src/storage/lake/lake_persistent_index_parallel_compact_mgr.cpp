@@ -29,6 +29,7 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/comparator.h"
+#include "storage/sstable/concatenating_iterator.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
@@ -102,10 +103,10 @@ Status LakePersistentIndexParallelCompactTask::run() {
     }
 
     // Collect all iterators from input sstables
-    std::vector<sstable::Iterator*> iters;
+    std::vector<sstable::Iterator*> concat_iters;
     std::vector<std::unique_ptr<PersistentIndexSstable>> sstables;
-    DeferOp free_iters([&] {
-        for (sstable::Iterator* iter : iters) {
+    DeferOp free_concat_iters([&] {
+        for (sstable::Iterator* iter : concat_iters) {
             delete iter;
         }
     });
@@ -115,6 +116,12 @@ Status LakePersistentIndexParallelCompactTask::run() {
 
     // Open each sstable and create iterator
     for (const auto& fileset : _input_sstables) {
+        std::vector<sstable::Iterator*> each_iters;
+        DeferOp free_iters([&] {
+            for (sstable::Iterator* iter : each_iters) {
+                delete iter;
+            }
+        });
         for (const auto& sstable_pb : fileset) {
             if (sstable_pb.filesize() == 0) {
                 continue;
@@ -129,11 +136,11 @@ Status LakePersistentIndexParallelCompactTask::run() {
             }
 
             ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                              opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
+                                              opts, _tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename())));
 
             // Create PersistentIndexSstable
             auto sst = std::make_unique<PersistentIndexSstable>();
-            RETURN_IF_ERROR(sst->init(std::move(rf), sstable_pb, nullptr, false));
+            RETURN_IF_ERROR(sst->init(std::move(rf), sstable_pb, nullptr, false, nullptr, _metadata, _tablet_mgr));
 
             // Create iterator
             read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
@@ -142,32 +149,35 @@ Status LakePersistentIndexParallelCompactTask::run() {
             read_options.delvec = sst->delvec();
 
             sstable::Iterator* iter = sst->new_iterator(read_options);
-            iters.push_back(iter);
+            each_iters.push_back(iter);
             sstables.push_back(std::move(sst));
         }
+        // Create concatenating iterator for each fileset
+        concat_iters.push_back(sstable::NewConcatenatingIterator(&each_iters[0], each_iters.size()));
+        each_iters.clear(); // Clear vector without deleting iterators (managed by concat_iters)
     }
 
-    if (iters.empty()) {
+    if (concat_iters.empty()) {
         return Status::OK();
     }
 
-    // Create merging iterator
+    // Create merging iterator for merging all filesets
     sstable::Options options;
     std::unique_ptr<sstable::Iterator> merging_iter(
-            sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
+            sstable::NewMergingIterator(options.comparator, &concat_iters[0], concat_iters.size()));
     if (!_seek_range.seek_key.empty()) {
         merging_iter->Seek(_seek_range.seek_key);
     } else {
         merging_iter->SeekToFirst();
     }
-    iters.clear(); // Clear vector without deleting iterators (managed by merging_iter)
+    concat_iters.clear(); // Clear vector without deleting iterators (managed by merging_iter)
 
     if (!merging_iter->Valid()) {
         return merging_iter->status();
     }
 
     auto merger = std::make_unique<KeyValueMerger>(merging_iter->key().to_string(), merging_iter->max_rss_rowid(),
-                                                   _merge_base_level, _tablet_mgr, _tablet_id,
+                                                   _merge_base_level, _tablet_mgr, _metadata->id(),
                                                    true /* generate multi outputs*/);
     while (merging_iter->Valid()) {
         const std::string& cur_key = merging_iter->key().to_string();
@@ -220,13 +230,13 @@ void LakePersistentIndexParallelCompactMgr::shutdown() {
 }
 
 Status LakePersistentIndexParallelCompactMgr::compact(
-        const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, int64_t tablet_id, bool merge_base_level,
-        std::vector<PersistentIndexSstablePB>* output_sstables) {
+        const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
+        bool merge_base_level, std::vector<PersistentIndexSstablePB>* output_sstables) {
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
     ADOPT_TRACE(trace);
     std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>> tasks;
-    generate_compaction_tasks(candidates, tablet_id, merge_base_level, &tasks);
+    generate_compaction_tasks(candidates, metadata, merge_base_level, &tasks);
     const int64_t start_ts = butil::gettimeofday_us();
     // if only one task in tasks, run in current thread
     if (tasks.empty()) {
@@ -275,7 +285,7 @@ Status LakePersistentIndexParallelCompactMgr::compact(
     LOG(INFO) << strings::Substitute(
             "Lake persistent index parallel compaction completed for tablet $0, merge_base_level=$1, "
             "input filesets=$2, output sstables=$3, tasks=$4, trace=$5",
-            tablet_id, merge_base_level, candidates.size(), output_sstables->size(), tasks.size(),
+            metadata->id(), merge_base_level, candidates.size(), output_sstables->size(), tasks.size(),
             trace->MetricsAsJSON());
     return Status::OK();
 }
@@ -291,8 +301,8 @@ bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string
 
 // TODO : use data sample to improve segment generation.
 void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
-        const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, int64_t tablet_id, bool merge_base_level,
-        std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
+        const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
+        bool merge_base_level, std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
     if (candidates.empty()) {
         return;
     }
@@ -304,7 +314,7 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
             if (!sst.has_range()) {
                 // Found an sstable with infinite boundary, no parallel splitting
                 tasks->push_back(std::make_unique<LakePersistentIndexParallelCompactTask>(
-                        candidates, _tablet_mgr, tablet_id, merge_base_level, UniqueId::gen_uid(), SeekRange()));
+                        candidates, _tablet_mgr, metadata, merge_base_level, UniqueId::gen_uid(), SeekRange()));
                 return;
             }
         }
@@ -343,7 +353,7 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     // Calculate segment number based on total size, threshold and parallelism config
     size_t segment_num =
             std::max<size_t>(1, total_size / config::pk_index_parallel_compaction_task_split_threshold_bytes);
-    segment_num = std::min<size_t>(segment_num, config::pk_index_parallel_compaction_threadpool_max_threads);
+    segment_num = std::min<size_t>(segment_num, config::pk_index_parallel_compaction_threadpool_max_threads * 4);
 
     struct Segment {
         // [seek_key, stop_key)
@@ -411,14 +421,14 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     LOG(INFO) << fmt::format(
             "LakePersistentIndexParallelCompactMgr: generated {} compaction segments for tablet {}, input sstables {} "
             "debug str {}",
-            segments.size(), tablet_id, input_debug_str, debug_str);
+            segments.size(), metadata->id(), input_debug_str, debug_str);
 
     // Create tasks from segments
     UniqueId fileset_id = UniqueId::gen_uid();
     for (auto& seg : segments) {
         if (seg.file_cnt > 0) {
             tasks->push_back(std::make_unique<LakePersistentIndexParallelCompactTask>(
-                    std::move(seg.filesets), _tablet_mgr, tablet_id, merge_base_level, fileset_id, seg.seek_range));
+                    std::move(seg.filesets), _tablet_mgr, metadata, merge_base_level, fileset_id, seg.seek_range));
         }
     }
 }

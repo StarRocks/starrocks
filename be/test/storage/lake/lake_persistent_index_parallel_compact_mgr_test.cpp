@@ -256,7 +256,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_empty_candidates)
     std::vector<std::vector<PersistentIndexSstablePB>> candidates;
     std::vector<PersistentIndexSstablePB> output_sstables;
 
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
     ASSERT_TRUE(output_sstables.empty());
 }
 
@@ -272,7 +272,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_single_sstable) {
     candidates.push_back({sst1});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Should have one output (optimization: single sstable is reused)
     ASSERT_EQ(1, output_sstables.size());
@@ -302,7 +302,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_non_over
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1; // Very small threshold
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     ASSERT_TRUE(output_sstables.size() == 3);
 
@@ -334,7 +334,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_non_over
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1; // Very small threshold
 
     std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>> tasks;
-    mgr->generate_compaction_tasks(candidates, _tablet_metadata->id(), false, &tasks);
+    mgr->generate_compaction_tasks(candidates, _tablet_metadata, false, &tasks);
 
     ASSERT_EQ(tasks.size(), 3);
 
@@ -354,7 +354,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_overlapping_sstab
     candidates.push_back({sst1, sst2});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Should successfully compact overlapping sstables
     ASSERT_TRUE(output_sstables.size() == 1);
@@ -383,7 +383,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_filesets
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1; // Very small threshold
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
 
@@ -410,7 +410,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_merge_base_l
 
     std::vector<PersistentIndexSstablePB> output_sstables;
     // Test with merge_base_level = true
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), true, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, &output_sstables));
 
     ASSERT_EQ(output_sstables.size(), 1);
     // check ranges
@@ -438,7 +438,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_parallel_executio
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1;
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Should have outputs
     ASSERT_EQ(output_sstables.size(), 10);
@@ -469,7 +469,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_threshold_co
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1024 * 1024 * 1024; // 1GB
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     ASSERT_EQ(output_sstables.size(), 1);
     // check range
@@ -492,7 +492,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_empty_sstabl
     candidates.push_back({sst1, sst2});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Should handle empty sstables gracefully
     ASSERT_EQ(output_sstables.size(), 1);
@@ -514,7 +514,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sstable_without_range) {
     candidates.push_back({sst1});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Should create single task without parallel splitting
     ASSERT_EQ(output_sstables.size(), 1);
@@ -529,9 +529,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sstable_without_range) {
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_empty_input) {
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), false,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
+                                                fileset_id, seek_range);
 
     // Empty input should return error
     auto st = task.run();
@@ -546,8 +547,9 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_null_tablet
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1});
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, nullptr, _tablet_metadata->id(), false, fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, nullptr, _tablet_metadata, false, fileset_id, seek_range);
 
     // Null tablet_mgr should return error
     auto st = task.run();
@@ -562,9 +564,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_single_sstable_o
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1});
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), false,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
+                                                fileset_id, seek_range);
 
     ASSERT_OK(task.run());
 
@@ -582,9 +585,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_sstable
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), false,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
+                                                fileset_id, seek_range);
 
     ASSERT_OK(task.run());
 
@@ -607,9 +611,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_overlapping
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), false,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
+                                                fileset_id, seek_range);
 
     ASSERT_OK(task.run());
 
@@ -625,10 +630,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_merge_base_
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
     // Test with merge_base_level = true
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), true,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, true,
+                                                fileset_id, seek_range);
 
     ASSERT_OK(task.run());
 
@@ -647,9 +653,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_fileset
     input_sstables.push_back({sst1, sst2}); // Fileset 1
     input_sstables.push_back({sst3, sst4}); // Fileset 2
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), false,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
+                                                fileset_id, seek_range);
 
     ASSERT_OK(task.run());
 
@@ -666,9 +673,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_zero_size_s
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
+    SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata->id(), false,
-                                                fileset_id);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
+                                                fileset_id, seek_range);
 
     ASSERT_OK(task.run());
 
@@ -690,7 +698,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_output_sstables_have_vali
     candidates.push_back({sst1, sst2, sst3});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Verify all outputs have valid ranges
     for (const auto& sst : output_sstables) {
@@ -723,7 +731,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_concurrent_compaction_tas
     config::pk_index_parallel_compaction_task_split_threshold_bytes = 1;
 
     std::vector<PersistentIndexSstablePB> output_sstables;
-    ASSERT_OK(mgr->compact(candidates, _tablet_metadata->id(), false, &output_sstables));
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
 
     // Should have multiple outputs
     ASSERT_EQ(output_sstables.size(), 20);
