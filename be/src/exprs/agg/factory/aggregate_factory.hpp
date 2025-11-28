@@ -179,6 +179,8 @@ public:
     static auto MakeSumDistinctAggregateFunctionV2();
     template <LogicalType LT>
     static auto MakeDecimalSumDistinctAggregateFunction();
+    template <LogicalType LT, int compute_bits>
+    static auto MakeFusedMultiDistinctAggregateFunction();
 
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
     static AggregateFunctionPtr MakeRetentionAggregateFunction();
@@ -400,6 +402,11 @@ auto AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
 template <LogicalType LT>
 auto AggregateFactory::MakeDecimalSumDistinctAggregateFunction() {
     return std::make_shared<DecimalDistinctAggregateFunction<LT, AggDistinctType::SUM>>();
+}
+
+template <LogicalType LT, int compute_bits>
+auto AggregateFactory::MakeFusedMultiDistinctAggregateFunction() {
+    return std::make_shared<FusedMultiDistinctFunction<LT, compute_bits>>();
 }
 
 template <LogicalType LT>

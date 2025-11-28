@@ -303,6 +303,10 @@ public class FunctionSet {
     public static final String NDV = "ndv";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
+    public static final String FUSED_MULTI_DISTINCT_COUNT = "fused_multi_distinct_count";
+    public static final String FUSED_MULTI_DISTINCT_COUNT_SUM = "fused_multi_distinct_count_sum";
+    public static final String FUSED_MULTI_DISTINCT_COUNT_AVG = "fused_multi_distinct_count_avg";
+    public static final String FUSED_MULTI_DISTINCT_COUNT_SUM_AVG = "fused_multi_distinct_count_sum_avg";
     public static final String DICT_MERGE = "dict_merge";
     public static final String WINDOW_FUNNEL = "window_funnel";
     public static final String DISTINCT_PC = "distinct_pc";
@@ -1220,6 +1224,22 @@ public class FunctionSet {
 
         }
 
+        for (Type type : MULTI_DISTINCT_COUNT_TYPES) {
+            Type returnType = createFusedMultiDistinctReturnType(type);
+            for (String name : new String[] {
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT,
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM,
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT_AVG,
+                    FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM_AVG
+            }) {
+                addBuiltin(AggregateFunction.createBuiltin(name,
+                        Lists.newArrayList(type),
+                        returnType,
+                        Type.VARBINARY,
+                        false, true, true));
+            }
+        }
+
         addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COMBINE,
                 Lists.newArrayList(Type.VARBINARY), Type.VARBINARY, Type.VARBINARY,
                 true, false, true));
@@ -1456,6 +1476,35 @@ public class FunctionSet {
         }
         addBuiltin(AggregateFunction.createBuiltin(name,
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
+    }
+
+    private static Type createFusedMultiDistinctReturnType(Type type) {
+        StructField countField = new StructField(FunctionSet.COUNT, Type.BIGINT);
+        Type sumType = type.clone();
+        Type avgType = type.clone();
+        if (type.isBoolean()) {
+            sumType = Type.BIGINT;
+            avgType = Type.DOUBLE;
+        } else if (type.isLargeint()) {
+            sumType = Type.LARGEINT;
+            avgType = Type.DOUBLE;
+        } else if (type.isIntegerType()) {
+            sumType = Type.BIGINT;
+            avgType = Type.DOUBLE;
+        } else if (type.isDecimal256()) {
+            sumType = Type.DECIMAL256;
+            avgType = Type.DECIMAL256;
+        } else if (type.isDecimalV3()) {
+            sumType = Type.DECIMAL128;
+            avgType = Type.DECIMAL128;
+        } else if (type.isFloatingPointType()) {
+            sumType = Type.DOUBLE;
+            avgType = Type.DOUBLE;
+        }
+
+        StructField sumField = new StructField(FunctionSet.SUM, sumType);
+        StructField avgField = new StructField(FunctionSet.AVG, avgType);
+        return new StructType(List.of(countField, sumField, avgField), true);
     }
 
     private void registerBuiltinMultiDistinctSumAggFunction() {

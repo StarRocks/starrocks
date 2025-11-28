@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
@@ -46,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule
 import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.DistinctAggregationOverWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
@@ -134,6 +136,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
+import com.starrocks.sql.util.Util;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -568,6 +571,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
 
+        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
+
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAsofJoinTemporalExpressionToChildProject());
 
@@ -899,6 +904,25 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         }
         scheduler.rewriteOnce(tree, rootTaskContext, new PruneSubfieldRule());
+        deriveLogicalProperty(tree);
+        return tree;
+    }
+
+    private OptExpression convertDistinctAggOverWindowToNullSafeEqualJoin(OptExpression tree,
+                                                                          TaskContext rootTaskContext) {
+        if (!rootTaskContext.getOptimizerContext().getSessionVariable().isEnableDistinctAggOverWindow()) {
+            return tree;
+        }
+        if (Util.getStream(tree).noneMatch(op -> op instanceof LogicalWindowOperator)) {
+            return tree;
+        }
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule(false));
+        deriveLogicalProperty(tree);
+        DistinctAggregationOverWindowRule rule = new DistinctAggregationOverWindowRule();
+        tree = rule.rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
         return tree;
     }
