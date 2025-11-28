@@ -185,7 +185,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Number of files
 - 是否可变: No
-- 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 ${profile_log_roll_num} 注入到日志 XML 中（例如 `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
+- 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 `${profile_log_roll_num}` 注入到日志 XML 中（例如 `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
 - 引入版本: v3.2.5
 
 ##### qe_slow_log_ms
