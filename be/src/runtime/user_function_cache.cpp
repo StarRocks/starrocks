@@ -183,7 +183,7 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
     auto it = _entry_map.find(function_id);
     if (it != _entry_map.end()) {
         LOG(WARNING) << "meet a same function id user function library, function_id=" << function_id
-                << ", one_checksum=" << checksum << ", other_checksum=" << it->second->checksum;
+        << ", one_checksum=" << checksum << ", other_checksum=" << it->second->checksum;
         return Status::InternalError("duplicate function id");
     }
     // create a cache entry and put it into entry map
