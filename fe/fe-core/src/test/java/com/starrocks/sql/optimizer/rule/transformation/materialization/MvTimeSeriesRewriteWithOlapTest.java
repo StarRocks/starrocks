@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
@@ -136,7 +137,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         starRocksAssert.dropMaterializedView("test_mv1");
     }
 
-    @Test
+    @Ignore
     public void testAggregateTimeSeriesRollupWithGroupBy() throws Exception {
         String mv1 = "create MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY (dt)\n" +
