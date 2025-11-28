@@ -1,4 +1,7 @@
 -- name: test_create_table_with_list_partition
+admin set frontend config ("enable_range_distribution" = "false");
+-- result:
+-- !result
 create table orders (
     order_id bigint NOT NULL,
     merchant_id int NOT NULL,

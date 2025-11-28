@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.TableFunction;
@@ -41,7 +42,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
@@ -297,15 +297,6 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function",
                         functionCallExpr.getPos());
-            } else {
-                if (functionCallExpr.getChildren().size() > 2) {
-                    if (!functionCallExpr.getChild(2).isConstant()) {
-                        throw new SemanticException(
-                                "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(2).getPos());
-                    }
-                }
-                return;
             }
         }
 

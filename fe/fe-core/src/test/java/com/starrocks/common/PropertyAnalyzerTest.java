@@ -41,6 +41,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -171,7 +172,7 @@ public class PropertyAnalyzerTest {
         DataProperty dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties, new DataProperty(TStorageMedium.SSD), false);
         // avoid UT fail because time zone different
-        DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, DateType.DATETIME);
+        DateLiteral dateLiteral = new DateLiteral(DateUtils.parseStrictDateTime(tomorrowTimeStr), DateType.DATETIME);
         Assertions.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
 
         Map<String, String> properties1 = Maps.newHashMap();

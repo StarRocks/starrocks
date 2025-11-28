@@ -23,8 +23,9 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.OrderByPair;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -74,7 +75,8 @@ public class OptimizeProcDir implements ProcDirInterface {
             return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
         }
         if (subExpr.getChild(1) instanceof DateLiteral) {
-            Long leftVal = (new DateLiteral((String) element, DateType.DATETIME)).getLongValue();
+            Long leftVal = (new DateLiteral(DateUtils.parseStrictDateTime((String) element), DateType.DATETIME)).getLongValue();
+
             Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             switch (binaryPredicate.getOp()) {
                 case EQ:
@@ -97,7 +99,7 @@ public class OptimizeProcDir implements ProcDirInterface {
         return true;
     }
 
-    public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, ArrayList<OrderByPair> orderByPairs,
+    public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(schemaChangeHandler);

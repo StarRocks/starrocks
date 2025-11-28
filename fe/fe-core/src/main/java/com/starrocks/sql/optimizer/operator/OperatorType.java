@@ -167,6 +167,7 @@ public enum OperatorType {
     private static final Set<OperatorType> PHYSICAL_SCANS =
             Arrays.stream(OperatorType.values())
                     .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .filter(x -> !x.equals(PHYSICAL_STREAM_SCAN))
                     .collect(Collectors.toUnmodifiableSet());
 
     public boolean isPhysicalScan() {

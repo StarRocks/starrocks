@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -22,6 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -29,11 +31,13 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
+import java.util.Set;
 
 import static com.starrocks.catalog.FunctionSet.STATISTIC_FUNCTIONS;
 
@@ -60,7 +64,7 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
-        if (analyticFunction.getParams().isDistinct() && !analyticExpr.isUnboundedWindowWithoutSlidingFrame()) {
+        if (analyticFunction.getParams().isDistinct() && !isWindowSupportDistinctAggregations(analyticExpr)) {
             throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());
         }
@@ -97,7 +101,6 @@ public class AnalyticAnalyzer {
                                 ExprToSql.toSql(analyticFunction), analyticFunction.getPos());
             }
 
-            // TODO: remove this check when the backend can handle non-constants
             if (analyticFunction.getChildren().size() == 2) {
                 // do nothing
             } else if (analyticFunction.getChildren().size() == 3) {
@@ -122,7 +125,8 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (!ExprUtils.isLiteral(theThirdChild) && theThirdChild.isNullable()) {
+
+                if (!ExprUtils.isLiteral(theThirdChild) && !(theThirdChild instanceof SlotRef) && theThirdChild.isNullable()) {
                     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
                             analyticFunction.getChild(2).getPos());
                 }
@@ -159,74 +163,74 @@ public class AnalyticAnalyzer {
         }
 
         AnalyticWindow windowFrame = analyticExpr.getWindow();
-        AnalyticWindow.Boundary leftBoundary = windowFrame.getLeftBoundary();
+        AnalyticWindowBoundary leftBoundary = windowFrame.getLeftBoundary();
         Preconditions.checkArgument(leftBoundary != null);
         if (windowFrame.getRightBoundary() == null) {
-            if (leftBoundary.getType() == AnalyticWindow.BoundaryType.FOLLOWING) {
-                throw new SemanticException(leftBoundary.getType().toString() + " requires a BETWEEN clause",
+            if (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) {
+                throw new SemanticException(leftBoundary.getBoundaryType().toString() + " requires a BETWEEN clause",
                         leftBoundary.getPos());
             } else {
                 windowFrame
-                        .setRightBoundary(new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
+                        .setRightBoundary(new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null));
             }
         }
-        AnalyticWindow.Boundary rightBoundary = windowFrame.getRightBoundary();
+        AnalyticWindowBoundary rightBoundary = windowFrame.getRightBoundary();
 
-        if (leftBoundary.getType() == AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING) {
+        if (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
             throw new SemanticException(
-                    leftBoundary.getType().toString() + " is only allowed for upper bound of BETWEEN",
+                    leftBoundary.getBoundaryType().toString() + " is only allowed for upper bound of BETWEEN",
                     leftBoundary.getPos());
         }
-        if (rightBoundary.getType() == AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING) {
+        if (rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
             throw new SemanticException(
-                    rightBoundary.getType().toString() + " is only allowed for lower bound of BETWEEN",
+                    rightBoundary.getBoundaryType().toString() + " is only allowed for lower bound of BETWEEN",
                     rightBoundary.getPos());
         }
 
         if (windowFrame.getType() == AnalyticWindow.Type.RANGE) {
-            if (leftBoundary.getType().isOffset()) {
+            if (leftBoundary.getBoundaryType().isOffset()) {
                 checkRangeOffsetBoundaryExpr(analyticExpr, leftBoundary);
             }
-            if (rightBoundary.getType().isOffset()) {
+            if (rightBoundary.getBoundaryType().isOffset()) {
                 checkRangeOffsetBoundaryExpr(analyticExpr, rightBoundary);
             }
 
             // TODO: Remove when RANGE windows with offset boundaries are supported.
-            if (leftBoundary.getType().isOffset() || (rightBoundary.getType().isOffset()) ||
-                    (leftBoundary.getType() == AnalyticWindow.BoundaryType.CURRENT_ROW
-                            && rightBoundary.getType() == AnalyticWindow.BoundaryType.CURRENT_ROW)) {
+            if (leftBoundary.getBoundaryType().isOffset() || (rightBoundary.getBoundaryType().isOffset()) ||
+                    (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW
+                            && rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW)) {
                 throw new SemanticException("RANGE is only supported with both the lower and upper bounds UNBOUNDED or"
                         + " one UNBOUNDED and the other CURRENT ROW.", windowFrame.getPos());
             }
         }
 
-        if (leftBoundary.getType().isOffset()) {
+        if (leftBoundary.getBoundaryType().isOffset()) {
             checkOffsetExpr(windowFrame, leftBoundary);
         }
 
-        if (rightBoundary.getType().isOffset()) {
+        if (rightBoundary.getBoundaryType().isOffset()) {
             checkOffsetExpr(windowFrame, rightBoundary);
         }
 
-        if (leftBoundary.getType() == AnalyticWindow.BoundaryType.FOLLOWING) {
-            if (rightBoundary.getType() == AnalyticWindow.BoundaryType.FOLLOWING) {
+        if (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) {
+            if (rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) {
                 checkOffsetBoundaries(leftBoundary, rightBoundary);
-            } else if (rightBoundary.getType() != AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING) {
+            } else if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
                 throw new SemanticException(
-                        "A lower window bound of " + AnalyticWindow.BoundaryType.FOLLOWING
+                        "A lower window bound of " + AnalyticWindowBoundary.BoundaryType.FOLLOWING
                                 + " requires that the upper bound also be " +
-                                AnalyticWindow.BoundaryType.FOLLOWING, windowFrame.getPos());
+                                AnalyticWindowBoundary.BoundaryType.FOLLOWING, windowFrame.getPos());
             }
         }
 
-        if (rightBoundary.getType() == AnalyticWindow.BoundaryType.PRECEDING) {
-            if (leftBoundary.getType() == AnalyticWindow.BoundaryType.PRECEDING) {
+        if (rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING) {
+            if (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING) {
                 checkOffsetBoundaries(rightBoundary, leftBoundary);
-            } else if (leftBoundary.getType() != AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING) {
+            } else if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
                 throw new SemanticException(
-                        "An upper window bound of " + AnalyticWindow.BoundaryType.PRECEDING
+                        "An upper window bound of " + AnalyticWindowBoundary.BoundaryType.PRECEDING
                                 + " requires that the lower bound also be " +
-                                AnalyticWindow.BoundaryType.PRECEDING, windowFrame.getPos());
+                                AnalyticWindowBoundary.BoundaryType.PRECEDING, windowFrame.getPos());
             }
         }
     }
@@ -235,7 +239,7 @@ public class AnalyticAnalyzer {
      * Checks that the value expr of an offset boundary of a RANGE window is compatible
      * with orderingExprs (and that there's only a single ordering expr).
      */
-    private static void checkRangeOffsetBoundaryExpr(AnalyticExpr analyticExpr, AnalyticWindow.Boundary boundary) {
+    private static void checkRangeOffsetBoundaryExpr(AnalyticExpr analyticExpr, AnalyticWindowBoundary boundary) {
         if (analyticExpr.getOrderByElements().size() > 1) {
             throw new SemanticException("Only one ORDER BY expression allowed if used with "
                     + "a RANGE window with PRECEDING/FOLLOWING: " + ExprToSql.toSql(analyticExpr), analyticExpr.getPos());
@@ -253,8 +257,8 @@ public class AnalyticAnalyzer {
     /**
      * Semantic analysis for expr of a PRECEDING/FOLLOWING clause.
      */
-    private static void checkOffsetExpr(AnalyticWindow windowFrame, AnalyticWindow.Boundary boundary) {
-        Preconditions.checkState(boundary.getType().isOffset());
+    private static void checkOffsetExpr(AnalyticWindow windowFrame, AnalyticWindowBoundary boundary) {
+        Preconditions.checkState(boundary.getBoundaryType().isOffset());
         Expr e = boundary.getExpr();
         Preconditions.checkNotNull(e);
         boolean isPos = true;
@@ -275,7 +279,7 @@ public class AnalyticAnalyzer {
         if (windowFrame.getType() == AnalyticWindow.Type.ROWS) {
             if (!e.isConstant() || !e.getType().isFixedPointType() || !isPos) {
                 throw new SemanticException("For ROWS window, the value of a PRECEDING/FOLLOWING offset must be a "
-                        + "constant positive integer: " + boundary.toSql(), e.getPos());
+                        + "constant positive integer: " + ExprToSql.toSql(boundary), e.getPos());
             }
 
             Preconditions.checkNotNull(val);
@@ -283,7 +287,7 @@ public class AnalyticAnalyzer {
         } else {
             if (!e.isConstant() || !e.getType().isNumericType() || !isPos) {
                 throw new SemanticException("For RANGE window, the value of a PRECEDING/FOLLOWING offset must be a "
-                        + "constant positive number: " + boundary.toSql(), e.getPos());
+                        + "constant positive number: " + ExprToSql.toSql(boundary), e.getPos());
             }
 
             boundary.setOffsetValue(BigDecimal.valueOf(val));
@@ -293,9 +297,9 @@ public class AnalyticAnalyzer {
     /**
      * Check that b1 <= b2.
      */
-    private static void checkOffsetBoundaries(AnalyticWindow.Boundary b1, AnalyticWindow.Boundary b2) {
-        Preconditions.checkState(b1.getType().isOffset());
-        Preconditions.checkState(b2.getType().isOffset());
+    private static void checkOffsetBoundaries(AnalyticWindowBoundary b1, AnalyticWindowBoundary b2) {
+        Preconditions.checkState(b1.getBoundaryType().isOffset());
+        Preconditions.checkState(b2.getBoundaryType().isOffset());
         Expr e1 = b1.getExpr();
         Preconditions.checkState(e1 != null && e1.isConstant() && e1.getType().isNumericType());
         Expr e2 = b2.getExpr();
@@ -385,5 +389,21 @@ public class AnalyticAnalyzer {
             return ((LiteralExpr) offset).getLongValue() > 0;
         }
         return false;
+    }
+
+    // range window support count/sum/avg(distinct)
+    public static boolean isWindowSupportDistinctAggregations(AnalyticExpr analyticExpr) {
+        AnalyticWindow window = analyticExpr.getWindow();
+        FunctionCallExpr fnCall = analyticExpr.getFnCall();
+        if (window != null && !window.getType().equals(AnalyticWindow.Type.RANGE)) {
+            return false;
+        }
+
+        final Set<String> supportFunctions = ImmutableSet.of(
+                FunctionSet.SUM,
+                FunctionSet.AVG,
+                FunctionSet.COUNT);
+
+        return supportFunctions.contains(fnCall.getFnName().getFunction());
     }
 }

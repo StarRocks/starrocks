@@ -14,7 +14,6 @@
 
 package com.starrocks.meta;
 
-import com.starrocks.meta.BlackListSql;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;

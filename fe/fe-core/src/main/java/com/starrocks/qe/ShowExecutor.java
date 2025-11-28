@@ -73,6 +73,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UserIdentity;
@@ -103,7 +104,6 @@ import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
@@ -152,9 +152,9 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.EnhancedShowStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -232,7 +232,6 @@ import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -1300,7 +1299,11 @@ public class ShowExecutor {
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
-                    createRoutineLoadSql.append(desc.toString());
+                    createRoutineLoadSql.append(desc.getColumnName());
+                    if (desc.getExpr() != null) {
+                        createRoutineLoadSql.append("=").append(ExprToSql.toSql(desc.getExpr()));
+                    }
+
                     if (descs.size() == 1 || i == descs.size() - 1) {
                         createRoutineLoadSql.append(")");
                     } else {
@@ -2962,11 +2965,7 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            if (!(showStmt instanceof EnhancedShowStmt sortedShowStmt)) {
-                return rows;
-            }
-
-            Predicate predicate = sortedShowStmt.getPredicate();
+            Predicate predicate = showStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }

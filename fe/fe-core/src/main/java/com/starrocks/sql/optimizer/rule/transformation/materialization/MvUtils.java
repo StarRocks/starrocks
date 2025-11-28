@@ -46,6 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -60,8 +61,8 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PRangeCell;
@@ -170,13 +171,14 @@ public class MvUtils {
         Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
             Set<MvId> mvIds = table.getRelatedMaterializedViews();
+            String tableOrMaterializedView = table.isMaterializedView() ? "MaterializedView" : "Table";
             if (mvIds != null && !mvIds.isEmpty()) {
-                logMVPrepare("Table/MaterializedView {} has related materialized views: {}",
-                        table.getName(), mvIds);
+                logMVPrepare("{} {} has related materialized views: {}",
+                        tableOrMaterializedView, table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
             } else if (currentLevel == 0) {
-                logMVPrepare("Table/MaterializedView {} has no related materialized views, " +
-                        "identifier:{}", table.getName(), table.getTableIdentifier());
+                logMVPrepare("{} {} has no related materialized views, " +
+                        "identifier:{}", tableOrMaterializedView, table.getName(), table.getTableIdentifier());
             }
         }
         if (newMvIds.isEmpty()) {
@@ -1648,7 +1650,7 @@ public class MvUtils {
     private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
                                                                      LiteralExpr literalExpr) throws AnalysisException {
         if (!partitionColRef.getType().equals(literalExpr.getType())) {
-            literalExpr = LiteralExpr.create(literalExpr.getStringValue(), partitionColRef.getType());
+            literalExpr = LiteralExprFactory.create(literalExpr.getStringValue(), partitionColRef.getType());
         }
         return (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
     }

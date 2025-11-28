@@ -477,8 +477,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // kick start this chunk source
             auto start_status = chunk_source->start(state);
             if (!start_status.ok()) {
-                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
-                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                LOG(WARNING) << "start chunk_source failed, fragment_instance_id="
+                             << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
                 _set_scan_status(start_status);
             }
             Status status;
@@ -488,8 +488,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
-                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
+                LOG_IF(WARNING, !status.is_suppressed())
+                        << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                        << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 

@@ -644,14 +644,14 @@ public class ConnectProcessor {
                     exprs.add(new NullLiteral());
                     continue;
                 }
-                LiteralExpr l = LiteralExpr.parseLiteral(prepareCtx.getStmt().getMysqlTypeCodes().get(i));
-                l.parseMysqlParam(packetBuf);
-                exprs.add(l);
+                LiteralExpr literal = MysqlParamParser.createLiteral(
+                        prepareCtx.getStmt().getMysqlTypeCodes().get(i), packetBuf);
+                exprs.add(literal);
             }
             ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = executeStmt.toSql();
+            String originStmt = AstToSQLBuilder.toSQL(executeStmt);
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);

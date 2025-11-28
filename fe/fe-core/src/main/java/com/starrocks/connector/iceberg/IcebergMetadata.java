@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
@@ -80,7 +81,6 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -1337,7 +1337,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             if (partitionSpec.isPartitioned()) {
                 String relativePartitionLocation = getIcebergRelativePartitionPath(
-                        nativeTbl.location(), dataFile.partition_path);
+                        IcebergUtil.tableDataLocation(nativeTbl), dataFile.partition_path);
                 IcebergPartitionData partitionData = IcebergPartitionData.partitionDataFromPath(
                         relativePartitionLocation, nullFingerprint, partitionSpec);
                 builder.withPartition(partitionData);
@@ -1393,10 +1393,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new Append(transaction);
     }
 
-    public static String getIcebergRelativePartitionPath(String tableLocation, String partitionLocation) {
-        tableLocation = tableLocation.endsWith("/") ? tableLocation.substring(0, tableLocation.length() - 1) : tableLocation;
-        String tableLocationWithData = tableLocation + "/data/";
-        String path = PartitionUtil.getSuffixName(tableLocationWithData, partitionLocation);
+    public static String getIcebergRelativePartitionPath(String tableDataLocation, String partitionLocation) {
+        tableDataLocation = tableDataLocation.endsWith("/") ? tableDataLocation.substring(0, tableDataLocation.length() - 1) :
+                tableDataLocation;
+        String path = PartitionUtil.getSuffixName(tableDataLocation, partitionLocation);
         if (path.startsWith("/")) {
             path = path.substring(1);
         }

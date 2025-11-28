@@ -37,11 +37,11 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.Lists;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
@@ -113,7 +113,7 @@ public class ExchangeNode extends PlanNode {
             if (inputNode instanceof SortNode) {
                 SortNode sortNode = (SortNode) inputNode;
                 if (Objects.equals(TopNType.ROW_NUMBER, sortNode.getTopNType()) &&
-                        CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs())) {
+                        CollectionUtils.isEmpty(sortNode.getSortInfo().getPartitionExprs()) && !sortNode.isPerPipeline()) {
                     limit = inputNode.limit;
                 } else {
                     unsetLimit();
@@ -203,13 +203,14 @@ public class ExchangeNode extends PlanNode {
         }
         if (mergeInfo != null) {
             TSortInfo sortInfo = new TSortInfo(
-                    ExprToThriftVisitor.treesToThrift(mergeInfo.getOrderingExprs()), mergeInfo.getIsAscOrder(),
+                    ExprToThrift.treesToThrift(mergeInfo.getOrderingExprs()), mergeInfo.getIsAscOrder(),
                     mergeInfo.getNullsFirst());
             msg.exchange_node.setSort_info(sortInfo);
             msg.exchange_node.setOffset(offset);
         }
         if (partitionType != null) {
             msg.exchange_node.setPartition_type(partitionType);
+            msg.exchange_node.setOffset(offset);
         }
         SessionVariable sv = ConnectContext.get().getSessionVariable();
         msg.exchange_node.setEnable_parallel_merge(isUseParallelMerge());

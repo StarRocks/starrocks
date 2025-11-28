@@ -129,6 +129,7 @@ vectorized_functions = [
     [102570, "mod", True, False, "DECIMAL32", ["DECIMAL32", "DECIMAL32"], "MathFunctions::mod<TYPE_DECIMAL32>"],
     [102571, "mod", True, False, "DECIMAL64", ["DECIMAL64", "DECIMAL64"], "MathFunctions::mod<TYPE_DECIMAL64>"],
     [102572, "mod", True, False, "DECIMAL128", ["DECIMAL128", "DECIMAL128"], "MathFunctions::mod<TYPE_DECIMAL128>"],
+    [102573, "mod", True, False, "DECIMAL256", ["DECIMAL256", "DECIMAL256"], "MathFunctions::mod<TYPE_DECIMAL256>"],
 
     [10260, "positive", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::positive<TYPE_DOUBLE>"],
     [10261, "positive", True, False, "BIGINT", ["BIGINT"], "MathFunctions::positive<TYPE_BIGINT>"],
@@ -1221,6 +1222,8 @@ vectorized_functions = [
     [150202, 'array_concat', True, False, 'ARRAY_JSON', ['ARRAY_JSON', "..."], 'ArrayFunctions::concat'],
 
     [150203, 'array_concat', True, True, 'ANY_ARRAY', ['ANY_ARRAY', "..."], 'ArrayFunctions::concat'],
+
+    [150207, 'arrays_zip', True, False, 'ANY_ARRAY', ['ANY_ARRAY', "..."], 'ArrayFunctions::arrays_zip'],
 
     [150210, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DATE', 'ARRAY_DATE'],
      'ArrayFunctions::array_overlap<TYPE_DATE>',

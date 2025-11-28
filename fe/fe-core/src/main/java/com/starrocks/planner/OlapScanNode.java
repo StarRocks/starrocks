@@ -74,6 +74,7 @@ import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,7 +85,6 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -1031,7 +1031,7 @@ public class OlapScanNode extends ScanNode {
         if (!getHeavyExprs().isEmpty()) {
             TPlanNodeCommon common = new TPlanNodeCommon();
             getHeavyExprs().forEach(
-                    (key, value) -> common.putToHeavy_exprs(key.asInt(), ExprToThriftVisitor.treeToThrift(value)));
+                    (key, value) -> common.putToHeavy_exprs(key.asInt(), ExprToThrift.treeToThrift(value)));
             msg.setCommon(common);
         }
 
@@ -1096,7 +1096,7 @@ public class OlapScanNode extends ScanNode {
             }
 
             if (!bucketExprs.isEmpty()) {
-                msg.lake_scan_node.setBucket_exprs(ExprToThriftVisitor.treesToThrift(bucketExprs));
+                msg.lake_scan_node.setBucket_exprs(ExprToThrift.treesToThrift(bucketExprs));
             }
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
@@ -1154,7 +1154,7 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node.setOutput_asc_hint(sortKeyAscHint);
             partitionKeyAscHint.ifPresent(aBoolean -> msg.olap_scan_node.setPartition_order_hint(aBoolean));
             if (!bucketExprs.isEmpty()) {
-                msg.olap_scan_node.setBucket_exprs(ExprToThriftVisitor.treesToThrift(bucketExprs));
+                msg.olap_scan_node.setBucket_exprs(ExprToThrift.treesToThrift(bucketExprs));
             }
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {

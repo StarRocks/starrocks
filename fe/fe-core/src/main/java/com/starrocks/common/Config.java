@@ -320,9 +320,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
-    @ConfField
-    public static boolean enable_profile_log_compress = false;
-
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
@@ -1647,7 +1644,7 @@ public class Config extends ConfigBase {
      * One master daemon thread will update database used data quota for db txn manager
      * every db_used_data_quota_update_interval_secs
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval to update the database used data quota in seconds")
     public static int db_used_data_quota_update_interval_secs = 300;
 
     /**
@@ -3982,34 +3979,34 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = false;
 
     /**
-     * The default scheduler interval for dynamic tablet jobs.
+     * The default scheduler interval for tablet reshard jobs.
      */
-    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
-    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+    @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs.")
+    public static long tablet_reshard_job_scheduler_interval_ms = 10;
 
     /**
-     * The max keep time of dynamic tablet history jobs.
+     * The max keep time of tablet reshard history jobs.
      */
-    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
-    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+    @ConfField(mutable = true, comment = "The max keep time of tablet reshard history jobs.")
+    public static long tablet_reshard_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
 
     /**
      * The max number of tablets can do tablet splitting and merging in parallel.
      */
     @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
-    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
+    public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
      * Tablets with size larger than this value will be considered to split.
      */
     @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4L * 1024L * 1024L * 1024L;
+    public static long tablet_reshard_split_size = 4L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

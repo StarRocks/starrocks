@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
@@ -21,7 +22,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;

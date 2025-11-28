@@ -30,6 +30,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.PartitionUtil;
@@ -44,8 +45,8 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -185,7 +186,7 @@ public class SyncPartitionUtils {
             lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, DateType.DATE), PrimitiveType.DATE);
             upperPartitionKey.pushColumn(new DateLiteral(upperDate, DateType.DATE), PrimitiveType.DATE);
             return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
-        } catch (AnalysisException e) {
+        } catch (ParsingException e) {
             throw new SemanticException("Convert to DateLiteral failed:", e);
         }
     }

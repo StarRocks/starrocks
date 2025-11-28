@@ -1,17 +1,17 @@
 # percentile_approx_weight
 
-Returns the approximation of the pth percentile with weight. `percentile_approx_weight` is a weighted version of `PERCENTILE_APPROX`, and allows users to specify a weight (a constant value or numeric column) for each input value.
+Returns the approximation of the p-th percentile with weight. The value of p is between 0 and 1, and it can be a single value or an array. PERCENTILE_APPROX_WEIGHT is a weighted version of PERCENTILE_APPROX that allows users to specify a weight (a constant value or numeric column) for each input value.
 
 This function uses fixed-size memory, so less memory can be used for columns with high cardinality. It also can be used to calculate statistics such as tp99.
 
 ## Syntax
 
 ```Haskell
-DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE p[, DOUBLE compression])
+DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE p[, DOUBLE compression])
 ```
 
 - `expr`: The column for which to calculate the percentile.
-- `pth` : Percentile value. Range: [0, 1]. For example, `0.99` indicates the 99th percentile.
+- `p`: The percentile value, which must be a DOUBLE in the range [0, 1], or an `ARRAY<DOUBLE>` where each element is in the range [0, 1]. For example, 0.99 represents the 99th percentile.
 - `weight` : Weight column. It must be a positive constant number or column.
 - `compression` : (Optional) Compression ratio. Range: [2048, 10000]. The larger the value, the higher the precision, the larger the memory consumption, and the longer the calculation time. If this parameter is not specified or the value is beyond the range of [2048, 10000], the default value `10000` is used.
 
@@ -45,7 +45,7 @@ mysql> select percentile_approx_weighted(c1, 1, 0.9) from t1;
 +----------------------------------------+
 | percentile_approx_weighted(c1, 1, 0.9) |
 +----------------------------------------+
-|                         45000.39453125 |
+|                          45000.3984375 |
 +----------------------------------------+
 1 row in set (0.07 sec)
 -- use a numeric column as weight
@@ -53,7 +53,7 @@ mysql> select percentile_approx_weighted(c2, c1, 0.5) from t1;
 +-----------------------------------------+
 | percentile_approx_weighted(c2, c1, 0.5) |
 +-----------------------------------------+
-|                              35355.9375 |
+|                          35355.97265625 |
 +-----------------------------------------+
 1 row in set (0.07 sec)
 -- use weight and compression to compute percentile
@@ -61,9 +61,17 @@ mysql> select percentile_approx_weighted(c2, c1, 0.5, 10000) from t1;
 +------------------------------------------------+
 | percentile_approx_weighted(c2, c1, 0.5, 10000) |
 +------------------------------------------------+
-|                                     35355.9375 |
+|                                 35355.97265625 |
 +------------------------------------------------+
 1 row in set (0.09 sec)
+
+mysql> select percentile_approx_weighted(c2, c1, [0.1, 0.5, 0.9], 10000) from t1;
++------------------------------------------------------------+
+| percentile_approx_weighted(c2, c1, [0.1, 0.5, 0.9], 10000) |
++------------------------------------------------------------+
+| [15811.6708984375,35355.97265625,47435.01171875]           |
++------------------------------------------------------------+
+1 row in set (0.03 sec)
 ```
 
 ## Keywords

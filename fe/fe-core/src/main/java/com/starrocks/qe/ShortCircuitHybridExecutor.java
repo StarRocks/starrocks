@@ -29,6 +29,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -238,7 +239,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         List<TKeyLiteralExpr> keyLiteralExprs = keyTuples.stream().map(keyTuple -> {
             TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
             keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
-                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
+                    .map(ExprToThrift::treeToThrift)
                     .collect(Collectors.toList()));
             return keyLiteralExpr;
         }).collect(Collectors.toList());
@@ -251,7 +252,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
             commonRequest.setDesc_tbl(tDescriptorTable);
             commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
-                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift).collect(Collectors.toList()));
+                    .map(ExprToThrift::treeToThrift).collect(Collectors.toList()));
             commonRequest.setIs_binary_row(isBinaryRow);
             commonRequest.setEnable_profile(enableProfile);
             if (planFragment.getSink() != null) {

@@ -103,7 +103,6 @@ import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -199,7 +198,7 @@ public class OlapTable extends Table {
          */
         UPDATING_META,
         OPTIMIZE,
-        DYNAMIC_TABLET
+        TABLET_RESHARD
     }
 
     @SerializedName(value = "state")
@@ -2728,52 +2727,6 @@ public class OlapTable extends Table {
         return !tempPartitions.isEmpty();
     }
 
-    public PhysicalPartition replacePhysicalPartition(long oldPhysicalPartitionId,
-                                                      PhysicalPartition newPhysicalPartition, boolean moveOldToTemp) {
-        Partition partition = getPartition(newPhysicalPartition.getParentId());
-        if (partition == null || partition.getId() != newPhysicalPartition.getParentId()) {
-            return null;
-        }
-
-        PhysicalPartition oldPhysicalPartition = partition.replacePhysicalPartition(oldPhysicalPartitionId,
-                newPhysicalPartition, moveOldToTemp);
-        if (oldPhysicalPartition == null) {
-            return null;
-        }
-
-        physicalPartitionIdToPartitionId.put(newPhysicalPartition.getId(), newPhysicalPartition.getParentId());
-        physicalPartitionNameToPartitionId.put(newPhysicalPartition.getName(), newPhysicalPartition.getParentId());
-
-        if (!moveOldToTemp) {
-            physicalPartitionIdToPartitionId.remove(oldPhysicalPartition.getId());
-            physicalPartitionNameToPartitionId.remove(oldPhysicalPartition.getName());
-        }
-
-        return oldPhysicalPartition;
-    }
-
-    public PhysicalPartition removePhysicalPartition(long physicalPartitionId) {
-        Long partitionId = physicalPartitionIdToPartitionId.get(physicalPartitionId);
-        if (partitionId == null) {
-            return null;
-        }
-
-        Partition partition = getPartition(partitionId);
-        if (partition == null) {
-            return null;
-        }
-
-        PhysicalPartition physicalPartition = partition.removeSubPartition(physicalPartitionId);
-        if (physicalPartition == null) {
-            return null;
-        }
-
-        physicalPartitionIdToPartitionId.remove(physicalPartition.getId());
-        physicalPartitionNameToPartitionId.remove(physicalPartition.getName());
-
-        return physicalPartition;
-    }
-
     public void setCompressionType(TCompressionType compressionType) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -3378,10 +3331,10 @@ public class OlapTable extends Table {
     }
 
     @Nullable
-    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionPathId) {
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionPathId);
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
         }
         return null;
     }

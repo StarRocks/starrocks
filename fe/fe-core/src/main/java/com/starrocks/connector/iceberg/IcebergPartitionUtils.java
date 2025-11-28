@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.statistic.StatisticUtils;
@@ -332,8 +333,8 @@ public class IcebergPartitionUtils {
                 Preconditions.checkArgument(!range.lowerEndpoint().equals(range.upperEndpoint()),
                         "Partition value must be range");
                 try {
-                    LiteralExpr lowerExpr = LiteralExpr.create(range.lowerEndpoint(), slotRef.getType());
-                    LiteralExpr upperExpr = LiteralExpr.create(range.upperEndpoint(), slotRef.getType());
+                    LiteralExpr lowerExpr = LiteralExprFactory.create(range.lowerEndpoint(), slotRef.getType());
+                    LiteralExpr upperExpr = LiteralExprFactory.create(range.upperEndpoint(), slotRef.getType());
                     Expr lower = new BinaryPredicate(BinaryType.GE, slotRef, lowerExpr);
                     Expr upper = new BinaryPredicate(BinaryType.LT, slotRef, upperExpr);
                     result.add(ExprUtils.compoundAnd(ImmutableList.of(lower, upper)));

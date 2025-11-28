@@ -97,6 +97,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
 - 導入バージョン: -
 
+##### sys_log_timezone
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: いいえ
+- 説明: ログプレフィックスにタイムゾーン情報を表示するかどうか。`true` はタイムゾーン情報を表示することを示し、`false` は表示しないことを示します。
+- 導入バージョン: -
+
 ### サーバー
 
 ##### abort_on_large_memory_allocation
@@ -107,6 +116,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 変更可能: Yes
 - 説明: 単一の割り当て要求が設定された large-allocation 閾値を超えた場合（g_large_memory_alloc_failure_threshold > 0 かつ 要求サイズ > 閾値）、プロセスがどのように応答するかを制御します。true の場合、こうした大きな割り当てが検出されると直ちに std::abort() を呼び出して（ハードクラッシュ）終了します。false の場合は割り当てがブロックされ、アロケータは失敗（nullptr または ENOMEM）を返すため、呼び出し元がエラーを処理できます。このチェックは TRY_CATCH_BAD_ALLOC パスでラップされていない割り当てに対してのみ有効です（mem hook は bad-alloc を捕捉している場合に別のフローを使用します）。予期しない巨大な割り当ての fail-fast デバッグ目的で有効にしてください。運用環境では、過大な割り当て試行で即時プロセス中断を望む場合を除き無効のままにしてください。
 - 導入バージョン: 3.4.3, 3.5.0, 4.0.0
+
+##### arrow_flight_port
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Port
+- 変更可能: いいえ
+- 説明: BE の Arrow Flight SQL サーバー用の TCP ポート。Arrow Flight サービスを無効化するには `-1` に設定します。macOS 以外のビルドでは、BE は起動時に Arrow Flight SQL Server を呼び出します。ポートが利用できない場合、サーバーの起動は失敗し BE プロセスは終了します。設定されたポートは HeartBeat Payload で FE に報告されます。BE を起動する前に `be.conf` でこの値を設定してください。
+- 導入バージョン: v3.4.0, v3.5.0
 
 ##### be_exit_after_disk_write_hang_second
 
@@ -189,6 +207,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE 間の RPC で行バッチを圧縮するかどうかを制御するブール値です。`true` は行バッチを圧縮することを示し、`false` は圧縮しないことを示します。
 - 導入バージョン: -
 
+##### delete_worker_count_normal_priority
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: Threads
+- 変更可能: No
+- 説明: BE エージェント上で delete (REALTIME_PUSH with DELETE) タスクを処理するために割り当てられる通常優先度のワーカースレッド数。起動時にこの値は delete_worker_count_high_priority に加算されて DeleteTaskWorkerPool のサイズ決定に使われます（agent_server.cpp を参照）。プールは最初の delete_worker_count_high_priority スレッドを HIGH 優先度として割り当て、残りを NORMAL とします。通常優先度スレッドは標準の delete タスクを処理し、全体の削除スループットに寄与します。並行削除容量を上げるには増やしてください（CPU/IO 使用量が増加します）。リソース競合を減らすには減らしてください。
+- 導入バージョン: v3.2.0
+
+##### enable_https
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: この項目が `true` に設定されると、BE の bRPC サーバは TLS を使用するように構成されます: `ServerOptions.ssl_options` は BE 起動時に `ssl_certificate_path` と `ssl_private_key_path` で指定された証明書と秘密鍵で設定されます。これにより受信 bRPC 接続に対して HTTPS/TLS が有効になり、クライアントは TLS を用いて接続する必要があります。証明書および鍵ファイルが存在し、BE プロセスからアクセス可能であり、bRPC/SSL の要件に合致していることを確認してください。
+- 導入バージョン: v4.0.0
+
+##### enable_jemalloc_memory_tracker
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で GlobalEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（#ifndef __APPLE__）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
+- 導入バージョン: v3.2.12
+
 ##### heartbeat_service_port
 
 - デフォルト: 9050
@@ -242,6 +287,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: thrift クライアントがリトライする時間間隔。
 - 導入バージョン: -
+
+##### thrift_connect_timeout_seconds
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: No
+- 説明: Thrift クライアントを作成する際に使用される接続タイムアウト（秒）。ClientCacheHelper::_create_client はこの値に 1000 を掛けて ThriftClientImpl::set_conn_timeout() に渡すため、BE クライアントキャッシュによってオープンされる新しい Thrift 接続の TCP/接続ハンドシェイクのタイムアウトを制御します。この設定は接続確立にのみ影響し、送受信タイムアウトは別途設定されます。非常に小さい値は高レイテンシのネットワークで誤検知による接続失敗を引き起こす可能性があり、大きすぎる値は到達不能なピアの検出を遅らせます。
+- 導入バージョン: v3.2.0
 
 ##### thrift_rpc_connection_max_valid_time_ms
 
@@ -299,6 +353,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 導入バージョン: 3.2.3
 
 ### ユーザー、ロール、および権限
+
+##### ssl_certificate_path
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: `enable_https` が true のときに BE の brpc サーバが使用する TLS/SSL 証明書ファイル（PEM）への絶対パス。BE 起動時にこの値は `brpc::ServerOptions::ssl_options().default_cert.certificate` にコピーされます。対応する秘密鍵は必ず `ssl_private_key_path` に設定してください。必要に応じてサーバ証明書および中間証明書を PEM 形式（証明書チェーン）で提供してください。ファイルは StarRocks BE プロセスから読み取り可能でなければならず、起動時にのみ適用されます。`enable_https` が有効でこの値が未設定または無効な場合、brpc の TLS 設定が失敗しサーバが正しく起動できない可能性があります。
+- 導入バージョン: v4.0.0
 
 ### クエリエンジン
 
@@ -940,6 +1003,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 導入バージョン: -
 
 ### ロードとアンロード
+
+##### broker_write_timeout_seconds
+
+- デフォルト: 30
+- タイプ: int
+- 単位: Seconds
+- 変更可能: No
+- 説明: バックエンドの broker 操作で書き込み/IO RPC に使用されるタイムアウト（秒）。この値は 1000 を掛けられてミリ秒タイムアウトとなり、BrokerFileSystem および BrokerServiceConnection インスタンス（例：ファイルエクスポートやスナップショットのアップロード/ダウンロード）にデフォルトの timeout_ms として渡されます。broker やネットワークが遅い場合、または大きなファイルを転送する場合は早期タイムアウトを避けるために増やしてください；減らすと broker RPC が早期に失敗する可能性があります。この値は common/config に定義され、プロセス起動時に適用されます（動的リロード不可）。
+- 導入バージョン: v3.2.0
+
+##### enable_load_channel_rpc_async
+
+- デフォルト: `true`
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 有効にすると、load-channel の open RPC（例: PTabletWriterOpen）の処理が BRPC ワーカーから専用のスレッドプールへオフロードされます。リクエストハンドラは ChannelOpenTask を生成して内部 `_async_rpc_pool` に投入し、`LoadChannelMgr::_open` をインラインで実行しません。これにより BRPC スレッド内の作業量とブロッキングが減少し、`load_channel_rpc_thread_pool_num` と `load_channel_rpc_thread_pool_queue_size` で同時実行性を調整できるようになります。スレッドプールへの投入が失敗する（プールが満杯またはシャットダウン済み）と、リクエストはキャンセルされエラー状態が返されます。プールは `LoadChannelMgr::close()` でシャットダウンされるため、有効化する際は容量とライフサイクルを考慮し、リクエストの拒否や処理遅延を避けるようにしてください。
+- 導入バージョン: `v3.5.0`
 
 ### 統計レポート
 
@@ -1814,6 +1895,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### 共有データ
 
+##### download_buffer_size
+
+- デフォルト: 4194304
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: Yes
+- 説明: スナップショットファイルをダウンロードする際に使用されるメモリ内コピー用バッファのサイズ（バイト）。SnapshotLoader::download はこの値を fs::copy に対してリモートの sequential file からローカルの writable file へ読み込む際の 1 回あたりのチャンクサイズとして渡します。帯域幅の大きいリンクでは、より大きな値にすることで syscall/IO オーバーヘッドが減りスループットが向上する可能性があります。小さい値はアクティブな転送ごとのピークメモリ使用量を削減します。注意: このパラメータはストリームごとのバッファサイズを制御するものであり、ダウンロードスレッド数を制御するものではありません — 総メモリ消費量 = download_buffer_size * number_of_concurrent_downloads です。
+- 導入バージョン: v3.2.13
+
 ##### graceful_exit_wait_for_frontend_heartbeat
 
 - デフォルト: false
@@ -2215,6 +2305,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: to_base64() 関数の入力値の最大長。
 - 導入バージョン: -
+
+##### memory_high_level
+
+- デフォルト: 75
+- タイプ: Long
+- 単位: Percent
+- 変更可能: Yes
+- 説明: プロセスのメモリ上限に対する割合で表されるハイウォーターメモリ閾値。総メモリ使用量がこの割合を超えると、BE はメモリ圧力を緩和するために徐々にメモリを解放し始めます（現在はデータキャッシュと更新キャッシュの追い出しで実施）。モニタはこの値を用いて memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御されたエビクションを行います；消費量が別の設定である memory_urgent_level を超えると、より攻撃的な即時削減が行われます。この値は閾値超過時に一部のメモリ集約的な操作（例えば primary-key preload）を無効化するかどうかの判断にも使われます。memory_urgent_level と合わせた検証を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
+- 導入バージョン: v3.2.0
 
 ##### report_exec_rpc_request_retry_num
 

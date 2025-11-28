@@ -16,10 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class ShowIndexStmt extends ShowStmt {
     private final String dbName;
@@ -31,7 +29,7 @@ public class ShowIndexStmt extends ShowStmt {
 
     public ShowIndexStmt(String dbName, TableName tableName, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.tableName = tableName;
     }
 

@@ -118,6 +118,10 @@ public class Status {
         return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
     }
 
+    public boolean isSuppressedError() {
+        return isGlobalDictError();
+    }
+
     public boolean isGlobalDictNotMatch() {
         return this.errorCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
     }

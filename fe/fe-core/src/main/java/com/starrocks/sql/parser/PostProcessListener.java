@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.parser;
 
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
-public class PostProcessListener extends StarRocksBaseListener {
+public class PostProcessListener extends com.starrocks.sql.parser.StarRocksBaseListener {
 
     private final int maxTokensNum;
     private final int maxExprChildCount;
@@ -40,8 +39,9 @@ public class PostProcessListener extends StarRocksBaseListener {
     }
 
     @Override
-    public void exitExpressionList(StarRocksParser.ExpressionListContext ctx) {
-        long childCount = ctx.children.stream().filter(child -> child instanceof StarRocksParser.ExpressionContext).count();
+    public void exitExpressionList(com.starrocks.sql.parser.StarRocksParser.ExpressionListContext ctx) {
+        long childCount = ctx.children.stream()
+                .filter(child -> child instanceof com.starrocks.sql.parser.StarRocksParser.ExpressionContext).count();
         if (childCount > maxExprChildCount) {
             NodePosition pos = new NodePosition(ctx.start, ctx.stop);
             throw new ParsingException(PARSER_ERROR_MSG.exprsExceedLimit(childCount, maxExprChildCount), pos);
@@ -49,7 +49,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     }
 
     @Override
-    public void exitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext ctx) {
+    public void exitExpressionsWithDefault(com.starrocks.sql.parser.StarRocksParser.ExpressionsWithDefaultContext ctx) {
         long childCount = ctx.expressionOrDefault().size();
         if (childCount > maxExprChildCount) {
             NodePosition pos = new NodePosition(ctx.start, ctx.stop);
@@ -58,7 +58,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     }
 
     @Override
-    public void exitInsertStatement(StarRocksParser.InsertStatementContext ctx) {
+    public void exitInsertStatement(com.starrocks.sql.parser.StarRocksParser.InsertStatementContext ctx) {
         long childCount = ctx.expressionsWithDefault().size();
         if (childCount > maxExprChildCount) {
             NodePosition pos = new NodePosition(ctx.start, ctx.stop);
@@ -67,7 +67,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     }
 
     @Override
-    public void exitIntegerList(StarRocksParser.IntegerListContext ctx) {
+    public void exitIntegerList(com.starrocks.sql.parser.StarRocksParser.IntegerListContext ctx) {
         long childCount = ctx.INTEGER_VALUE().size();
         if (childCount > maxExprChildCount) {
             NodePosition pos = new NodePosition(ctx.start, ctx.stop);
@@ -76,7 +76,7 @@ public class PostProcessListener extends StarRocksBaseListener {
     }
 
     @Override
-    public void exitStringList(StarRocksParser.StringListContext ctx) {
+    public void exitStringList(com.starrocks.sql.parser.StarRocksParser.StringListContext ctx) {
         long childCount = ctx.string().size();
         if (childCount > maxExprChildCount) {
             NodePosition pos = new NodePosition(ctx.start, ctx.stop);

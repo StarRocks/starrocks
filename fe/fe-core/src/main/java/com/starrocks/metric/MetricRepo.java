@@ -36,6 +36,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -172,6 +173,34 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+    /**
+     * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
+     * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
+     * NOTE:
+     * This metric may not accurately reflect the lock held time under high contention, because the metric will
+     * be updated once the wait time exceeds the threshold, but the held time may continue to increase until the
+     * owner completes its operation and releases the lock.
+     * The good thing is that this metric can still be updated even deadlock happens.
+     * Sample Prometheus alert rules in runbook:
+     * - alert: SlowLockHeldTimeHigh
+     *   expr: starrocks_fe_slow_lock_held_time_ms{quantile="0.99"} > 300000
+     *   for: 5m
+     */
+    public static final Histogram HISTO_SLOW_LOCK_HELD_TIME_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_held_time_ms"),
+                    SlideWindowHistogramCreator.INSTANCE);
+    /**
+     * Histogram tracking the lock wait time (in milliseconds) when slow locks are detected.
+     * Uses a 1-minute sliding time window reservoir to track recent slow lock behavior.
+     * Updated when lock wait time exceeds the slow_lock_threshold_ms configuration.
+     * NOTE:
+     * This metric can accurately track the lock wait time. However, this metric can't be updated
+     * when deadlock happens, hence it can't be used to detect deadlock situations.
+     */
+    public static final Histogram HISTO_SLOW_LOCK_WAIT_TIME_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_wait_time_ms"),
+                    SlideWindowHistogramCreator.INSTANCE);
+
     public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
@@ -249,6 +278,18 @@ public final class MetricRepo {
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
+
+    /**
+     * A creator for SlideWindowHistogram, which uses SlidingTimeWindowArrayReservoir as reservoir.
+     */
+    private static class SlideWindowHistogramCreator implements MetricRegistry.MetricSupplier<Histogram> {
+        private static final SlideWindowHistogramCreator INSTANCE = new SlideWindowHistogramCreator();
+
+        @Override
+        public Histogram newMetric() {
+            return new Histogram(new SlidingTimeWindowArrayReservoir(1, TimeUnit.MINUTES));
+        }
+    }
 
     public static synchronized void init() {
         if (hasInit) {
@@ -1137,13 +1178,17 @@ public final class MetricRepo {
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
+        GaugeMetricImpl<Long> totalSize = new GaugeMetricImpl<>(
+                "total_data_size_bytes", MetricUnit.BYTES, "total size of all databases approximately in bytes");
         int dbNum = 0;
+        long dbDataSizeTotal = 0;
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }
             dbNum++;
+            dbDataSizeTotal += db.usedDataQuotaBytes.get();
             GaugeMetricImpl<Integer> tableNum = new GaugeMetricImpl<>(
                     "table_num", MetricUnit.OPERATIONS, "count of table");
             tableNum.setValue(db.getTableNumber());
@@ -1161,7 +1206,9 @@ public final class MetricRepo {
             visitor.visit(dbSizeBytesTotal);
         }
         databaseNum.setValue(dbNum);
+        totalSize.setValue(dbDataSizeTotal);
         visitor.visit(databaseNum);
+        visitor.visit(totalSize);
     }
 
     private static void collectBrpcMetrics(MetricVisitor visitor) {

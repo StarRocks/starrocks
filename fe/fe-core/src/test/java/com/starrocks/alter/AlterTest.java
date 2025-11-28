@@ -49,6 +49,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
@@ -61,6 +62,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -102,7 +104,6 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.DateType;
@@ -731,7 +732,8 @@ public class AlterTest {
 
         // batch update storage_medium and storage_cool_down properties
         stmt = "alter table test.tbl4 modify partition (p2, p3, p4) set ('storage_medium' = 'HDD')";
-        DateLiteral dateLiteral = new DateLiteral("9999-12-31 00:00:00", DateType.DATETIME);
+        DateLiteral dateLiteral = new DateLiteral(DateUtils.parseStrictDateTime("9999-12-31 00:00:00"),
+                DateType.DATETIME);
         long coolDownTimeMs = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
         DataProperty oldDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeMs);
         partitionList = Lists.newArrayList(p2, p3, p4);

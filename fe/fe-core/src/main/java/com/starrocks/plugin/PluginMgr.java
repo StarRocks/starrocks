@@ -44,6 +44,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.UninstallPluginLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -54,6 +55,7 @@ import com.starrocks.plugin.PluginLoader.PluginStatus;
 import com.starrocks.qe.AuditLogBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InstallPluginStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -104,7 +106,7 @@ public class PluginMgr implements Writable {
         }
     }
 
-    private boolean addDynamicPluginNameIfAbsent(String name) {
+    private boolean addDynamicPluginName(String name) {
         synchronized (dynamicPluginNames) {
             return dynamicPluginNames.add(name);
         }
@@ -146,12 +148,15 @@ public class PluginMgr implements Writable {
             pluginLoader.install();
             pluginLoader.setStatus(PluginStatus.INSTALLED);
 
-            if (!addDynamicPluginNameIfAbsent(info.getName())) {
+            // double check again
+            if (checkDynamicPluginNameExist(info.getName())) {
                 throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
             }
-            plugins[info.getTypeId()].put(info.getName(), pluginLoader);
 
-            GlobalStateMgr.getCurrentState().getEditLog().logInstallPlugin(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logInstallPlugin(info, wal -> {
+                addDynamicPluginName(info.getName());
+                plugins[info.getTypeId()].put(info.getName(), pluginLoader);
+            });
             LOG.info("install plugin {}", info.getName());
             return info;
         } catch (Throwable e) {
@@ -160,11 +165,35 @@ public class PluginMgr implements Writable {
         }
     }
 
+    public void uninstallPluginFromStmt(UninstallPluginStmt stmt) throws IOException, StarRocksException {
+        String pluginName = stmt.getPluginName();
+        int typeId = uninstallPlugin(pluginName);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(new UninstallPluginLog(pluginName), wal -> {
+            plugins[typeId].remove(pluginName);
+            removeDynamicPluginName(pluginName);
+        });
+        LOG.info("uninstall plugin = {}", pluginName);
+    }
+
+    public void replayUninstallPlugin(UninstallPluginLog log) {
+        String pluginName = log.getName();
+        try {
+            int typeId = uninstallPlugin(pluginName);
+
+            // remove the plugin from manager
+            plugins[typeId].remove(pluginName);
+            removeDynamicPluginName(pluginName);
+        } catch (Exception e) {
+            LOG.warn("replay uninstall plugin failed.", e);
+        }
+    }
+
     /**
      * Dynamic uninstall plugin.
      * If uninstall failed, the plugin should NOT be removed from plugin manager.
      */
-    public PluginInfo uninstallPlugin(String name) throws IOException, StarRocksException {
+    public int uninstallPlugin(String name) throws IOException, StarRocksException {
         if (!checkDynamicPluginNameExist(name)) {
             throw new DdlException("Plugin " + name + " does not exist");
         }
@@ -188,16 +217,8 @@ public class PluginMgr implements Writable {
                 loader.uninstall();
 
                 // uninstall succeed, remove the plugin
-                plugins[i].remove(name);
                 loader.setStatus(PluginStatus.UNINSTALLED);
-                removeDynamicPluginName(name);
-
-                // do not get plugin info by calling loader.getPluginInfo(). That method will try to
-                // reload the plugin properties from source if this plugin is not installed successfully.
-                // Here we only need the plugin's name for persisting.
-                // TODO(cmy): This is a bad design to couple the persist info with PluginInfo, but for
-                // the compatibility, I till use this method.
-                return new PluginInfo(name);
+                return i;
             }
         }
 
@@ -242,7 +263,7 @@ public class PluginMgr implements Writable {
             LOG.warn("fail to load plugin", e);
         } finally {
             // this is a replay process, so whether it is successful or not, add it's name.
-            addDynamicPluginNameIfAbsent(info.getName());
+            addDynamicPluginName(info.getName());
         }
     }
 

@@ -34,13 +34,13 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.planner.expression.ExprOpcodeRegistry;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprOpcodeRegistry;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TMergeJoinNode;
 import com.starrocks.thrift.TPlanNode;
@@ -64,13 +64,13 @@ public class MergeJoinNode extends JoinNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.MERGE_JOIN_NODE;
         msg.merge_join_node = new TMergeJoinNode();
-        msg.merge_join_node.join_op = joinOp.toThrift();
+        msg.merge_join_node.join_op = ExprToThrift.joinOperatorToThrift(joinOp);
         msg.merge_join_node.distribution_mode = distrMode.toThrift();
         StringBuilder sqlJoinPredicatesBuilder = new StringBuilder();
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             TEqJoinCondition eqJoinCondition = new TEqJoinCondition(
-                    ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(0)),
-                    ExprToThriftVisitor.treeToThrift(eqJoinPredicate.getChild(1)));
+                    ExprToThrift.treeToThrift(eqJoinPredicate.getChild(0)),
+                    ExprToThrift.treeToThrift(eqJoinPredicate.getChild(1)));
             eqJoinCondition.setOpcode(ExprOpcodeRegistry.getBinaryOpcode(eqJoinPredicate.getOp()));
             msg.merge_join_node.addToEq_join_conjuncts(eqJoinCondition);
             if (sqlJoinPredicatesBuilder.length() > 0) {
@@ -79,7 +79,7 @@ public class MergeJoinNode extends JoinNode {
             sqlJoinPredicatesBuilder.append(ExprToSql.toSql(eqJoinPredicate));
         }
         for (Expr e : otherJoinConjuncts) {
-            msg.merge_join_node.addToOther_join_conjuncts(ExprToThriftVisitor.treeToThrift(e));
+            msg.merge_join_node.addToOther_join_conjuncts(ExprToThrift.treeToThrift(e));
             if (sqlJoinPredicatesBuilder.length() > 0) {
                 sqlJoinPredicatesBuilder.append(", ");
             }
@@ -108,7 +108,7 @@ public class MergeJoinNode extends JoinNode {
         msg.merge_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
         if (partitionExprs != null) {
-            msg.merge_join_node.setPartition_exprs(ExprToThriftVisitor.treesToThrift(partitionExprs));
+            msg.merge_join_node.setPartition_exprs(ExprToThrift.treesToThrift(partitionExprs));
         }
         msg.setFilter_null_value_columns(filter_null_value_columns);
 

@@ -20,9 +20,12 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.LocationUtil;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
@@ -172,13 +175,24 @@ public final class IcebergUtil {
         Map<Integer, MinMaxValue> minMaxValues =
                 parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
         for (SlotDescriptor slot : slots) {
-            int slotId = slot.getId().asInt();
-            MinMaxValue minMaxValue = minMaxValues.get(slotId);
+            Types.NestedField field = schema.findField(slot.getColumn().getName());
+            if (field == null) {
+                continue;
+            }
+            int fieldId = field.fieldId();
+            MinMaxValue minMaxValue = minMaxValues.get(fieldId);
             if (minMaxValue == null) {
                 continue; // No min/max value for this slot
             }
             minMaxValue.toThrift(result, slot);
         }
         return result;
+    }
+
+    public static String tableDataLocation(Table table) {
+        Preconditions.checkArgument(table != null, "table is null");
+        String tableLocation = table.location();
+        return table.properties().getOrDefault(TableProperties.WRITE_DATA_LOCATION,
+                String.format("%s/data", LocationUtil.stripTrailingSlash(tableLocation)));
     }
 }

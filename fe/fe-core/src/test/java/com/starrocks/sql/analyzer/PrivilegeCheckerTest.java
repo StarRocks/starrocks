@@ -36,9 +36,12 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.clone.TabletSchedCtx;
@@ -94,8 +97,6 @@ import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -1628,7 +1629,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testSetGlobalVar() throws Exception {
         ctxToRoot();
         verifyGrantRevoke(
-                "SET global enable_cbo = true",
+                "SET global enable_cross_join = true",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation");
@@ -1693,7 +1694,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         // Test `use database` : check any privilege on any function in db
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn,
+        Function function = new ScalarFunction(fn,
                 Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);
@@ -2792,7 +2793,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testFunc() throws Exception {
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
-        Function function = new Function(fn,
+        Function function = new ScalarFunction(fn,
                 Arrays.asList(StringType.STRING, StringType.STRING), StringType.STRING, false);
         try {
             db1.addFunction(function);

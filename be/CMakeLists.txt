@@ -123,8 +123,6 @@ elseif (NOT APPLE)
 endif()
 
 set(CMAKE_SKIP_RPATH TRUE)
-set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
 
 set(ALL_BE_LIBS "" CACHE INTERNAL "All BE libraries")
 
@@ -133,424 +131,9 @@ FUNCTION(FINALIZE_BE_LIBS)
     MESSAGE(STATUS "ALL BE LIBS (SORTED): ${ALL_BE_LIBS}") 
 ENDFUNCTION()
 
-# Compile generated source if necessary
-message(STATUS "build gensrc if necessary")
-execute_process(COMMAND make -C ${BASE_DIR}/../gensrc/
-                RESULT_VARIABLE MAKE_GENSRC_RESULT)
-if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
-    message(FATAL_ERROR "Failed to build ${BASE_DIR}/../gensrc/")
-endif()
+include(cmake_modules/ThirdParty.cmake)
 
-#
-set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
-configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
-add_library(build_version OBJECT ${BUILD_VERSION_CC})
-target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
-
-# Add common cmake prefix path and link library path
-list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
-list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
-link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
-
-# Set Boost
-set(Boost_DEBUG FALSE)
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_NO_BOOST_CMAKE ON)
-set(BOOST_ROOT ${THIRDPARTY_DIR})
-# boost suppress warning is supported on cmake 3.20
-# https://cmake.org/cmake/help/latest/module/FindBoost.html
-set(Boost_NO_WARN_NEW_VERSIONS ON)
-
-if (NOT APPLE)
-    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context iostreams)
-else()
-    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context iostreams)
-endif()
-include_directories(${Boost_INCLUDE_DIRS})
-message(STATUS ${Boost_LIBRARIES})
-
-set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
-set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
-
-# Set all libraries
-
-add_library(clucene-core STATIC IMPORTED)
-set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-core-static.a)
-
-add_library(clucene-shared STATIC IMPORTED)
-set_target_properties(clucene-shared PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-shared-static.a)
-
-add_library(clucene-contribs-lib STATIC IMPORTED)
-set_target_properties(clucene-contribs-lib PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-contribs-lib.a)
-
-add_library(gflags STATIC IMPORTED GLOBAL)
-set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
-
-add_library(glog STATIC IMPORTED GLOBAL)
-set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
-
-add_library(re2 STATIC IMPORTED GLOBAL)
-set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
-
-add_library(pprof STATIC IMPORTED)
-set_target_properties(pprof PROPERTIES IMPORTED_LOCATION
-    ${GPERFTOOLS_HOME}/lib/libprofiler.a)
-
-add_library(tcmalloc STATIC IMPORTED)
-set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
-    ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
-
-add_library(protobuf STATIC IMPORTED GLOBAL)
-set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
-
-add_library(protoc STATIC IMPORTED)
-set_target_properties(protoc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotoc.a)
-
-add_library(gtest STATIC IMPORTED)
-set_target_properties(gtest PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgtest.a)
-
-add_library(gmock STATIC IMPORTED)
-set_target_properties(gmock PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgmock.a)
-
-add_library(snappy STATIC IMPORTED GLOBAL)
-set_target_properties(snappy PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsnappy.a)
-
-set(CURL_INCLUDE_DIR "${THIRDPARTY_DIR}/include" CACHE PATH "curl include path")
-set(CURL_LIBRARY "${THIRDPARTY_DIR}/lib/libcurl.a" CACHE FILEPATH "curl static library")
-add_library(curl STATIC IMPORTED GLOBAL)
-set_target_properties(curl PROPERTIES IMPORTED_LOCATION ${CURL_LIBRARY})
-
-add_library(lz4 STATIC IMPORTED)
-set_target_properties(lz4 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/liblz4.a)
-
-add_library(thrift STATIC IMPORTED)
-set_target_properties(thrift PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthrift.a)
-
-add_library(thriftnb STATIC IMPORTED)
-set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthriftnb.a)
-
-add_library(mysql STATIC IMPORTED)
-set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
-
-add_library(hdfs STATIC IMPORTED GLOBAL)
-set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhdfs.a)
-
-add_library(fiu STATIC IMPORTED)
-set_target_properties(fiu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libfiu.a)
-
-add_library(icuuc STATIC IMPORTED)
-set_target_properties(icuuc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicuuc.a)
-
-add_library(icui18n STATIC IMPORTED)
-set_target_properties(icui18n PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicui18n.a)
-
-add_library(icudata STATIC IMPORTED)
-set_target_properties(icudata PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicudata.a)
-
-
-# Allow FindOpenSSL() to find correct static libraries
-set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
-message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
-add_library(crypto STATIC IMPORTED GLOBAL)
-set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
-
-add_library(AWS::crypto ALIAS crypto)
-set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
-set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
-foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
-    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
-    list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
-endforeach()
-find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
-include_directories(${AWSSDK_INCLUDE_DIRS})
-
-set(Poco_ROOT_DIR ${THIRDPARTY_DIR})
-find_package(Poco REQUIRED COMPONENTS Net NetSSL)
-include_directories(${Poco_INCLUDE_DIRS})
-
-add_library(libevent STATIC IMPORTED)
-set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
-
-add_library(openssl STATIC IMPORTED)
-set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libssl.a)
-
-add_library(leveldb STATIC IMPORTED GLOBAL)
-set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
-    add_library(jemalloc SHARED IMPORTED)
-    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-shared/libjemalloc.so)
-else()
-    add_library(jemalloc STATIC IMPORTED)
-    set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-static/libjemalloc.a)
-endif()
-
-add_library(brotlicommon STATIC IMPORTED)
-set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
-
-add_library(brotlidec STATIC IMPORTED)
-set_target_properties(brotlidec PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlidec.a)
-
-add_library(brotlienc STATIC IMPORTED)
-set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlienc.a)
-
-add_library(zstd STATIC IMPORTED)
-set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
-
-add_library(streamvbyte STATIC IMPORTED)
-set_target_properties(streamvbyte PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libstreamvbyte_static.a)
-
-add_library(arrow STATIC IMPORTED)
-set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
-
-add_library(parquet STATIC IMPORTED)
-set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
-
-add_library(brpc STATIC IMPORTED GLOBAL)
-set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
-
-add_library(rocksdb STATIC IMPORTED GLOBAL)
-set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
-
-add_library(krb5support STATIC IMPORTED)
-set_target_properties(krb5support PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libkrb5support.a)
-
-add_library(krb5 STATIC IMPORTED)
-set_target_properties(krb5 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libkrb5.a)
-
-add_library(com_err STATIC IMPORTED)
-set_target_properties(com_err PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcom_err.a)
-
-add_library(k5crypto STATIC IMPORTED)
-set_target_properties(k5crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libk5crypto.a)
-
-add_library(gssapi_krb5 STATIC IMPORTED)
-set_target_properties(gssapi_krb5 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgssapi_krb5.a)
-
-add_library(sasl STATIC IMPORTED GLOBAL)
-set_target_properties(sasl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsasl2.a)
-
-add_library(librdkafka_cpp STATIC IMPORTED)
-set_target_properties(librdkafka_cpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka++.a)
-
-add_library(librdkafka STATIC IMPORTED)
-set_target_properties(librdkafka PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka.a)
-
-add_library(libpulsar STATIC IMPORTED)
-set_target_properties(libpulsar PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libpulsar.a)
-
-add_library(libs2 STATIC IMPORTED)
-set_target_properties(libs2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libs2.a)
-
-add_library(bitshuffle STATIC IMPORTED)
-set_target_properties(bitshuffle PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbitshuffle.a)
-
-add_library(roaring STATIC IMPORTED)
-set_target_properties(roaring PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libroaring.a)
-
-add_library(cctz STATIC IMPORTED)
-set_target_properties(cctz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcctz.a)
-
-add_library(benchmark STATIC IMPORTED)
-set_target_properties(benchmark PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark.a)
-
-add_library(benchmark_main STATIC IMPORTED)
-set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark_main.a)
-
-if (ENABLE_MULTI_DYNAMIC_LIBS)
-    add_library(fmt SHARED IMPORTED)
-    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.so.8)
-    file(GLOB FMT_SO_FILES "${THIRDPARTY_DIR}/lib64/libfmt.so*")
-    install(FILES ${FMT_SO_FILES} DESTINATION ${OUTPUT_DIR}/lib)
-else()
-    add_library(fmt STATIC IMPORTED)
-    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
-endif()
-
-add_library(ryu STATIC IMPORTED)
-set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
-
-add_library(libz STATIC IMPORTED GLOBAL)
-set_target_properties(libz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a)
-
-add_library(libbz2 STATIC IMPORTED)
-set_target_properties(libbz2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbz2.a)
-
-# Disable minidump on aarch64, hence breakpad is not needed.
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    add_library(breakpad STATIC IMPORTED)
-    set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
-endif()
-
-add_library(hyperscan STATIC IMPORTED)
-set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
-
-add_library(simdjson STATIC IMPORTED)
-set_target_properties(simdjson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdjson.a)
-
-add_library(simdutf STATIC IMPORTED)
-set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsimdutf.a)
-
-add_library(velocypack STATIC IMPORTED)
-set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
-
-find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
-
-add_library(http_client_curl STATIC IMPORTED GLOBAL)
-set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libhttp_client_curl.a)
-
-add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_common.a)
-
-add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_trace.a)
-
-add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
-
-add_library(jansson STATIC IMPORTED GLOBAL)
-set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjansson.a)
-
-add_library(avro STATIC IMPORTED GLOBAL)
-set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
-
-add_library(avrocpp STATIC IMPORTED GLOBAL)
-set_target_properties(avrocpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavrocpp_s.a)
-
-add_library(serdes STATIC IMPORTED GLOBAL)
-set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
-
-add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
-
-add_library(libxml2 STATIC IMPORTED GLOBAL)
-set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.a)
-
-add_library(azure-core STATIC IMPORTED GLOBAL)
-set_target_properties(azure-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-core.a)
-
-add_library(azure-identity STATIC IMPORTED GLOBAL)
-set_target_properties(azure-identity PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-identity.a)
-
-add_library(azure-storage-common STATIC IMPORTED GLOBAL)
-set_target_properties(azure-storage-common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-common.a)
-
-add_library(azure-storage-blobs STATIC IMPORTED GLOBAL)
-set_target_properties(azure-storage-blobs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-blobs.a)
-
-add_library(azure-storage-files-datalake STATIC IMPORTED GLOBAL)
-set_target_properties(azure-storage-files-datalake PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-files-datalake.a)
-
-set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
-find_package(absl CONFIG REQUIRED)
-set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
-find_package(gRPC CONFIG REQUIRED)
-message(STATUS "Using gRPC ${gRPC_VERSION}")
-get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
-add_library(protobuf::libprotobuf ALIAS protobuf)
-add_library(ZLIB::ZLIB ALIAS libz)
-
-# Disable libdeflate on aarch64
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    add_library(libdeflate STATIC IMPORTED GLOBAL)
-    set_target_properties(libdeflate PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdeflate.a)
-endif()
-
-if (${WITH_TENANN} STREQUAL "ON")
-    add_library(tenann STATIC IMPORTED GLOBAL)
-    if(${USE_AVX2})
-        set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle-avx2.a)
-    else()
-        set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle.a)
-    endif()
-endif()
-
-if (${WITH_STARCACHE} STREQUAL "ON")
-    add_library(starcache STATIC IMPORTED GLOBAL)
-    set(STARCACHE_DIR "${THIRDPARTY_DIR}/starcache")
-    set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${STARCACHE_DIR}/lib/libstarcache.a)
-    include_directories(SYSTEM ${STARCACHE_DIR}/include)
-    message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
-endif()
-if ("${WITH_BRPC_KEEPALIVE}" STREQUAL "ON")
-  set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BRPC_KEEPALIVE")
-endif()
-
-if ("${USE_STAROS}" STREQUAL "ON")
-    if (DEFINED ENV{STARLET_INSTALL_DIR})
-        set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
-    else()
-        set(STARLET_INSTALL_DIR "${THIRDPARTY_DIR}/starlet")
-    endif()
-    if (NOT EXISTS ${STARLET_INSTALL_DIR})
-        message(FATAL_ERROR "Starlet thirdparty directory ${STARLET_INSTALL_DIR} not exist!")
-    else()
-        message(STATUS "Searching starlet related libraries from ${STARLET_INSTALL_DIR} ...")
-    endif()
-
-    # Tell cmake that PROTOBUF library is already found
-    set(PROTOBUF_FOUND TRUE)
-    # starrocks project has its imported libprotobuf.a and libre2.a
-    # add following ALIAS so grpc can find the correct dependent libraries
-    add_library(re2::re2 ALIAS re2)
-    add_library(glog::glog ALIAS glog)
-    add_library(gflags::gflags_static ALIAS gflags)
-    add_library(hdfs::hdfs ALIAS hdfs)
-    add_library(brpc::brpc ALIAS brpc)
-    add_library(leveldb::leveldb ALIAS leveldb)
-    add_library(CURL::libcurl ALIAS curl)
-    add_library(rocksdb::rocksdb ALIAS rocksdb)
-    add_library(starcache::starcache ALIAS starcache)
-    add_library(Snappy::snappy ALIAS snappy)
-    add_library(libxml2::libxml2 ALIAS libxml2)
-    add_library(Azure::azure-core ALIAS azure-core)
-    add_library(Azure::azure-identity ALIAS azure-identity)
-    add_library(Azure::azure-storage-common ALIAS azure-storage-common)
-    add_library(Azure::azure-storage-blobs ALIAS azure-storage-blobs)
-    add_library(Azure::azure-storage-files-datalake ALIAS azure-storage-files-datalake)
-
-    set(prometheus-cpp_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp" CACHE PATH "prometheus cpp client search path")
-    find_package (prometheus-cpp CONFIG REQUIRED)
-    get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "Using prometheus-cpp")
-    message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-    include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
-
-    # gcp cloud storage related dependencies
-    set(ZLIB_INCLUDE_DIR "${THIRDPARTY_DIR}/include")
-    set(ZLIB_LIBRARY "${THIRDPARTY_DIR}/lib/libz.a")
-    set(Crc32c_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/Crc32c" CACHE PATH "Crc32c search path")
-    find_package (Crc32c CONFIG REQUIRED)
-    set(nlohmann_json_DIR "${STARLET_INSTALL_DIR}/third_party/share/cmake/nlohmann_json" CACHE PATH "nlohmann json search path")
-    find_package (nlohmann_json CONFIG REQUIRED)
-    set(google_cloud_cpp_common_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_common" CACHE PATH "google cloud cpp common search path")
-    find_package (google_cloud_cpp_common CONFIG REQUIRED)
-    set(google_cloud_cpp_rest_internal_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_rest_internal" CACHE PATH "google cloud cpp rest internal search path")
-    find_package (google_cloud_cpp_rest_internal CONFIG REQUIRED)
-    set(google_cloud_cpp_storage_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/google_cloud_cpp_storage" CACHE PATH "google cloud cpp storage search path")
-    find_package (google_cloud_cpp_storage CONFIG REQUIRED)
-
-    set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
-    find_package(starlet CONFIG REQUIRED)
-    message(STATUS "Using starlet ${starlet_VERSION}")
-    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-
-    set_target_properties(starlet::starlet_fslib_all PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starlet_fslib_all ALIAS starlet::starlet_fslib_all)
-    set_target_properties(starlet::starlet PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starlet ALIAS starlet::starlet)
-
-    set(STARROCKS_DEPENDENCIES
-       ${STARROCKS_DEPENDENCIES}
-       starlet
-       starlet_fslib_all
-       starcache
-       ${AZURE_SDK_LIB}
-       )
-endif()
+include(cmake_modules/PreBuildModule.cmake)
 
 # LLVM
 include(cmake_modules/FindLLVM.cmake)
@@ -565,7 +148,6 @@ if (CLANG_TIDY_PATH)
     # enable clang-tidy check for all source code files
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
-
 
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
@@ -730,7 +312,6 @@ endif()
 
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
-# Debug information is stored as dwarf2 to be as compatible as possible
 #   -Werror: compile warnings should be errors when using the toolchain compiler.
 # Only enable for debug builds because this is what we test in pre-commit tests.
 set(CXX_FLAGS_DEBUG "${CXX_GCC_FLAGS} -ggdb -O0 -gdwarf-5 -DDEBUG")
@@ -801,7 +382,6 @@ include_directories(
     SYSTEM ${THIRDPARTY_DIR}/llvm/include/
 )
 
-
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     include_directories(${THIRDPARTY_DIR}/include/breakpad/)
 endif()
@@ -847,13 +427,6 @@ set(STARROCKS_LINK_LIBS
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
 )
-
-set(JAVA_HOME ${THIRDPARTY_DIR}/open_jdk/)
-add_library(jvm SHARED IMPORTED)
-FILE(GLOB_RECURSE LIB_JVM ${JAVA_HOME}/lib/*/libjvm.so)
-set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
-include_directories(${JAVA_HOME}/include)
-include_directories(${JAVA_HOME}/include/linux)
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     ${AWSSDK_LINK_LIBRARIES}
@@ -1210,13 +783,8 @@ install(FILES
     ${BASE_DIR}/../conf/log4j2.properties
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
-    DESTINATION ${OUTPUT_DIR}/conf)
-
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
-install(FILES
     ${BASE_DIR}/../conf/asan_suppressions.conf
     DESTINATION ${OUTPUT_DIR}/conf)
-endif()
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

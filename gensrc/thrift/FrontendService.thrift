@@ -1524,7 +1524,7 @@ struct TPartitionMetaInfo {
     29: optional i64 storage_size
     30: optional bool tablet_balanced
     31: optional i64 metadata_switch_version
-    32: optional i64 path_id
+    32: optional i64 path_id // deprecated
 }
 
 struct TGetPartitionsMetaResponse {
@@ -2171,7 +2171,7 @@ struct TUpdateFailPointResponse {
     1: optional Status.TStatus status;
 }
 
-struct TDynamicTabletJobsItem {
+struct TTabletReshardJobsItem {
     1: optional i64 job_id;
     2: optional string db_name;
     3: optional string table_name;
@@ -2187,12 +2187,40 @@ struct TDynamicTabletJobsItem {
     13: optional string error_message;
 }
 
-struct TDynamicTabletJobsRequest {
+struct TTabletReshardJobsRequest {
 }
 
-struct TDynamicTabletJobsResponse {
+struct TTabletReshardJobsResponse {
     1: optional Status.TStatus status;
-    2: optional list<TDynamicTabletJobsItem> items;
+    2: optional list<TTabletReshardJobsItem> items;
+}
+
+struct TFeThreadInfo {
+    1: optional string fe_address;
+    2: optional i64 thread_id;
+    3: optional string thread_name;
+    4: optional string thread_state;
+    5: optional bool is_daemon;
+    6: optional i32 priority;
+    7: optional i64 cpu_time_ms;
+    8: optional i64 user_time_ms;
+}
+
+struct TGetFeThreadsRequest {
+    1: optional TAuthInfo auth_info;
+}
+
+struct TGetFeThreadsResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TFeThreadInfo> threads;
+}
+
+struct TRefreshConnectionsRequest {
+    1: optional bool force;
+}
+
+struct TRefreshConnectionsResponse {
+    1: optional Status.TStatus status;
 }
 
 service FrontendService {
@@ -2280,6 +2308,8 @@ service FrontendService {
 
     TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
 
+    TGetFeThreadsResponse getFeThreads(1: TGetFeThreadsRequest request)
+
     TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
     TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
 
@@ -2338,6 +2368,8 @@ service FrontendService {
 
     TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
 
-    TDynamicTabletJobsResponse getDynamicTabletJobsInfo(1: TDynamicTabletJobsRequest request)
+    TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
+
+    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
 }
 

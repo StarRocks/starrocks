@@ -42,7 +42,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.VirtualSlotRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -296,16 +295,14 @@ public class GroupByClause implements ParseNode {
             case CUBE:
                 if (groupingExprs != null) {
                     strBuilder.append("CUBE (");
-                    strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
-                            .map(ExprToSql::toSql).collect(Collectors.joining(", ")));
+                    strBuilder.append(groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;
             case ROLLUP:
                 if (groupingExprs != null) {
                     strBuilder.append("ROLLUP (");
-                    strBuilder.append(groupingExprs.stream().filter(e -> !(e instanceof VirtualSlotRef))
-                            .map(ExprToSql::toSql).collect(Collectors.joining(", ")));
+                    strBuilder.append(groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ")));
                     strBuilder.append(")");
                 }
                 break;

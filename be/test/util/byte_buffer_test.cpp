@@ -94,7 +94,7 @@ TEST_F(ByteBufferTest, test_allocate_with_meta) {
     auto buf1 = ByteBuffer::allocate_with_tracker(4).value();
     ASSERT_EQ(NoneByteBufferMeta::instance(), buf1->meta());
 
-    auto buf2 = ByteBuffer::allocate_with_tracker(4, ByteBufferMetaType::KAFKA).value();
+    auto buf2 = ByteBuffer::allocate_with_tracker(4, 0, ByteBufferMetaType::KAFKA).value();
     KafkaByteBufferMeta* meta2 = dynamic_cast<KafkaByteBufferMeta*>(buf2->meta());
     ASSERT_TRUE(meta2 != nullptr);
     ASSERT_EQ(-1, meta2->partition());

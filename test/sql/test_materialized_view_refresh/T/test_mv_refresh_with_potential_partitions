@@ -55,7 +55,7 @@ AS SELECT k1,k6,k7,k8,k9,k10,k11,k12,k13 FROM t1;
 
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 
-function: check_hit_materialized_view("SELECT k1,k6,k7,k8,k9,k10,k11,k12,k13 FROM t1", "test_mv1")
+function: print_hit_materialized_view("SELECT k1,k6,k7,k8,k9,k10,k11,k12,k13 FROM t1", "test_mv1")
 SELECT COUNT(1) FROM test_mv1;
 SELECT COUNT(1) FROM t1;
 SELECT * FROM test_mv1 ORDER BY 1,2,3,4,5,6 LIMIT 5;

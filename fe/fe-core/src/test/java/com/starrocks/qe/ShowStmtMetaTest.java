@@ -15,6 +15,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
@@ -100,7 +101,6 @@ import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;

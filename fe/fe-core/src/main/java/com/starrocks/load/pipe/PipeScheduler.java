@@ -39,7 +39,7 @@ public class PipeScheduler extends FrontendDaemon {
     private boolean recovered = false;
 
     public PipeScheduler(PipeManager pm) {
-        super("PipeScheduler", Config.pipe_scheduler_interval_millis);
+        super("pipe-scheduler", Config.pipe_scheduler_interval_millis);
         this.pipeManager = pm;
     }
 
