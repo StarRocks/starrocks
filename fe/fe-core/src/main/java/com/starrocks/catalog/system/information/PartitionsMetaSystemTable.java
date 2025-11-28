@@ -44,7 +44,6 @@ public class PartitionsMetaSystemTable {
                         .column("VERSION_TXN_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         // corresponding to `Range` or `List` in `SHOW PARTITIONS FROM XXX`
-<<<<<<< HEAD
                         .column("PARTITION_VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DISTRIBUTION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("BUCKETS", ScalarType.createType(PrimitiveType.INT))
@@ -64,28 +63,6 @@ public class PartitionsMetaSystemTable {
                         .column("STORAGE_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("TABLET_BALANCED", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("METADATA_SWITCH_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PATH_ID", ScalarType.createType(PrimitiveType.BIGINT))
-=======
-                        .column("PARTITION_VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DISTRIBUTION_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("BUCKETS", IntegerType.INT)
-                        .column("REPLICATION_NUM", IntegerType.INT)
-                        .column("STORAGE_MEDIUM", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("COOLDOWN_TIME", DateType.DATETIME)
-                        .column("LAST_CONSISTENCY_CHECK_TIME", DateType.DATETIME)
-                        .column("IS_IN_MEMORY", BooleanType.BOOLEAN)
-                        .column("IS_TEMP", BooleanType.BOOLEAN)
-                        .column("DATA_SIZE", IntegerType.BIGINT)
-                        .column("ROW_COUNT", IntegerType.BIGINT)
-                        .column("ENABLE_DATACACHE", BooleanType.BOOLEAN)
-                        .column("AVG_CS", FloatType.DOUBLE)
-                        .column("P50_CS", FloatType.DOUBLE)
-                        .column("MAX_CS", FloatType.DOUBLE)
-                        .column("STORAGE_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_SIZE", IntegerType.BIGINT)
-                        .column("TABLET_BALANCED", BooleanType.BOOLEAN)
-                        .column("METADATA_SWITCH_VERSION", IntegerType.BIGINT)
->>>>>>> 75df2cc7c8 ([Refactor] Revert 'Separate path id from physical partition id (#61854)' (#66026))
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }
