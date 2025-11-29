@@ -57,7 +57,6 @@ public:
     const std::vector<PersistentIndexSstablePB>& output_sstables() { return _output_sstables; }
 
 private:
-    const PersistentIndexSstablePB* first_input_sstable() const;
     size_t input_sstable_file_cnt() const;
 
 private:

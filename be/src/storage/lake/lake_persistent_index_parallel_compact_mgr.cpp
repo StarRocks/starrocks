@@ -67,16 +67,6 @@ bool SeekRange::full_contains(const PersistentIndexSstableRangePB& range) const 
     return true;
 }
 
-const PersistentIndexSstablePB* LakePersistentIndexParallelCompactTask::first_input_sstable() const {
-    const PersistentIndexSstablePB* first_sstable = nullptr;
-    for (const auto& fileset : _input_sstables) {
-        if (fileset.size() > 0 && first_sstable == nullptr) {
-            first_sstable = &fileset[0];
-        }
-    }
-    return first_sstable;
-}
-
 size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
     size_t cnt = 0;
     for (const auto& fileset : _input_sstables) {
@@ -90,16 +80,6 @@ Status LakePersistentIndexParallelCompactTask::run() {
     const size_t file_cnt = input_sstable_file_cnt();
     if (file_cnt == 0 || _tablet_mgr == nullptr) {
         return Status::InternalError("Invalid task parameters");
-    }
-
-    // Optimization: if only one sstable, directly reuse it without merge
-    if (file_cnt == 1) {
-        const PersistentIndexSstablePB* first_sst = first_input_sstable();
-        if (_seek_range.full_contains(first_sst->range())) {
-            _output_sstables.push_back(*first_sst);
-            _output_sstables.back().mutable_fileset_id()->CopyFrom(_output_fileset_id.to_proto());
-            return Status::OK();
-        }
     }
 
     // Collect all iterators from input sstables
@@ -159,6 +139,24 @@ Status LakePersistentIndexParallelCompactTask::run() {
 
     if (concat_iters.empty()) {
         return Status::OK();
+    }
+
+    if (concat_iters.size() == 1) {
+        // Only one fileset, only do move.
+        bool full_contain = true;
+        for (const auto& sst : sstables) {
+            if (!_seek_range.full_contains(sst->sstable_pb().range())) {
+                full_contain = false;
+                break;
+            }
+        }
+        if (full_contain) {
+            for (const auto& sst : sstables) {
+                _output_sstables.push_back(sst->sstable_pb());
+                _output_sstables.back().mutable_fileset_id()->CopyFrom(_output_fileset_id.to_proto());
+            }
+            return Status::OK();
+        }
     }
 
     // Create merging iterator for merging all filesets

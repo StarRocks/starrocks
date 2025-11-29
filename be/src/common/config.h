@@ -438,6 +438,10 @@ CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "104857600"
 CONF_mInt64(pk_index_target_file_size, "67108864");
 // Whether enable parallel compaction for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
+// Whether enable parallel get for primary key index in shared-data mode.
+CONF_mBool(enable_pk_index_parallel_get, "true");
+// Compaction threadpool max thread num for pk index get in shared-data mode.
+CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "4");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiple, "10");

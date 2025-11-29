@@ -728,21 +728,44 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
                                  PrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
+    std::unique_ptr<ThreadPoolToken> token;
+    std::mutex mutex;
+    Status status = Status::OK();
+    if (config::enable_pk_index_parallel_get) {
+        token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    }
     for (; !upsert->done(); upsert->next()) {
         auto current = upsert->current();
         if (skip_pk_index_update) {
-            // use get instead of upsert
-            std::vector<uint64_t> old_values(current.first->size(), NullIndexValue);
-            RETURN_IF_ERROR(index.get(*current.first, &old_values));
-            for (unsigned long old : old_values) {
-                if (old != NullIndexValue) {
-                    (*new_deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+            auto func = [&, current]() {
+                // use get instead of upsert
+                std::vector<uint64_t> old_values(current.first->size(), NullIndexValue);
+                auto st = index.get(*current.first, &old_values);
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+                if (status.ok()) {
+                    for (unsigned long old : old_values) {
+                        if (old != NullIndexValue) {
+                            (*new_deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                        }
+                    }
                 }
+            };
+            if (token) {
+                token->submit_func(func);
+                TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+            } else {
+                func();
+                RETURN_IF_ERROR(status);
             }
         } else {
             RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *current.first, new_deletes));
         }
     }
+    if (token) {
+        token->wait();
+    }
+    RETURN_IF_ERROR(status);
     return upsert->status();
 }
 

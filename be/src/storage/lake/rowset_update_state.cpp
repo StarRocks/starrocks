@@ -97,8 +97,8 @@ void SegmentPKEncodeResult::next() {
     }
 }
 
-std::pair<Column*, size_t> SegmentPKEncodeResult::current() {
-    return std::make_pair(pk_column.get(), _begin_rowid_offsets[_current_pk_column_idx]);
+std::pair<ColumnPtr, size_t> SegmentPKEncodeResult::current() {
+    return std::pair<ColumnPtr, size_t>(pk_column, _begin_rowid_offsets[_current_pk_column_idx]);
 }
 
 void SegmentPKEncodeResult::close() {

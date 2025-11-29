@@ -92,7 +92,7 @@ public:
     Status status();
     void close();
     // <Current pk column, begin rowid>
-    std::pair<Column*, size_t> current();
+    std::pair<ColumnPtr, size_t> current();
 
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
