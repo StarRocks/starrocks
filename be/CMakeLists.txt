@@ -612,7 +612,16 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
 
-set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
+# Check if libsframe exists (needed for binutils 2.40+ on newer distros like Ubuntu 24.04)
+find_library(SFRAME_LIB sframe)
+
+if(SFRAME_LIB)
+    message(STATUS "Found libsframe: ${SFRAME_LIB}, linking it explicitly.")
+    set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd -lsframe)
+else()
+    message(STATUS "libsframe not found, skipping explicit linkage.")
+    set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
+endif()
 
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
