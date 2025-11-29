@@ -389,14 +389,14 @@ message GetTabletMetadatasRequest {
 }
 
 message TabletMetadatas {
+    optional StatusPB status = 1;
+    optional int64 tablet_id = 2;
     // version -> tablet metadata
-    map<int64, TabletMetadataPB> version_metadatas = 1;
+    map<int64, TabletMetadataPB> version_metadatas = 3;
 }
 
 message GetTabletMetadatasResponse {
-    optional StatusPB status = 1;
-    // tablet id -> TabletMetadatas
-    map<int64, TabletMetadatas> tablet_metadatas = 2;
+    repeated TabletMetadatas tablet_metadatas = 1;
 }
 
 service LakeService {

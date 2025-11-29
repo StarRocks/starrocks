@@ -2881,12 +2881,10 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
 
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
 
-        ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(response.status().status_code(), 0);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
-        ASSERT_TRUE(response.tablet_metadatas().contains(_tablet_id));
-
-        const auto& tablet_metadatas = response.tablet_metadatas().at(_tablet_id);
+        const auto& tablet_metadatas = response.tablet_metadatas(0);
+        ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
         ASSERT_EQ(tablet_metadatas.version_metadatas_size(), 2);
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(2));
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(3));
@@ -2908,7 +2906,6 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
 
         ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(response.status().status_code(), 0);
         ASSERT_EQ(response.tablet_metadatas_size(), 0);
     }
 
@@ -2926,12 +2923,11 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
 
         ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(response.status().status_code(), 0);
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
-        ASSERT_TRUE(response.tablet_metadatas().contains(_tablet_id));
+        const auto& tablet_metadatas = response.tablet_metadatas(0);
+        ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
 
         // should find version 3 and 4
-        const auto& tablet_metadatas = response.tablet_metadatas().at(_tablet_id);
         ASSERT_EQ(tablet_metadatas.version_metadatas_size(), 2);
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(3));
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(4));
@@ -2958,8 +2954,11 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
 
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(TStatusCode::IO_ERROR, response.status().status_code());
-        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "injected get tablet metadata error"));
+        ASSERT_EQ(response.tablet_metadatas_size(), 1);
+        const auto& tablet_metadatas = response.tablet_metadatas(0);
+        ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
+        ASSERT_EQ(TStatusCode::IO_ERROR, tablet_metadatas.status().status_code());
+        ASSERT_TRUE(MatchPattern(tablet_metadatas.status().error_msgs(0), "injected get tablet metadata error"));
     }
 
     // thread pool is full
@@ -2979,7 +2978,10 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.set_min_version(1);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
+        ASSERT_EQ(response.tablet_metadatas_size(), 1);
+        const auto& tablet_metadatas = response.tablet_metadatas(0);
+        ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
+        ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, tablet_metadatas.status().status_code());
     }
 
     // task cancelled
@@ -3011,8 +3013,12 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.set_min_version(1);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(TStatusCode::CANCELLED, response.status().status_code());
-        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*Get tablet metadatas task has been cancelled*"));
+        ASSERT_EQ(response.tablet_metadatas_size(), 1);
+        const auto& tablet_metadatas = response.tablet_metadatas(0);
+        ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
+        ASSERT_EQ(TStatusCode::CANCELLED, tablet_metadatas.status().status_code());
+        ASSERT_TRUE(MatchPattern(tablet_metadatas.status().error_msgs(0),
+                                 "*Get tablet metadatas task has been cancelled*"));
     }
 }
 

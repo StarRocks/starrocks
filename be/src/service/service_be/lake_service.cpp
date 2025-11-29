@@ -1405,8 +1405,6 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
         return;
     }
 
-    Status::OK().to_protobuf(response->mutable_status());
-
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     int64_t max_version = request->max_version();
@@ -1428,43 +1426,61 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
                         if (st.ok()) {
                             metadatas.emplace_back(std::move(tablet_metadata_or).value());
                         } else if (!st.is_not_found()) {
-                            LOG(WARNING) << "Fail to get tablet metadata. tablet: " << tablet_id
-                                         << ", version: " << version << ", err: " << st;
                             std::lock_guard l(response_mtx);
-                            st.to_protobuf(response->mutable_status());
+                            auto* tablet_metadatas = response->add_tablet_metadatas();
+                            tablet_metadatas->set_tablet_id(tablet_id);
+                            st.to_protobuf(tablet_metadatas->mutable_status());
                             return;
                         }
                     }
 
                     if (!metadatas.empty()) {
                         std::lock_guard l(response_mtx);
-                        auto& tablet_metadatas = (*response->mutable_tablet_metadatas())[tablet_id];
+                        auto* tablet_metadatas = response->add_tablet_metadatas();
+                        tablet_metadatas->set_tablet_id(tablet_id);
+                        Status::OK().to_protobuf(tablet_metadatas->mutable_status());
                         for (const auto& metadata : metadatas) {
-                            (*tablet_metadatas.mutable_version_metadatas())[metadata->version()].CopyFrom(*metadata);
+                            (*tablet_metadatas->mutable_version_metadatas())[metadata->version()].CopyFrom(*metadata);
                         }
                     }
                 },
                 [&, tablet_id] {
                     Status st = Status::Cancelled(
                             fmt::format("Get tablet metadatas task has been cancelled. tablet: {}", tablet_id));
-                    LOG(WARNING) << st;
                     std::lock_guard l(response_mtx);
-                    if (response->status().status_code() == 0) {
-                        st.to_protobuf(response->mutable_status());
-                    }
+                    auto* tablet_metadatas = response->add_tablet_metadatas();
+                    tablet_metadatas->set_tablet_id(tablet_id);
+                    st.to_protobuf(tablet_metadatas->mutable_status());
                     latch.count_down();
                 });
 
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit get tablet metadatas task. tablet: " << tablet_id << ", err: " << st;
             std::lock_guard l(response_mtx);
-            st.to_protobuf(response->mutable_status());
+            auto* tablet_metadatas = response->add_tablet_metadatas();
+            tablet_metadatas->set_tablet_id(tablet_id);
+            st.to_protobuf(tablet_metadatas->mutable_status());
             latch.count_down();
         }
     }
 
     latch.wait();
+
+    // add a warning log if any tablets fail
+    std::vector<std::string> messages;
+    for (const auto& tm : response->tablet_metadatas()) {
+        if (tm.status().status_code() != 0) {
+            std::string error_msg;
+            for (const auto& msg : tm.status().error_msgs()) {
+                error_msg += msg;
+            }
+            messages.emplace_back(fmt::format("tablet_id: {}, status_code: {}, error_msg: {}", tm.tablet_id(),
+                                              tm.status().status_code(), error_msg));
+        }
+    }
+    if (!messages.empty()) {
+        LOG(WARNING) << "Get tablet metadatas failed for some tablets: " << JoinStrings(messages, "; ");
+    }
 }
 
 } // namespace starrocks
