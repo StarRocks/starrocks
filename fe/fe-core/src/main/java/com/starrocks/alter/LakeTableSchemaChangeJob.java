@@ -1028,7 +1028,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         for (Column column : table.getColumns()) {
             if (VarcharType.VARCHAR.equals(column.getType())) {
-                IDictManager.getInstance().removeGlobalDict(table.getId(), column.getColumnId());
+                IDictManager.getInstance().removeGlobalDict(table, column.getColumnId());
             }
         }
 
