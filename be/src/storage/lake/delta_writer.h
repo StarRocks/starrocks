@@ -188,6 +188,11 @@ public:
         return *this;
     }
 
+    DeltaWriterBuilder& set_db_id(int64_t db_id) {
+        _db_id = db_id;
+        return *this;
+    }
+
     DeltaWriterBuilder& set_table_id(int64_t table_id) {
         _table_id = table_id;
         return *this;
@@ -278,6 +283,7 @@ public:
 private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _txn_id{0};
+    int64_t _db_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
     int64_t _schema_id{0};

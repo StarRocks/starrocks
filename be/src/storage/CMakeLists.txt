@@ -285,7 +285,8 @@ set(STORAGE_FILES
     index/vector/tenann/tenann_index_builder.cpp
     index/vector/tenann/tenann_index_utils.cpp
     record_predicate/record_predicate_helper.cpp
-    record_predicate/column_hash_is_congruent.cpp)
+    record_predicate/column_hash_is_congruent.cpp
+    lake/table_schema_service.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
