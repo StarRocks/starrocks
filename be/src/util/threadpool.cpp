@@ -646,7 +646,36 @@ void ThreadPool::dispatch_thread() {
 
         MonoTime start_time = MonoTime::Now();
         // Execute the task
-        task.runnable->run();
+        // Catch all exceptions to prevent thread pool crash. Individual tasks should handle
+        // exceptions and convert them to Status where appropriate (e.g., RPC handlers).
+        //
+        // IMPORTANT: This catch block only prevents the thread pool from crashing. It does NOT
+        // guarantee exception safety of the task itself. Tasks should use RAII (e.g., ClosureGuard,
+        // DeferOp, lock_guard) to ensure resources are properly cleaned up even when exceptions
+        // are thrown. If a task is not exception-safe, catching the exception here may leave the
+        // system in an inconsistent state (e.g., leaked resources, held locks, corrupted data).
+        //
+        // The task's destructor will be called via task.runnable.reset() below, which should
+        // clean up any RAII-managed resources. However, non-RAII resources must be managed by
+        // the task itself.
+        try {
+            task.runnable->run();
+        } catch (const std::bad_alloc& e) {
+            LOG(ERROR) << "Thread pool task failed with std::bad_alloc in pool '" << _name << "': " << e.what() << "\n"
+                       << get_stack_trace();
+            // Continue execution to avoid thread pool crash. The task's destructor will be
+            // called below to clean up RAII-managed resources.
+        } catch (const std::exception& e) {
+            LOG(ERROR) << "Thread pool task failed with exception in pool '" << _name << "': " << e.what() << "\n"
+                       << get_stack_trace();
+            // Continue execution to avoid thread pool crash. The task's destructor will be
+            // called below to clean up RAII-managed resources.
+        } catch (...) {
+            LOG(ERROR) << "Thread pool task failed with unknown exception in pool '" << _name << "\n"
+                       << get_stack_trace();
+            // Continue execution to avoid thread pool crash. The task's destructor will be
+            // called below to clean up RAII-managed resources.
+        }
         current_thread->inc_finished_tasks();
 
         // Destruct the task while we do not hold the lock.
@@ -655,6 +684,10 @@ void ThreadPool::dispatch_thread() {
         // objects, and we don't want to block submission of the threadpool.
         // In the worst case, the destructor might even try to do something
         // with this threadpool, and produce a deadlock.
+        //
+        // This will clean up any RAII-managed resources in the task, even if the task
+        // threw an exception. However, if the task is not exception-safe (e.g., uses
+        // raw pointers, manual lock/unlock, etc.), resources may still be leaked.
         task.runnable.reset();
         MonoTime finish_time = MonoTime::Now();
 
