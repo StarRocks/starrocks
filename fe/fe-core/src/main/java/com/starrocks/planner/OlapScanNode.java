@@ -61,6 +61,7 @@ import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -108,6 +109,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
+import com.starrocks.thrift.TTableSchemaMeta;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -116,6 +118,8 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -211,6 +215,22 @@ public class OlapScanNode extends ScanNode {
     int backPressureMaxRounds = -1;
     long backPressureThrottleTime = -1;
     long backPressureNumRows = -1;
+
+    /**
+     * Cached schema information used for query plan.
+     * <p>
+     * This field stores the schema information that was used when generating the plan, enabling
+     * backend nodes to retrieve the exact schema from the frontend during query execution. This is
+     * particularly important for Fast Schema Evolution scenarios where schema changes are not
+     * immediately propagated schema metadata to backend nodes.
+     * </p>
+     * <p>
+     * The schema is populated during the {@code toThrift()} conversion process when
+     * serializing the query plan. Currently, this mechanism is only used in shared-data mode.
+     * </p>
+     */
+    @Nullable
+    private volatile SchemaInfo selectedSchema;
 
     // Constructs node to scan given data files of table 'tbl'.
     // Constructs node to scan given data files of table 'tbl'.
@@ -355,6 +375,13 @@ public class OlapScanNode extends ScanNode {
 
     public OlapTable getOlapTable() {
         return olapTable;
+    }
+
+    /**
+     * Returns the cached schema information for the selected materialized index.
+     */
+    public Optional<SchemaInfo> getSchema() {
+        return Optional.ofNullable(selectedSchema);
     }
 
     @Override
@@ -1109,6 +1136,15 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.lake_scan_node.setOutput_asc_hint(sortKeyAscHint);
+
+            long indexId = selectedIndexId != -1 ? selectedIndexId : olapTable.getBaseIndexId();
+            this.selectedSchema = SchemaInfo.fromMaterializedIndex(
+                    olapTable, indexId, olapTable.getIndexMetaByIndexId(indexId));
+            TTableSchemaMeta schemaMeta = new TTableSchemaMeta();
+            schemaMeta.setDb_id(MetaUtils.lookupDbIdByTable(olapTable));
+            schemaMeta.setTable_id(olapTable.getId());
+            schemaMeta.setSchema_id(selectedSchema.getId());
+            msg.lake_scan_node.setSchema_meta(schemaMeta);
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
