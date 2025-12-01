@@ -71,6 +71,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean forcePreAggregation = false;
 
+    private boolean withLocalShuffle = false;
+
+    private long localLimit = DEFAULT_LIMIT;
+
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -104,6 +108,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
+        this.withLocalShuffle = aggregateOperator.withLocalShuffle;
+        this.localLimit = aggregateOperator.localLimit;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -183,8 +189,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return withoutColocateRequirement;
     }
 
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
     public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
         this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {
