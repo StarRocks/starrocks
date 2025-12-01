@@ -1,0 +1,181 @@
+# StarRocks Backend (be/) Cursor Rules
+
+## Overview
+The backend is the C++ component responsible for the core analytical engine, storage layer, and query execution. It handles all data storage, processing, and vectorized query execution for StarRocks.
+
+## ⚠️ BUILD WARNING
+**DO NOT attempt to build or run tests unless explicitly requested.** The C++ build system is extremely resource-intensive and can take hours to complete.
+
+## Backend Architecture
+
+### Query Execution Engine (exec/)
+Components for executing query plans:
+- `exec/pipeline/` - Pipeline execution engine
+- `exec/scan/` - Table scanning operators
+- `exec/aggregate/` - Aggregation operators
+- `exec/join/` - Join operators (hash join, sort merge join, etc.)
+- `exec/sort/` - Sorting operators
+- `exec/topn/` - Top-N operators
+- `exec/exchange/` - Data exchange operators for distributed execution
+
+### Storage Engine (storage/)
+Data persistence and management:
+- `storage/tablet/` - Tablet management (basic storage unit)
+- `storage/rowset/` - Rowset management (data organization)
+- `storage/segment/` - Segment storage format
+- `storage/compaction/` - Background compaction
+- `storage/index/` - Index structures (bloom filter, bitmap, etc.)
+- `storage/lake/` - Cloud-native storage format
+- `storage/persistent_index/` - Persistent index implementation
+- `storage/primary_key/` - Primary key table implementation
+
+### Expression Evaluation (exprs/)
+Expression computation and evaluation:
+- `exprs/vectorized/` - Vectorized expression evaluation
+- `exprs/agg/` - Aggregate function implementations
+- `exprs/builtin/` - Built-in scalar functions
+- `exprs/binary_function.h` - Binary function templates
+- `exprs/cast_expr.h` - Type casting expressions
+- `exprs/string_functions.h` - String function implementations
+
+### Data Formats (formats/)
+External data format support:
+- `formats/parquet/` - Apache Parquet format
+- `formats/orc/` - Apache ORC format
+- `formats/csv/` - CSV format
+- `formats/json/` - JSON format
+- `formats/avro/` - Apache Avro format
+
+### Runtime (runtime/)
+Runtime services and memory management:
+- `runtime/mem_pool.h` - Memory pool management
+- `runtime/mem_tracker.h` - Memory tracking
+- `runtime/runtime_state.h` - Query runtime state
+- `runtime/fragment_mgr.cpp` - Fragment execution management
+- `runtime/stream_load/` - Stream load implementation
+- `runtime/batch_write/` - Batch write operations
+
+### Connectors (connector/)
+External data source connectors:
+- `connector/hive/` - Hive connector
+- `connector/lake/` - Lake storage connector
+- `connector/file/` - File connector base
+- `connector/binlog/` - Binlog connector
+
+### Column Types (column/)
+Column data structures:
+- `column/column.h` - Base column class
+- `column/vectorized_column.h` - Vectorized column implementation
+- `column/nullable_column.h` - Nullable column wrapper
+- `column/binary_column.h` - Variable-length binary data
+- `column/array_column.h` - Array type support
+- `column/map_column.h` - Map type support
+- `column/struct_column.h` - Struct type support
+
+### Common Utilities (common/)
+Shared utilities and base classes:
+- `common/status.h` - Status and error handling
+- `common/config.h` - Configuration management
+- `common/logging.h` - Logging utilities
+- `common/tracer.h` - Distributed tracing
+
+### Services (service/)
+RPC and HTTP services:
+- `service/backend_service.cpp` - Main backend RPC service
+- `service/starrocks_be.cpp` - BE main entry point
+- `service/brpc_service.cpp` - BRPC service implementation
+
+### SIMD Optimization (simd/)
+SIMD-accelerated operations:
+- `simd/simd.h` - SIMD utility functions
+- `simd/mulselector.h` - SIMD-based selection
+- `simd/gather.h` - SIMD gather operations
+
+### IO Operations (io/)
+File and network I/O:
+- `io/fd_input_stream.h` - File descriptor input
+- `io/s3_input_stream.h` - S3 input stream
+- `io/cache_input_stream.h` - Cached input stream
+
+### File System (fs/)
+File system abstraction:
+- `fs/fs.h` - File system interface
+- `fs/fs_posix.h` - POSIX file system
+- `fs/fs_s3.h` - S3 file system
+- `fs/fs_hdfs.h` - HDFS file system
+
+### Types (types/)
+Type definitions and utilities:
+- `types/bitmap_value.h` - Bitmap type
+- `types/hll.h` - HyperLogLog type
+- `types/date_value.h` - Date/time types
+- `types/logical_type.h` - Logical type definitions
+
+## Development Guidelines
+
+### Coding Style
+- Follow Google C++ Style Guide
+- Use modern C++ features (C++17/C++20)
+- Use RAII for resource management
+- Prefer smart pointers over raw pointers
+- Use const-correctness consistently
+- Use `Status` for error handling, not exceptions
+
+### Key Patterns
+```cpp
+// Status-based error handling
+Status DoSomething() {
+    RETURN_IF_ERROR(PrepareStep());
+    RETURN_IF_ERROR(ExecuteStep());
+    return Status::OK();
+}
+
+// Vectorized batch processing
+Status ProcessBatch(const ChunkPtr& chunk) {
+    for (size_t i = 0; i < chunk->num_rows(); ++i) {
+        // Process each row
+    }
+    return Status::OK();
+}
+
+// Memory tracking
+auto tracker = std::make_unique<MemTracker>();
+MemPool pool(tracker.get());
+// Allocate from pool
+```
+
+### Performance Considerations
+- **Vectorization**: Process data in batches, not row-by-row
+- **Memory Locality**: Keep related data together
+- **SIMD**: Use SIMD instructions for hot paths
+- **Lock Contention**: Minimize lock scope and duration
+- **Memory Allocation**: Use memory pools, avoid frequent allocations
+
+### Testing
+- Unit tests are in `be/test/`
+- Use Google Test framework
+- Mock external dependencies
+- Test edge cases and error paths
+
+## Contribution Guidelines
+
+### PR Titles for Backend Changes
+Use appropriate prefixes for backend PRs:
+- `[BugFix] Fix memory leak in segment iterator`
+- `[Feature] Add vectorized string function`
+- `[Enhancement] Improve compaction scheduling`
+- `[Performance] Optimize hash join probe`
+
+### Commit Message Examples for Backend
+```
+[Performance] Optimize hash aggregation with SIMD
+
+Use SIMD instructions to accelerate hash computation
+in aggregation operator, improving performance by 20%.
+
+- Add SIMD hash computation for fixed-width types
+- Optimize memory access patterns for cache efficiency
+- Add micro-benchmarks for hash aggregation
+
+Closes: #12345
+```

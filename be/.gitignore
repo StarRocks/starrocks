@@ -1,5 +1,6 @@
 /*
 !.gitignore
+!.cursorrules
 !benchmark/
 !cmake_modules/
 !src/
