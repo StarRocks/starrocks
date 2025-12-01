@@ -2805,14 +2805,16 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
     publish_version(2, 3);
     publish_version(3, 4);
 
-    // 1. missing request fields
+    // 1. check request
+    // 1.1 missing request fields
     {
         brpc::Controller cntl;
         GetTabletMetadatasRequest request;
         GetTabletMetadatasResponse response;
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "missing tablet_ids"));
     }
 
     {
@@ -2821,8 +2823,9 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         GetTabletMetadatasResponse response;
         request.add_tablet_ids(_tablet_id);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("missing max_version", cntl.ErrorText());
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "missing max_version"));
     }
 
     {
@@ -2832,10 +2835,12 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.add_tablet_ids(_tablet_id);
         request.set_max_version(3);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("missing min_version", cntl.ErrorText());
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "missing min_version"));
     }
 
+    // 1.2 max_version < min_version
     {
         brpc::Controller cntl;
         GetTabletMetadatasRequest request;
@@ -2844,11 +2849,12 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.set_max_version(3);
         request.set_min_version(4);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("max_version should be >= min_version", cntl.ErrorText());
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "max_version should be >= min_version"));
     }
 
-    // thread pool is null
+    // 2. thread pool is null
     {
         SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                               [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -2865,11 +2871,13 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.set_max_version(10);
         request.set_min_version(1);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-        ASSERT_EQ("tablet stats thread pool is null", cntl.ErrorText());
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "tablet stats thread pool is null"));
     }
 
-    // 2. success case
+    // 3. success case
+    // 3.1 normal case
     {
         GetTabletMetadatasRequest request;
         GetTabletMetadatasResponse response;
@@ -2882,6 +2890,7 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
 
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, response.status().status_code());
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
         const auto& tablet_metadatas = response.tablet_metadatas(0);
         ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
@@ -2892,7 +2901,7 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_EQ(tablet_metadatas.version_metadatas().at(3).version(), 3);
     }
 
-    // 3. tablet not found
+    // 3.2 tablet not found
     {
         GetTabletMetadatasRequest request;
         GetTabletMetadatasResponse response;
@@ -2906,10 +2915,17 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
 
         ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(response.tablet_metadatas_size(), 0);
+        // rpc-level status should be OK
+        ASSERT_EQ(0, response.status().status_code());
+        ASSERT_EQ(response.tablet_metadatas_size(), 1);
+        const auto& tablet_metadatas = response.tablet_metadatas(0);
+        ASSERT_EQ(tablet_metadatas.tablet_id(), non_existent_tablet_id);
+        ASSERT_EQ(TStatusCode::NOT_FOUND, tablet_metadatas.status().status_code());
+        ASSERT_TRUE(MatchPattern(tablet_metadatas.status().error_msgs(0),
+                                 "tablet -1 metadata not found in version range [1, 2]"));
     }
 
-    // 4. some versions not found
+    // 3.3 some versions not found
     {
         GetTabletMetadatasRequest request;
         GetTabletMetadatasResponse response;
@@ -2923,9 +2939,12 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
 
         ASSERT_FALSE(cntl.Failed());
+        // rpc-level status should be OK
+        ASSERT_EQ(0, response.status().status_code());
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
         const auto& tablet_metadatas = response.tablet_metadatas(0);
         ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
+        ASSERT_EQ(TStatusCode::OK, tablet_metadatas.status().status_code());
 
         // should find version 3 and 4
         ASSERT_EQ(tablet_metadatas.version_metadatas_size(), 2);
@@ -2933,8 +2952,8 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_TRUE(tablet_metadatas.version_metadatas().contains(4));
     }
 
-    // 5. failed case
-    // get tablet metadata failed
+    // 4. failed case
+    // 4.1 get tablet metadata failed
     {
         TEST_ENABLE_ERROR_POINT("TabletManager::get_tablet_metadata",
                                 Status::IOError("injected get tablet metadata error"));
@@ -2954,6 +2973,8 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
 
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
+        // rpc-level status should be OK even if one tablet fails
+        ASSERT_EQ(0, response.status().status_code());
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
         const auto& tablet_metadatas = response.tablet_metadatas(0);
         ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
@@ -2961,7 +2982,7 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         ASSERT_TRUE(MatchPattern(tablet_metadatas.status().error_msgs(0), "injected get tablet metadata error"));
     }
 
-    // thread pool is full
+    // 4.2 thread pool is full
     {
         SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
         SyncPoint::GetInstance()->EnableProcessing();
@@ -2978,13 +2999,15 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.set_min_version(1);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
+        // rpc-level status should be OK even if one tablet fails
+        ASSERT_EQ(0, response.status().status_code());
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
         const auto& tablet_metadatas = response.tablet_metadatas(0);
         ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
         ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, tablet_metadatas.status().status_code());
     }
 
-    // task cancelled
+    // 4.3 task cancelled
     {
         class MockRunnable : public Runnable {
         public:
@@ -3013,12 +3036,14 @@ TEST_F(LakeServiceTest, test_get_tablet_metadatas) {
         request.set_min_version(1);
         _lake_service.get_tablet_metadatas(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
+        // rpc-level status should be OK even if one tablet fails
+        ASSERT_EQ(0, response.status().status_code());
         ASSERT_EQ(response.tablet_metadatas_size(), 1);
         const auto& tablet_metadatas = response.tablet_metadatas(0);
         ASSERT_EQ(tablet_metadatas.tablet_id(), _tablet_id);
         ASSERT_EQ(TStatusCode::CANCELLED, tablet_metadatas.status().status_code());
         ASSERT_TRUE(MatchPattern(tablet_metadatas.status().error_msgs(0),
-                                 "*Get tablet metadatas task has been cancelled*"));
+                                 "*get tablet metadatas task has been cancelled*"));
     }
 }
 
