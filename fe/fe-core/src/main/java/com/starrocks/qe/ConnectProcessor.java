@@ -458,7 +458,7 @@ public class ConnectProcessor {
                 ctx.getMysqlChannel() != null ?
                         ctx.getMysqlChannel().getRemoteIp() : "System",
                 ctx.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.FAILED,
+                QueryDetail.QueryMemState.PARSE_FAILED,
                 ctx.getDatabase(),
                 sql,
                 ctx.getQualifiedUser(),

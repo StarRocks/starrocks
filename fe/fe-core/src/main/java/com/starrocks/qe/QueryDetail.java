@@ -43,7 +43,8 @@ public class QueryDetail implements Serializable {
         RUNNING,
         FINISHED,
         FAILED,
-        CANCELLED
+        CANCELLED,
+        PARSE_FAILED
     }
 
     /**
