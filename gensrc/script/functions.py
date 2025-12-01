@@ -1116,6 +1116,7 @@ vectorized_functions = [
      'ArrayFunctions::array_sort<TYPE_DATETIME>'],
     [150121, 'array_sort', True, False, 'ARRAY_DATE', ['ARRAY_DATE'], 'ArrayFunctions::array_sort<TYPE_DATE>'],
     [150122, 'array_sort', True, False, 'ARRAY_JSON', ['ARRAY_JSON'], 'ArrayFunctions::array_sort<TYPE_JSON>'],
+    [150126, 'array_sort_lambda', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'FUNCTION'], 'ArrayFunctions::array_sort_lambda'],
 
     [150130, 'reverse', True, False, 'ARRAY_BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::array_reverse<TYPE_BOOLEAN>'],
     [150131, 'reverse', True, False, 'ARRAY_TINYINT', ['ARRAY_TINYINT'], 'ArrayFunctions::array_reverse<TYPE_TINYINT>'],

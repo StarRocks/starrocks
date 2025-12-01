@@ -253,6 +253,9 @@ struct TExprNode {
   56: optional TDictionaryGetExpr dictionary_get_expr
   // whether this expr is only used in index
   57: optional bool is_index_only_filter
+
+  // lambda function contain non-deterministic sub-exprs
+  58: optional bool is_nondeterministic
 }
 
 struct TPartitionLiteral {
