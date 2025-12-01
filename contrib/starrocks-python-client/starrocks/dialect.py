@@ -33,6 +33,7 @@ from sqlalchemy import (
     Select,
     Table,
     TableClause,
+    Update,
     exc,
     log,
     schema as sa_schema,
@@ -51,8 +52,7 @@ from sqlalchemy.dialects.mysql.base import (
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
 from sqlalchemy.engine import reflection
 from sqlalchemy.engine.interfaces import ReflectedTableComment
-from sqlalchemy.sql import sqltypes, bindparam
-from sqlalchemy.sql.expression import Delete, Select, Update
+from sqlalchemy.sql import bindparam
 
 from starrocks.common import utils
 from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults, ReflectionViewDefaults
@@ -65,7 +65,7 @@ from starrocks.common.params import (
     TableKind,
     TableObjectInfoKey,
 )
-from starrocks.common.types import ColumnAggType, SystemRunMode, TableType
+from starrocks.common.types import ColumnAggType, SystemRunMode, TableEngine, TableType
 from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.sql.schema import View
 
@@ -188,10 +188,12 @@ colspecs = base_colspecs | {
 class StarRocksTypeCompiler(MySQLTypeCompiler):
     """
     Compile a datatype to StarRocks' SQL type string.
-    """
+    For special types only, use the default implementation in MySQLTypeCompiler for other types.
 
-    def visit_NVARCHAR(self, type_, **kw):
-        return self.visit_VARCHAR(type_, **kw)
+    NOTE: StarRocks will ignore the length of Integer types, so we need to care about the
+    comparison of Integer types.
+    NOTE: StarRocks does not support scale of Float types.
+    """
 
     def visit_BOOLEAN(self, type_, **kw):
         return "BOOLEAN"
@@ -199,30 +201,25 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
     def visit_FLOAT(self, type_, **kw):
         return "FLOAT"
 
-    def visit_TINYINT(self, type_, **kw):
-        return "TINYINT"
-
-    def visit_SMALLINT(self, type_, **kw):
-        return "SMALLINT"
-
-    def visit_INTEGER(self, type_, **kw):
-        return "INTEGER"
-
-    def visit_BIGINT(self, type_, **kw):
-        return "BIGINT"
+    def visit_DOUBLE(self, type_, **kw):
+        return "DOUBLE"
 
     def visit_LARGEINT(self, type_, **kw):
+        if getattr(type_, "display_width", None) is not None:
+            return f"LARGEINT({type_.display_width})"
         return "LARGEINT"
+
+    def visit_NVARCHAR(self, type_, **kw):
+        return self.visit_VARCHAR(type_, **kw)
 
     def visit_STRING(self, type_, **kw):
         return "STRING"
-        # return "VARCHAR(65533)"
 
     def visit_VARCHAR(self, type_, **kw):
         # StarRocks supports unbounded strings via STRING. When no length is
         # provided (e.g. from SQLAlchemy String() without length), render
         # STRING instead of requiring a VARCHAR length.
-        if getattr(type_, "length", None) is None:
+        if getattr(type_, "length", None) is None or type_.length == 65533:
             return "STRING"
         return f"VARCHAR({type_.length})"
 
@@ -577,7 +574,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         logger.debug("table original opts for table: %s, schema: %s, opts: %r", table.name, table.schema, opts)
 
         # ENGINE
-        if engine := opts.get(TableInfoKey.ENGINE):
+        engine = opts.get(TableInfoKey.ENGINE)
+        if engine and engine.upper() != TableEngine.OLAP:
             table_opts.append(f'ENGINE={engine}')
 
         # Key / Table Type (Primary key, Duplicate key, Aggregate key, Unique key)
@@ -734,8 +732,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec.append(agg_info)
 
         # NULL or NOT NULL.
+        is_nullable_set = False
         if not column.nullable:
             colspec.append("NOT NULL")
+            is_nullable_set = True
         # else: omit explicit NULL (default)
 
         # AUTO_INCREMENT or default value or computed column
@@ -761,6 +761,7 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec[idx_type] = "BIGINT"  # AUTO_INCREMENT column must be BIGINT
             if column.nullable:
                 colspec.append("NOT NULL")
+                is_nullable_set = True
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
@@ -768,10 +769,15 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 colspec[1] = "BIGINT"
                 if column.nullable:
                     colspec.append("NOT NULL")
+                    is_nullable_set = True
                 colspec.append("AUTO_INCREMENT")
 
             elif default is not None:
                 colspec.append("DEFAULT " + default)
+
+        # Uncomment below if we want to explicitly set NULL that the column is nullable and not changed by other clauses.
+        # if column.nullable and not is_nullable_set:
+        #     colspec.append("NULL")
 
         # Computed
         if column.computed is not None:
@@ -1226,8 +1232,9 @@ class StarRocksIdentifierPreparer(MySQLIdentifierPreparer):
     such as: reserved_words = STARROCKS_RESERVED_WORDS | RESERVED_WORDS_MYSQL
     """
 
-    def __init__(self, dialect):
-        super().__init__(dialect, initial_quote='`')
+    def __init__(self, dialect, **kwargs):
+        kwargs.pop("server_ansiquotes", None)
+        super().__init__(dialect, server_ansiquotes=False, **kwargs)
 
     # We don't force to use quote for identifier. we can uncomment this if needed.
     # def _requires_quotes(self, ident):
@@ -1280,8 +1287,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
     def __init__(self, *args, **kwargs):
         super(StarRocksDialect, self).__init__(*args, **kwargs)
         self.run_mode: Optional[str] = None
-        # Explicitly instantiate the preparer here, ensuring it's an instance
-        self.preparer = self.preparer(self)
+        # It may be error to explicitly instantiate the preparer here, `initialize` method will instance it.
+        # self.preparer = self.preparer(self)
 
         # some test parameters
         # self.test_replication_num: Optional[int] = None
@@ -1595,6 +1602,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             c.split(' ')[0].strip('`'): 'AUTO_INCREMENT' in c
             for c in only_columns
         }
+        # logger.debug("get auto increment info from show create table: %s", col_autoinc)
         return col_autoinc
 
     def _get_partition_clause_from_create_table(self, create_table: str) -> Optional[str]:

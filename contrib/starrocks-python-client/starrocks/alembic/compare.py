@@ -57,13 +57,23 @@ from starrocks.common.utils import (
     TableAttributeNormalizer,
     extract_dialect_options_as_case_insensitive,
 )
-from starrocks.datatype import ARRAY, BOOLEAN, MAP, STRING, STRUCT, TINYINT, VARCHAR
+from starrocks.datatype import ARRAY, BOOLEAN, FLOAT, MAP, STRING, STRUCT, TINYINT, VARCHAR
 from starrocks.engine.interfaces import ReflectedPartitionInfo, ReflectedTableKeyInfo
 from starrocks.reflection import StarRocksTableDefinitionParser
 from starrocks.sql.schema import MaterializedView, View
 
 
 logger = logging.getLogger(__name__)
+
+
+INTEGER_VISIT_NAMES_WITH_DISPLAY_WIDTH = {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "LARGEINT"}
+
+
+def _is_integer_with_display_width(type_obj: sqltypes.TypeEngine) -> bool:
+    visit_name = getattr(type_obj, "__visit_name__", None)
+    if visit_name is None:
+        return False
+    return visit_name.upper() in INTEGER_VISIT_NAMES_WITH_DISPLAY_WIDTH
 
 
 def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metadata_column: Column[Any]) -> bool:
@@ -73,6 +83,9 @@ def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metada
     For some special cases:
         - meta.BOOLEAN equals to conn.TINYINT(1)
         - meta.STRING equals to conn.VARCHAR(65533)
+
+    NOTE: StarRocks will ignore the length of Integer types, so we need to care about the
+    comparison of Integer types: ignore the comparison of the display width of Integer types.
 
     Args:
         impl: The implementation of the dialect.
@@ -87,16 +100,16 @@ def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metada
 
     # logger.debug("compare_simple_type: inspector_type: %s, metadata_type: %s", inspector_type, metadata_type)
     # Scenario 1.a: model defined BOOLEAN, database stored TINYINT(1)
-    if (isinstance(metadata_type, BOOLEAN) and
-        isinstance(inspector_type, TINYINT) and
-        getattr(inspector_type, 'display_width', None) == 1):
+    if (isinstance(metadata_type, BOOLEAN)
+        and isinstance(inspector_type, TINYINT)
+        and getattr(inspector_type, 'display_width', None) == 1):
         # logger.debug("compare_simple_type with BOOLEAN vs TINYINT(1), treat them as the same.")
         return False
 
     # Scenario 1.b: model defined TINYINT(1), database may display as Boolean (theoretically not possible, but for safety)
-    if (isinstance(metadata_type, TINYINT) and
-        getattr(metadata_type, 'display_width', None) == 1 and
-        isinstance(inspector_type, BOOLEAN)):
+    if (isinstance(metadata_type, TINYINT)
+        and getattr(metadata_type, 'display_width', None) == 1
+        and isinstance(inspector_type, BOOLEAN)):
         # logger.debug("compare_simple_type with TINYINT(1) vs BOOLEAN, treat them as the same.")
         return False
 
@@ -113,6 +126,11 @@ def compare_simple_type(impl: DefaultImpl, inspector_column: Column[Any], metada
         isinstance(inspector_type, STRING)):
         logger.debug("compare_simple_type with VARCHAR(65533) vs STRING, treat them as the same.")
         return False
+
+    # Scenario 3: ignore display_width when comparing integer types.
+    if (_is_integer_with_display_width(metadata_type) and _is_integer_with_display_width(inspector_type)):
+        if type(metadata_type) is type(inspector_type):
+            return False
 
     # Other cases use default comparison logic from the parent class
     from starrocks.alembic.starrocks import StarRocksImpl
@@ -329,7 +347,7 @@ def _autogen_for_views(
         if other_schemas:
             warnings.warn(
                 "Views in other schemas will be ignored. It's probably you have not set the `include_schemas` "
-                "and `include_name` correctly. Set them in you `env.py` properly if you want to manage views "
+                "and `include_name` parameters correctly. Set them in you `env.py` properly if you want to manage views "
                 f"in other schemas: {other_schemas!r}",
                 UserWarning,
             )
@@ -824,7 +842,7 @@ def _autogen_for_mvs(
         if other_schemas:
             warnings.warn(
                 "Materialized views in other schemas will be ignored. It's probably you have not set the `include_schemas` "
-                "and `include_name` correctly. Set them in your `env.py` properly if you want to manage materialized views "
+                "and `include_name` parameters correctly. Set them in your `env.py` properly if you want to manage materialized views "
                 f"in other schemas: {other_schemas!r}",
                 UserWarning,
             )

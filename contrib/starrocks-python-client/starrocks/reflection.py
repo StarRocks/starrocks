@@ -200,9 +200,9 @@ class StarRocksTableDefinitionParser(object):
         table: _DecodingRow,
         table_config: Dict[str, Any],
         columns: List[_DecodingRow],
-        column_2_agg_type: Dict[str, str],
-        column_autoinc: dict[str, bool],
-        charset: str,
+        column_2_agg_type: Dict[str, str] = None,
+        column_autoinc: dict[str, bool] = None,
+        charset: str = None,
     ) -> ReflectedState:
         """
         Parses the raw reflection data into a structured ReflectedState object.
@@ -216,23 +216,24 @@ class StarRocksTableDefinitionParser(object):
         :return: A ReflectedState object containing the parsed table information.
         """
         # logger.debug("parsing table: %s", table.TABLE_NAME)
+        sorted_columns = self._sort_columns(columns)
         reflected_table_info = ReflectedState(
             table_name=table.TABLE_NAME,
             columns=[
                 self._parse_column(
                     column=column,
                     col_2_autoinc=column_autoinc,
-                    **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: column_2_agg_type.get(column.COLUMN_NAME)},
+                    **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: column_2_agg_type.get(column.COLUMN_NAME)} if column_2_agg_type else {},
                 )
-                for column in columns
+                for column in sorted_columns
             ],
             table_options=self._parse_table_options(
                 table.TABLE_NAME, schema=table.TABLE_SCHEMA,
-                table=table, table_config=table_config, columns=columns
+                table=table, table_config=table_config, sorted_columns=sorted_columns
             ),
             keys=[{
                 "type": self._get_mysql_key_type(table_config=table_config),
-                "columns": [(c, None, None) for c in self._get_key_columns(columns=columns)],
+                "columns": [(c, None, None) for c in self._get_key_columns(sorted_columns=sorted_columns)],
                 "parser": None,
                 "name": None,
             }],
@@ -262,8 +263,8 @@ class StarRocksTableDefinitionParser(object):
         col_data = {
             "name": column.COLUMN_NAME,
             "type": self._parse_column_type(column=column),
-            "nullable": column.IS_NULLABLE == "YES",
-            "default": column.COLUMN_DEFAULT or None,
+            "nullable": column.IS_NULLABLE != "NO",
+            "default": self._ColumnDefaultValueRenderer().build(column),
             "autoincrement": col_2_autoinc.get(column.COLUMN_NAME, False) if col_2_autoinc else False,
             "comment": column.COLUMN_COMMENT or None,
             "dialect_options": {
@@ -278,6 +279,49 @@ class StarRocksTableDefinitionParser(object):
         # logger.debug("parsed column data for column: %s is %s", column.COLUMN_NAME, col_data)
 
         return col_data
+
+    class _ColumnDefaultValueRenderer:
+        """
+        Apply StarRocks-friendly default value rendering:
+        1. DATETIME CURRENT_TIMESTAMP defaults are emitted verbatim.
+        2. Function-looking defaults become `(func_expr)`.
+        3. Remaining literals are double quoted.
+        """
+        def build(self, column: _DecodingRow) -> Optional[str]:
+            raw_default = getattr(column, "COLUMN_DEFAULT", None)
+            if raw_default is None:
+                return None
+
+            default = str(raw_default).strip()
+            if not default:
+                return None
+
+            if default.upper() == "NULL":
+                return "NULL"
+
+            if self._is_datetime_column(column) and default.upper().startswith("CURRENT_TIMESTAMP"):
+                return default
+
+            if self._looks_like_function(default):
+                return self._wrap_function_default(default)
+
+            return f"{default!r}"
+
+        @staticmethod
+        def _is_datetime_column(column: _DecodingRow) -> bool:
+            column_type = getattr(column, "COLUMN_TYPE", "") or ""
+            return column_type.upper().startswith("DATETIME")
+
+        @staticmethod
+        def _looks_like_function(default: str) -> bool:
+            return bool(re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*\(.*\)$", default))
+
+        @staticmethod
+        def _wrap_function_default(default: str) -> str:
+            trimmed = default.strip()
+            if trimmed.startswith("(") and trimmed.endswith(")"):
+                return trimmed
+            return f"({trimmed})"
 
     def _parse_column_type(self, column: _DecodingRow) -> Any:
         """
@@ -322,14 +366,19 @@ class StarRocksTableDefinitionParser(object):
         # return str(table_model_to_key_type_map.get(table_config.get(TableConfigKey.TABLE_MODEL), "").value)
         return str(MySQLKeyType.PRIMARY.value)
 
-    def _get_key_columns(self, columns: List[_DecodingRow]) -> List[str]:
+    def _sort_columns(self, columns: List[_DecodingRow]) -> List[_DecodingRow]:
+        """
+        Sort columns by ORDINAL_POSITION.
+        """
+        return sorted(columns, key=lambda col: col.ORDINAL_POSITION)
+
+    def _get_key_columns(self, sorted_columns: List[_DecodingRow]) -> List[str]:
         """
         Get list of key columns (COLUMN_KEY) from information_schema.columns table.
         It returns list of column names that are part of key.
 
         Currently, we can't extract the key columns from information_schema.tables_config.
         """
-        sorted_columns = sorted(columns, key=lambda col: col.ORDINAL_POSITION)
         return [c.COLUMN_NAME for c in sorted_columns if c.COLUMN_KEY]
 
     @staticmethod
@@ -493,7 +542,7 @@ class StarRocksTableDefinitionParser(object):
         return opts
 
     def _parse_table_options(self, table_name: str, schema: Optional[str],
-            table: _DecodingRow, table_config: Dict[str, Any], columns: List[_DecodingRow]
+            table: _DecodingRow, table_config: Dict[str, Any], sorted_columns: List[_DecodingRow]
         ) -> Dict:
         """
         Parse table options from `information_schema` views,
@@ -508,7 +557,7 @@ class StarRocksTableDefinitionParser(object):
             table: A row from `information_schema.tables`.
             table_config: A dictionary representing a row from `information_schema.tables_config`,
                              augmented with the 'PARTITION_CLAUSE'.
-            columns: A list of rows from `information_schema.columns`.
+            sorted_columns: A list of rows from `information_schema.columns`, sorted by ORDINAL_POSITION.
 
         Returns:
             A dictionary of StarRocks-specific table options with the 'starrocks_' prefix.
@@ -533,7 +582,7 @@ class StarRocksTableDefinitionParser(object):
             # convert to key string, such as "PRIMARY_KEY", not PRIMARY KEY"
             key_str = TableInfoKey.MODEL_TO_KEY_MAP.get(table_model)
             if key_str:
-                key_columns_str = ", ".join(self._get_key_columns(columns))
+                key_columns_str = ", ".join(self._get_key_columns(sorted_columns))
                 prefixed_key = f"{SRKwargsPrefix}{key_str}"
                 opts[prefixed_key] = key_columns_str
 
@@ -567,10 +616,8 @@ class StarRocksTableDefinitionParser(object):
         # For views, we care about name, type, and comment
         # Type and nullable are inferred from the SELECT statement
         if column_rows:
-            state.columns = [
-                self._parse_column(col)
-                for col in column_rows
-            ]
+            sorted_columns = self._sort_columns(column_rows)
+            state.columns = [self._parse_column(col) for col in sorted_columns]
 
         table_options = self._parse_common_table_options(table_row)
 
