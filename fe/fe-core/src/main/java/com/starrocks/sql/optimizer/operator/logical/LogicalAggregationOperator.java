@@ -311,11 +311,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.aggregations = aggregationOperator.aggregations;
             builder.isSplit = aggregationOperator.isSplit;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
-<<<<<<< HEAD
-=======
-            builder.topNLocalAgg = aggregationOperator.topNLocalAgg;
             builder.localLimit = aggregationOperator.localLimit;
->>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
             return this;
         }
 
