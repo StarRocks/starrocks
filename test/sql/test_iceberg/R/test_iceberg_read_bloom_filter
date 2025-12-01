@@ -21,6 +21,9 @@ set enable_profile=true;
 set enable_async_profile=false;
 -- result:
 -- !result
+set plan_mode=local;
+-- result:
+-- !result
 select * from iceberg_oss_db.bloom_filter_table5 where c1 = 2;
 -- result:
 -- !result
