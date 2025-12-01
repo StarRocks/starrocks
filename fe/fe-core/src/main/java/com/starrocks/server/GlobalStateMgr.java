@@ -93,6 +93,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.LogCleaner;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -510,6 +511,8 @@ public class GlobalStateMgr {
 
     private ProcProfileCollector procProfileCollector;
 
+    private LogCleaner logCleaner;
+
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
 
     private TemporaryTableMgr temporaryTableMgr;
@@ -839,6 +842,7 @@ public class GlobalStateMgr {
 
         this.memoryUsageTracker = new MemoryUsageTracker();
         this.procProfileCollector = new ProcProfileCollector();
+        this.logCleaner = new LogCleaner();
 
         this.sqlParser = new SqlParser(AstBuilder.getInstance());
         this.analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
@@ -1532,6 +1536,8 @@ public class GlobalStateMgr {
         refreshDictionaryCacheTaskDaemon.start();
 
         procProfileCollector.start();
+
+        logCleaner.start();
 
         warehouseIdleChecker.start();
 

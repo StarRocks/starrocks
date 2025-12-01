@@ -309,6 +309,26 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
+    @ConfField(mutable = true, comment = "Enable automatic log cleaning based on disk usage. " +
+            "When enabled, logs will be cleaned when disk usage exceeds the threshold.")
+    public static boolean log_cleaner_disk_util_based_enable = false;
+
+    @ConfField(mutable = true, comment = "Disk usage threshold (percentage) to trigger log cleaning. " +
+            "When disk usage exceeds this threshold, log cleaning will start. Default is 80, meaning 80%.")
+    public static int log_cleaner_disk_usage_threshold = 80;
+
+    @ConfField(mutable = true, comment = "Target disk usage (percentage) after log cleaning. " +
+            "Log cleaning will continue until disk usage drops below this threshold. Default is 60, meaning 60%.")
+    public static int log_cleaner_disk_usage_target = 60;
+
+    @ConfField(mutable = true, comment = "Minimum retention days for audit log files. " +
+            "Audit log files newer than this will not be deleted even if disk usage is high. Default is 3 days.")
+    public static int log_cleaner_audit_log_min_retention_days = 3;
+
+    @ConfField(mutable = true, comment = "Interval in seconds to check disk usage and clean logs. " +
+            "Default is 300 seconds (5 minutes).")
+    public static int log_cleaner_check_interval_second = 300;
+
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
      * It is only effective when enable_collect_query_detail_info is set to false, since the plan will be recorded
