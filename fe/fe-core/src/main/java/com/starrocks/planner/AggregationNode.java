@@ -98,6 +98,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     private boolean withLocalShuffle = false;
 
+    // direct set limit will introduce a limit on ExchangeNode
+    private long localLimit = -1;
+
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
     // 1. bucket shuffle join,
     // 2. colocate join,
@@ -174,6 +177,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
+    }
+
     public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
         this.groupByMinMaxStats = groupByMinMaxStats;
     }
@@ -246,6 +253,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
         msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
+        if (localLimit > 0) {
+            Preconditions.checkState(!hasLimit());
+            msg.limit = localLimit;
+        }
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
@@ -363,6 +374,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         if (withLocalShuffle) {
             output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+        if (localLimit > 0) {
+            output.append(detailPrefix).append("limit: ").append(localLimit).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
