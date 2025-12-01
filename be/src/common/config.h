@@ -107,6 +107,9 @@ CONF_String(mem_limit, "90%");
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
+// Enable the RSS non jemalloc tracker, which tracks process RSS - jemalloc.resident
+CONF_Bool(enable_rss_non_jemalloc_tracker, "false");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");

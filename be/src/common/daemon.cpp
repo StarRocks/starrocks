@@ -45,7 +45,9 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include <fmt/ranges.h>
+#include <unistd.h>
 
+#include <cinttypes>
 #include <csignal>
 
 #include "fs/encrypt_file.h"
@@ -201,6 +203,49 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
     }
 }
 
+// Read process RSS from /proc/self/statm
+// Returns RSS in bytes, or -1 on error
+static int64_t get_process_rss() {
+#ifndef __APPLE__
+    FILE* fp = fopen("/proc/self/statm", "r");
+    if (fp == nullptr) {
+        PLOG(WARNING) << "open /proc/self/statm failed";
+        return -1;
+    }
+
+    // /proc/self/statm format: size resident share text lib data dt
+    // We need the second field (resident) which is RSS in pages
+    int64_t size = 0;
+    int64_t resident = 0;
+    int64_t share = 0;
+    int64_t text = 0;
+    int64_t lib = 0;
+    int64_t data = 0;
+    int64_t dt = 0;
+
+    int ret = fscanf(fp, "%" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64 " %" PRId64, &size,
+                     &resident, &share, &text, &lib, &data, &dt);
+    fclose(fp);
+
+    if (ret < 2) {
+        LOG(WARNING) << "failed to parse /proc/self/statm";
+        return -1;
+    }
+
+    // Get page size (usually 4096 bytes)
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) {
+        LOG(WARNING) << "failed to get page size";
+        return -1;
+    }
+
+    return resident * page_size;
+#else
+    // On macOS, /proc/self/statm is not available
+    return -1;
+#endif
+}
+
 #ifndef __APPLE__
 // Tracker the memory usage of jemalloc
 void jemalloc_tracker_daemon(void* arg_this) {
@@ -214,6 +259,17 @@ void jemalloc_tracker_daemon(void* arg_this) {
             auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
             int64_t delta = stats.metadata - tracker->consumption();
             tracker->consume(delta);
+        }
+
+        // RSS non jemalloc tracker
+        if (config::enable_rss_non_jemalloc_tracker && GlobalEnv::GetInstance()->rss_non_jemalloc_tracker()) {
+            int64_t process_rss = get_process_rss();
+            if (process_rss > 0 && stats.resident > 0) {
+                int64_t rss_non_jemalloc = process_rss - stats.resident;
+                auto tracker = GlobalEnv::GetInstance()->rss_non_jemalloc_tracker();
+                int64_t delta = rss_non_jemalloc - tracker->consumption();
+                tracker->consume(delta);
+            }
         }
 
         nap_sleep(1, [daemon] { return daemon->stopped(); });
