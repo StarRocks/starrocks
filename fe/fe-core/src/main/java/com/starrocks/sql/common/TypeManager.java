@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
@@ -143,7 +144,7 @@ public class TypeManager {
                 throw new SemanticException(
                         "Cannot cast '" + ExprToSql.toSql(expr) + "' from " + expr.getType() + " to " + targetType);
             }
-            return expr.uncheckedCastTo(targetType);
+            return ExprCastFunction.uncheckedCastTo(expr, targetType);
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }

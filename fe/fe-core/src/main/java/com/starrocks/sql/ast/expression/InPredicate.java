@@ -96,15 +96,6 @@ public class InPredicate extends Predicate {
         this.isNotIn = isNotIn;
     }
 
-    /**
-     * Negates an InPredicate.
-     */
-    @Override
-    public Expr negate() {
-        return new InPredicate(getChild(0), children.subList(1, children.size()),
-                !isNotIn);
-    }
-
     public List<Expr> getListChildren() {
         return children.subList(1, children.size());
     }

@@ -14,14 +14,11 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class ArrayExpr extends Expr {
@@ -44,24 +41,6 @@ public class ArrayExpr extends Expr {
     @Override
     public Expr clone() {
         return new ArrayExpr(this);
-    }
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        ArrayList<Expr> newItems = new ArrayList<>();
-        ArrayType arrayType = (ArrayType) targetType;
-        Type itemType = arrayType.getItemType();
-        for (int i = 0; i < getChildren().size(); i++) {
-            Expr child = getChild(i);
-            if (child.getType().matchesType(itemType)) {
-                newItems.add(child);
-            } else {
-                newItems.add(child.castTo(itemType));
-            }
-        }
-        ArrayExpr e = new ArrayExpr(targetType, newItems);
-        e.analysisDone();
-        return e;
     }
 
     @Override

@@ -151,7 +151,7 @@ public class MysqlScanNode extends ScanNode {
         }
         ArrayList<Expr> mysqlConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : mysqlConjuncts) {
-            p = p.replaceLargeStringLiteral();
+            p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(ExprToSql.toMySql(p));
         }
     }

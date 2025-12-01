@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -107,7 +108,7 @@ public class AnalyticAnalyzer {
                 }
 
                 try {
-                    analyticFunction.uncheckedCastChild(firstType, 2);
+                    ExprCastFunction.uncheckedCastChild(analyticFunction, firstType, 2);
                 } catch (AnalysisException e) {
                     throw new SemanticException("The third parameter of LEAD/LAG can't convert to " + firstType,
                             analyticFunction.getChild(2).getPos());
@@ -121,7 +122,7 @@ public class AnalyticAnalyzer {
                 if (theThirdChild instanceof UserVariableExpr) {
                     theThirdChild = ((UserVariableExpr) theThirdChild).getValue();
                 }
-                if (!theThirdChild.isLiteral() && theThirdChild.isNullable()) {
+                if (!ExprUtils.isLiteral(theThirdChild) && theThirdChild.isNullable()) {
                     throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
                             analyticFunction.getChild(2).getPos());
                 }

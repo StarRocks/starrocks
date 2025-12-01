@@ -198,24 +198,6 @@ public class LargeIntLiteral extends LiteralExpr {
 
 
     @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (targetType.isFloatingPointType()) {
-            return new FloatLiteral(value.doubleValue(), targetType);
-        } else if (targetType.isDecimalOfAnyVersion()) {
-            DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(value));
-            decimalLiteral.type = targetType;
-            return decimalLiteral;
-        } else if (targetType.isNumericType()) {
-            try {
-                return new IntLiteral(value.longValueExact(), targetType);
-            } catch (ArithmeticException e) {
-                throw new AnalysisException("Number out of range[" + value + "]. type: " + targetType);
-            }
-        }
-        return super.uncheckedCastTo(targetType);
-    }
-
-    @Override
     public void swapSign() throws NotImplementedException {
         // swapping sign does not change the type
         value = value.negate();

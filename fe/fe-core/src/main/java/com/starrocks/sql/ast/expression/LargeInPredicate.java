@@ -107,12 +107,6 @@ public class LargeInPredicate extends InPredicate {
     }
 
     @Override
-    public Expr negate() {
-        return new LargeInPredicate(getChild(0), rawText, rawConstantList, constantCount,
-                !isNotIn(), getListChildren(), pos);
-    }
-
-    @Override
     public boolean isConstantValues() {
         return true;
     }

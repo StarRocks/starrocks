@@ -542,7 +542,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                         getRemoteFiles(sourceHiveTable, params);
                 partitionRemoteFiles.add(Pair.create(params.getPartitionKeys() == null ? "" :
                                 params.getPartitionKeys().stream().map(partitionKey ->
-                                        PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
+                                                PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
                                         collect(Collectors.joining()),
                         remoteFiles));
             }

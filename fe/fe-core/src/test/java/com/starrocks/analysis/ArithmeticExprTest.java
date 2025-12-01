@@ -1,7 +1,9 @@
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Function;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -31,9 +33,12 @@ public class ArithmeticExprTest {
         ScalarType decimal64p10s2 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(addExpr, ConnectContext.get());
         Assertions.assertEquals(addExpr.getType(), decimal64p10s2);
-        Assertions.assertNotNull(addExpr.getFn());
-        Assertions.assertEquals(addExpr.getFn().getArgs()[0], decimal64p10s2);
-        Assertions.assertEquals(addExpr.getFn().getArgs()[1], decimal64p10s2);
+
+        Function fn = ExpressionAnalyzer.getArithmeticFunction(addExpr);
+
+        Assertions.assertNotNull(fn);
+        Assertions.assertEquals(fn.getArgs()[0], decimal64p10s2);
+        Assertions.assertEquals(fn.getArgs()[1], decimal64p10s2);
     }
 
     private ScalarType dec(int bits, int precision, int scale) {
@@ -120,7 +125,7 @@ public class ArithmeticExprTest {
             ScalarType expectLhsType = (ScalarType) c[3];
             ScalarType expectRhsType = (ScalarType) c[4];
             ArithmeticExpr.TypeTriple tr =
-                    ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
+                    DecimalV3FunctionAnalyzer.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
             Assertions.assertEquals(tr.returnType, expectReturnType);
             Assertions.assertEquals(tr.lhsTargetType, expectLhsType);
             Assertions.assertEquals(tr.rhsTargetType, expectRhsType);
@@ -147,7 +152,7 @@ public class ArithmeticExprTest {
             ScalarType lhsType = (ScalarType) c[0];
             ScalarType rhsType = (ScalarType) c[1];
             try {
-                ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
+                DecimalV3FunctionAnalyzer.getReturnTypeOfDecimal(ArithmeticExpr.Operator.MULTIPLY, lhsType, rhsType);
                 Assertions.fail("should throw exception");
             } catch (SemanticException ignored) {
             }

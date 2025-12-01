@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.expression.ExprUtils;
 
 import java.util.List;
 
@@ -77,7 +78,7 @@ public class SelectList {
     public void reset() {
         for (SelectListItem item : items) {
             if (!item.isStar()) {
-                item.getExpr().reset();
+                ExprUtils.reset(item.getExpr());
             }
         }
     }

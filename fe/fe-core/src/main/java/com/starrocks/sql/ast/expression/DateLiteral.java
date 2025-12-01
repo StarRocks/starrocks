@@ -41,7 +41,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -285,29 +284,6 @@ public class DateLiteral extends LiteralExpr {
         }
     }
 
-
-    @Override
-    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (targetType.isDateType()) {
-            if (type.equals(targetType)) {
-                return this;
-            }
-            if (targetType.isDate()) {
-                return new DateLiteral(this.year, this.month, this.day);
-            } else if (targetType.isDatetime()) {
-                return new DateLiteral(this.year, this.month, this.day, this.hour, this.minute, this.second,
-                        this.microsecond);
-            } else {
-                throw new AnalysisException("Error date literal type : " + type);
-            }
-        } else if (targetType.isStringType()) {
-            return new StringLiteral(getStringValue());
-        } else if (TypeManager.isImplicitlyCastable(this.type, targetType, true)) {
-            return new CastExpr(targetType, this);
-        }
-        Preconditions.checkState(false);
-        return this;
-    }
 
     public void castToDate() {
         this.type = DateType.DATE;

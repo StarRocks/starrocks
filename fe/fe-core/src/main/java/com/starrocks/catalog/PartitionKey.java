@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
@@ -226,11 +227,11 @@ public class PartitionKey implements Comparable<PartitionKey> {
             try {
                 LiteralExpr newKey = key1;
                 if (key1.getType() != destType) {
-                    newKey = (LiteralExpr) key1.castTo(destType);
+                    newKey = (LiteralExpr) ExprCastFunction.castTo(key1, destType);
                 }
                 LiteralExpr newOtherKey = key2;
                 if (key2.getType() != destType) {
-                    newOtherKey = (LiteralExpr) key2.castTo(destType);
+                    newOtherKey = (LiteralExpr) ExprCastFunction.castTo(key2, destType);
                 }
                 ret = newKey.compareLiteral(newOtherKey);
             } catch (AnalysisException e) {

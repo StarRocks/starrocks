@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -109,7 +110,7 @@ public class SPMPlaceholderBuilder {
         @Override
         public ParseNode visitFunctionCall(FunctionCallExpr node, Void context) {
             if (SPMFunctions.isSPMFunctions(node)) {
-                Preconditions.checkState(node.getChild(0).isLiteral());
+                Preconditions.checkState(ExprUtils.isLiteral(node.getChild(0)));
                 long spmId = ((IntLiteral) node.getChild(0)).getValue();
                 if (userSPMIds.contains(spmId)) {
                     throw new SemanticException("sql plan found conflict placeholder expression: " + ExprToSql.toMySql(node));

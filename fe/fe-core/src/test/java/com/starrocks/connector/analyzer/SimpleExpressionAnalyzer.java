@@ -20,7 +20,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -46,6 +45,7 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
@@ -69,16 +69,12 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
-import com.starrocks.type.DecimalType;
-import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
 import com.starrocks.type.IntegerType;
-import com.starrocks.type.InvalidType;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -95,6 +91,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
+import static com.starrocks.sql.analyzer.ExpressionAnalyzer.getArithmeticFunction;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 
@@ -259,10 +256,9 @@ public class SimpleExpressionAnalyzer {
 
                     for (int i = 0; i < node.getChildren().size(); i++) {
                         if (!node.getChildren().get(i).getType().matchesType(targetItemType)) {
-                            node.castChild(targetItemType, i);
+                            ExprCastFunction.castChild(node, targetItemType, i);
                         }
                     }
-
                     node.setType(new ArrayType(targetItemType));
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
@@ -287,7 +283,7 @@ public class SimpleExpressionAnalyzer {
                 }
                 try {
                     if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
-                        node.castChild(IntegerType.INT, 1);
+                        ExprCastFunction.castChild(node, IntegerType.INT, 1);
                     }
                     node.setType(((ArrayType) expr.getType()).getItemType());
                 } catch (AnalysisException e) {
@@ -295,9 +291,9 @@ public class SimpleExpressionAnalyzer {
                 }
             } else {
                 try {
-                    if (subscript.getType().getPrimitiveType() !=
-                            ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
-                        node.castChild(((MapType) expr.getType()).getKeyType(), 1);
+                    if (subscript.getType().getPrimitiveType()
+                            != ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
+                        ExprCastFunction.castChild(node, ((MapType) expr.getType()).getKeyType(), 1);
                     }
                     node.setType(((MapType) expr.getType()).getValueType());
                 } catch (AnalysisException e) {
@@ -322,7 +318,7 @@ public class SimpleExpressionAnalyzer {
         public Void visitArrowExpr(ArrowExpr node, Scope scope) {
             Expr item = node.getChild(0);
             Expr key = node.getChild(1);
-            if (!key.isLiteral() || !key.getType().isStringType()) {
+            if (!ExprUtils.isLiteral(key) || !key.getType().isStringType()) {
                 throw new SemanticException("right operand of -> should be string literal, but got " + key);
             }
             if (!item.getType().isJsonType()) {
@@ -418,168 +414,9 @@ public class SimpleExpressionAnalyzer {
 
         @Override
         public Void visitArithmeticExpr(ArithmeticExpr node, Scope scope) {
-            if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.BINARY_INFIX) {
-                ArithmeticExpr.Operator op = node.getOp();
-                Type t1 = getNumResultType(node.getChild(0).getType());
-                Type t2 = getNumResultType(node.getChild(1).getType());
-                if (t1.isDecimalV3() || t2.isDecimalV3()) {
-                    try {
-                        node.rewriteDecimalOperation();
-                    } catch (AnalysisException ex) {
-                        throw new SemanticException(ex.getMessage());
-                    }
-                    Type lhsType = node.getChild(0).getType();
-                    Type rhsType = node.getChild(1).getType();
-                    Type resultType = node.getType();
-                    Type[] args = {lhsType, rhsType};
-                    Function fn = ExprUtils.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
-                    // In resolved function instance, it's argTypes and resultType are wildcard decimal type
-                    // (both precision and and scale are -1, only used in function instance resolution), it's
-                    // illegal for a function and expression to has a wildcard decimal type as its type in BE,
-                    // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
-                    node.setType(resultType);
-                    node.setFn(newFn);
-                    return null;
-                }
-                // Find result type of this operator
-                Type commonType;
-                switch (op) {
-                    case MULTIPLY:
-                    case ADD:
-                    case SUBTRACT:
-                        // numeric ops must be promoted to highest-resolution type
-                        // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                        commonType = getArithmeticExprBiggerType(getArithmeticExprCommonType(t1, t2));
-                        break;
-                    case MOD:
-                        commonType = getArithmeticExprCommonType(t1, t2);
-                        break;
-                    case DIVIDE:
-                        commonType = getArithmeticExprCommonType(t1, t2);
-                        if (commonType.isFixedPointType()) {
-                            commonType = FloatType.DOUBLE;
-                        }
-                        break;
-                    case INT_DIVIDE:
-                    case BITAND:
-                    case BITOR:
-                    case BITXOR:
-                        commonType = getArithmeticExprCommonType(t1, t2);
-                        if (!commonType.isFixedPointType()) {
-                            commonType = IntegerType.BIGINT;
-                        }
-                        break;
-                    case BIT_SHIFT_LEFT:
-                    case BIT_SHIFT_RIGHT:
-                    case BIT_SHIFT_RIGHT_LOGICAL:
-                        commonType = t1;
-                        break;
-                    default:
-                        // the programmer forgot to deal with a case
-                        throw unsupportedException("Unknown arithmetic operation " + op + " in: " + node);
-                }
-
-                if (node.getChild(0).getType().equals(NullType.NULL)
-                        && node.getChild(1).getType().equals(NullType.NULL)) {
-                    commonType = NullType.NULL;
-                }
-
-                if (!NullType.NULL.equals(node.getChild(0).getType()) && !TypeManager.canCastTo(t1, commonType)) {
-                    throw new SemanticException(
-                            "cast type " + node.getChild(0).getType().toSql() + " with type " + commonType.toSql()
-                                    + " is invalid.");
-                }
-
-                if (!NullType.NULL.equals(node.getChild(1).getType()) && !TypeManager.canCastTo(t2, commonType)) {
-                    throw new SemanticException(
-                            "cast type " + node.getChild(1).getType().toSql() + " with type " + commonType.toSql()
-                                    + " is invalid.");
-                }
-
-                Function fn = ExprUtils.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
-                        Function.CompareMode.IS_SUPERTYPE_OF);
-
-                /*
-                 * commonType is the common type of the parameters of the function,
-                 * and fn.getReturnType() is the return type of the function after execution
-                 * So we use fn.getReturnType() as node type
-                 */
-                node.setType(fn.getReturnType());
-                node.setFn(fn);
-            } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
-
-                Function fn = ExprUtils.getBuiltinFunction(
-                        node.getOp().getName(), new Type[] {IntegerType.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
-
-                node.setType(IntegerType.BIGINT);
-                node.setFn(fn);
-            } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
-                throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
-            } else {
-                throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
-            }
-
+            Function arithmeticFunction = getArithmeticFunction(node);
+            node.setType(arithmeticFunction.getReturnType());
             return null;
-        }
-
-        private static Type getArithmeticExprCommonType(Type t1, Type t2) {
-            PrimitiveType pt1 = getNumResultType(t1).getPrimitiveType();
-            PrimitiveType pt2 = getNumResultType(t2).getPrimitiveType();
-
-            if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
-                return FloatType.DOUBLE;
-            } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
-                return TypeManager.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
-            } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
-                return DecimalType.DECIMALV2;
-            } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
-                return IntegerType.LARGEINT;
-            } else if (pt1 == PrimitiveType.BIGINT || pt2 == PrimitiveType.BIGINT) {
-                return IntegerType.BIGINT;
-            } else if ((PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
-                    pt1.ordinal() <= PrimitiveType.INT.ordinal()) &&
-                    (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
-                            pt2.ordinal() <= PrimitiveType.INT.ordinal())) {
-                return (pt1.ordinal() > pt2.ordinal()) ? t1 : t2;
-            } else if (PrimitiveType.TINYINT.ordinal() <= pt1.ordinal() &&
-                    pt1.ordinal() <= PrimitiveType.INT.ordinal()) {
-                // when t2 is INVALID TYPE:
-                return t1;
-            } else if (PrimitiveType.TINYINT.ordinal() <= pt2.ordinal() &&
-                    pt2.ordinal() <= PrimitiveType.INT.ordinal()) {
-                // when t1 is INVALID TYPE:
-                return t2;
-            } else {
-                return InvalidType.INVALID;
-            }
-        }
-
-        private static Type getArithmeticExprBiggerType(Type t) {
-            return switch (getNumResultType(t).getPrimitiveType()) {
-                case TINYINT -> IntegerType.SMALLINT;
-                case SMALLINT -> IntegerType.INT;
-                case INT, BIGINT -> IntegerType.BIGINT;
-                case LARGEINT -> IntegerType.LARGEINT;
-                case DOUBLE -> FloatType.DOUBLE;
-                case DECIMALV2 -> DecimalType.DECIMALV2;
-                case DECIMAL32, DECIMAL64, DECIMAL128 -> t;
-                default -> InvalidType.INVALID;
-            };
-        }
-
-        public static Type getNumResultType(Type type) {
-            return switch (type.getPrimitiveType()) {
-                case BOOLEAN, TINYINT -> IntegerType.TINYINT;
-                case SMALLINT -> IntegerType.SMALLINT;
-                case INT -> IntegerType.INT;
-                case BIGINT -> IntegerType.BIGINT;
-                case LARGEINT -> IntegerType.LARGEINT;
-                case FLOAT, DOUBLE, DATE, DATETIME, TIME, CHAR, VARCHAR -> FloatType.DOUBLE;
-                case DECIMALV2 -> DecimalType.DECIMALV2;
-                case DECIMAL32, DECIMAL64, DECIMAL128, DECIMAL256 -> type;
-                default -> InvalidType.INVALID;
-            };
         }
 
         List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
@@ -615,7 +452,6 @@ public class SimpleExpressionAnalyzer {
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
             node.setType(fn.getReturnType());
-            node.setFn(fn);
             return null;
         }
 
@@ -686,7 +522,8 @@ public class SimpleExpressionAnalyzer {
             }
 
             // check pattern
-            if (LikePredicate.Operator.REGEXP.equals(node.getOp()) && !type2.isNull() && node.getChild(1).isLiteral()) {
+            if (LikePredicate.Operator.REGEXP.equals(node.getOp()) && !type2.isNull()
+                    && ExprUtils.isLiteral(node.getChild(1))) {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {

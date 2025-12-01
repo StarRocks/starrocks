@@ -56,12 +56,6 @@ public class MultiInPredicate extends Predicate {
         numberOfColumns = other.numberOfColumns;
     }
 
-    @Override
-    public Expr negate() {
-        return new MultiInPredicate(this.outerExprs, this.subquery,
-                !isNotIn);
-    }
-
     public boolean isNotIn() {
         return isNotIn;
     }

@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.TableName;
@@ -393,7 +394,7 @@ public class QueryDumpMVRecommender {
                             .stream()
                             .map(expr -> {
                                 String tableName = scanNode.getTableName();
-                                List<String> usedColumns = expr.collectAllSlotRefs()
+                                List<String> usedColumns = ExprUtils.collectAllSlotRefs(expr)
                                         .stream()
                                         .map(ExprToSql::toSql)
                                         .map(trimIdColon)

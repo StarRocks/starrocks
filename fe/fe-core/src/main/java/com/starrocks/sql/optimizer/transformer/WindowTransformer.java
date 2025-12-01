@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -108,7 +109,7 @@ public class WindowTransformer {
             windowFrame = AnalyticWindow.DEFAULT_ROWS_WINDOW;
 
             try {
-                callExpr.uncheckedCastChild(IntegerType.BIGINT, 0);
+                ExprCastFunction.uncheckedCastChild(callExpr, IntegerType.BIGINT, 0);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -135,7 +136,7 @@ public class WindowTransformer {
 
                 AnalyticExpr.checkDefaultValue(callExpr);
                 // check the value whether out of range
-                callExpr.uncheckedCastChild(IntegerType.BIGINT, 1);
+                ExprCastFunction.uncheckedCastChild(callExpr, IntegerType.BIGINT, 1);
 
                 AnalyticWindow.BoundaryType rightBoundaryType = AnalyticWindow.BoundaryType.FOLLOWING;
                 if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {
