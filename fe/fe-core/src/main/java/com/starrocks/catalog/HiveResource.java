@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.AlterResourceInfo;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
@@ -120,5 +121,12 @@ public class HiveResource extends Resource {
         sb.append(metastoreURIs);
         sb.append("\");");
         return sb.toString();
+    }
+
+    @Override
+    public void alterProperties(AlterResourceInfo info) {
+        if (info.getMetastoreURIs() != null) {
+            this.metastoreURIs = info.getMetastoreURIs();
+        }
     }
 }

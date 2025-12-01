@@ -43,6 +43,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -306,6 +307,46 @@ public class ResourceMgr implements Writable {
     public ResourceProcNode getProcNode() {
         return procNode;
     }
+
+    public void replayAlterResource(AlterResourceInfo alterResourceInfo) {
+        this.writeLock();
+        try {
+            Resource resource = nameToResource.get(alterResourceInfo.getName());
+            if (resource == null) {
+                LOG.warn("Failed to find resource {} when replaying alter resource log",
+                        alterResourceInfo.getName());
+                return;
+            }
+            resource.alterProperties(alterResourceInfo);
+            if (resource.needMappingCatalog()) {
+                try {
+                    createMappingCatalogIfNeeded(resource);
+                } catch (DdlException e) {
+                    LOG.error("Failed to create catalog for resource {}", resource.getName(), e);
+                }
+            }
+        } finally {
+            this.writeUnLock();
+        }
+    }
+
+    private void createMappingCatalogIfNeeded(Resource resource) throws DdlException {
+        if (resource.needMappingCatalog()) {
+            String type = resource.getType().name().toLowerCase(Locale.ROOT);
+            String catalogName = getResourceMappingCatalogName(resource.getName(), type);
+
+            if (nameToResource.containsKey(resource.getName())) {
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+            }
+
+            Map<String, String> properties = Maps.newHashMap(resource.getProperties());
+            properties.put("type", type);
+            properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
+            GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(type, catalogName, "mapping catalog", properties);
+        }
+    }
+
 
     public class ResourceProcNode implements ProcNodeInterface {
         @Override

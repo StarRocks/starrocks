@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.persist.AlterResourceInfo;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -168,6 +169,16 @@ public class IcebergResource extends Resource {
             } else {
                 throw new DdlException(String.format("property %s has not support yet", key));
             }
+        }
+    }
+
+    @Override
+    public void alterProperties(AlterResourceInfo info) {
+        if (info.getMetastoreURIs() != null) {
+            this.metastoreURIs = info.getMetastoreURIs();
+        }
+        if (info.getCatalogImpl() != null) {
+            this.catalogImpl = info.getCatalogImpl();
         }
     }
 }

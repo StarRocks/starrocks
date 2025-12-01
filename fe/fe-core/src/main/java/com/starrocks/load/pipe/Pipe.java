@@ -656,6 +656,10 @@ public class Pipe implements GsonPostProcessable {
         this.state = state;
     }
 
+    public void setLoadStatus(LoadStatus loadStatus) {
+        this.loadStatus = loadStatus;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         this.runningTasks = new HashMap<>();

@@ -266,6 +266,15 @@ public class PipeManager {
         }
     }
 
+    public Pipe getPipeById(PipeId pipeId) {
+        try {
+            lock.readLock().lock();
+            return pipeMap.get(pipeId);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void removePipe(Pipe pipe) {
         try {
             lock.writeLock().lock();

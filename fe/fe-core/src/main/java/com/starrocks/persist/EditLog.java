@@ -646,9 +646,19 @@ public class EditLog {
                     globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_ALTER_RESOURCE: {
+                    final AlterResourceInfo alterResourceInfo = (AlterResourceInfo) journal.data();
+                    globalStateMgr.getResourceMgr().replayAlterResource(alterResourceInfo);
+                    break;
+                }
                 case OperationType.OP_RESOURCE_GROUP: {
                     final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.data();
                     globalStateMgr.getResourceGroupMgr().replayResourceGroupOp(entry);
+                    break;
+                }
+                case OperationType.OP_ALTER_RESOURCE_GROUP: {
+                    final AlterResourceGroupLog entry = (AlterResourceGroupLog) journal.data();
+                    globalStateMgr.getResourceGroupMgr().replayAlterResourceGroup(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK: {
@@ -1110,6 +1120,11 @@ public class EditLog {
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.data();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
+                    break;
+                }
+                case OperationType.OP_ALTER_PIPE: {
+                    AlterPipeLog alterPipeLog = (AlterPipeLog) journal.data();
+                    globalStateMgr.getPipeManager().getRepo().replayAlterPipe(alterPipeLog);
                     break;
                 }
                 case OperationType.OP_CREATE_DICTIONARY: {

@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.persist.AlterResourceInfo;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
@@ -101,6 +102,13 @@ public class HudiResource extends Resource {
             } else {
                 throw new DdlException(String.format("property %s has not support yet", key));
             }
+        }
+    }
+
+    @Override
+    public void alterProperties(AlterResourceInfo info) {
+        if (info.getMetastoreURIs() != null) {
+            this.metastoreURIs = info.getMetastoreURIs();
         }
     }
 }
