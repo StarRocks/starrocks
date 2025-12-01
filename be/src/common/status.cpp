@@ -269,6 +269,10 @@ std::string Status::code_as_string() const {
         return "Big query scan rows limit exceeded";
     case TStatusCode::LEADER_TRANSFERRED:
         return "Leader transferred";
+    case TStatusCode::TABLE_NOT_EXIST:
+        return "Table not exists";
+    case TStatusCode::QUERY_NOT_EXIST:
+        return "Query not exists";
     }
     return {};
 }

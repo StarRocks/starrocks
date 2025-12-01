@@ -1824,7 +1824,7 @@ public class FrontendServiceImplTest {
             TGetTableSchemaResponse response1 = new TGetTableSchemaResponse();
             TGetTableSchemaResponse response2 = new TGetTableSchemaResponse();
             TStatus status1 = new TStatus(TStatusCode.OK);
-            TStatus status2 = new TStatus(TStatusCode.TABLE_NOT_EXISTS);
+            TStatus status2 = new TStatus(TStatusCode.TABLE_NOT_EXIST);
             response1.setStatus(status1);
             response2.setStatus(status2);
 
@@ -1842,7 +1842,7 @@ public class FrontendServiceImplTest {
             Assertions.assertNotNull(batchResponse.getResponses());
             Assertions.assertEquals(2, batchResponse.getResponsesSize());
             Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
-            Assertions.assertEquals(TStatusCode.TABLE_NOT_EXISTS,
+            Assertions.assertEquals(TStatusCode.TABLE_NOT_EXIST,
                     batchResponse.getResponses().get(1).getStatus().getStatus_code());
 
             schemaService.verify(() -> TableSchemaService.getTableSchema(same(request1)));

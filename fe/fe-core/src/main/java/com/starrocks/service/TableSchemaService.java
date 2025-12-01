@@ -98,7 +98,7 @@ public class TableSchemaService {
             // is requesting the schema.
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
             if (table == null) {
-                TStatus status = new TStatus(TStatusCode.TABLE_NOT_EXISTS);
+                TStatus status = new TStatus(TStatusCode.TABLE_NOT_EXIST);
                 status.addToError_msgs(String.format(
                         "table not found, may be dropped, db id: %s, table id: %s", dbId, tableId));
                 response.setStatus(status);
@@ -179,7 +179,7 @@ public class TableSchemaService {
     private static SchemaStatusOr findSchemaInQueryCoordinator(long schemaId, TUniqueId queryId) {
         Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(queryId);
         if (coordinator == null) {
-            return SchemaStatusOr.error(TStatusCode.QUERY_NOT_EXISTS,
+            return SchemaStatusOr.error(TStatusCode.QUERY_NOT_EXIST,
                     "query not found, maybe has finished, query id: " + DebugUtil.printId(queryId));
         }
         Optional<SchemaInfo> schemaInfo = coordinator.getScanNodes().stream()

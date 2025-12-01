@@ -301,7 +301,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     public void testTableNotFound() {
         TGetTableSchemaRequest request = createScanRequest(1L, db.getId(), -1L, new TUniqueId(1, 1));
         TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
-        Assertions.assertEquals(TStatusCode.TABLE_NOT_EXISTS, response.getStatus().getStatus_code());
+        Assertions.assertEquals(TStatusCode.TABLE_NOT_EXIST, response.getStatus().getStatus_code());
         Assertions.assertTrue(response.getStatus().getError_msgs().get(0).contains("table not found"));
     }
 
@@ -317,7 +317,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
             TGetTableSchemaRequest request = createScanRequest(schemaInfo.getId() - 1, db.getId(), table.getId(), queryId);
             TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
 
-            Assertions.assertEquals(TStatusCode.QUERY_NOT_EXISTS, response.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.QUERY_NOT_EXIST, response.getStatus().getStatus_code());
             Assertions.assertTrue(response.getStatus().getError_msgs().get(0).contains("query not found"));
         }
 
