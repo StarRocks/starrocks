@@ -270,6 +270,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
             .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
+            .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

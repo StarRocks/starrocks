@@ -158,6 +158,11 @@ public class EditLog {
                     globalStateMgr.setNextId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_NEXTID_V2: {
+                    NextIdLog nextIdLog = (NextIdLog) journal.data();
+                    globalStateMgr.setNextId(nextIdLog.getId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
                     TransactionIdInfo idInfo = (TransactionIdInfo) journal.data();
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()

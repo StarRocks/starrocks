@@ -238,7 +238,7 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Type> COLUMN_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory
                     .of(com.starrocks.catalog.Type.class, "clazz")
-                    .registerSubtype(ScalarType.class, "ScalarType")
+                    .registerSubtype(ScalarType.class, "ScalarType", true)
                     .registerSubtype(ArrayType.class, "ArrayType")
                     .registerSubtype(MapType.class, "MapType")
                     .registerSubtype(StructType.class, "StructType")

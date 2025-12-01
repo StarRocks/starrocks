@@ -646,6 +646,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_TABLET_RESHARD_JOB_LOG = 13551;
 
+    // New V2 operations for logEdit to logJsonObject migration
+    public static final short OP_SAVE_NEXTID_V2 = 13552;
+
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_RESOURCE = 13557;
 
