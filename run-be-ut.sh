@@ -276,6 +276,10 @@ else
     fi
 fi
 
+if [[ -d ${STARROCKS_THIRDPARTY}/installed/lib/paimon ]]; then
+  export LD_LIBRARY_PATH="${STARROCKS_THIRDPARTY}/installed/lib/paimon:${LD_LIBRARY_PATH}"
+fi
+
 export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/jindosdk:$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
     # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
