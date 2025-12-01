@@ -213,10 +213,10 @@ public class MetaUtils {
             if (db != null &&
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
                 res = db.getId();
+                table.maySetDatabaseId(res);
                 break;
             }
         }
-        table.maySetDatabaseId(res);
         return res;
     }
 
