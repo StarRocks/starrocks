@@ -950,7 +950,7 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::downgrade() {
         } else {
             auto new_column = BinaryColumn::create();
             new_column->get_offset().resize(_offsets.size());
-            new_column->get_bytes().swap(_bytes);
+            new_column->get_bytes().swap(get_bytes());
 
             for (size_t i = 0; i < _offsets.size(); i++) {
                 new_column->get_offset()[i] = static_cast<uint32_t>(_offsets[i]);

@@ -299,10 +299,13 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         auto& temp_null_column = temp_nullable_column->null_column_ref();
 
         // Read data column and null column
-        temp_null_column.append_numbers(null_data, num_rows);
+        ContainerResource container(_page_handle, null_data, num_rows);
+        int n = temp_null_column.append_numbers(container);
+        DCHECK_EQ(n, num_rows);
         RETURN_IF_ERROR(next_batch(range, temp_data_column));
         DCHECK(temp_null_column.size() == num_rows);
         DCHECK(temp_data_column->size() == num_rows);
+        temp_nullable_column->update_has_null();
 
         // Evaluate predicates on the temporary column
         RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
