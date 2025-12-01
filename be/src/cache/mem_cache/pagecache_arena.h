@@ -16,7 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <utility>
 #include <vector>
 
 #include "common/config.h"
@@ -98,17 +98,22 @@ public:
             return;
         }
 
-        // Arena is enabled, try to use pagecache arena
+        // Arena is enabled, try to use pagecache arena deallocation
+        // Note: We use je_free here instead of arena-specific deallocation because:
+        // 1. je_free automatically detects which arena the pointer belongs to
+        // 2. This handles the case where allocation fell back to je_malloc
+        //    (when arena allocation failed or arena was not initialized at allocation time)
+        // 3. This ensures correct deallocation regardless of where the pointer was allocated
         auto* arena = get_pagecache_arena_instance();
         if (arena != nullptr && pagecache_arena_is_initialized(arena)) {
-            // Try to deallocate from arena first
-            // Note: We need to check if the pointer belongs to the arena
-            // For simplicity, we always try arena deallocation first, then fallback
+            // Use arena deallocation, which internally uses je_free to auto-detect arena
             pagecache_arena_deallocate(arena, p, bytes);
             return;
         }
 
-        // Fallback to default jemalloc
+        // Fallback to default jemalloc if arena is not available
+        // This handles cases where allocation fell back to je_malloc
+        // (e.g., when arena allocation failed or arena was not initialized at allocation time)
         je_free(p);
     }
 

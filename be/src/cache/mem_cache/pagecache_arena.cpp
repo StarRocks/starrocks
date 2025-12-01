@@ -119,9 +119,13 @@ void PageCacheArena::deallocate(void* ptr, size_t size) {
         return;
     }
 
-    // Use dallocx with arena flag to free from the specific arena
-    int flags = MALLOCX_ARENA(_arena_index) | MALLOCX_TCACHE_NONE;
-    je_dallocx(ptr, flags);
+    // Use je_free instead of je_dallocx to let jemalloc automatically detect
+    // which arena the pointer belongs to. This is safer because:
+    // 1. je_free automatically detects the arena from the pointer metadata
+    // 2. je_dallocx with MALLOCX_ARENA requires the pointer to be from that specific arena,
+    //    which may not always be true if allocation fell back to default jemalloc
+    (void)size; // size parameter is not used by je_free
+    je_free(ptr);
 }
 
 bool PageCacheArena::get_stats(ArenaStats* stats) {
