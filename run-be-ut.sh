@@ -334,10 +334,19 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
 
 echo "[INFO] gtest_filter: $TEST_NAME"
 
+
+# If TEST_NAME is "*", GTEST_PARALLEL must be set, otherwise exit with an error
+# Run cases in gunit test in parallel if has gtest-parallel script.
+# Reference: https://github.com/google/gtest-parallel
+if [[ "$TEST_NAME" == "*" ]]; then
+    if [ ! -x "${GTEST_PARALLEL}" ]; then
+        echo "[ERROR] Running all tests (gtest_filter=*) requires GTEST_PARALLEL to be set and executable, please set GTEST_PARALLEL in your environment, for example: export GTEST_PARALLEL=/path/to/gtest-parallel/gtest-parallel"
+        exit 1
+    fi
+fi
+
 run_test_module() {
     TARGET=$1
-    # run cases in gunit test in parallel if has gtest-parallel script.
-    # reference: https://github.com/google/gtest-parallel
     if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == $TARGET ]]; then
         echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/$TARGET"
         if [ ${DRY_RUN} -eq 0 ]; then
