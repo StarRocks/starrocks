@@ -73,7 +73,6 @@ public class TablesSystemTable extends SystemTable {
                 .column("INDEX_LENGTH", BIGINT)
                 .column("DATA_FREE", BIGINT)
                 .column("AUTO_INCREMENT", BIGINT)
-                .column("CREATOR", TypeFactory.createVarchar(64))
                 .column("CREATE_TIME", DATETIME)
                 .column("UPDATE_TIME", DATETIME)
                 .column("CHECK_TIME", DATETIME)
@@ -81,6 +80,7 @@ public class TablesSystemTable extends SystemTable {
                 .column("CHECKSUM", BIGINT)
                 .column("CREATE_OPTIONS", TypeFactory.createVarchar(255))
                 .column("TABLE_COMMENT", TypeFactory.createVarchar(2048))
+                .column("CREATOR", TypeFactory.createVarchar(64))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
 
