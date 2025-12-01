@@ -21,7 +21,6 @@
 #include <vector>
 
 #include "cache/datacache.h"
-#include "cache/mem_cache/pagecache_arena.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -53,9 +52,8 @@ PageReader::PageReader(io::SeekableInputStream* stream, size_t start_offset, siz
         _cache = DataCache::GetInstance()->page_cache();
         _init_page_cache_key();
     }
-    // Use PageCacheVector if arena is enabled, otherwise use std::vector<uint8_t>
-    _compressed_buf = make_pagecache_vector();
-    _uncompressed_buf = make_pagecache_vector();
+    _compressed_buf = std::make_unique<std::vector<uint8_t>>();
+    _uncompressed_buf = std::make_unique<std::vector<uint8_t>>();
 }
 
 Status PageReader::next_page() {
@@ -117,13 +115,10 @@ Status PageReader::_read_and_deserialize_header(bool need_fill_cache) {
     BufferPtr tmp_page_buffer;
     std::vector<uint8_t>* page_buffer;
     if (need_fill_cache) {
-        // Use PageCacheVector if arena is enabled, otherwise use std::vector<uint8_t>
-        tmp_page_buffer = make_pagecache_vector();
         DCHECK(_cache_buf);
         page_buffer = _cache_buf;
     } else {
-        // Use PageCacheVector - allocator internally handles config switch
-        tmp_page_buffer = std::make_unique<PageCacheVector>();
+        tmp_page_buffer = std::make_unique<std::vector<uint8_t>>();
         page_buffer = tmp_page_buffer.get();
     }
 

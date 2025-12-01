@@ -187,7 +187,7 @@ static Status parse_page_from_cache(PageHandle* handle, Slice* body, PageFooterP
     return Status::OK();
 }
 
-static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<std::vector<uint8_t>>* page_out) {
+static Status read_page_from_file(const PageReadOptions& opts, PageBufferPtr* page_out) {
     // every page contains 4 bytes footer length and 4 bytes checksum
     const uint32_t page_size = opts.page_pointer.size;
     if (page_size < 8) {
@@ -196,7 +196,7 @@ static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<s
     }
 
     // Use PageCacheVector - allocator internally handles config switch
-    auto page = std::make_unique<PageCacheVector>();
+    auto page = std::make_unique<PageBuffer>();
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
     size_t reserve_size = page_size + Column::APPEND_OVERFLOW_MAX_SIZE;
     RETURN_IF_ERROR(raw::stl_vector_resize_uninitialized_checked(page.get(), reserve_size, page_size - 4));
@@ -243,7 +243,7 @@ static StatusOr<uint32_t> verify_and_parse_footer(Slice& page_slice, const PageR
 }
 
 static Status decompress_if_needed(const PageReadOptions& opts, const PageFooterPB* footer, uint32_t footer_size,
-                                   std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) {
+                                   PageBufferPtr* page, Slice* page_slice) {
     const uint32_t body_size = page_slice->size - 4 - footer_size;
 
     if (body_size == footer->uncompressed_size()) {
@@ -288,7 +288,7 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 }
 
 Status insert_page_cache(bool cache_enabled, const PageReadOptions& opts, StoragePageCache* cache,
-                         const std::string& cache_key, std::unique_ptr<std::vector<uint8_t>> page, PageHandle* handle) {
+                         const std::string& cache_key, PageBufferPtr page, PageHandle* handle) {
     // If cache is not enabled or use_page_cache is false, just return
     if (!cache_enabled || !opts.use_page_cache) {
         *handle = PageHandle(page.get());
@@ -329,7 +329,7 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
     }
 
     // hold compressed page at first, reset to decompressed page later
-    std::unique_ptr<std::vector<uint8_t>> page;
+    PageBufferPtr page;
     // not found from sr page cache. try to read from file stream
     RETURN_IF_ERROR(read_page_from_file(opts, &page));
 

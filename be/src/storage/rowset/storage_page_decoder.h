@@ -18,7 +18,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/rowset/common.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -33,15 +33,15 @@ public:
     virtual void reserve_head(uint8_t head_size) {}
 
     virtual Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                                    std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) {
+                                    PageBufferPtr* page, Slice* page_slice) {
         return Status::OK();
     }
 };
 
 class StoragePageDecoder {
 public:
-    static Status decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
-                              std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice);
+    static Status decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding, PageBufferPtr* page,
+                              Slice* page_slice);
 };
 
 } // namespace starrocks
