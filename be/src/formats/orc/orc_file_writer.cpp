@@ -158,7 +158,9 @@ FileWriter::CommitResult ORCFileWriter::commit() {
     FileWriter::CommitResult result{
             .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
     try {
-        _writer->close();
+        if (_writer != nullptr) {
+            _writer->close();
+        }
     } catch (const std::exception& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
