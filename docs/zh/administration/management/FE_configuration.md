@@ -2856,7 +2856,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 类型：Boolean
 - Unit:
 - 是否动态：是
-- 描述：是否开启 Query 级别的用于透明加速改写的物化视图 Cache，用于加速改写性能。
+- 描述：是否开启Query级别的用于透明加速改写的物化视图Cache，用于加速改写性能。
 - 引入版本： v3.3
 
 ##### enable_mv_refresh_collect_profile
