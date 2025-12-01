@@ -251,6 +251,25 @@ Notes:
 - Review/clean the generated code to align naming, comments, and any project conventions. Especially the `info` and StarRocks-specific parameters as `starrocks_xxx`.
   - For `info`: the `definition` of views and materialized views will be stored here, check the `definition` here whether it's what you defined.
 
+Warning:
+
+- It's recommended to add `--generator tables` flag, when running the sqlacodegen command, to generate Core style model script. Because `sqlacodegen` will **reorder columns** in ORM style (putting all NOT NULL columns ahead).
+
+    ```bash
+    sqlacodegen --schemas mydb1,mydb2 \
+        --options include-dialect-options,keep-dialect-types \
+        --generator tables \
+        starrocks://root@localhost:9030 > models_all.py
+    ```
+
+- Key columns will be recognized as `NOT NULL` columns. If you want to keep `nullable` for key columns, you need to add `nullable=True` parameter for each key column in the generated model python script **manually**.
+
+    ```python
+    Column('abm_id', BIGINT(20), primary_key=True)
+    # --> change above one to below one
+    Column('abm_id', BIGINT(20), primary_key=True, nullable=True)
+    ```
+
 See the full [`sqlacodegen`](https://github.com/agronholm/sqlacodegen) feature set and flags.
 
 ### Defining Tables with StarRocks Attributes and Types
