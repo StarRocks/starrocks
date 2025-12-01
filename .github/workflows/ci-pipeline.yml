@@ -29,6 +29,7 @@ jobs:
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
       TEST_PR: ${{ steps.check_test_case.outputs.TEST_PR }}
+      PRE_COMMIT: ${{ steps.check_blacklist.outputs.pre_commit }}
     steps:
       - name: Sync Check
         id: check
@@ -181,6 +182,8 @@ jobs:
     needs: basic-checker
     name: BE FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
+    env:
+      PRE_COMMIT: needs.basic-checker.outputs.PRE_COMMIT
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
@@ -212,6 +215,41 @@ jobs:
 
       - name: Upload the BE Filter Info
         uses: actions/upload-artifact@v4
+        with:
+          name: be-path-filter
+          path: ./be-path-filter/
+          retention-days: 3
+          overwrite: true
+
+      # pr 的当前 commit 内的 diff
+      - name: Commit path filter
+        uses: dorny/paths-filter@v3
+        id: commit-filter
+        if: env.PRE_COMMIT != ''
+        with:
+          base: ${{ env.PRE_COMMIT }}
+          filters: |
+            be:
+              - 'be/!(test)**'
+              - 'gensrc/**'
+              - 'run-be-ut.sh'
+              - 'build.sh'
+              - 'thirdparty/**'
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            thirdparty:
+              - 'thirdparty/**'
+              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+      
+      - name: Prepare commit diff info
+        run: |
+          if [[ "${{ steps.commit-filter.outputs.be }}" != "true" && "${{ steps.commit-filter.outputs.thirdparty }}" != true ]]; then
+            cd be-path-filter
+            echo "true" > commit_only_test.txt
+          fi
+
+      - name: Upload the BE Commit Filter Info
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: be-path-filter
           path: ./be-path-filter/
@@ -708,7 +746,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [basic-checker, test-checker, be-ut, fe-ut, thirdparty-info]
+    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -723,7 +761,10 @@ jobs:
       build_nece: ${{ steps.check-necessity.outputs.BUILD_NECE }}
       test_pr: ${{ needs.basic-checker.outputs.TEST_PR }}
     if: >
-      always() && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure' && (needs.be-ut.result == 'success' || needs.fe-ut.result == 'success' || needs.test-checker.result == 'success')
+      always() && 
+      needs.thirdparty-info.result != 'failure' && 
+      needs.fe-codestyle-check.result != 'failure' && 
+      (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.result == 'success')
     steps:
       - name: CLEAN
         run: |
@@ -765,6 +806,9 @@ jobs:
             echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
             echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
             echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
+            if [[ -e commit_only_test.txt ]]; then
+              echo "commit_only_test=`cat commit_only_test.txt`" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Parsing FE path-filter file
@@ -783,12 +827,12 @@ jobs:
       - name: Check necessity
         id: check-necessity
         if: >
-          (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || 
-          (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter == 'true' && needs.fe-ut.result == 'success') || 
-          (steps.parsing-fe-path-filter.outputs.src_filter != 'true' && steps.parsing-be-path-filter.outputs.src_filter == 'true' && needs.be-ut.result == 'success') ||
+          steps.parsing-fe-path-filter.outputs.src_filter == 'true' || 
+          (steps.parsing-be-path-filter.outputs.src_filter == 'true' && steps.parsing-be-path-filter.outputs.commit_only_test != 'true') ||
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
         run: |
           echo "BUILD_NECE=true" >> $GITHUB_OUTPUT
+          exit -1
 
       - name: BRANCH INFO
         id: branch
