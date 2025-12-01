@@ -362,15 +362,46 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### big_query_log_roll_interval
 
-<<<<<<< HEAD
 - Default: DAY
-=======
-- Default: {}
-- Type: String[]
+- Type: String
 - Unit: -
 - Is mutable: No
-- Description: A list of logger names or package prefixes that the system will configure at startup as WARN-level loggers and route to the warning appender (SysWF) — the `fe.warn.log` file. Entries are inserted into the generated Log4j configuration (alongside builtin warn modules such as org.apache.kafka, org.apache.hudi, and org.apache.hadoop.io.compress) and produce logger elements like `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>`. Fully-qualified package and class prefixes (for example, "com.example.lib") are recommended to suppress noisy INFO/DEBUG output into the regular log and to allow warnings to be captured separately.
-- Introduced in: v3.2.13
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### big_query_log_delete_age
+
+- Default: 7d
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### log_plan_cancelled_by_crash_be
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to log the COSTS plan if the query is cancelled due to a BE crash or RpcException. This parameter is effective only when `enable_collect_query_detail_info` is set to `false`. When `enable_collect_query_detail_info` is set to `true`, the plan will be recorded in the query detail.
+- Introduced in: v3.1
+-->
+
+<!--
+##### log_register_and_unregister_query_id
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
 
 ##### log_cleaner_disk_util_based_enable
 
@@ -416,61 +447,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 300 seconds (5 minutes).
 - Introduced in: -
-
-### Server
-
-##### brpc_idle_wait_max_time
-
-- Default: 10000
-- Type: Int
-- Unit: ms
-- Is mutable: No
-- Description: The maximum length of time for which bRPC clients wait as in the idle state.
-- Introduced in: -
-
-##### cluster_name
-
-- Default: StarRocks Cluster
->>>>>>> bfd66f2375 ([Enhancement] Add log cleaner based on disk usage (#65972))
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### big_query_log_delete_age
-
-- Default: 7d
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
-
-<!--
-##### log_plan_cancelled_by_crash_be
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to log the COSTS plan if the query is cancelled due to a BE crash or RpcException. This parameter is effective only when `enable_collect_query_detail_info` is set to `false`. When `enable_collect_query_detail_info` is set to `true`, the plan will be recorded in the query detail.
-- Introduced in: v3.1
--->
-
-<!--
-##### log_register_and_unregister_query_id
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description:
-- Introduced in: -
--->
 
 ### Server
 

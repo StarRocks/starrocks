@@ -360,10 +360,50 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 -->
 
-<<<<<<< HEAD
 <!--
 ##### big_query_log_roll_interval
-=======
+
+- 默认值：DAY
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### big_query_log_delete_age
+
+- 默认值：7d
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### log_plan_cancelled_by_crash_be
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在查询异常结束时，打印 COSTS 计划到日志中。只有在 `enable_collect_query_detail_info` 为 `false` 时有效，因为 `enable_collect_query_detail_info` 为 `true` 时，plan 会被记录到 query detail 中。
+- 引入版本：v3.1
+-->
+
+<!--
+##### log_register_and_unregister_query_id
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
 ##### log_cleaner_disk_util_based_enable
 
 - 默认值：false
@@ -408,50 +448,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：检查磁盘使用率和清理日志的时间间隔（秒）。清理器会定期检查每个日志目录的磁盘使用率，并在必要时触发清理。默认值为 300 秒（5 分钟）。
 - 引入版本：-
-
-##### sys_log_warn_modules
->>>>>>> bfd66f2375 ([Enhancement] Add log cleaner based on disk usage (#65972))
-
-- 默认值：DAY
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### big_query_log_delete_age
-
-- 默认值：7d
-- 类型：String
-- 单位：-
-- 是否动态：否
-- 描述：
-- 引入版本：-
--->
-
-<!--
-##### log_plan_cancelled_by_crash_be
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：是否在查询异常结束时，打印 COSTS 计划到日志中。只有在 `enable_collect_query_detail_info` 为 `false` 时有效，因为 `enable_collect_query_detail_info` 为 `true` 时，plan 会被记录到 query detail 中。
-- 引入版本：v3.1
--->
-
-<!--
-##### log_register_and_unregister_query_id
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：
-- 引入版本：-
--->
 
 ### Server
 
