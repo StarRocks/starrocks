@@ -77,7 +77,11 @@ bool BalancedChunkBuffer::put(int buffer_index, int* actual_buffer, ChunkPtr chu
     // CRITICAL (by satanson)
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
-    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return true;
+    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) {
+        // Set actual_buffer to buffer_index for early return case
+        *actual_buffer = buffer_index;
+        return true;
+    }
     bool ret;
     size_t memory_usage = chunk->memory_usage();
     if (_strategy == BalanceStrategy::kDirect) {
