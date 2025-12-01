@@ -36,7 +36,6 @@ package com.starrocks.alter;
 
 import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -44,6 +43,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.IntegerType;

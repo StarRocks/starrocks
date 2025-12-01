@@ -12,51 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.Type;
 
-import java.util.List;
 import java.util.Map;
 
-// clause which is used to add one field to
-public class AddFieldClause extends AlterTableColumnClause {
+// Drop one column
+public class DropColumnClause extends AlterTableColumnClause {
     private final String colName;
-    private final StructFieldDesc fieldDesc;
+    private String rollupName;
 
     public String getColName() {
         return colName;
     }
 
-    public StructFieldDesc getFieldDesc() {
-        return fieldDesc;
+    public DropColumnClause(String colName, String rollupName, Map<String, String> properties) {
+        this(colName, rollupName, properties, NodePosition.ZERO);
     }
 
-    public List<String> getNestedParentFieldNames() {
-        return fieldDesc.getNestedParentFieldNames();
-    }
-
-    public String getFieldName() {
-        return fieldDesc.getFieldName();
-    }
-
-    public Type getType() {
-        return fieldDesc.getType();
-    }
-
-    public ColumnPosition getFieldPos() {
-        return fieldDesc.getFieldPos();
-    }
-
-    public AddFieldClause(String colName, StructFieldDesc fieldDesc, Map<String, String> properties) {
-        super(null, properties, NodePosition.ZERO);
+    public DropColumnClause(String colName, String rollupName, Map<String, String> properties, NodePosition pos) {
+        super(properties, pos);
         this.colName = colName;
-        this.fieldDesc = fieldDesc;
+        this.rollupName = rollupName;
+    }
+
+    public String getRollupName() {
+        return rollupName;
+    }
+
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitAddFieldClause(this, context);
+        return visitor.visitDropColumnClause(this, context);
     }
 }
