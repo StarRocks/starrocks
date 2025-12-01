@@ -196,7 +196,7 @@ Status GlobalEnv::_init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTrackerType::PROCESS, bytes_limit, nullptr);
-    _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
+    _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC_METADATA, -1, process_mem_tracker());
     _rss_non_jemalloc_tracker = regist_tracker(MemTrackerType::RSS_NON_JEMALLOC, -1, process_mem_tracker());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);

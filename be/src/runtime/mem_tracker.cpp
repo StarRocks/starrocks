@@ -52,7 +52,7 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::CONSISTENCY, "consistency"},
         {MemTrackerType::COMPACTION, "compaction"},
         {MemTrackerType::SCHEMA_CHANGE, "schema_change"},
-        {MemTrackerType::JEMALLOC, "jemalloc_metadata"},
+        {MemTrackerType::JEMALLOC_METADATA, "jemalloc_metadata"},
         {MemTrackerType::RSS_NON_JEMALLOC, "rss_non_jemalloc"},
         {MemTrackerType::PASSTHROUGH, "passthrough"},
         {MemTrackerType::CONNECTOR_SCAN, "connector_scan"},
