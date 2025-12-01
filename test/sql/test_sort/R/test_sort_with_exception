@@ -1,0 +1,45 @@
+-- name: test_sort_with_exception @sequential
+create table t0 (
+    c0 STRING,
+    c1 STRING NOT NULL,
+    c2 int,
+    c3 int NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  100000));
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+admin enable failpoint 'chunks_sorter_full_sort_partial_sort_bad_alloc';
+-- result:
+-- !result
+[UC]select *,row_number() over (partition by c0 order by c1) from t0;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+admin disable failpoint 'chunks_sorter_full_sort_partial_sort_bad_alloc';
+-- result:
+-- !result
+admin enable failpoint 'chunks_sorter_full_sort_done_bad_alloc';
+-- result:
+-- !result
+[UC]select *,row_number() over (partition by c0 order by c1) from t0;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+admin disable failpoint 'chunks_sorter_full_sort_partial_sort_bad_alloc';
+-- result:
+-- !result
+admin enable failpoint 'chunks_sorter_topn_sort_bad_alloc';
+-- result:
+-- !result
+[UC]select * from t0 order by c1 limit 4096;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+admin disable failpoint 'chunks_sorter_topn_sort_bad_alloc';
+-- result:
+-- !result
