@@ -351,7 +351,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_overlapping_sstab
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 50, 100, &sst2));
 
     std::vector<std::vector<PersistentIndexSstablePB>> candidates;
-    candidates.push_back({sst1, sst2});
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
     ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
@@ -388,12 +389,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_filesets
     config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
 
     // Should successfully merge multiple filesets
-    ASSERT_TRUE(output_sstables.size() == 2);
+    ASSERT_TRUE(output_sstables.size() == 4);
     // check range
     ASSERT_EQ(output_sstables[0].range().start_key(), sst1.range().start_key());
-    ASSERT_EQ(output_sstables[0].range().end_key(), sst3.range().end_key());
-    ASSERT_EQ(output_sstables[1].range().start_key(), sst2.range().start_key());
-    ASSERT_EQ(output_sstables[1].range().end_key(), sst4.range().end_key());
+    ASSERT_EQ(output_sstables[3].range().end_key(), sst4.range().end_key());
 }
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_merge_base_level) {
@@ -412,10 +411,15 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_merge_base_l
     // Test with merge_base_level = true
     ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, &output_sstables));
 
-    ASSERT_EQ(output_sstables.size(), 1);
+    ASSERT_EQ(output_sstables.size(), 2);
     // check ranges
     ASSERT_EQ(output_sstables[0].range().start_key(), sst1.range().start_key());
-    ASSERT_EQ(output_sstables[0].range().end_key(), sst2.range().end_key());
+    ASSERT_EQ(output_sstables[0].range().end_key(), sst1.range().end_key());
+    ASSERT_EQ(output_sstables[1].range().start_key(), sst2.range().start_key());
+    ASSERT_EQ(output_sstables[1].range().end_key(), sst2.range().end_key());
+    // fileset ids should be updated
+    ASSERT_TRUE(UniqueId(sst1.fileset_id()) != UniqueId(output_sstables[0].fileset_id()));
+    ASSERT_TRUE(UniqueId(sst2.fileset_id()) != UniqueId(output_sstables[1].fileset_id()));
 }
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_parallel_execution) {
@@ -462,7 +466,9 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_threshold_co
     ASSERT_OK(create_test_sstable("test_sst_3.sst", 2000, 100, &sst3));
 
     std::vector<std::vector<PersistentIndexSstablePB>> candidates;
-    candidates.push_back({sst1, sst2, sst3});
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
+    candidates.push_back({sst3});
 
     // Test with very large threshold - should merge into single task
     auto old_threshold = config::pk_index_parallel_compaction_task_split_threshold_bytes;
@@ -489,7 +495,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_empty_sstabl
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 100, 50, &sst2));
 
     std::vector<std::vector<PersistentIndexSstablePB>> candidates;
-    candidates.push_back({sst1, sst2});
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
 
     std::vector<PersistentIndexSstablePB> output_sstables;
     ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
@@ -531,8 +538,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_empty_input
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     // Empty input should return error
     auto st = task.run();
@@ -549,7 +556,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_null_tablet
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, nullptr, _tablet_metadata, false, fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, nullptr, _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     // Null tablet_mgr should return error
     auto st = task.run();
@@ -566,8 +574,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_single_sstable_o
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     ASSERT_OK(task.run());
 
@@ -587,8 +595,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_sstable
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     ASSERT_OK(task.run());
 
@@ -613,8 +621,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_overlapping
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     ASSERT_OK(task.run());
 
@@ -633,8 +641,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_merge_base_
     SeekRange seek_range{"", ""}; // Empty range means full range
 
     // Test with merge_base_level = true
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, true,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, true, fileset_id,
+                                                seek_range);
 
     ASSERT_OK(task.run());
 
@@ -655,8 +663,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_fileset
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     ASSERT_OK(task.run());
 
@@ -675,8 +683,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_zero_size_s
     auto fileset_id = UniqueId::gen_uid();
     SeekRange seek_range{"", ""}; // Empty range means full range
 
-    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false,
-                                                fileset_id, seek_range);
+    LakePersistentIndexParallelCompactTask task(input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id,
+                                                seek_range);
 
     ASSERT_OK(task.run());
 

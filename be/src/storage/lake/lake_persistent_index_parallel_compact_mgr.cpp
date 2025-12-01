@@ -250,7 +250,7 @@ Status LakePersistentIndexParallelCompactMgr::compact(
         Status final_status = Status::OK();
         std::mutex output_mutex;
         for (int i = 0; i < tasks.size(); ++i) {
-            RETURN_IF_ERROR(_thread_pool->submit_func([&, i]() {
+            auto submit_st = _thread_pool->submit_func([&, i]() {
                 scoped_refptr<Trace> child_trace(new Trace);
                 Trace* sub_trace = child_trace.get();
                 trace->AddChildTrace("SubCompactionTask", sub_trace);
@@ -260,7 +260,7 @@ Status LakePersistentIndexParallelCompactMgr::compact(
                 if (!st.ok()) {
                     LOG(ERROR) << "Persistent index parallel compaction task failed: " << st;
                     std::lock_guard<std::mutex> lg(output_mutex);
-                    final_status = st;
+                    final_status.update(st);
                 } else {
                     // protect output_sstables via mutex
                     std::lock_guard<std::mutex> lg(output_mutex);
@@ -269,7 +269,14 @@ Status LakePersistentIndexParallelCompactMgr::compact(
                     }
                 }
                 latch.count_down();
-            }));
+            });
+            if (!submit_st.ok()) {
+                LOG(ERROR) << "Failed to submit persistent index parallel compaction task to thread pool: "
+                           << submit_st;
+                latch.count_down();
+                std::lock_guard<std::mutex> lg(output_mutex);
+                final_status.update(submit_st);
+            }
         }
         latch.wait();
         RETURN_IF_ERROR(final_status);
