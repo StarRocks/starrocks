@@ -93,6 +93,9 @@ public class AggregationNode extends PlanNode {
 
     private boolean withLocalShuffle = false;
 
+    // direct set limit will introduce a limit on ExchangeNode
+    private long localLimit = -1;
+
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
     // 1. bucket shuffle join,
     // 2. colocate join,
@@ -168,6 +171,18 @@ public class AggregationNode extends PlanNode {
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
+<<<<<<< HEAD
+=======
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
+    }
+
+    public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
+        this.groupByMinMaxStats = groupByMinMaxStats;
+    }
+
+    @Override
+>>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
     public void disablePhysicalPropertyOptimize() {
         setUseSortAgg(false);
         setUsePerBucketOptimize(false);
@@ -235,6 +250,10 @@ public class AggregationNode extends PlanNode {
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
         msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
+        if (localLimit > 0) {
+            Preconditions.checkState(!hasLimit());
+            msg.limit = localLimit;
+        }
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
@@ -316,6 +335,9 @@ public class AggregationNode extends PlanNode {
 
         if (withLocalShuffle) {
             output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+        if (localLimit > 0) {
+            output.append(detailPrefix).append("limit: ").append(localLimit).append("\n");
         }
 
         return output.toString();

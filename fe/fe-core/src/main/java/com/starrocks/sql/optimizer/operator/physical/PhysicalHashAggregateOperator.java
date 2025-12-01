@@ -71,6 +71,15 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean forcePreAggregation = false;
 
+<<<<<<< HEAD
+=======
+    private boolean withLocalShuffle = false;
+
+    private long localLimit = DEFAULT_LIMIT;
+
+    private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
+
+>>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -104,6 +113,12 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
+<<<<<<< HEAD
+=======
+        this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
+        this.withLocalShuffle = aggregateOperator.withLocalShuffle;
+        this.localLimit = aggregateOperator.localLimit;
+>>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -183,8 +198,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return withoutColocateRequirement;
     }
 
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
     public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
         this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {
