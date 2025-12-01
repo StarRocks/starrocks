@@ -177,18 +177,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
-<<<<<<< HEAD
-=======
     public void setLocalLimit(long localLimit) {
         this.localLimit = localLimit;
     }
 
-    public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
-        this.groupByMinMaxStats = groupByMinMaxStats;
-    }
-
-    @Override
->>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
     public void disablePhysicalPropertyOptimize() {
         setUseSortAgg(false);
         setUsePerBucketOptimize(false);
