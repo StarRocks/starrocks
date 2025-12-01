@@ -64,12 +64,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     private DataSkewInfo distinctColumnDataSkew = null;
 
-<<<<<<< HEAD
-=======
-    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
-    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
-    private boolean topNLocalAgg = false;
-
     // only used in streaming aggregate
     // eg: select distinct a from table limit 100;
     // In this query, we can push the LIMIT down to the streaming distinct operator.
@@ -78,7 +72,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // operators can truncate overlapping data produced by the local-distinct stage.
     private long localLimit = DEFAULT_LIMIT;
 
->>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
     // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
     // If you want to manually set this value, you could invoke setOnlyLocalAggregate().
@@ -149,21 +142,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return distinctColumnDataSkew;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean isTopNLocalAgg() {
-        return topNLocalAgg;
-    }
-
-    public void setTopNLocalAgg(boolean topNLocalAgg) {
-        this.topNLocalAgg = topNLocalAgg;
-    }
-
     public long getLocalLimit() {
         return localLimit;
     }
 
->>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
     public boolean checkGroupByCountDistinct() {
         if (groupingKeys.isEmpty() || aggregations.size() != 1) {
             return false;
