@@ -92,17 +92,17 @@ SIMD-accelerated operations:
 - `simd/gather.h` - SIMD gather operations
 
 ### IO Operations (io/)
-File and network I/O:
-- `io/fd_input_stream.h` - File descriptor input
-- `io/s3_input_stream.h` - S3 input stream
-- `io/cache_input_stream.h` - Cached input stream
+Low-level I/O stream implementations:
+- `io/fd_input_stream.h` - File descriptor input stream
+- `io/s3_input_stream.h` - S3 streaming input (low-level data access)
+- `io/cache_input_stream.h` - Cached input stream wrapper
 
 ### File System (fs/)
-File system abstraction:
+File system abstraction layer (high-level operations):
 - `fs/fs.h` - File system interface
-- `fs/fs_posix.h` - POSIX file system
-- `fs/fs_s3.h` - S3 file system
-- `fs/fs_hdfs.h` - HDFS file system
+- `fs/fs_posix.h` - POSIX file system implementation
+- `fs/fs_s3.h` - S3 file system (file operations, metadata)
+- `fs/fs_hdfs.h` - HDFS file system implementation
 
 ### Types (types/)
 Type definitions and utilities:
@@ -130,12 +130,12 @@ Status DoSomething() {
     return Status::OK();
 }
 
-// Vectorized batch processing
-Status ProcessBatch(const ChunkPtr& chunk) {
-    for (size_t i = 0; i < chunk->num_rows(); ++i) {
-        // Process each row
-    }
-    return Status::OK();
+// Vectorized column-wise processing (preferred)
+Status ProcessColumn(const ColumnPtr& column, ColumnPtr* result) {
+    // Process entire column using vectorized operations
+    *result = ColumnHelper::create_column(column->type_info(), column->size());
+    // Apply SIMD-optimized operations to process all elements at once
+    return VectorizedOp::apply(column.get(), result->get());
 }
 
 // Memory tracking
