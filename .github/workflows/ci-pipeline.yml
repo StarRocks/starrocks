@@ -183,7 +183,7 @@ jobs:
     name: BE FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
     env:
-      PRE_COMMIT: needs.basic-checker.outputs.PRE_COMMIT
+      PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
