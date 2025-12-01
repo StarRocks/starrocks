@@ -74,6 +74,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     private boolean withLocalShuffle = false;
 
+    private long localLimit = DEFAULT_LIMIT;
+
     private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
 
     public PhysicalHashAggregateOperator(AggType type,
@@ -111,6 +113,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
         this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
         this.withLocalShuffle = aggregateOperator.withLocalShuffle;
+        this.localLimit = aggregateOperator.localLimit;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -197,8 +200,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return withoutColocateRequirement;
     }
 
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
     public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
         this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {

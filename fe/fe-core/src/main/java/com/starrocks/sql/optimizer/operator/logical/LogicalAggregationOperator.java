@@ -64,6 +64,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     private DataSkewInfo distinctColumnDataSkew = null;
 
+    // only used in streaming aggregate
+    // eg: select distinct a from table limit 100;
+    // In this query, we can push the LIMIT down to the streaming distinct operator.
+    // However, no LIMIT should be inserted between the global and local operators.
+    // may cause incorrect final results, because the LIMIT between the local-distinct and global-distinct
+    // operators can truncate overlapping data produced by the local-distinct stage.
+    private long localLimit = DEFAULT_LIMIT;
+
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
     // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
     // If you want to manually set this value, you could invoke setOnlyLocalAggregate().
@@ -136,6 +144,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
+    }
+
+    public long getLocalLimit() {
+        return localLimit;
     }
 
     public boolean checkGroupByCountDistinct() {
@@ -303,6 +315,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.aggregations = aggregationOperator.aggregations;
             builder.isSplit = aggregationOperator.isSplit;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
+            builder.localLimit = aggregationOperator.localLimit;
             return this;
         }
 
@@ -314,6 +327,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
         public Builder setGroupingKeys(
                 List<ColumnRefOperator> groupingKeys) {
             builder.groupingKeys = ImmutableList.copyOf(groupingKeys);
+            return this;
+        }
+
+        public Builder setLocalLimit(long localLimit) {
+            builder.localLimit = localLimit;
             return this;
         }
 
