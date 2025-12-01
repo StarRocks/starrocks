@@ -576,12 +576,12 @@ insert into ss values('2002-01-02', 1, 2);
 alter table ss modify column cc INT AFTER event_day;
 -- result:
 -- !result
-insert into ss values('2002-01-03', 1, 2);
--- result:
--- !result
-select sleep(3);
+select sleep(5);
 -- result:
 1
+-- !result
+insert into ss values('2002-01-03', 1, 2);
+-- result:
 -- !result
 insert into ss values('2002-01-04', 1, 2);
 -- result:
