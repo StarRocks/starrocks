@@ -14,6 +14,8 @@
 
 package com.starrocks.load.pipe;
 
+import com.starrocks.common.CloseableLock;
+import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -82,6 +84,28 @@ public class PipeRepo {
             }
             default: {
                 LOG.error("Unknown PipeOp: " + entry.getPipeOp());
+            }
+        }
+    }
+
+    public void replayAlterPipe(AlterPipeLog alterPipeLog) {
+        Pipe pipe = pipeManager.getPipeById(alterPipeLog.getPipeId());
+        if (pipe == null) {
+            LOG.warn("Cannot find pipe {} when replaying AlterPipeLog", alterPipeLog.getPipeId());
+            return;
+        }
+
+        try (CloseableLock l = pipe.takeWriteLock()) {
+            if (alterPipeLog.getState() != null) {
+                pipe.setState(alterPipeLog.getState());
+            }
+
+            if (alterPipeLog.getChangeProps() != null) {
+                pipe.processProperties(alterPipeLog.getChangeProps());
+            }
+
+            if (alterPipeLog.getLoadStatus() != null) {
+                pipe.setLoadStatus(alterPipeLog.getLoadStatus());
             }
         }
     }

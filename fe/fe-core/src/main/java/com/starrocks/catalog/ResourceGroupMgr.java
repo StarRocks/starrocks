@@ -25,6 +25,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.AlterResourceGroupLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -680,6 +681,69 @@ public class ResourceGroupMgr implements Writable {
             createResourceGroup(defaultMvWgStmt);
         } catch (Exception e) {
             LOG.warn("failed to create builtin resource groups", e);
+        }
+    }
+
+    private void updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+        if (log.getClassifiers() != null) {
+            List<ResourceGroupClassifier> oldClassifiers = wg.getClassifiers();
+            Set<Long> newClassifierIds = log.getClassifiers().stream()
+                    .map(ResourceGroupClassifier::getId).collect(Collectors.toSet());
+            for (ResourceGroupClassifier classifier : oldClassifiers) {
+                if (!newClassifierIds.contains(classifier.getId())) {
+                    classifierMap.remove(classifier.getId());
+                }
+            }
+            for (ResourceGroupClassifier classifier : log.getClassifiers()) {
+                classifierMap.put(classifier.getId(), classifier);
+            }
+            wg.setClassifiers(log.getClassifiers());
+        }
+        if (log.getCpuWeight() != null) {
+            wg.setCpuWeight(log.getCpuWeight());
+            wg.normalizeCpuWeight();
+        }
+        if (log.getExclusiveCpuCores() != null) {
+            sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
+            wg.setExclusiveCpuCores(log.getExclusiveCpuCores());
+            sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+        }
+        if (log.getMaxCpuCores() != null) {
+            wg.setMaxCpuCores(log.getMaxCpuCores());
+        }
+        if (log.getMemLimit() != null) {
+            wg.setMemLimit(log.getMemLimit());
+        }
+        if (log.getBigQueryMemLimit() != null) {
+            wg.setBigQueryMemLimit(log.getBigQueryMemLimit());
+        }
+        if (log.getBigQueryScanRowsLimit() != null) {
+            wg.setBigQueryScanRowsLimit(log.getBigQueryScanRowsLimit());
+        }
+        if (log.getBigQueryCpuSecondLimit() != null) {
+            wg.setBigQueryCpuSecondLimit(log.getBigQueryCpuSecondLimit());
+        }
+        if (log.getConcurrencyLimit() != null) {
+            wg.setConcurrencyLimit(log.getConcurrencyLimit());
+        }
+        if (log.getSpillMemLimitThreshold() != null) {
+            wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+        }
+        if (log.getVersion() != 0) {
+            wg.setVersion(log.getVersion());
+        }
+    }
+
+    public void replayAlterResourceGroup(AlterResourceGroupLog log) {
+        writeLock();
+        try {
+            ResourceGroup wg = resourceGroupMap.get(log.getName());
+            if (wg == null) {
+                return;
+            }
+            updateResourceGroup(wg, log);
+        } finally {
+            writeUnlock();
         }
     }
 
