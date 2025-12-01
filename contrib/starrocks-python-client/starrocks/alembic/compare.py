@@ -57,7 +57,7 @@ from starrocks.common.utils import (
     TableAttributeNormalizer,
     extract_dialect_options_as_case_insensitive,
 )
-from starrocks.datatype import ARRAY, BOOLEAN, FLOAT, MAP, STRING, STRUCT, TINYINT, VARCHAR
+from starrocks.datatype import ARRAY, BOOLEAN, MAP, STRING, STRUCT, TINYINT, VARCHAR
 from starrocks.engine.interfaces import ReflectedPartitionInfo, ReflectedTableKeyInfo
 from starrocks.reflection import StarRocksTableDefinitionParser
 from starrocks.sql.schema import MaterializedView, View

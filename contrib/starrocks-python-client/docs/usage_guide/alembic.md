@@ -232,7 +232,7 @@ You define your schema in your Python models file (e.g., `models.py`) using SQLA
 
 If your StarRocks database already contains tables, views, or materialized views, you can bootstrap your models by generating them with `sqlacodegen`. This is particularly useful when introducing Alembic to an existing system.
 
-- Choose one or more schemas (StarRocks “databases”) to include using `--schemas` (comma-separated). Empyt for all schemas (databases). [Optional]
+- Choose one or more schemas (StarRocks “databases”) to include using `--schemas` (comma-separated). Empty for all schemas (databases). [Optional]
 - Render StarRocks-specific dialect options and table kind (to distinguish `Table`, `View`, and `Materialized View`) with `--options include_dialect_options`. **[Required]**
 - Preserve StarRocks-specific types with `--options keep_dialect_types`, so generated code imports and uses the StarRocks types instead of generic SQLAlchemy types. **[Required]**
 

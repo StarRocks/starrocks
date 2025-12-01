@@ -273,9 +273,8 @@ class STRUCT(StructuredType):
     def get_col_spec(self, **kw) -> str:
         fields_sql = []
         for name, type_ in self.field_tuples:
-            name_sql = self.get_sub_type_col_spec(name, **kw)
             type_sql = self.get_sub_type_col_spec(type_, **kw)
-            fields_sql.append(f"{name_sql} {type_sql}")
+            fields_sql.append(f"{name} {type_sql}")
         return f"STRUCT<{', '.join(fields_sql)}>"
 
     def get_sub_item_types(self) -> Set[sqltypes.TypeEngine]:
