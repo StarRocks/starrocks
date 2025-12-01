@@ -1802,6 +1802,22 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+        """
+        wait table state to normal
+        """
+        times = 0
+        while times < timeout_sec:
+            sql = f"show proc '/dbs/{db_name}/{table_name}'"
+            res = self.execute_sql(sql, True)
+            tools.assert_true(res["status"])
+            state = res["result"][0][5]
+            if state == "NORMAL":
+                break
+            time.sleep(1)
+            times += 1
+        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
