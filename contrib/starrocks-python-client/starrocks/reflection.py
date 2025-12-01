@@ -120,7 +120,7 @@ class StarRocksInspector(Inspector):
         # 1. Get table_kind and parsed_state, which will use the cached parsed_state)
         parsed_state = self.dialect._parsed_state_or_create(self.bind, table.name, table.schema, info_cache=self.info_cache)
         table_kind = parsed_state.table_kind
-        logger.debug("reflect %s: %s, parsed_state: %s.", table_kind.lower(), table.name, parsed_state)
+        logger.debug("reflect %s: %s, parsed_state: %s.", table_kind, table.name, parsed_state)
 
         # 3. Set info['table_kind']
         table.info[TableObjectInfoKey.TABLE_KIND] = table_kind
@@ -293,11 +293,8 @@ class StarRocksTableDefinitionParser(object):
                 return None
 
             default = str(raw_default).strip()
-            if not default:
+            if default is None or default.upper() == "NULL":
                 return None
-
-            if default.upper() == "NULL":
-                return "NULL"
 
             if self._is_datetime_column(column) and default.upper().startswith("CURRENT_TIMESTAMP"):
                 return default

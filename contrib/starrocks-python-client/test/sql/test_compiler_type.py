@@ -102,6 +102,9 @@ CONSTRAINT_TEST_CASES = [
     (INTEGER(), None, None, '0', "col INTEGER DEFAULT '0'"),
     (VARCHAR(50), False, 'Full test column', 'test',
      "col VARCHAR(50) NOT NULL DEFAULT 'test' COMMENT 'Full test column'"),
+    # Test empty string default value
+    (VARCHAR(50), None, None, '', "col VARCHAR(50) DEFAULT ''"),
+    (STRING(), None, None, '', "col STRING DEFAULT ''"),
 ]
 
 EDGE_CASE_TEST_CASES = [

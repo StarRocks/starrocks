@@ -661,12 +661,12 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         # Key / Table Type (Primary key, Duplicate key, Aggregate key, Unique key)
         key_type = None
         key_desc = None
-        for tbl_kind_key_str, table_kind in TableInfoKey.KEY_KWARG_MAP.items():
+        for tbl_kind_key_str, table_type in TableInfoKey.KEY_KWARG_MAP.items():
             kwarg_upper = tbl_kind_key_str.upper()
             if kwarg_upper in opts:
                 if key_type:
                     raise exc.CompileError(f"Multiple key types found: {tbl_kind_key_str}, first_key_type: {key_type}")
-                key_type = table_kind
+                key_type = table_type
                 key_columns_str: str = TableAttributeNormalizer.remove_outer_parentheses(opts[kwarg_upper])
                 logger.debug("get table key info: key_type: %s, key_columns: %s", key_type, key_columns_str)
                 # check if the key columns are valid
