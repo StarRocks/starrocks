@@ -25,12 +25,11 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LogCleanerTest {
     private File testLogDir;
-    private String originalSysLogDir;
-    private String originalAuditLogDir;
     private boolean originalLogCleanerEnable;
     private int originalThreshold;
     private int originalTarget;
@@ -40,8 +39,6 @@ public class LogCleanerTest {
     @BeforeEach
     public void setUp() throws IOException {
         // Save original config values
-        originalSysLogDir = Config.sys_log_dir;
-        originalAuditLogDir = Config.audit_log_dir;
         originalLogCleanerEnable = Config.log_cleaner_disk_util_based_enable;
         originalThreshold = Config.log_cleaner_disk_usage_threshold;
         originalTarget = Config.log_cleaner_disk_usage_target;
@@ -60,8 +57,8 @@ public class LogCleanerTest {
 
         // Enable log cleaner for tests
         Config.log_cleaner_disk_util_based_enable = true;
-        Config.log_cleaner_disk_usage_threshold = 80;
-        Config.log_cleaner_disk_usage_target = 60;
+        Config.log_cleaner_disk_usage_threshold = 0;
+        Config.log_cleaner_disk_usage_target = 0;
         Config.log_cleaner_audit_log_min_retention_days = 3;
         Config.log_cleaner_check_interval_second = 300;
     }
@@ -69,8 +66,6 @@ public class LogCleanerTest {
     @AfterEach
     public void tearDown() throws IOException {
         // Restore original config values
-        Config.sys_log_dir = originalSysLogDir;
-        Config.audit_log_dir = originalAuditLogDir;
         Config.log_cleaner_disk_util_based_enable = originalLogCleanerEnable;
         Config.log_cleaner_disk_usage_threshold = originalThreshold;
         Config.log_cleaner_disk_usage_target = originalTarget;
@@ -98,15 +93,17 @@ public class LogCleanerTest {
     }
 
     @Test
-    public void testLogCleanerDisabled() {
+    public void testLogCleanerDisabled() throws IOException {
+        createLogFile("fe.log.20240101-1", 1000);
+        createLogFile("fe.audit.log.20240101-1", 1000);
         Config.log_cleaner_disk_util_based_enable = false;
 
         LogCleaner cleaner = new LogCleaner();
         cleaner.runAfterCatalogReady();
 
-        // Should not process anything when disabled
-        File[] files = testLogDir.listFiles();
-        assertTrue(files == null || files.length == 0);
+        // Files should not be deleted when cleaner is disabled
+        assertTrue(new File(testLogDir, "fe.log.20240101-1").exists());
+        assertTrue(new File(testLogDir, "fe.audit.log.20240101-1").exists());
     }
 
     @Test
@@ -137,10 +134,9 @@ public class LogCleanerTest {
         LogCleaner cleaner = new LogCleaner();
         cleaner.runAfterCatalogReady();
 
-        // At least one file should be deleted (depending on disk usage simulation)
-        // Since we can't easily mock File.getTotalSpace() and getUsableSpace() for real files,
-        // we verify the cleaner runs without exception
-        assertTrue(testLogDir.exists());
+        assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.log.20240102-1").exists());
+        assertFalse(new File(testLogDir, "fe.dump.log.20240101-1").exists());
     }
 
     @Test
@@ -161,8 +157,8 @@ public class LogCleanerTest {
         // Old audit log may be deleted if disk usage is high
         File oldFile = new File(testLogDir, "fe.audit.log.20240102-1");
 
-        // At least recent file should exist
-        assertTrue(recentFile.exists() || oldFile.exists());
+        assertTrue(recentFile.exists());
+        assertFalse(oldFile.exists());
     }
 
     @Test
@@ -182,10 +178,14 @@ public class LogCleanerTest {
         LogCleaner cleaner = new LogCleaner();
         cleaner.runAfterCatalogReady();
 
-        // All log files should exist (disk usage is low by default)
-        assertTrue(new File(testLogDir, "fe.log.20240101-1").exists());
-        assertTrue(new File(testLogDir, "fe.audit.log.20240101-1").exists());
-        assertTrue(new File(testLogDir, "fe.dump.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.dump.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.big_query.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.profile.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.features.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.internal.log.20240101-1").exists());
+        assertFalse(new File(testLogDir, "fe.warn.log.20240101-1").exists());
+
         assertTrue(new File(testLogDir, "other.log.20240101-1").exists());
     }
 
@@ -196,23 +196,6 @@ public class LogCleanerTest {
         LogCleaner cleaner = new LogCleaner();
         // Should not throw exception
         cleaner.runAfterCatalogReady();
-    }
-
-    @Test
-    public void testMultipleDirectoriesWithSamePath() throws IOException {
-        // Set all log directories to the same path
-        Config.sys_log_dir = testLogDir.getAbsolutePath();
-        Config.audit_log_dir = testLogDir.getAbsolutePath();
-        Config.internal_log_dir = testLogDir.getAbsolutePath();
-
-        createLogFile("fe.log.20240101-1", 1000);
-        createLogFile("fe.audit.log.20240101-1", 1000);
-
-        LogCleaner cleaner = new LogCleaner();
-        cleaner.runAfterCatalogReady();
-
-        // Should process without errors (directory deduplication)
-        assertTrue(testLogDir.exists());
     }
 
     @Test
@@ -233,6 +216,8 @@ public class LogCleanerTest {
 
         // Current log file should not be deleted (doesn't match pattern)
         assertTrue(new File(testLogDir, "fe.log").exists());
+        // Old log file should be deleted
+        assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
     }
 
     private void createLogFile(String fileName, long size) throws IOException {
