@@ -1186,31 +1186,33 @@ void SegmentIterator::_init_column_predicates() {
 }
 
 StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
-    // Check every 32 chunks if we should trigger sampling based on selectivity
+    // Check every 16 chunks if we should trigger sampling based on selectivity
     // if only have one predicate column, do not sample
-    const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ & 16) == 0 &&
+    const bool should_check_selectivity = (_context->_evaluated_chunk_nums++ % 16) == 0 &&
                                           (!_context->_only_output_one_predicate_col_with_filter_push_down);
-    if (should_check_selectivity && _context->_enable_predicate_col_late_materialize &&
-        _context->_first_column_total_rows_read > 0) {
-        // // Calculate accumulated selectivity
-        // double first_column_selectivity = static_cast<double>(_context->_first_column_total_rows_passed) /
-        //                                   _context->_first_column_total_rows_read;
-
-        // If selectivity > 0.5 (more than 50% of rows passed, bad filtering), trigger sampling
+    if (should_check_selectivity && _context->_enable_predicate_col_late_materialize) {
+        // Calculate accumulated selectivity.
+        // If selectivity > tigger_sample_selectivity or this is the first time, trigger sampling
         // to potentially find an even better predicate order
-        ColumnId old_first_column_id = _context->_predicate_order[0];
+        double first_column_selectivity = _context->_first_column_total_rows_read == 0
+                                                  ? 1
+                                                  : static_cast<double>(_context->_first_column_total_rows_passed) /
+                                                            _context->_first_column_total_rows_read;
+        if (first_column_selectivity > config::tigger_sample_selectivity) {
+            ColumnId old_first_column_id = _context->_predicate_order[0];
 
-        // Sample and update predicate selectivity
-        ASSIGN_OR_RETURN(size_t sampled_chunk_size, _sample_predicate_columns(rowid));
+            // Sample and update predicate selectivity
+            ASSIGN_OR_RETURN(size_t sampled_chunk_size, _sample_predicate_columns(rowid));
 
-        // Check if first column changed after sampling
-        ColumnId new_first_column_id = _context->_predicate_order.front();
-        if (new_first_column_id != old_first_column_id) {
-            // First column changed, reset selectivity statistics
-            _context->_first_column_total_rows_read = 0;
-            _context->_first_column_total_rows_passed = 0;
+            // Check if the first column changed after sampling
+            ColumnId new_first_column_id = _context->_predicate_order.front();
+            if (new_first_column_id != old_first_column_id) {
+                // First column changed, reset selectivity statistics
+                _context->_first_column_total_rows_read = 0;
+                _context->_first_column_total_rows_passed = 0;
+            }
+            return sampled_chunk_size;
         }
-        return sampled_chunk_size;
     }
     return 0;
 }

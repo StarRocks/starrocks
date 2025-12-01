@@ -1797,4 +1797,9 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+
+// if the first predicate column's selectivity bigger than this, trigger sample,
+// which means if the selectivity is very good already, we don't need to sample
+CONF_mDouble(tigger_sample_selectivity, "0.2");
+
 } // namespace starrocks::config
