@@ -146,6 +146,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+                primitiveType = PrimitiveType.VARBINARY;
+                break;
             default:
                 // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
                 // However, the mariadb-java-client does not handle the JSON type,
