@@ -2186,6 +2186,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public long cboPushDownDistinctLimit() {
         return cboPushDownDistinctLimit;
     }
+    public void setCboPushDownDistinctLimit(long cboPushDownDistinctLimit) {
+        this.cboPushDownDistinctLimit = cboPushDownDistinctLimit;
+    }
 
     public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
         this.cboPushDownTopNLimit = cboPushDownTopNLimit;
