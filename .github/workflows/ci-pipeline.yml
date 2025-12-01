@@ -189,6 +189,11 @@ jobs:
       test_filter: ${{ steps.path-filter.outputs.ut }}
       thirdparty_filter: ${{ steps.path-filter.outputs.thirdparty }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:
@@ -227,7 +232,8 @@ jobs:
         id: commit-filter
         if: env.PRE_COMMIT != ''
         with:
-          base: ${{ env.PRE_COMMIT }}
+          base: HEAD~1  # 上一个 commit
+          ref: HEAD  
           filters: |
             be:
               - 'be/!(test)**'
@@ -1344,6 +1350,10 @@ jobs:
       - SQL-Tester
       - restart-fe-after-admit
       - restart-be-after-admit
+      - fe-ut
+      - be-ut
+      - fe-codestyle-check
+      - clang-tidy
     if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
