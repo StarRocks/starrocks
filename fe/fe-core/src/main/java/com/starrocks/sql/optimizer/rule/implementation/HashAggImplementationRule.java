@@ -44,6 +44,11 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.getPredicate(),
                 logical.getProjection());
         physical.setDistinctColumnDataSkew(logical.getDistinctColumnDataSkew());
+<<<<<<< HEAD
+=======
+        physical.setTopNLocalAgg(logical.isTopNLocalAgg());
+        physical.setLocalLimit(logical.getLocalLimit());
+>>>>>>> 7e61d566b8 ([BugFix] Fix push down distinct limit cause data lose (#66109))
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
     }

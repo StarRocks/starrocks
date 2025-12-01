@@ -103,7 +103,8 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setSplit()
                 .setPredicate(null)
-                .setLimit(localAggLimit)
+                .setLocalLimit(localAggLimit)
+                .setLimit(Operator.DEFAULT_LIMIT)
                 .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
