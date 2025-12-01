@@ -12,23 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.transaction;
+package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.authorization.IdGenerator;
-import com.starrocks.catalog.CatalogRecycleBin;
-import com.starrocks.catalog.ColocateTableIndex;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfoBuilder;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,7 +24,9 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GlobalTransactionMgr;
 
 import java.util.HashMap;
 import java.util.List;
@@ -44,15 +34,19 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MockedLocalMetaStore extends LocalMetastore {
+    private static final short DEFAULT_REPLICATION_NUM = 3;
+
     private final IdGenerator idGenerator;
     private final Map<String, Database> nameToDb;
     private final Map<Long, Database> idToDb;
+    private final GlobalStateMgr globalStateMgr;
 
     public MockedLocalMetaStore(GlobalStateMgr globalStateMgr,
                                 CatalogRecycleBin recycleBin,
                                 ColocateTableIndex colocateTableIndex) {
         super(globalStateMgr, recycleBin, colocateTableIndex);
 
+        this.globalStateMgr = globalStateMgr;
         this.nameToDb = new HashMap<>();
         this.idToDb = new HashMap<>();
         this.idGenerator = new IdGenerator();
@@ -65,13 +59,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
 
     @Override
     public Database getDb(long databaseId) {
-        for (Database database : nameToDb.values()) {
-            if (database.getId() == databaseId) {
-                return database;
-            }
-        }
-
-        return null;
+        return idToDb.get(databaseId);
     }
 
     @Override
@@ -87,7 +75,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
 
     @Override
     public List<Table> getTables(Long dbId) {
-        Database db = nameToDb.get(dbId);
+        Database db = idToDb.get(dbId);
         return db.getTables();
     }
 
@@ -95,6 +83,7 @@ public class MockedLocalMetaStore extends LocalMetastore {
     public void createDb(String name) {
         Database database = new Database(idGenerator.getNextId(), name);
         nameToDb.put(name, database);
+        idToDb.put(database.getId(), database);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         globalTransactionMgr.addDatabaseTransactionMgr(database.getId());
@@ -106,57 +95,79 @@ public class MockedLocalMetaStore extends LocalMetastore {
         String tableName = stmt.getTableName();
 
         // create distribution info
+        Preconditions.checkNotNull(db, "Database %s not found", stmt.getDbName());
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, null);
 
+        long tableId = idGenerator.getNextId();
         long partitionId = idGenerator.getNextId();
         SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
-        Partition partition = createPartition(partitionId, tableName, distributionInfo);
+        partitionInfo.setReplicationNum(partitionId, DEFAULT_REPLICATION_NUM);
+        partitionInfo.setIsInMemory(partitionId, false);
 
         OlapTable olapTable = new OlapTable(
-                idGenerator.getNextId(),
+                tableId,
                 tableName,
                 stmt.getColumns(),
                 null,
                 partitionInfo,
                 distributionInfo);
-        olapTable.addPartition(partition);
 
         long indexId = idGenerator.getNextId();
         olapTable.setIndexMeta(
                 indexId,
-                "",
+                tableName,
                 stmt.getColumns(),
                 0,
                 0,
                 (short) 0,
                 TStorageType.COLUMN,
-                KeysType.UNIQUE_KEYS);
+                KeysType.DUP_KEYS);
         olapTable.setBaseIndexId(indexId);
+        olapTable.setReplicationNum(DEFAULT_REPLICATION_NUM);
+
+        Partition partition = createPartition(
+                db.getId(),
+                olapTable.getId(),
+                partitionId,
+                tableName,
+                distributionInfo,
+                indexId);
+        olapTable.addPartition(partition);
 
         db.registerTableUnlocked(olapTable);
 
         return true;
     }
 
-    private Partition createPartition(long partitionId, String partitionName, DistributionInfo distributionInfo) {
-        Partition logicalPartition = new Partition(
+    private Partition createPartition(long dbId,
+                                      long tableId,
+                                      long partitionId,
+                                      String partitionName,
+                                      DistributionInfo distributionInfo,
+                                      long baseIndexId) {
+        MaterializedIndex baseIndex = new MaterializedIndex(baseIndexId, IndexState.NORMAL);
+        long physicalPartitionId = globalStateMgr.getNextId();
+        Partition partition = new Partition(
                 partitionId,
+                physicalPartitionId,
                 partitionName,
+                baseIndex,
                 distributionInfo);
 
-        long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
-        PhysicalPartition physicalPartition = new PhysicalPartition(
-                physicalPartitionId,
-                logicalPartition.generatePhysicalPartitionName(physicalPartitionId),
-                partitionId,
-                null);
-        physicalPartition.setBucketNum(distributionInfo.getBucketNum());
+        int bucketNum = distributionInfo != null ? distributionInfo.getBucketNum() : 1;
+        bucketNum = bucketNum > 0 ? bucketNum : 1;
 
-        logicalPartition.addSubPartition(physicalPartition);
+        for (int i = 0; i < bucketNum; i++) {
+            long tabletId = globalStateMgr.getNextId();
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, baseIndexId, TStorageMedium.HDD);
+            com.starrocks.catalog.LocalTablet tablet = new com.starrocks.catalog.LocalTablet(tabletId);
+            baseIndex.addTablet(tablet, tabletMeta, false);
+            globalStateMgr.getTabletInvertedIndex().addTablet(tabletId, tabletMeta);
+        }
 
-        return logicalPartition;
+        return partition;
     }
 
     @Override
@@ -174,4 +185,5 @@ public class MockedLocalMetaStore extends LocalMetastore {
         Database db = getDb(dbName);
         db.registerTableUnlocked(view);
     }
+
 }

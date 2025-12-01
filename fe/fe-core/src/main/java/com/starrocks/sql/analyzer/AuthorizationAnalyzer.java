@@ -24,7 +24,6 @@ import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
@@ -38,6 +37,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -141,7 +141,7 @@ public class AuthorizationAnalyzer {
                         objectList.add(authorizationManager.generateUserObject(ObjectType.USER, userIdentity));
                     }
                 } else if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
-                    List<Pair<Long, Long>> funcPrivTokenList = analyzeFuncPrivToken(stmt, objectType);
+                    List<Pair<Long, Long>> funcPrivTokenList = analyzeFuncPrivToken(stmt, objectType, session);
                     for (Pair<Long, Long> funcPrivToken : funcPrivTokenList) {
                         objectList.add(authorizationManager.generateFunctionObject(objectType,
                                 funcPrivToken.first, funcPrivToken.second));
@@ -201,7 +201,8 @@ public class AuthorizationAnalyzer {
             return userIdentities;
         }
 
-        public List<Pair<Long, Long>> analyzeFuncPrivToken(BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType)
+        public List<Pair<Long, Long>> analyzeFuncPrivToken(BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType,
+                                                           ConnectContext session)
                 throws AnalysisException {
             List<Pair<Long, Long>> funcPrivTokenList = new ArrayList<>();
 
@@ -238,44 +239,41 @@ public class AuthorizationAnalyzer {
                 }
             } else {
                 if (ObjectType.FUNCTION.equals(objectType)) {
-                    for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
-                        FunctionName functionName = f.first;
-                        if (functionName.getDb() == null) {
-                            String dbName = ConnectContext.get().getDatabase();
-                            if (dbName.equals("")) {
-                                throw new SemanticException("database not selected");
-                            }
-                            functionName.setDb(dbName);
-                        }
+                    List<FunctionRef> functionRefs = stmt.getFunctionRefs();
+                    List<FunctionArgsDef> functionArgs = stmt.getFunctionArgsDefs();
+                    for (int i = 0; i < functionRefs.size(); i++) {
+                        FunctionRef functionRef = functionRefs.get(i);
+                        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, session.getDatabase());
+                        FunctionArgsDef argsDef = functionArgs.get(i);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                                functionRef, argsDef, session.getDatabase());
 
-                        FunctionArgsDef argsDef = f.second;
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(), argsDef.isVariadic());
-
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(searchDesc.getName().getDb());
                         long databaseID = db.getId();
                         Function function = db.getFunction(searchDesc);
 
                         if (function == null) {
-                            throw new SemanticException("cannot find function " + functionName + "!");
+                            throw new SemanticException("cannot find function " + searchDesc.getName() + "!");
                         } else {
                             funcPrivTokenList.add(new Pair<>(databaseID, function.getFunctionId()));
                         }
                     }
                 } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
-                    for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
-                        FunctionName functionName = f.first;
-                        FunctionArgsDef argsDef = f.second;
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(), argsDef.isVariadic());
+                    List<FunctionRef> functionRefs = stmt.getFunctionRefs();
+                    List<FunctionArgsDef> functionArgs = stmt.getFunctionArgsDefs();
+                    for (int i = 0; i < functionRefs.size(); i++) {
+                        FunctionRef functionRef = functionRefs.get(i);
+                        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
+                        FunctionArgsDef argsDef = functionArgs.get(i);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                                functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
 
-                        Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
-                                .getFunction(searchDesc);
+                        Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(searchDesc);
 
                         if (function == null) {
-                            throw new SemanticException("cannot find function " + functionName + "!");
+                            throw new SemanticException("cannot find function " + searchDesc.getName() + "!");
                         } else {
                             funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
                                     function.getFunctionId()));

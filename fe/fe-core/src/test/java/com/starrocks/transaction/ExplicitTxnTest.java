@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;

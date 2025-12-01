@@ -6480,18 +6480,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitDropFunctionStatement(com.starrocks.sql.parser.StarRocksParser.DropFunctionStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString();
         boolean isGlobal = context.GLOBAL() != null;
         boolean dropIfExist = context.IF() != null && context.EXISTS() != null;
-        FunctionName fnName = FunctionName.createFnName(functionName);
-        if (isGlobal) {
-            if (!Strings.isNullOrEmpty(fnName.getDb())) {
-                throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(functionName), qualifiedName.getPos());
-            }
-            fnName.setAsGlobalFunction();
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, createPos(context), isGlobal);
+        if (isGlobal && !Strings.isNullOrEmpty(functionRef.getDbName())) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
         }
 
-        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()), createPos(context), dropIfExist);
+        return new DropFunctionStmt(functionRef, getFunctionArgsDef(context.typeList()),
+                createPos(context), dropIfExist);
     }
 
     @Override
@@ -6524,17 +6521,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             inlineContent = context.inlineFunction().ATTACHMENT().getText().substring(2, content.length() - 2);
         }
 
-        FunctionName fnName = FunctionName.createFnName(functionName);
-        if (isGlobal) {
-            if (!Strings.isNullOrEmpty(fnName.getDb())) {
-                throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(functionName), qualifiedName.getPos());
-            }
-            fnName.setAsGlobalFunction();
+        if (isGlobal && qualifiedName.getParts().size() > 1) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
         }
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
 
-        return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent, replaceIfExists,
-                createIfNotExists);
+        return new CreateFunctionStmt(functionType, functionRef,
+                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent,
+                replaceIfExists, createIfNotExists);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
@@ -6936,31 +6930,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private GrantRevokePrivilegeObjects buildGrantRevokePrivWithFunction(
             com.starrocks.sql.parser.StarRocksParser.PrivFunctionObjectNameListContext context, boolean isGlobal) {
-        List<Pair<FunctionName, FunctionArgsDef>> functions = new ArrayList<>();
+        List<FunctionRef> functionRefs = new ArrayList<>();
+        List<FunctionArgsDef> functionArgsDefs = new ArrayList<>();
         int functionSize = context.qualifiedName().size();
         List<com.starrocks.sql.parser.StarRocksParser.TypeListContext> typeListContexts = context.typeList();
         for (int i = 0; i < functionSize; ++i) {
             com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext qualifiedNameContext = context.qualifiedName(i);
             QualifiedName qualifiedName = getQualifiedName(qualifiedNameContext);
-            FunctionName functionName;
-            if (qualifiedName.getParts().size() == 1) {
-                functionName = new FunctionName(qualifiedName.getParts().get(0));
-            } else if (qualifiedName.getParts().size() == 2) {
-                functionName = new FunctionName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-            } else {
-                throw new SemanticException("Error function format " + qualifiedName);
-            }
-
-            if (isGlobal) {
-                functionName.setAsGlobalFunction();
-            }
-
+            FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
             FunctionArgsDef argsDef = getFunctionArgsDef(typeListContexts.get(i));
-            functions.add(Pair.create(functionName, argsDef));
+            functionRefs.add(functionRef);
+            functionArgsDefs.add(argsDef);
         }
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setFunctions(functions);
+        objects.setFunctionRefs(functionRefs);
+        objects.setFunctionArgsDefs(functionArgsDefs);
 
         return objects;
     }
