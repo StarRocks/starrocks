@@ -15,6 +15,7 @@ set catalog iceberg_sql_test_${uuid0};
 
 set enable_profile=true;
 set enable_async_profile=false;
+set plan_mode=local;
 
 select * from iceberg_oss_db.bloom_filter_table5 where c1 = 2;
 select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
