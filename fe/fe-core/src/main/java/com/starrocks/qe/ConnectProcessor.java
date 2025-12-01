@@ -52,6 +52,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.UUIDUtil;
@@ -93,6 +94,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
@@ -445,6 +447,29 @@ public class ConnectProcessor {
         }
     }
 
+    protected void addParseFailedQueryDetail(String sql) {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        QueryDetail queryDetail = new QueryDetail(
+                DebugUtil.printId(ctx.getQueryId()),
+                true, // always set isQuery to true
+                ctx.connectionId,
+                ctx.getMysqlChannel() != null ?
+                        ctx.getMysqlChannel().getRemoteIp() : "System",
+                ctx.getStartTime(), -1, -1,
+                QueryDetail.QueryMemState.FAILED,
+                ctx.getDatabase(),
+                sql,
+                ctx.getQualifiedUser(),
+                Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""),
+                ctx.getCurrentWarehouseName(),
+                ctx.getCurrentCatalog());
+        ctx.setQueryDetail(queryDetail);
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
+    }
+
     private QueryAttemptResult executeQueryAttempt(String originStmt) throws Throwable {
         boolean allStatementsAreSet = true;
 
@@ -457,6 +482,8 @@ public class ConnectProcessor {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
             stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
         } catch (ParsingException parsingException) {
+            ctx.getState().setError(parsingException.getMessage());
+            addParseFailedQueryDetail(originStmt);
             throw new AnalysisException(parsingException.getMessage());
         }
 
