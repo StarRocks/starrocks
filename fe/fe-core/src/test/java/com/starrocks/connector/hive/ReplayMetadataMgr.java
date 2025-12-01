@@ -30,6 +30,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
@@ -76,11 +77,9 @@ public class ReplayMetadataMgr extends MetadataMgr {
             String catalogName;
             if (!resourceMgr.containsResource(resourceName)) {
                 // we only support hive query dump now.
-                Map<String, String> properties = Maps.newHashMap();
-                properties.put("hive.metastore.uris", "thrift://localhost:9083");
                 HiveResource resource = new HiveResource(resourceName);
                 try {
-                    resource.alterProperties(properties);
+                    resource.alterProperties(new AlterResourceInfo(resourceName, "thrift://localhost:9083"));
                     resourceMgr.replayCreateResource(resource);
                 } catch (Exception e) {
                     throw new RuntimeException(e);

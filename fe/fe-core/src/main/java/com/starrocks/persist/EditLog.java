@@ -668,9 +668,19 @@ public class EditLog {
                     globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_ALTER_RESOURCE: {
+                    final AlterResourceInfo alterResourceInfo = (AlterResourceInfo) journal.data();
+                    globalStateMgr.getResourceMgr().replayAlterResource(alterResourceInfo);
+                    break;
+                }
                 case OperationType.OP_RESOURCE_GROUP: {
                     final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.data();
                     globalStateMgr.getResourceGroupMgr().replayResourceGroupOp(entry);
+                    break;
+                }
+                case OperationType.OP_ALTER_RESOURCE_GROUP: {
+                    final AlterResourceGroupLog entry = (AlterResourceGroupLog) journal.data();
+                    globalStateMgr.getResourceGroupMgr().replayAlterResourceGroup(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK: {
@@ -1125,6 +1135,11 @@ public class EditLog {
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
+                case OperationType.OP_ALTER_PIPE: {
+                    AlterPipeLog alterPipeLog = (AlterPipeLog) journal.data();
+                    globalStateMgr.getPipeManager().getRepo().replayAlterPipe(alterPipeLog);
+                    break;
+                }
                 case OperationType.OP_CREATE_DICTIONARY: {
                     Dictionary dictionary = (Dictionary) journal.data();
                     globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
@@ -1453,8 +1468,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
     }
 
-    public void logResourceGroupOp(ResourceGroupOpEntry op) {
-        logJsonObject(OperationType.OP_RESOURCE_GROUP, op);
+    public void logResourceGroupOp(ResourceGroupOpEntry op, WALApplier applier) {
+        logJsonObject(OperationType.OP_RESOURCE_GROUP, op, applier);
+    }
+
+    public void logAlterResourceGroup(AlterResourceGroupLog log, WALApplier applier) {
+        logJsonObject(OperationType.OP_ALTER_RESOURCE_GROUP, log, applier);
     }
 
     public void logCreateTask(Task info, WALApplier applier) {
@@ -1767,12 +1786,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_LOAD_JOB, info);
     }
 
-    public void logCreateResource(Resource resource) {
-        logJsonObject(OperationType.OP_CREATE_RESOURCE, resource);
+    public void logCreateResource(Resource resource, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_RESOURCE, resource, walApplier);
     }
 
-    public void logDropResource(DropResourceOperationLog operationLog) {
-        logJsonObject(OperationType.OP_DROP_RESOURCE, operationLog);
+    public void logAlterResource(AlterResourceInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_RESOURCE, info, walApplier);
+    }
+
+    public void logDropResource(DropResourceOperationLog operationLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_RESOURCE, operationLog, walApplier);
     }
 
     public void logCreateSmallFile(SmallFile info, WALApplier walApplier) {
@@ -2123,8 +2146,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
 
-    public void logPipeOp(PipeOpEntry opEntry) {
-        logJsonObject(OperationType.OP_PIPE, opEntry);
+    public void logPipeOp(PipeOpEntry opEntry, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_PIPE, opEntry, walApplier);
+    }
+
+    public void logAlterPipe(AlterPipeLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_PIPE, log, walApplier);
     }
 
     public void logModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) {
