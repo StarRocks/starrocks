@@ -234,6 +234,7 @@ jobs:
         with:
           base: HEAD~1  # 上一个 commit
           ref: HEAD  
+          working-directory: ${{ github.workspace }}
           filters: |
             be:
               - 'be/!(test)**'
