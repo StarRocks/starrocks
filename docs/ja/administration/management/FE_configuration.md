@@ -3204,6 +3204,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 有効にすると、Lake テーブルは関連するトランザクションで combined transaction log パスを使用することを許可します。このフラグはクラスタが shared-data モード（RunMode.isSharedDataMode()）で動作している場合にのみ考慮されます。`lake_use_combined_txn_log = true` のとき、BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING、BATCH_LOAD_JOB タイプのロードトランザクションは combined txn log を使用する対象になります（詳細は LakeTableHelper.supportCombinedTxnLog を参照）。compaction を含むコードパスは isTransactionSupportCombinedTxnLog を通じて combined-log のサポートを確認します。無効化されているか shared-data モードでない場合は、combined transaction log の動作は使用されません。
 - 導入バージョン: v3.3.7, v3.4.0, v3.5.0
 
+##### lake_enable_drop_tablet_cache
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: shared-data モードで、実データが削除される前に BE/CN 上のキャッシュをクリーンアップします。
+- 導入バージョン: v4.0
+
 ##### enable_iceberg_commit_queue
 
 - デフォルト: true

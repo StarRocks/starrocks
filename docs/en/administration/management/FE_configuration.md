@@ -3793,6 +3793,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
+##### lake_enable_drop_tablet_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In shared-data mode, clears the cache on BE/CN before the underlying data is actually deleted.
+- Introduced in: v4.0
+
 ##### enable_iceberg_commit_queue
 
 - Default: true

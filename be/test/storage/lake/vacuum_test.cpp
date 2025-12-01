@@ -16,8 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <ctime>
 #include <set>
+#include <vector>
 
 #include "common/config.h"
 #include "fs/fs.h"
@@ -32,6 +34,7 @@
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/path_util.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
@@ -2059,6 +2062,87 @@ TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
         ASSERT_EQ(TStatusCode::OK, response.status().status_code());
         EXPECT_FALSE(file_exist(combined_txn_log_filename(1000)));
     }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_drop_tablet_cache) {
+    constexpr int64_t kTabletId = 700;
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 2,
+        "rowsets": [
+            {
+                "segments": [
+                    "700_seg_c.dat"
+                ],
+                "segment_size": [300],
+                "data_size": 300
+            }
+        ],
+        "delvec_meta": {
+            "version_to_file": [
+                {
+                    "key": 2,
+                    "value": {
+                        "name": "700_delvec.delvec",
+                        "size": 23
+                    }
+                }
+            ]
+        },
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "700_sst.sst",
+                    "filesize": 333
+                }
+            ]
+        },
+        "prev_garbage_version": 0
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "700_seg_a.dat",
+                    "700_seg_b.dat"
+                ],
+                "segment_size": [100, 200],
+                "bundle_file_offsets": [0, 1000],
+                "data_size": 300
+            }
+        ],
+        "prev_garbage_version": 2
+        }
+        )DEL")));
+
+    std::vector<std::string> dropped;
+    SyncPoint::GetInstance()->SetCallBack("drop_tablet_cache:drop_local_cache", [&](void* arg) {
+        auto* path = reinterpret_cast<const std::string*>(arg);
+        dropped.emplace_back(::starrocks::path_util::base_name(*path));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("drop_tablet_cache:drop_local_cache");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(drop_tablet_cache(_tablet_mgr.get(), kTabletId, 3));
+
+    std::vector<std::string> expected{
+            "700_seg_a.dat", "700_seg_b.dat", "700_seg_c.dat", "700_delvec.delvec", "700_sst.sst",
+    };
+
+    std::sort(dropped.begin(), dropped.end());
+    std::sort(expected.begin(), expected.end());
+    ASSERT_EQ(expected, dropped);
 }
 
 TEST_P(LakeVacuumTest, test_vacuumed_version) {
