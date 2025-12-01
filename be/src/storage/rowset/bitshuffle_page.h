@@ -422,7 +422,7 @@ template <LogicalType Type>
 inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
                                                           size_t* count, Column* column) {
     DCHECK(_parsed);
-    if (PREDICT_FALSE(*count) == 0) {
+    if (PREDICT_FALSE(*count == 0)) {
         return Status::OK();
     }
     size_t total = *count;
