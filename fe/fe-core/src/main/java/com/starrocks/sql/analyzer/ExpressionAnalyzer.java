@@ -961,6 +961,79 @@ public class ExpressionAnalyzer {
             }
             String fnName = node.getFnName().getFunction();
 
+            if (fnName.equalsIgnoreCase("date_part")) {
+                if (node.getChildren().size() != 2) {
+                    throw new SemanticException("DATE_PART requires 2 arguments: DATE_PART('unit', date_expr)");
+                }
+
+                Expr unitExpr = node.getChild(0);
+                Expr dateExpr = node.getChild(1);
+
+                if (!(unitExpr instanceof StringLiteral)) {
+                    throw new SemanticException("The first argument of DATE_PART must be a constant string " + 
+                            "literal, e.g., 'year'");
+                }
+
+                String unit = ((StringLiteral) unitExpr).getStringValue().toLowerCase();
+                String targetFunction = "";
+
+                switch (unit) {
+                    case "year":
+                    case "yy":
+                    case "yyyy":
+                        targetFunction = "year";
+                        break;
+                    case "quarter":
+                    case "qq":
+                    case "q":
+                        targetFunction = "quarter";
+                        break;
+                    case "month":
+                    case "mm":
+                    case "m":
+                        targetFunction = "month";
+                        break;
+                    case "day":
+                    case "dd":
+                    case "d":
+                        targetFunction = "day";
+                        break;
+                    case "hour":
+                    case "hh":
+                        targetFunction = "hour";
+                        break;
+                    case "minute":
+                    case "mi":
+                    case "n":
+                        targetFunction = "minute";
+                        break;
+                    case "second":
+                    case "ss":
+                    case "s":
+                        targetFunction = "second";
+                        break;
+                    case "dow": 
+                        targetFunction = "dayofweek";
+                        break;
+                    case "doy":
+                        targetFunction = "dayofyear";
+                        break;
+                    case "week":
+                    case "wk":
+                    case "ww":
+                        targetFunction = "week_iso";
+                        break;
+                    default:
+                        throw new SemanticException("Unsupported unit for DATE_PART: " + unit);
+                }
+
+                node.resetFnName("", targetFunction);
+                node.clearChildren();
+                node.addChild(dateExpr);
+
+                return visitFunctionCall(node, scope);
+            }
+ 
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
 
