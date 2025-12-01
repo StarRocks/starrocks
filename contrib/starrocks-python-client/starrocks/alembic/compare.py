@@ -248,8 +248,8 @@ def include_object_for_view_mv(object, name, type_, reflected, compare_to):
     """
     if type_ == "table":
         # object is a sqlalchemy.Table object, from metadata or reflected
-        table_kind = object.info.get(TableObjectInfoKey.TABLE_KIND).upper()
-        if table_kind in (TableKind.VIEW, TableKind.MATERIALIZED_VIEW):
+        table_kind = object.info.get(TableObjectInfoKey.TABLE_KIND)
+        if table_kind and table_kind.upper() in (TableKind.VIEW, TableKind.MATERIALIZED_VIEW):
             return False
     return True
 
@@ -330,7 +330,7 @@ def _autogen_for_views(
     all_normed_metadata_view_names = set(
         (table.schema if table.schema != default_schema else None, table.name)
         for table in metadata.tables.values()
-        if table.info.get(TableObjectInfoKey.TABLE_KIND).upper() == TableKind.VIEW
+        if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.VIEW
         and autogen_context.run_name_filters(
             table.name, "view", {"schema_name": table.schema}
         )
@@ -385,7 +385,7 @@ def _compare_views(
     view_name_to_table = {
         (table.schema if table.schema != default_schema else None, table.name): table
         for table in metadata.tables.values()
-        if table.info.get(TableObjectInfoKey.TABLE_KIND).upper() == TableKind.VIEW
+        if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.VIEW
     }
     metadata_view_names = metadata_view_names_no_dflt
 
@@ -825,7 +825,7 @@ def _autogen_for_mvs(
     all_normed_metadata_mv_names = set(
         (table.schema if table.schema != default_schema else None, table.name)
         for table in metadata.tables.values()
-        if table.info.get(TableObjectInfoKey.TABLE_KIND).upper() == TableKind.MATERIALIZED_VIEW
+        if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.MATERIALIZED_VIEW
         and autogen_context.run_name_filters(
             table.name, "materialized_view", {"schema_name": table.schema}
         )
@@ -880,7 +880,7 @@ def _compare_mvs(
     mv_name_to_table = {
         (table.schema if table.schema != default_schema else None, table.name): table
         for table in metadata.tables.values()
-        if table.info.get(TableObjectInfoKey.TABLE_KIND).upper() == TableKind.MATERIALIZED_VIEW
+        if (table_kind:= table.info.get(TableObjectInfoKey.TABLE_KIND)) and table_kind.upper() == TableKind.MATERIALIZED_VIEW
     }
     metadata_mv_names = metadata_mv_names_no_dflt
 

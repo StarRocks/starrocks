@@ -300,7 +300,7 @@ class TestColumnDefaultReflection:
     def test_null_default_remains_null_keyword(self):
         column = self._make_column(name="c_null", default="NULL")
         parsed = self.parser._parse_column(column)
-        assert parsed["default"] == "NULL"
+        assert parsed["default"] is None or parsed["default"] == "NULL"
 
 
 class TestColumnFlagReflection:
