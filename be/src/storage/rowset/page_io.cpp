@@ -40,6 +40,7 @@
 #include <string_view>
 
 #include "cache/mem_cache/page_cache.h"
+#include "cache/mem_cache/pagecache_arena.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -194,7 +195,8 @@ static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<s
                 strings::Substitute("Bad page: too small ($0), file($1)", page_size, opts.read_file->filename()));
     }
 
-    auto page = std::make_unique<std::vector<uint8_t>>();
+    // Use PageCacheVector - allocator internally handles config switch
+    auto page = std::make_unique<PageCacheVector>();
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
     size_t reserve_size = page_size + Column::APPEND_OVERFLOW_MAX_SIZE;
     RETURN_IF_ERROR(raw::stl_vector_resize_uninitialized_checked(page.get(), reserve_size, page_size - 4));
@@ -259,7 +261,8 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     const uint32_t decompressed_size = footer->uncompressed_size();
     const uint32_t total_size = decompressed_size + footer_size + 4;
-    auto decompressed = std::make_unique<std::vector<uint8_t>>();
+    // Use PageCacheVector - allocator internally handles config switch
+    auto decompressed = std::make_unique<PageCacheVector>();
 
     // Allocate APPEND_OVERFLOW_MAX_SIZE more bytes to make append_strings_overflow work
     size_t reserve_size = total_size + Column::APPEND_OVERFLOW_MAX_SIZE;

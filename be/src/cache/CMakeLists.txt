@@ -26,6 +26,7 @@ set(CACHE_FILES
   data_cache_hit_rate_counter.hpp
   mem_cache/lrucache_engine.cpp
   mem_cache/page_cache.cpp
+  mem_cache/pagecache_arena.cpp
   disk_cache/block_cache.cpp
   disk_cache/io_buffer.cpp
 )

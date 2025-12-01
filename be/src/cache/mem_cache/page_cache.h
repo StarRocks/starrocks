@@ -38,6 +38,7 @@
 #include <utility>
 
 #include "cache/datacache.h"
+#include "cache/mem_cache/pagecache_arena.h"
 
 namespace starrocks {
 
@@ -88,6 +89,10 @@ public:
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
     Status insert(const std::string& key, std::vector<uint8_t>* data, const MemCacheWriteOptions& opts,
+                  PageCacheHandle* handle);
+
+    // Insert using PageCacheVector (uses pagecache arena)
+    Status insert(const std::string& key, PageCacheVector* data, const MemCacheWriteOptions& opts,
                   PageCacheHandle* handle);
 
     Status insert(const std::string& key, void* data, int64_t size, MemCacheDeleter deleter,

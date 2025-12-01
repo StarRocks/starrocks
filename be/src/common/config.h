@@ -333,6 +333,8 @@ CONF_mBool(enable_zero_copy_from_page_cache, "true");
 CONF_mString(storage_page_cache_limit, "-1");
 // whether to disable page cache feature in storage
 CONF_mBool(disable_storage_page_cache, "false");
+// whether to use separate jemalloc arena for pagecache to reduce memory fragmentation
+CONF_mBool(enable_pagecache_arena, "true");
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_index_memory_page_cache, "true");
 // whether to enable the zonemap index memory cache
