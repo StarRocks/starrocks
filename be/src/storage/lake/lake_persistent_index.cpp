@@ -351,6 +351,7 @@ Status LakePersistentIndex::minor_compact() {
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     // try to merge to a existing fileset
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    LOG(INFO) << "add sst2 : " << sstable_pb.filename();
     _total_write_bytes += filesize;
     TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
     return Status::OK();
@@ -392,6 +393,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
             sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */, std::move(delvec)));
     // try to merge to a existing fileset
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    LOG(INFO) << "add sst1 : " << sstable_pb.filename();
     _total_write_bytes += sst_meta.size();
     TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();
@@ -735,6 +737,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                           opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
         RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
         RETURN_IF_ERROR(new_sstable_fileset->init(sstable));
+        LOG(INFO) << "add sst3 : " << sstable_pb.filename();
         _total_compaction_bytes += sstable_pb.filesize();
     } else {
         DCHECK(!op_compaction.output_sstables().empty());
@@ -750,6 +753,7 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
                                               opts, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename())));
             RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
             new_sstables.push_back(std::move(sstable));
+            LOG(INFO) << "add sst4 : " << sstable_pb.filename();
             _total_compaction_bytes += sstable_pb.filesize();
         }
         RETURN_IF_ERROR(new_sstable_fileset->init(new_sstables));

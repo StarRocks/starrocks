@@ -1767,6 +1767,8 @@ CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 CONF_mInt64(load_spill_merge_max_thread, "16");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
+// Row count threshold to trigger lazy load for PK column. Default is 1,000,000.
+CONF_mInt64(pk_column_lazy_load_row_cnt, "1000000");
 // Batch size for column mode partial update when processing insert rows.
 // If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
 // Default is 4096.

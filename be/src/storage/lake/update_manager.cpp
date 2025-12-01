@@ -731,6 +731,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     std::unique_ptr<ThreadPoolToken> token;
     std::mutex mutex;
     Status status = Status::OK();
+    Trace* trace = Trace::CurrentTrace();
     if (config::enable_pk_index_parallel_get) {
         token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
@@ -739,8 +740,13 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
         if (skip_pk_index_update) {
             auto func = [&, current]() {
                 // use get instead of upsert
-                std::vector<uint64_t> old_values(current.first->size(), NullIndexValue);
-                auto st = index.get(*current.first, &old_values);
+                ADOPT_TRACE(trace);
+                MutableColumnPtr pk_column;
+                auto st = upsert->encoded_pk_column(current.first.get(), pk_column);
+                std::vector<uint64_t> old_values(pk_column ? pk_column->size() : 0, NullIndexValue);
+                if (st.ok()) {
+                    st = index.get(*pk_column, &old_values);
+                }
                 std::lock_guard<std::mutex> l(mutex);
                 status.update(st);
                 if (status.ok()) {
@@ -752,17 +758,23 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
                 }
             };
             if (token) {
-                token->submit_func(func);
+                auto st = token->submit_func(func);
                 TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+                // collect status when submit fail, need to wait for previously submitted tasks
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
             } else {
                 func();
                 RETURN_IF_ERROR(status);
             }
         } else {
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *current.first, new_deletes));
+            MutableColumnPtr pk_column;
+            RETURN_IF_ERROR(upsert->encoded_pk_column(current.first.get(), pk_column));
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *pk_column, new_deletes));
         }
     }
     if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
         token->wait();
     }
     RETURN_IF_ERROR(status);

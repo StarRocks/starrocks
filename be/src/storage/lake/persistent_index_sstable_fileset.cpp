@@ -16,6 +16,7 @@
 
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/sstable/comparator.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -98,15 +99,18 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     // 1. divide key_indexes into different groups according to sstables
     std::map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
-    for (auto& key_index : key_indexes) {
-        auto it = _sstable_map.upper_bound(keys[key_index]);
-        if (it != _sstable_map.begin()) {
-            --it;
-            const auto& [start_key, end_sstable_pair] = *it;
-            const auto& [end_key, sstable] = end_sstable_pair;
-            if (comparator->Compare(keys[key_index], Slice(end_key)) <= 0) {
-                // key in range [start_key, end_key]
-                sstable_key_indexes_map[sstable.get()].insert(key_index);
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("fileset_get_divide_us");
+        for (auto& key_index : key_indexes) {
+            auto it = _sstable_map.upper_bound(keys[key_index]);
+            if (it != _sstable_map.begin()) {
+                --it;
+                const auto& [start_key, end_sstable_pair] = *it;
+                const auto& [end_key, sstable] = end_sstable_pair;
+                if (comparator->Compare(keys[key_index], Slice(end_key)) <= 0) {
+                    // key in range [start_key, end_key]
+                    sstable_key_indexes_map[sstable.get()].insert(key_index);
+                }
             }
         }
     }
