@@ -950,7 +950,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             // Condition 3: the varchar column has collected global dict
-            Column columnObj = table.getColumn(column.getName());
+            // Skip virtual columns as they are not in the table schema
+            if (Utils.isVirtualColumn(column.getName())) {
+                continue;
+            }
+            // Get Column object
+            Column columnObj = scan.getColRefToColumnMetaMap().get(column);
             if (!IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                 LOG.debug("{} doesn't have global dict", column.getName());
                 continue;

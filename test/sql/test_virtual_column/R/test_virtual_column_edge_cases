@@ -1,0 +1,3 @@
+-- Expected results for test_virtual_column_edge_cases
+-- All queries use [UC] flag as tablet_id values are dynamic
+

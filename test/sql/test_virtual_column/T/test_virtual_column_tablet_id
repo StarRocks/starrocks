@@ -1,0 +1,114 @@
+-- name: test_virtual_column_tablet_id @sequential
+
+-- Test virtual column _tablet_id_ for OLAP table
+create database if not exists test_virtual_column_db;
+use test_virtual_column_db;
+
+-- Create OLAP table (Duplicate Key)
+create table olap_table (
+    k1 int,
+    k2 int,
+    v1 string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+
+-- Insert test data
+insert into olap_table values
+(1, 10, 'a'),
+(2, 20, 'b'),
+(3, 30, 'c'),
+(4, 40, 'd'),
+(5, 50, 'e');
+
+-- Test 1: Select virtual column explicitly
+[UC]select _tablet_id_, k1, k2 from olap_table order by k1;
+
+-- Test 2: Virtual column should not appear in SELECT *
+select * from olap_table order by k1;
+
+-- Test 3: GROUP BY virtual column for data distribution analysis
+[UC]select _tablet_id_, count(*) as row_count, sum(k2) as sum_k2
+from olap_table
+group by _tablet_id_
+order by _tablet_id_;
+
+-- Test 4: Virtual column with aggregation
+[UC]select _tablet_id_, min(k1) as min_k1, max(k1) as max_k1, count(*) as rows
+from olap_table
+group by _tablet_id_
+order by _tablet_id_;
+
+-- Test 5: Virtual column in WHERE clause (should work)
+[UC]select k1, k2, _tablet_id_ from olap_table where _tablet_id_ > 0 order by k1;
+
+-- Test 6: Virtual column should not appear in DESCRIBE
+desc olap_table;
+
+-- Test 7: Virtual column should not appear in SHOW CREATE TABLE
+show create table olap_table;
+
+-- Test 8: Create Primary Key table and test virtual column
+create table pk_table (
+    k1 int,
+    k2 int,
+    v1 string
+)
+primary key(k1)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+
+insert into pk_table values
+(1, 10, 'a'),
+(2, 20, 'b'),
+(3, 30, 'c');
+
+[UC]select _tablet_id_, k1, k2 from pk_table order by k1;
+
+[UC]select _tablet_id_, count(*) as row_count
+from pk_table
+group by _tablet_id_
+order by _tablet_id_;
+
+-- Test 9: Create Unique Key table and test virtual column
+create table uk_table (
+    k1 int,
+    k2 int,
+    v1 string
+)
+unique key(k1)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+
+insert into uk_table values
+(1, 10, 'a'),
+(2, 20, 'b'),
+(3, 30, 'c');
+
+[UC]select _tablet_id_, k1, k2 from uk_table order by k1;
+
+[UC]select _tablet_id_, count(*) as row_count
+from uk_table
+group by _tablet_id_
+order by _tablet_id_;
+
+-- Test 10: Virtual column with JOIN
+[UC]select a._tablet_id_ as tablet_id_a, b._tablet_id_ as tablet_id_b, a.k1, a.k2, b.k2 as k2_b
+from olap_table a
+join olap_table b on a.k1 = b.k1
+order by a.k1
+limit 5;
+
+-- Test 11: Virtual column with ORDER BY
+[UC]select k1, k2, _tablet_id_ from olap_table order by _tablet_id_, k1;
+
+-- Test 12: Virtual column with LIMIT
+[UC]select _tablet_id_, k1, k2 from olap_table order by k1 limit 3;
+
+-- Cleanup
+drop table if exists olap_table;
+drop table if exists pk_table;
+drop table if exists uk_table;
+drop database if exists test_virtual_column_db;
+

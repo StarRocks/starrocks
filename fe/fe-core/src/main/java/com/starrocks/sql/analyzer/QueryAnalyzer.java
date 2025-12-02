@@ -37,6 +37,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -745,6 +746,19 @@ public class QueryAnalyzer {
                         fields.add(field);
                     }
                 }
+
+                // Add virtual columns for internal tables (OLAP, Primary Key, Duplicate Key)
+                if (table.isOlapOrCloudNativeTable() && Config.enable_virtual_column) {
+                    for (Column column : getVirtualColumns()) {
+                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                        // Virtual columns are not visible by default (won't appear in SELECT *)
+                        // but can be explicitly selected
+                        Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                                column.isAllowNull());
+                        columns.put(field, column);
+                        fields.add(field);
+                    }
+                }
             }
 
             node.setColumns(columns.build());
@@ -783,6 +797,15 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
+            return columns;
+        }
+
+        private List<Column> getVirtualColumns() {
+            List<Column> columns = new ArrayList<>();
+            // Virtual column _tablet_id_ with BIGINT type
+            Column tabletIdColumn = new Column("_tablet_id_", IntegerType.BIGINT, false);
+            tabletIdColumn.setIsHidden(true); // Mark as hidden so it doesn't appear in DESCRIBE
+            columns.add(tabletIdColumn);
             return columns;
         }
 
