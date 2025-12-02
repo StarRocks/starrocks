@@ -964,6 +964,9 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
             fn = getArrayGenerateFunction(node);
             argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+        } else if (FunctionSet.REGEXP_POSITION.equals(fnName)) {
+            fn = getRegexpPositionFunction(node);
+            argumentTypes = fn.getArgs();
         } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
             // bitmap_union is analyzed here rather than `getAnalyzedAggregateFunction` because
             // it's just a syntax sugar for bitmap_agg transformed from bitmap_union(to_bitmap())
@@ -1074,6 +1077,30 @@ public class FunctionAnalyzer {
         // add new argument types
         Arrays.stream(argumentTypes).forEach(newArgumentTypes::add);
         return fn;
+    }
+
+    private static Function getRegexpPositionFunction(FunctionCallExpr node) {
+        // add default argument types for position=1 and occurrence=1
+        int argCount = node.getChildren().size();
+
+        if (argCount < 2 || argCount > 4) {
+            throw new SemanticException(
+                "regexp_position requires 2, 3, or 4 arguments: " +
+                "regexp_position(str, pattern[, start_pos[, occurrence]])",
+                node.getPos());      
+        }
+
+        if (argCount == 2) {
+            node.addChild(new IntLiteral(1));
+            node.addChild(new IntLiteral(1));
+        } else if (argCount == 3) {
+            node.addChild(new IntLiteral(1));
+        }
+
+        Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+
+        return Expr.getBuiltinFunction(FunctionSet.REGEXP_POSITION, argumentTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     /**
