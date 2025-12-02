@@ -1,20 +1,181 @@
--- Expected results for test_virtual_column_tablet_id
--- Note: Queries with [UC] flag skip result checking as tablet_id values are dynamic
-
--- Test 2: Virtual column should not appear in SELECT *
+-- name: test_virtual_column_tablet_id @sequential
+create database if not exists test_virtual_column_db;
 -- result:
--- k1	k2	v1
--- 1	10	a
--- 2	20	b
--- 3	30	c
--- 4	40	d
--- 5	50	e
 -- !result
-
--- Test 6: DESCRIBE should not show virtual column
+use test_virtual_column_db;
 -- result:
--- Field	Type	Null	Key	Default	Extra
--- k1	int(11)	Yes	true	NULL	
--- k2	int(11)	Yes	false	NULL	
--- v1	varchar(65533)	Yes	false	NULL	
+-- !result
+create table olap_table (
+    k1 int,
+    k2 int,
+    v1 string
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into olap_table values
+(1, 10, 'a'),
+(2, 20, 'b'),
+(3, 30, 'c'),
+(4, 40, 'd'),
+(5, 50, 'e');
+-- result:
+-- !result
+[UC]select _tablet_id_, k1, k2 from olap_table order by k1;
+-- result:
+12059837	1	10
+12059835	2	20
+12059837	3	30
+12059839	4	40
+12059839	5	50
+-- !result
+select * from olap_table order by k1;
+-- result:
+1	10	a
+2	20	b
+3	30	c
+4	40	d
+5	50	e
+-- !result
+[UC]select _tablet_id_, count(*) as row_count, sum(k2) as sum_k2
+from olap_table
+group by _tablet_id_
+order by _tablet_id_;
+-- result:
+12059835	1	20
+12059837	2	40
+12059839	2	90
+-- !result
+[UC]select _tablet_id_, min(k1) as min_k1, max(k1) as max_k1, count(*) as rows
+from olap_table
+group by _tablet_id_
+order by _tablet_id_;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input 'rows', the most similar input is {a legal identifier}.")
+-- !result
+[UC]select k1, k2, _tablet_id_ from olap_table where _tablet_id_ > 0 order by k1;
+-- result:
+E: (1064, 'unknown column _tablet_id_: BE:21006')
+-- !result
+desc olap_table;
+-- result:
+k1	int	YES	true	None	
+k2	int	YES	false	None	
+v1	varchar(65533)	YES	false	None	
+-- !result
+show create table olap_table;
+-- result:
+olap_table	CREATE TABLE `olap_table` (
+  `k1` int(11) NULL COMMENT "",
+  `k2` int(11) NULL COMMENT "",
+  `v1` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+create table pk_table (
+    k1 int,
+    k2 int,
+    v1 string
+)
+primary key(k1)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into pk_table values
+(1, 10, 'a'),
+(2, 20, 'b'),
+(3, 30, 'c');
+-- result:
+-- !result
+[UC]select _tablet_id_, k1, k2 from pk_table order by k1;
+-- result:
+12059850	1	10
+12059848	2	20
+12059850	3	30
+-- !result
+[UC]select _tablet_id_, count(*) as row_count
+from pk_table
+group by _tablet_id_
+order by _tablet_id_;
+-- result:
+12059848	1
+12059850	2
+-- !result
+create table uk_table (
+    k1 int,
+    k2 int,
+    v1 string
+)
+unique key(k1)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into uk_table values
+(1, 10, 'a'),
+(2, 20, 'b'),
+(3, 30, 'c');
+-- result:
+-- !result
+[UC]select _tablet_id_, k1, k2 from uk_table order by k1;
+-- result:
+12059863	1	10
+12059861	2	20
+12059863	3	30
+-- !result
+[UC]select _tablet_id_, count(*) as row_count
+from uk_table
+group by _tablet_id_
+order by _tablet_id_;
+-- result:
+12059861	1
+12059863	2
+-- !result
+[UC]select a._tablet_id_ as tablet_id_a, b._tablet_id_ as tablet_id_b, a.k1, a.k2, b.k2 as k2_b
+from olap_table a
+join olap_table b on a.k1 = b.k1
+order by a.k1
+limit 5;
+-- result:
+12059837	12059837	1	10	10
+12059835	12059835	2	20	20
+12059837	12059837	3	30	30
+12059839	12059839	4	40	40
+12059839	12059839	5	50	50
+-- !result
+[UC]select k1, k2, _tablet_id_ from olap_table order by _tablet_id_, k1;
+-- result:
+2	20	12059835
+1	10	12059837
+3	30	12059837
+4	40	12059839
+5	50	12059839
+-- !result
+[UC]select _tablet_id_, k1, k2 from olap_table order by k1 limit 3;
+-- result:
+12059837	1	10
+12059835	2	20
+12059837	3	30
+-- !result
+drop table if exists olap_table;
+-- result:
+-- !result
+drop table if exists pk_table;
+-- result:
+-- !result
+drop table if exists uk_table;
+-- result:
+-- !result
+drop database if exists test_virtual_column_db;
+-- result:
 -- !result
