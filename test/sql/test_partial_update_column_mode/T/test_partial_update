@@ -104,3 +104,41 @@ select count(1) from tab1 where 'v3' is not null;
 
 
 drop database test_partial_update_with_expr;
+
+
+-- name: test_column_partial_update_with_condition_update
+create database test_column_partial_update_with_condition_update;
+use test_column_partial_update_with_condition_update;
+
+CREATE TABLE site_access (
+  site_id int(11) not NULL DEFAULT "10" COMMENT "",
+  event_day date NULL COMMENT "",
+  city_code varchar(100) NULL COMMENT "",
+  user_name varchar(32) NULL DEFAULT "" COMMENT "",
+  pv bigint(20) NULL DEFAULT "0" COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(site_id)
+DISTRIBUTED BY HASH(site_id)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replication_num" = "1"
+);
+
+insert into site_access values
+(22,'2024-07-22','bsgs','zs',22),
+(23,'2024-07-23','bsgs','zs',23),
+(24,'2024-07-24','bsgs','zs',24),
+(25,'2024-07-25','bsgs','zs',25),
+(26,'2024-07-26','bsgs','zs',26),
+(27,'2024-07-27','bsgs','zs',27),
+(28,'2024-07-28','bsgs','zs',28),
+(29,'2024-07-29','bsgs','zs',29);
+
+select * from site_access;
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_8.csv -XPUT -H partial_update:true  -H label:label10324  -H columns:site_id,event_day,user_name -H column_separator:,  -H partial_update:true -H partial_update_mode:column -H merge_condition:event_day ${url}/api/test_column_partial_update_with_condition_update/site_access/_stream_load
+sync;
+select * from site_access;
+
+drop database test_column_partial_update_with_condition_update;
+

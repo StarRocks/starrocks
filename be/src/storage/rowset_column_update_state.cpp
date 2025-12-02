@@ -283,8 +283,7 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
                                                                EditVersion latest_applied_version,
                                                                const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_update_files() == 0 ||
-        rowset_meta_pb.txn_meta().has_merge_condition()) {
+    if (!rowset_meta_pb.has_txn_meta() || rowset->num_update_files() == 0) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_init_rowset_seg_id(tablet));
