@@ -1856,6 +1856,21 @@ public class PlanFragmentBuilder {
                                     "only support `regexp` or `rlike` for log grep");
                         }
                     }
+
+                    if (like.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
+                        String pattern = ((ConstantOperator) like.getChild(1)).getVarchar();
+                        if (!pattern.contains("%")) {
+                            switch (columnRefOperator.getName()) {
+                                case "TABLE_SCHEMA":
+                                case "DATABASE_NAME":
+                                    scanNode.setSchemaDb(pattern);
+                                    break;
+                                case "TABLE_NAME":
+                                    scanNode.setSchemaTable(pattern);
+                                    break;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -4325,8 +4340,8 @@ public class PlanFragmentBuilder {
         }
 
         private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
-                                                            ColumnRefSet leftColumns,
-                                                            ColumnRefSet rightColumns) {
+                                                                       ColumnRefSet leftColumns,
+                                                                       ColumnRefSet rightColumns) {
             List<ScalarOperator> candidates = new ArrayList<>();
 
             for (ScalarOperator predicate : otherJoin) {
