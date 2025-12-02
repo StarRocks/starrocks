@@ -175,10 +175,17 @@
     "@algolia/requester-common" "4.20.0"
     "@algolia/transporter" "4.20.0"
 
+<<<<<<< HEAD
 "@algolia/client-search@5.23.4":
   version "5.23.4"
   resolved "https://registry.yarnpkg.com/@algolia/client-search/-/client-search-5.23.4.tgz#7906ab4b704edd1ba2ac39100bf37e0279b4ebdc"
   integrity sha512-uBGo6KwUP6z+u6HZWRui8UJClS7fgUIAiYd1prUqCbkzDiCngTOzxaJbEvrdkK0hGCQtnPDiuNhC5MhtVNN4Eg==
+=======
+"@algolia/client-search@5.45.0", "@algolia/client-search@^5.45.0":
+  version "5.45.0"
+  resolved "https://registry.yarnpkg.com/@algolia/client-search/-/client-search-5.45.0.tgz#709f5fb2a13487fa6327b31306654a2c694c0fe9"
+  integrity sha512-nxuCid+Nszs4xqwIMDw11pRJPes2c+Th1yup/+LtpjFH8QWXkr3SirNYSD3OXAeM060HgWWPLA8/Fxk+vwxQOA==
+>>>>>>> e78430f722 ([Doc] update yarn lockfile (#66215))
   dependencies:
     "@algolia/client-common" "5.23.4"
     "@algolia/requester-browser-xhr" "5.23.4"
