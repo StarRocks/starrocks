@@ -40,9 +40,11 @@ struct DriverPrepareSyncContext {
 
     ~DriverPrepareSyncContext() {
         // Clean up the dynamically allocated Status object
-        Status* error = first_error.load();
-        if (error != nullptr) {
-            delete error;
+        Status* expected = first_error.load();
+        Status* new_value = nullptr;
+        first_error.compare_exchange_strong(expected, new_value);
+        if (expected != nullptr) {
+            delete expected;
         }
     }
 };
