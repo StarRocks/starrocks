@@ -69,6 +69,7 @@ void PartitionChunkWriter::commit_file() {
 }
 
 Status BufferPartitionChunkWriter::init() {
+    RETURN_IF_ERROR(create_file_writer_if_needed());
     return Status::OK();
 }
 
@@ -125,6 +126,7 @@ Status SpillPartitionChunkWriter::init() {
     RETURN_IF_ERROR(_load_spill_block_mgr->init());
     _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(_load_spill_block_mgr.get(),
                                                              _fragment_context->runtime_state()->runtime_profile());
+    RETURN_IF_ERROR(create_file_writer_if_needed());
     return Status::OK();
 }
 

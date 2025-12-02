@@ -39,9 +39,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TColumn;
@@ -56,11 +58,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -70,6 +72,10 @@ public class ColumnTest {
     private GlobalStateMgr globalStateMgr;
 
     private FakeGlobalStateMgr fakeGlobalStateMgr;
+
+    // default value for date type CURRENT_TIMESTAMP
+    public static DefaultValueDef CURRENT_TIMESTAMP_VALUE = new DefaultValueDef(true,
+            new FunctionCallExpr("now", new ArrayList<>()));
 
     @BeforeEach
     public void setUp() {

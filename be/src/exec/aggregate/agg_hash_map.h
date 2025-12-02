@@ -31,10 +31,14 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
+#include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/fixed_hash_map.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+
+DECLARE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 using AggDataPtr = uint8_t*;
 template <typename T>
@@ -169,47 +173,55 @@ struct AggHashMapWithKey {
     template <AllocFunc<Impl> Func>
     void build_hash_map(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                         Buffer<AggDataPtr>* agg_states) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         ExtraAggParam extra;
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, false, false>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 
     template <AllocFunc<Impl> Func>
     void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                        Func&& allocate_func, Buffer<AggDataPtr>* agg_states, Filter* not_founds) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, false>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 
     template <AllocFunc<Impl> Func>
     void build_hash_map_with_limit(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                                    Buffer<AggDataPtr>* agg_states, Filter* not_founds, size_t limit) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         extra.limits = limit;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<false, true, true>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 
     template <AllocFunc<Impl> Func>
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                       Filter* not_founds) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
         // Assign not_founds vector when needs compute not founds.
         ExtraAggParam extra;
         extra.not_founds = not_founds;
         DCHECK(not_founds);
         (*not_founds).assign(chunk_size, 0);
-        return static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false>>(
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
     }
 };
 
@@ -350,6 +362,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
                 DCHECK(not_founds);
                 _find_key((*agg_states)[i], (*not_founds)[i], key);
             }
+            FAIL_POINT_TRIGGER_EXECUTE(aggregate_build_hash_map_bad_alloc, {
+                if (i > 0) throw std::bad_alloc();
+            });
         }
     }
 

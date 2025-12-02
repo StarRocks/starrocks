@@ -147,6 +147,7 @@ This project is used by the following companies. Learn more about their use case
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
 - [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
+- [Splitmetrics](https://celerdata.com/blog/how-splitmetrics-replaced-postgresql-with-starrocks-for-customer-facing-analytics)
 - [Tencent(Games)](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
 - [Tencent(LLM)](https://www.youtube.com/watch?v=WVHXFks9EQk)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8)

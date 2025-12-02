@@ -12,32 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-// Drop one column
-public class DropColumnClause extends AlterTableColumnClause {
-    private final String colName;
+public abstract class AlterTableColumnClause extends AlterTableClause {
+    protected Map<String, String> properties;
 
-    public String getColName() {
-        return colName;
+    protected AlterTableColumnClause(Map<String, String> properties, NodePosition pos) {
+        super(pos);
+        this.properties = properties;
     }
 
-    public DropColumnClause(String colName, String rollupName, Map<String, String> properties) {
-        this(colName, rollupName, properties, NodePosition.ZERO);
-    }
-
-    public DropColumnClause(String colName, String rollupName, Map<String, String> properties, NodePosition pos) {
-        super(rollupName, properties, pos);
-        this.colName = colName;
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropColumnClause(this, context);
+    public Map<String, String> getProperties() {
+        return this.properties;
     }
 }
