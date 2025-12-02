@@ -20,8 +20,15 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
+=======
+#include "util/defer_op.h"
+#include "util/runtime_profile.h"
+>>>>>>> 6b5abef714 ([Enhancement] Rapid memory release on AGG/SORT (#66157))
 
 namespace starrocks {
+DEFINE_FAIL_POINT(chunks_sorter_full_sort_partial_sort_bad_alloc);
+DEFINE_FAIL_POINT(chunks_sorter_full_sort_done_bad_alloc);
 
 ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                            const std::vector<bool>* is_asc_order,
@@ -46,8 +53,10 @@ void ChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* pr
 }
 
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
+    CancelableDefer defer = [this]() { _reset(); };
     RETURN_IF_ERROR(_merge_unsorted(state, chunk));
     RETURN_IF_ERROR(_partial_sort(state, false));
+    defer.cancel();
 
     return Status::OK();
 }
@@ -99,6 +108,8 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
     }
     bool reach_limit = _staging_unsorted_rows >= max_buffered_rows || _staging_unsorted_bytes >= max_buffered_bytes;
     if (done || reach_limit) {
+        FAIL_POINT_TRIGGER_EXECUTE(chunks_sorter_full_sort_partial_sort_bad_alloc, { throw std::bad_alloc(); });
+
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         _profiler->input_required_memory->update(_staging_unsorted_bytes);
         concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
@@ -142,6 +153,8 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
         _assign_ordinals();
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
     }
+
+    FAIL_POINT_TRIGGER_EXECUTE(chunks_sorter_full_sort_done_bad_alloc, { throw std::bad_alloc(); });
 
     return Status::OK();
 }
@@ -250,13 +263,14 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     return final_chunk;
 }
 Status ChunksSorterFullSort::do_done(RuntimeState* state) {
+    CancelableDefer defer = [this]() { _reset(); };
     RETURN_IF_ERROR(_partial_sort(state, true));
     {
         _sort_permutation = {};
         _unsorted_chunk.reset();
     }
     RETURN_IF_ERROR(_merge_sorted(state));
-
+    defer.cancel();
     return Status::OK();
 }
 
@@ -289,6 +303,15 @@ size_t ChunksSorterFullSort::get_output_rows() const {
 
 int64_t ChunksSorterFullSort::mem_usage() const {
     return _merged_runs.mem_usage();
+}
+
+void ChunksSorterFullSort::_reset() {
+    _staging_unsorted_chunks.clear();
+    _unsorted_chunk.reset();
+    _sorted_chunks.clear();
+    _late_materialized_chunks.clear();
+    _early_materialized_chunks.clear();
+    _merged_runs.clear();
 }
 
 } // namespace starrocks
