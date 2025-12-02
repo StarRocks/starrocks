@@ -163,6 +163,10 @@ public:
     }
     static Status NotAuthorized(std::string_view msg) { return Status(TStatusCode::NOT_AUTHORIZED, msg); }
 
+    static Status TableNotExist(std::string_view msg) { return Status(TStatusCode::TABLE_NOT_EXIST, msg); }
+
+    static Status QueryNotExist(std::string_view msg) { return Status(TStatusCode::QUERY_NOT_EXIST, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_unknown() const { return code() == TStatusCode::UNKNOWN; }
@@ -224,6 +228,10 @@ public:
     bool is_not_authorized() const { return code() == TStatusCode::NOT_AUTHORIZED; }
 
     bool is_global_dict_error() const { return code() == TStatusCode::GLOBAL_DICT_ERROR; }
+
+    bool is_table_not_exist() const { return code() == TStatusCode::TABLE_NOT_EXIST; }
+
+    bool is_query_not_exist() const { return code() == TStatusCode::QUERY_NOT_EXIST; }
 
     bool is_suppressed() const { return is_global_dict_error(); }
 
