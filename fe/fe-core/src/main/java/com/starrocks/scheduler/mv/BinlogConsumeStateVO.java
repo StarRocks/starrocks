@@ -22,6 +22,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -35,6 +37,8 @@ import java.util.Objects;
  * NOTE: not thread-safe for updating
  */
 public class BinlogConsumeStateVO implements Writable {
+    private static final Logger LOG = LogManager.getLogger(BinlogConsumeStateVO.class);
+
     @SerializedName("binlogMap")
     private Map<BinlogIdVO, BinlogLSNVO> binlogMap = new HashMap<>();
 
@@ -44,6 +48,9 @@ public class BinlogConsumeStateVO implements Writable {
         binlogMap.forEach((key, value) -> {
             TBinlogScanRange scan = new TBinlogScanRange();
             TabletMeta meta = tabletIndex.getTabletMeta(key.getTabletId());
+            if (meta == null) {
+                throw new RuntimeException("Tablet " + key.getTabletId() + " does not exist");
+            }
             scan.setTable_id(meta.getTableId());
             scan.setTablet_id(key.getTabletId());
             scan.setPartition_id(meta.getPhysicalPartitionId());

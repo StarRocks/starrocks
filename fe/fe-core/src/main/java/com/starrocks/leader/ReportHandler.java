@@ -154,9 +154,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             List<Pair<List<Object>, Long>> result = new ArrayList<>();
             for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
                 result.add(Pair.create(taskMap.values()
-                        .stream()
-                        .limit(1)
-                        .collect(Collectors.toList()),
+                                .stream()
+                                .limit(1)
+                                .collect(Collectors.toList()),
                         (long) taskMap.size()));
             }
             return result;
@@ -587,163 +587,165 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
 
         TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        tabletInvertedIndex.readLock();
         long start = System.currentTimeMillis();
-        try {
-            LOG.debug("begin to do tablet diff with backend[{}]. num: {}", backendId, backendTablets.size());
-            // backingReplicaMetaTable.row(backendId) won't return null
-            Map<Long, Replica> replicaMetaWithBackend = tabletInvertedIndex.getReplicaMetaWithBackend(backendId);
-            // traverse replicas in meta with this backend
-            for (Map.Entry<Long, Replica> entry : replicaMetaWithBackend.entrySet()) {
-                long tabletId = entry.getKey();
-                TabletMeta tabletMeta = tabletInvertedIndex.getTabletMeta(tabletId);
-                Preconditions.checkState(tabletMeta != null);
+        LOG.debug("begin to do tablet diff with backend[{}]. num: {}", backendId, backendTablets.size());
+        List<Long> tabletsId = tabletInvertedIndex.getTabletIdsByBackendId(backendId);
 
-                if (tabletMeta.isLakeTablet()) {
+        // traverse replicas in meta with this backend
+        for (Long tabletId : tabletsId) {
+            TabletMeta tabletMeta = tabletInvertedIndex.getTabletMeta(tabletId);
+            if (tabletMeta == null) {
+                LOG.info("tablet {} no longer exists when diff backend {}, skip it", tabletId, backendId);
+                continue;
+            }
+
+            if (tabletMeta.isLakeTablet()) {
+                continue;
+            }
+
+            if (backendTablets.containsKey(tabletId)) {
+                TTablet backendTablet = backendTablets.get(tabletId);
+                Replica replica = tabletInvertedIndex.getReplica(tabletId, backendId);
+                if (replica == null) {
+                    LOG.info("replica of tablet {} on backend {} no longer exists in FE, skip diff", tabletId, backendId);
                     continue;
                 }
 
-                if (backendTablets.containsKey(tabletId)) {
-                    TTablet backendTablet = backendTablets.get(tabletId);
-                    Replica replica = entry.getValue();
-                    for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
-                        if (backendTabletInfo.isSetIs_error_state()) {
-                            replica.setIsErrorState(backendTabletInfo.is_error_state);
-                        }
-                        if (backendTabletInfo.isSetMax_rowset_creation_time()) {
-                            replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
-                        }
-                        foundTabletsWithValidSchema.add(tabletId);
-                        // 1. (intersection)
-                        if (needSync(replica, backendTabletInfo)) {
-                            // need sync
-                            tabletSyncMap.put(Pair.create(tabletMeta.getDbId(), tabletMeta.getTableId()), tabletId);
-                        }
+                for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                    if (backendTabletInfo.isSetIs_error_state()) {
+                        replica.setIsErrorState(backendTabletInfo.is_error_state);
+                    }
+                    if (backendTabletInfo.isSetMax_rowset_creation_time()) {
+                        replica.setMaxRowsetCreationTime(backendTabletInfo.max_rowset_creation_time);
+                    }
+                    foundTabletsWithValidSchema.add(tabletId);
+                    // 1. (intersection)
+                    if (needSync(replica, backendTabletInfo)) {
+                        // need sync
+                        tabletSyncMap.put(Pair.create(tabletMeta.getDbId(), tabletMeta.getTableId()), tabletId);
+                    }
 
-                        // check and set path,
-                        // path info of replica is only saved in Leader FE
-                        if (backendTabletInfo.isSetPath_hash() &&
-                                replica.getPathHash() != backendTabletInfo.getPath_hash()) {
-                            replica.setPathHash(backendTabletInfo.getPath_hash());
-                        }
+                    // check and set path,
+                    // path info of replica is only saved in Leader FE
+                    if (backendTabletInfo.isSetPath_hash() &&
+                            replica.getPathHash() != backendTabletInfo.getPath_hash()) {
+                        replica.setPathHash(backendTabletInfo.getPath_hash());
+                    }
 
-                        if (backendTabletInfo.isSetSchema_hash() && replica.getState() == ReplicaState.NORMAL
-                                && replica.getSchemaHash() != backendTabletInfo.getSchema_hash()) {
-                            // update the schema hash only when replica is normal
-                            replica.setSchemaHash(backendTabletInfo.getSchema_hash());
-                        }
+                    if (backendTabletInfo.isSetSchema_hash() && replica.getState() == ReplicaState.NORMAL
+                            && replica.getSchemaHash() != backendTabletInfo.getSchema_hash()) {
+                        // update the schema hash only when replica is normal
+                        replica.setSchemaHash(backendTabletInfo.getSchema_hash());
+                    }
 
-                        if (!isRestoreReplica(replica, tabletMeta) &&
-                                needRecover(replica, backendTabletInfo)) {
-                            LOG.warn("replica {} of tablet {} on backend {} need recovery. "
-                                            + "replica in FE: {}, report version {}, report schema hash: {},"
-                                            + " is bad: {}",
-                                    replica.getId(), tabletId, backendId,
-                                    replica, backendTabletInfo.getVersion(), backendTabletInfo.getSchema_hash(),
-                                    backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown");
-                            tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
-                        }
+                    if (!isRestoreReplica(replica, tabletMeta) &&
+                            needRecover(replica, backendTabletInfo)) {
+                        LOG.warn("replica {} of tablet {} on backend {} need recovery. "
+                                        + "replica in FE: {}, report version {}, report schema hash: {},"
+                                        + " is bad: {}",
+                                replica.getId(), tabletId, backendId,
+                                replica, backendTabletInfo.getVersion(), backendTabletInfo.getSchema_hash(),
+                                backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown");
+                        tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
+                    }
 
-                        replica.setLastReportVersion(backendTabletInfo.getVersion());
+                    replica.setLastReportVersion(backendTabletInfo.getVersion());
 
-                        // check if tablet needs migration
-                        long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
-                        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(tabletMeta.getDbId(), tabletMeta.getTableId());
-                        if (olapTable == null) {
-                            continue;
-                        }
-                        PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-                        if (physicalPartition == null) {
-                            continue;
-                        }
+                    // check if tablet needs migration
+                    long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tabletMeta.getDbId(), tabletMeta.getTableId());
+                    if (olapTable == null) {
+                        continue;
+                    }
+                    PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                    if (physicalPartition == null) {
+                        continue;
+                    }
 
-                        TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
-                        if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
-                            if (storageMedium != backendTabletInfo.getStorage_medium()) {
-                                // If storage medium is less than 1, there is no need to send migration tasks to BE.
-                                // Because BE will ignore this request.
-                                if (backendStorageTypeCnt <= 1) {
-                                    LOG.debug("available storage medium type count is less than 1, " +
-                                                    "no need to send migrate task. tabletId={}, backendId={}.",
-                                            tabletMeta, backendId);
-                                } else {
-                                    tabletMigrationMap.put(storageMedium, tabletId);
-                                }
-                            }
-                            if (storageMedium != tabletMeta.getStorageMedium()) {
-                                tabletMeta.setStorageMedium(storageMedium);
+                    TStorageMedium storageMedium = storageMediumMap.get(physicalPartition.getParentId());
+                    if (storageMedium != null && backendTabletInfo.isSetStorage_medium()) {
+                        if (storageMedium != backendTabletInfo.getStorage_medium()) {
+                            // If storage medium is less than 1, there is no need to send migration tasks to BE.
+                            // Because BE will ignore this request.
+                            if (backendStorageTypeCnt <= 1) {
+                                LOG.debug("available storage medium type count is less than 1, " +
+                                                "no need to send migrate task. tabletId={}, backendId={}.",
+                                        tabletMeta, backendId);
+                            } else {
+                                tabletMigrationMap.put(storageMedium, tabletId);
                             }
                         }
-                        // check if we should clear transactions
-                        if (backendTabletInfo.isSetTransaction_ids()) {
-                            List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
-                            GlobalTransactionMgr transactionMgr =
-                                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-                            for (Long transactionId : transactionIds) {
-                                TransactionState transactionState =
-                                        transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
-                                if (transactionState == null ||
-                                        transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
-                                    transactionsToClear.put(transactionId, physicalPartitionId);
-                                    LOG.debug("transaction id [{}] is not valid any more, "
-                                            + "clear it from backend [{}]", transactionId, backendId);
-                                } else if (transactionState.getTransactionStatus() ==
-                                        TransactionStatus.VISIBLE) {
-                                    TableCommitInfo tableCommitInfo =
-                                            transactionState.getTableCommitInfo(tabletMeta.getTableId());
-                                    PartitionCommitInfo partitionCommitInfo =
-                                            tableCommitInfo.getPartitionCommitInfo(physicalPartitionId);
-                                    if (partitionCommitInfo == null) {
-                                        /*
-                                         * This may happen as follows:
-                                         * 1. txn is committed on BE, and report commit info to FE
-                                         * 2. FE received report and begin to assemble partitionCommitInfos.
-                                         * 3. At the same time, some partitions have been dropped, so
-                                         *    partitionCommitInfos does not contain these partitions.
-                                         * 4. So we will not able to get partitionCommitInfo here.
-                                         *
-                                         * Just print a log to observe
-                                         */
-                                        LOG.info(
-                                                "failed to find partition commit info. table: {}, " +
-                                                        "partition: {}, tablet: {}, txn_id: {}",
-                                                tabletMeta.getTableId(), physicalPartitionId, tabletId,
-                                                transactionState.getTransactionId());
-                                    } else {
-                                        TPartitionVersionInfo versionInfo =
-                                                new TPartitionVersionInfo(physicalPartitionId,
-                                                        partitionCommitInfo.getVersion(), 0);
-                                        versionInfo.setGtid(transactionState.getGlobalTransactionId());
-                                        Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
-                                                transactionsToPublish.computeIfAbsent(
-                                                        transactionState.getDbId(), k -> Maps.newHashMap());
-                                        Map<Long, TPartitionVersionInfo> partitionMap =
-                                                txnMap.computeIfAbsent(transactionId, k -> Maps.newHashMap());
-                                        partitionMap.put(versionInfo.getPartition_id(), versionInfo);
-                                        transactionsToCommitTime.put(transactionId,
-                                                transactionState.getCommitTime());
-                                    }
-                                }
-                            }
-                        } // end for txn id
-
-                        // update replica's version count
-                        // no need to write log, and no need to get db lock.
-                        if (backendTabletInfo.isSetVersion_count()) {
-                            replica.setVersionCount(backendTabletInfo.getVersion_count());
+                        if (storageMedium != tabletMeta.getStorageMedium()) {
+                            tabletMeta.setStorageMedium(storageMedium);
                         }
                     }
-                } else {
-                    // 2. (meta - be)
-                    // may need delete from meta
-                    LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
-                    tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
+                    // check if we should clear transactions
+                    if (backendTabletInfo.isSetTransaction_ids()) {
+                        List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
+                        GlobalTransactionMgr transactionMgr =
+                                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                        for (Long transactionId : transactionIds) {
+                            TransactionState transactionState =
+                                    transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
+                            if (transactionState == null ||
+                                    transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
+                                transactionsToClear.put(transactionId, physicalPartitionId);
+                                LOG.debug("transaction id [{}] is not valid any more, "
+                                        + "clear it from backend [{}]", transactionId, backendId);
+                            } else if (transactionState.getTransactionStatus() ==
+                                    TransactionStatus.VISIBLE) {
+                                TableCommitInfo tableCommitInfo =
+                                        transactionState.getTableCommitInfo(tabletMeta.getTableId());
+                                PartitionCommitInfo partitionCommitInfo =
+                                        tableCommitInfo.getPartitionCommitInfo(physicalPartitionId);
+                                if (partitionCommitInfo == null) {
+                                    /*
+                                     * This may happen as follows:
+                                     * 1. txn is committed on BE, and report commit info to FE
+                                     * 2. FE received report and begin to assemble partitionCommitInfos.
+                                     * 3. At the same time, some partitions have been dropped, so
+                                     *    partitionCommitInfos does not contain these partitions.
+                                     * 4. So we will not able to get partitionCommitInfo here.
+                                     *
+                                     * Just print a log to observe
+                                     */
+                                    LOG.info(
+                                            "failed to find partition commit info. table: {}, " +
+                                                    "partition: {}, tablet: {}, txn_id: {}",
+                                            tabletMeta.getTableId(), physicalPartitionId, tabletId,
+                                            transactionState.getTransactionId());
+                                } else {
+                                    TPartitionVersionInfo versionInfo =
+                                            new TPartitionVersionInfo(physicalPartitionId,
+                                                    partitionCommitInfo.getVersion(), 0);
+                                    versionInfo.setGtid(transactionState.getGlobalTransactionId());
+                                    Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
+                                            transactionsToPublish.computeIfAbsent(
+                                                    transactionState.getDbId(), k -> Maps.newHashMap());
+                                    Map<Long, TPartitionVersionInfo> partitionMap =
+                                            txnMap.computeIfAbsent(transactionId, k -> Maps.newHashMap());
+                                    partitionMap.put(versionInfo.getPartition_id(), versionInfo);
+                                    transactionsToCommitTime.put(transactionId,
+                                            transactionState.getCommitTime());
+                                }
+                            }
+                        }
+                    } // end for txn id
+
+                    // update replica's version count
+                    // no need to write log, and no need to get db lock.
+                    if (backendTabletInfo.isSetVersion_count()) {
+                        replica.setVersionCount(backendTabletInfo.getVersion_count());
+                    }
                 }
-            } // end for replicaMetaWithBackend
-        } finally {
-            tabletInvertedIndex.readUnlock();
-        }
+            } else {
+                // 2. (meta - be)
+                // may need delete from meta
+                LOG.debug("backend[{}] does not report tablet[{}-{}]", backendId, tabletId, tabletMeta);
+                tabletDeleteFromMeta.put(tabletMeta.getDbId(), tabletId);
+            }
+        } // end for replicaMetaWithBackend
 
         long end = System.currentTimeMillis();
         LOG.info("finished to do tablet diff with backend[{}]. sync: {}. metaDel: {}. foundValid: {}. "
@@ -881,7 +883,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return;
         }
 
-        backend.updateDisks(backendDisks,  GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        backend.updateDisks(backendDisks, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         long cost = System.currentTimeMillis() - start;
         if (cost > MAX_REPORT_HANDLING_TIME_LOGGING_THRESHOLD_MS) {
             LOG.info("finished to handle disk report from backend {}, cost: {} ms",
@@ -1183,7 +1185,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             && diskInfo.getState() == DiskInfo.DiskState.ONLINE
                             && backendReportVersion < currentBackendReportVersion) {
                         LOG.warn("report Version from be: {} is outdated, report version in request: {}, " +
-                                "latest report version: {}, ignore tablet: {}",
+                                        "latest report version: {}, ignore tablet: {}",
                                 backendId, backendReportVersion, currentBackendReportVersion, tabletId);
                         continue;
                     } else if (diskInfo == null) {
@@ -1529,7 +1531,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
                 OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tabletMeta.getTableId());
+                        .getTable(db.getId(), tabletMeta.getTableId());
                 if (table == null) {
                     continue;
                 }
@@ -1633,7 +1635,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     long tabletId = tabletIds.get(i);
                     long tableId = tabletMeta.getTableId();
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                            .getTable(db.getId(), tableId);
                     if (olapTable == null) {
                         continue;
                     }
@@ -1731,7 +1733,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                        .getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1787,7 +1789,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                        .getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1849,7 +1851,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                        .getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }
@@ -1982,7 +1984,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                 boolean needToCheck = false;
                 OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tableId);
+                        .getTable(db.getId(), tableId);
                 if (olapTable == null) {
                     continue;
                 }

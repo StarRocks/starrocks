@@ -117,6 +117,9 @@ public class LocalMetastoreSimpleOpsEditLogTest {
             globalStateMgr.setColocateTableIndex(new com.starrocks.catalog.ColocateTableIndex());
         }
 
+        // Clean up any existing tablets from previous test runs
+        globalStateMgr.getTabletInvertedIndex().deleteTablet(TABLET_ID);
+        
         // Create database
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         Database db = new Database(DB_ID, DB_NAME);
@@ -1141,6 +1144,9 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         Assertions.assertEquals(ReplicaStatus.BAD, replayInfo.getReplicaStatus());
 
         // Create follower metastore and the same id objects, then replay
+        // First, delete the master replica from TabletInvertedIndex to simulate a clean follower state
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(TABLET_ID, BACKEND_ID);
+        
         LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
         Database followerDb = new Database(DB_ID, DB_NAME);
         followerMetastore.unprotectCreateDb(followerDb);

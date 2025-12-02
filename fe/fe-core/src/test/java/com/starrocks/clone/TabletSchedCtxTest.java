@@ -82,6 +82,10 @@ public class TabletSchedCtxTest {
 
     @BeforeEach
     public void setUp() {
+        // Clean up any existing tablets from previous test runs
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(TABLET_ID_1);
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(TABLET_ID_2);
+        
         // be1
         be1 = new Backend(10001, "192.168.0.1", 9051);
         Map<String, DiskInfo> disks = Maps.newHashMap();
