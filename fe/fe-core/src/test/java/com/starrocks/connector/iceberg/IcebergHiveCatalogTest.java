@@ -242,15 +242,11 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testCreateViewPropertiesNotIcebergCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+    public void testCreateViewPropertiesNotIcebergCatalog(@Mocked CatalogMgr mockCatalogMgr) {
         final String catalogName = "catalog";
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = mockGsm;
-                minTimes = 0;
-
-                mockGsm.getCatalogMgr();
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = mockCatalogMgr;
                 minTimes = 0;
 
@@ -275,15 +271,11 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testCreateViewPropertiesInternalCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+    public void testCreateViewPropertiesInternalCatalog(@Mocked CatalogMgr mockCatalogMgr) {
         final String catalogName = "default_catalog";
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = mockGsm;
-                minTimes = 0;
-
-                mockGsm.getCatalogMgr();
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = mockCatalogMgr;
                 minTimes = 0;
 
@@ -308,15 +300,11 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
-    public void testCreateViewPropertiesUnknownCatalog(@Mocked GlobalStateMgr mockGsm, @Mocked CatalogMgr mockCatalogMgr) {
+    public void testCreateViewPropertiesUnknownCatalog(@Mocked CatalogMgr mockCatalogMgr) {
         final String catalogName = "xxx";
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = mockGsm;
-                minTimes = 0;
-
-                mockGsm.getCatalogMgr();
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
                 result = mockCatalogMgr;
                 minTimes = 0;
 
