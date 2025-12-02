@@ -1,0 +1,54 @@
+-- name: test_jdbc_catalog_binary_type
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'create database db_binary_${uuid0};'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_binary_${uuid0}; CREATE TABLE t1 (c1 varbinary(16), c2 binary(16));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_binary_${uuid0}; INSERT INTO t1 VALUES (1,1);'
+-- result:
+0
+
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create external catalog jdbc_catalog_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+-- result:
+-- !result
+set catalog jdbc_catalog_${uuid0};
+-- result:
+-- !result
+select hex(c1), hex(c2) from db_binary_${uuid0}.t1;
+-- result:
+31	31000000000000000000000000000000
+-- !result
+desc db_binary_${uuid0}.t1;
+-- result:
+c1	VARBINARY	Yes	false	None		
+c2	VARBINARY	Yes	false	None		
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog jdbc_catalog_${uuid0};
+-- result:
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_binary_${uuid0};'
+-- result:
+0
+
+-- !result
