@@ -18,7 +18,6 @@
 #include "column/binary_column.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
-#include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
@@ -165,7 +164,7 @@ TEST_F(ColumnXxh3HashTest, test_array_column) {
     elements->append(5);
     offsets->append(5);
 
-    auto column = ArrayColumn::create(elements, offsets);
+    auto column = ArrayColumn::create(NullableColumn::wrap_if_necessary(elements), offsets);
 
     uint32_t hash_values[2] = {0, 0};
     column->xxh3_hash(hash_values, 0, 2);
@@ -196,7 +195,8 @@ TEST_F(ColumnXxh3HashTest, test_map_column) {
     values->append(30);
     offsets->append(3);
 
-    auto column = MapColumn::create(keys, values, offsets);
+    auto column = MapColumn::create(NullableColumn::wrap_if_necessary(keys), NullableColumn::wrap_if_necessary(values),
+                                    offsets);
 
     uint32_t hash_values[2] = {0, 0};
     column->xxh3_hash(hash_values, 0, 2);
@@ -219,8 +219,8 @@ TEST_F(ColumnXxh3HashTest, test_struct_column) {
     field2->append("b");
 
     Columns fields;
-    fields.push_back(field1);
-    fields.push_back(field2);
+    fields.push_back(NullableColumn::wrap_if_necessary(field1));
+    fields.push_back(NullableColumn::wrap_if_necessary(field2));
 
     auto column = StructColumn::create(fields, std::vector<std::string>{"f1", "f2"});
 

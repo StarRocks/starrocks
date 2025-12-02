@@ -3081,7 +3081,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // 0: fnv_hash (default, for backward compatibility)
     // 1: xxh3_hash (faster)
     @VarAttr(name = EXCHANGE_HASH_FUNCTION_VERSION, flag = VariableMgr.INVISIBLE)
-    private int exchangeHashFunctionVersion = 0;
+    private int exchangeHashFunctionVersion = 1;
 
     @VarAttr(name = ENABLE_CONSTANT_EXECUTE_IN_FE)
     private boolean enableConstantExecuteInFE = true;

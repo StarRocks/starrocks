@@ -416,6 +416,10 @@ void NullableColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const
         return;
     }
     const auto null_data = _null_column->immutable_data();
+    // TODO: If nulls are sparse, the current implementation may introduce unnecessary
+    // virtual function call overhead. For better efficiency, consider implementing a
+    // selective xxh3_hash variant, allowing batch processing of contiguous non-null
+    // or null regions, which would reduce virtual-function calls
     uint32_t value = 0x9e3779b9;
     while (from < to) {
         uint32_t new_from = from + 1;
