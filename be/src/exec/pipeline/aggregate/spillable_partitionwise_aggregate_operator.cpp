@@ -85,7 +85,10 @@ void SpillablePartitionWiseAggregateSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_agg_op->prepare(state));
+    RETURN_IF_ERROR(_agg_op->prepare_local_state(state));
+
     DCHECK(!_agg_op->aggregator()->is_none_group_by_exprs());
     _agg_op->aggregator()->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
@@ -106,11 +109,6 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
     _agg_op->aggregator()->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
-}
-
-Status SpillablePartitionWiseAggregateSinkOperator::prepare_local_state(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare_local_state(state));
-    return _agg_op->prepare(state);
 }
 
 Status SpillablePartitionWiseAggregateSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

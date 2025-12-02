@@ -297,7 +297,6 @@ public class TaskRun implements Comparable<TaskRun> {
             context.getSessionVariable().setEnableSingleNodeSchedule(
                     parentRunCtx.getSessionVariable().enableSingleNodeSchedule());
         }
-        switchUser(context);
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.

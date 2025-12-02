@@ -448,7 +448,7 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 Status FragmentContext::prepare_active_drivers() {
     auto* profile = runtime_state()->runtime_profile();
     auto* prepare_driver_timer =
-            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 0_ms);
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-global", "prepare-pipeline-driver", 10_ms);
 
     {
         // prepare all driver's state in one thread, this phase's prepare don't need to be thread-safe
@@ -460,7 +460,7 @@ Status FragmentContext::prepare_active_drivers() {
     }
 
     auto* prepare_driver_local_timer =
-            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 0_ms);
+            ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver-local", "prepare-pipeline-driver", 10_ms);
     SCOPED_TIMER(prepare_driver_local_timer);
 
     auto pipeline_prepare_pool = runtime_state()->exec_env()->pipeline_prepare_pool();

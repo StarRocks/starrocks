@@ -82,7 +82,9 @@ void SpillablePartitionWiseDistinctSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_distinct_op->prepare(state));
+    RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     DCHECK(!_distinct_op->aggregator()->is_none_group_by_exprs());
     _distinct_op->aggregator()->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
@@ -100,12 +102,6 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
 
-    return Status::OK();
-}
-
-Status SpillablePartitionWiseDistinctSinkOperator::prepare_local_state(RuntimeState* state) {
-    RETURN_IF_ERROR(Operator::prepare_local_state(state));
-    RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     return Status::OK();
 }
 

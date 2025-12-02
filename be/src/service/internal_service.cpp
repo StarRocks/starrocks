@@ -384,12 +384,16 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     // prepare fragment instance in parallel
     std::vector<PromiseStatusSharedPtr> promise_statuses;
-    std::vector<pipeline::FragmentExecutor> fragment_executors(unique_requests.size());
+    // must use shared_ptr to avoid uaf
+    std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
+            std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        _exec_env->pipeline_prepare_pool()->offer([ms, i, &fragment_executors, &unique_requests, this] {
+        _exec_env->pipeline_prepare_pool()->offer([ms, i, fragment_executors, t_batch_requests, this] {
+            auto& unique_requests = t_batch_requests->unique_param_per_instance;
             auto& req = unique_requests[i];
-            ms->set_value(fragment_executors[i].prepare(_exec_env, req, req));
+            auto& fragment_executor = fragment_executors->at(i);
+            ms->set_value(fragment_executor.prepare(_exec_env, req, req));
         });
         promise_statuses.emplace_back(std::move(ms));
     }
@@ -397,10 +401,10 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     for (size_t i = 0; i < unique_requests.size(); ++i) {
         auto& promise = promise_statuses[i];
         // When a preparation fails, return error immediately. The other unfinished preparation is safe,
-        // since they can use the shared pointer of promise and t_batch_requests.
+        // since they can use the shared pointer of promise/t_batch_requests/fragment_executors
         status = promise->get_future().get();
         if (status.ok()) {
-            status = fragment_executors[i].execute(_exec_env);
+            status = fragment_executors->at(i).execute(_exec_env);
         } else if (status.is_duplicate_rpc_invocation()) {
             status = Status::OK();
         }

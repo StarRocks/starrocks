@@ -333,6 +333,7 @@ public class Deployer {
             batchFuture = execRemoteBatchFragmentsAsync(fragmentInstanceExecStates);
         } catch (Exception e) {
             LOG.warn("deployFragmentsForSingleNode failed", e);
+            throw new StarRocksException(e);
         }
 
         // every fragment instance share the same future
@@ -426,14 +427,14 @@ public class Deployer {
         // 2. clear unique param's desc table, so fragment instances can prepare parallelly
         tRequest.getUnique_param_per_instance().forEach(instance -> instance.setDesc_tbl(emptyDescTable));
 
-        // Todo: consider parallel serialize if this become bottleneck
-        TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
-        byte[] serializedRequest = serializer.serialize(tRequest);
-
         try {
+            // Todo: consider parallel serialize if this become bottleneck
+            TSerializer serializer = AttachmentRequest.getSerializer(jobSpec.getPlanProtocol());
+            byte[] serializedRequest = serializer.serialize(tRequest);
+
             return BackendServiceClient.getInstance()
                     .execBatchPlanFragmentsAsync(brpcAddress, serializedRequest, jobSpec.getPlanProtocol());
-        } catch (Exception e) {
+        } catch (RpcException | TException e) {
             LOG.warn("execBatchPlanFragmentsAsync failed", e);
             // DO NOT throw exception here, return a complete future with error code,
             // so that the following logic will cancel the fragment.
