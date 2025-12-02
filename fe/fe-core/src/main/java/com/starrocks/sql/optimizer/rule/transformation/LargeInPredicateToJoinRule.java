@@ -134,7 +134,7 @@ public class LargeInPredicateToJoinRule extends TransformationRule {
         
         if (analysis.largeInPredicates.size() > 1) {
             throw new LargeInPredicateException(
-                    "LargeInPredicate does not support multiple LargeInPredicate in one query, found: %d",
+                    "LargeInPredicate does not support multiple LargeInPredicate in one query, found: %s",
                     analysis.largeInPredicates.size());
         }
 
