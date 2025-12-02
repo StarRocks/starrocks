@@ -206,6 +206,39 @@ The various joins supported by StarRocks can be classified as equi-joins and non
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+#### JOIN USING Clause
+
+In addition to specifying join conditions using `ON`, StarRocks also supports using the `USING` clause to simplify equi-joins with columns of the same name. For example: `SELECT * FROM t1 JOIN t2 USING (id)`.
+
+**Version Differences:**
+
+- **Versions before 4.0.2**
+  
+  `USING` was treated as syntactic sugar and internally converted to an `ON` condition. The result would include USING columns from both the left and right tables as separate columns, and table alias qualifiers (e.g., `t1.id`) were allowed when referencing USING columns.
+  
+  ```SQL
+  -- Supported in versions before 4.0.2
+  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- Returns two separate id columns
+  ```
+
+- **Versions 4.0.2 and later**
+  
+  StarRocks implements SQL-standard `USING` semantics. Key changes include:
+  
+  - Supports all join types, including `FULL OUTER JOIN`
+  - USING columns appear as a single coalesced column in results (for FULL OUTER JOIN, using `COALESCE(left.col, right.col)` semantics)
+  - Table alias qualifiers (e.g., `t1.id`) are no longer supported for USING columns; unqualified column names (e.g., `id`) must be used
+  - In `SELECT *`, column order is: `[USING columns, left non-USING columns, right non-USING columns]`
+  
+  ```SQL
+  -- Versions 4.0.2 and later
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ Correct: Returns a single coalesced id column
+  SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ Error: Column 'id' is ambiguous
+  SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN is supported
+  ```
+
+This change aligns StarRocks's behavior with SQL-standard compliant databases such as PostgreSQL, Oracle, and Trino.
+
 ## ASOF Join
 
 An ASOF Join is a type of temporal or range-based join commonly used in time-series analytics. It allows joining two tables based on equality of certain keys and a non-equality condition on time or sequence fields, for example, `t1.time >= t2.time`. The ASOF Join selects the most recent matching row from the right-side table for each row on the left-side table. Supported from v4.0 onwards.
