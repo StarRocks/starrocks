@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.11.1)
+cmake_minimum_required(VERSION 3.16)
 
 # set CMAKE_C_COMPILER, this must set before project command
 if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
@@ -557,6 +557,10 @@ if (${WITH_TENANN} STREQUAL "ON")
     )
 endif()
 
+# enable global pch compiling
+add_library(StarRocksPCH INTERFACE)
+target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
+
 # Add all external dependencies. They should come after the starrocks libs.
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} ${STARROCKS_DEPENDENCIES} hdfs jvm)
@@ -608,6 +612,7 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         )
     ELSE()
         ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
+        target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
     ENDIF()
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()
