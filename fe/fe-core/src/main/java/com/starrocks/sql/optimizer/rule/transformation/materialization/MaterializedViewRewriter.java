@@ -1165,6 +1165,10 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                     mvRelationId = mvRefFactory.getRelationId(columnRef.getId());
                 }
 
+                // Skip virtual columns as they are not in the table schema
+                if (Utils.isVirtualColumn(columnRef.getName())) {
+                    continue;
+                }
                 Table table = entry.getKey().getTable();
                 Column column = table.getColumn(columnRef.getName());
                 ColumnRefOperator newColumn =

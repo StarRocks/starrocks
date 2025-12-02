@@ -1,0 +1,20 @@
+-- Expected results for test_virtual_column_tablet_id
+-- Note: Queries with [UC] flag skip result checking as tablet_id values are dynamic
+
+-- Test 2: Virtual column should not appear in SELECT *
+-- result:
+-- k1	k2	v1
+-- 1	10	a
+-- 2	20	b
+-- 3	30	c
+-- 4	40	d
+-- 5	50	e
+-- !result
+
+-- Test 6: DESCRIBE should not show virtual column
+-- result:
+-- Field	Type	Null	Key	Default	Extra
+-- k1	int(11)	Yes	true	NULL	
+-- k2	int(11)	Yes	false	NULL	
+-- v1	varchar(65533)	Yes	false	NULL	
+-- !result

@@ -48,7 +48,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.Expr;
@@ -113,7 +112,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // column is not key and has no aggregate type: aggregate type is none
     // column is not key and has aggregate type: aggregate type is name of aggregate function.
     @SerializedName(value = "aggregationType")
-    private AggregateType aggregationType;
+    private com.starrocks.sql.ast.AggregateType aggregationType;
     // aggStateDesc is used for common aggregate function state with intermediate result type in aggregate key model.
     // if aggregationType is AGG_STATE_UNION, aggStateDesc should not be null.
     @SerializedName("aggStateDesc")
@@ -179,32 +178,32 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(dataType.isValid());
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
+    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType, String defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
+    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType,
                   ColumnDef.DefaultValueDef defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, null, false, defaultValue, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
+    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType, boolean isAllowNull,
                   ColumnDef.DefaultValueDef defaultValueDef, String comment) {
         this(name, type, isKey, aggregateType, null, isAllowNull, defaultValueDef, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType, AggStateDesc aggStateDesc,
                   boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
         this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
     }
 
-    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+    public Column(String name, Type type, boolean isKey, com.starrocks.sql.ast.AggregateType aggregateType, AggStateDesc aggStateDesc,
                   boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
                   String physicalName) {
         this.name = name;
@@ -435,6 +434,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public boolean isShadowColumn() {
         return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
+    }
+
+    /**
+     * Check if this column is a virtual column.
+     * Virtual columns are read-only metadata columns that are not persisted.
+     * Currently supported: _tablet_id_
+     */
+    public boolean isVirtualColumn() {
+        return "_tablet_id_".equalsIgnoreCase(this.name);
     }
 
     public int getOlapColumnIndexSize() {

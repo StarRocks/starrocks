@@ -618,7 +618,7 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
 ENDFUNCTION()
 
 # Check if libsframe exists (needed for binutils 2.40+ on newer distros like Ubuntu 24.04)
-find_library(SFRAME_LIB sframe)
+#find_library(SFRAME_LIB sframe)
 
 if(SFRAME_LIB)
     message(STATUS "Found libsframe: ${SFRAME_LIB}, linking it explicitly.")

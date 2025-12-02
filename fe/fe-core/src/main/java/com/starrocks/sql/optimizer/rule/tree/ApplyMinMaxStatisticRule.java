@@ -96,6 +96,12 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                     if (!column.getType().isNumericType() && !column.getType().isDate()) {
                         continue;
                     }
+                    // Skip virtual columns as they are not in the table schema
+                    if (Utils.isVirtualColumn(column.getName())) {
+                        continue;
+                    }
+                    // Get Column object
+                    Column c = scanOperator.getColRefToColumnMetaMap().get(column);
                     if (globalDicts.containsKey(column.getId())) {
                         final ConstantOperator min = ConstantOperator.createVarchar("0");
                         final ColumnDict columnDict = globalDicts.get(column.getId());
@@ -103,7 +109,6 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                         infos.put(column.getId(), new Pair<>(min, max));
                         continue;
                     }
-                    Column c = table.getColumn(column.getName());
                     Optional<IMinMaxStatsMgr.ColumnMinMax> minMax = IMinMaxStatsMgr.internalInstance()
                             .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
                                     new StatsVersion(-1, lastUpdateTime));
