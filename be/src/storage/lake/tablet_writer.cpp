@@ -43,4 +43,18 @@ void TabletWriter::try_enable_pk_parallel_execution() {
     }
 }
 
+void TabletWriter::check_global_dict(SegmentWriter* segment_writer) {
+    const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
+    for (const auto& it : seg_global_dict_columns_valid_info) {
+        if (!it.second) {
+            _global_dict_columns_valid_info[it.first] = false;
+        } else {
+            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
+                iter == _global_dict_columns_valid_info.end()) {
+                _global_dict_columns_valid_info[it.first] = true;
+            }
+        }
+    }
+}
+
 } // namespace starrocks::lake

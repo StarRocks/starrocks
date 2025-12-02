@@ -152,6 +152,8 @@ public:
 
     bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
 
+    void check_global_dict(SegmentWriter* segment_writer);
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
