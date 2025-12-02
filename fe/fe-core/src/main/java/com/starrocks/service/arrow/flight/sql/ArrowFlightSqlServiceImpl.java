@@ -439,14 +439,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private void getStreamResult(String ticket, ServerStreamListener listener) {
-        LOG.warn("[ARROW] Calling getStreamResult with ticket: {}", ticket); 
         String[] ticketParts = ticket.split(":");
 
         if (ticketParts.length == 2) {
             getStreamResultFromFE(ticketParts[0], ticketParts[1], listener); 
         } else if (ticketParts.length == 4) {
-            LOG.warn("[ARROW] BE ticket received");
-            getStreamResultFromBE(ticketParts[0], ticketParts[1], ticketParts[2], 
+            getStreamResultFromBE(ticketParts[0], ticketParts[1], ticketParts[2],
                              Integer.parseInt(ticketParts[3]), listener);
         } else {
             throw CallStatus.INVALID_ARGUMENT.withDescription(
@@ -457,8 +455,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private void getStreamResultFromBE(String queryId, String fragmentInstanceId, 
                                     String beHost, int bePort, ServerStreamListener listener) {
-        LOG.warn("[ARROW] Proxying result from BE {}:{} for queryId: {}", beHost, bePort, queryId);
-        
         FlightStream beStream = null;
         
         try {
@@ -595,7 +591,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 String[] split = sv.getArrowFlightProxy().split(":");
                 endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
             }
-            LOG.warn("[ARROW] Built ticket: {}", handle.toStringUtf8());
 
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
