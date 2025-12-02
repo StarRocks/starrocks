@@ -88,10 +88,6 @@ public class BackendProcNodeTest {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = tabletInvertedIndex;
-
-                tabletInvertedIndex.getTabletNumByBackendIdAndPathHash(anyLong, anyLong);
-                minTimes = 0;
-                result = 1;
             }
         };
 
