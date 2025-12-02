@@ -622,16 +622,16 @@ function: wait_alter_table_not_pending()
 -- result:
 None
 -- !result
-select * from ss;
+select * from ss order by event_day;
 -- result:
-2002-01-03	1	2
 2002-01-01	1	2
 2002-01-02	1	2
+2002-01-03	1	2
 2002-01-04	1	2
 2002-01-05	1	2
-2002-01-08	1	2
-2002-01-07	1	2
 2002-01-06	1	2
+2002-01-07	1	2
+2002-01-08	1	2
 -- !result
 
 -- name: test_time_slice_with_minute_granularity
