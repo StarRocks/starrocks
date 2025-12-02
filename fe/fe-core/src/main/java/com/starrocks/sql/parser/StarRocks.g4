@@ -767,7 +767,7 @@ adminShowReplicaStatusStatement
     ;
 
 adminRepairTableStatement
-    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    : ADMIN REPAIR TABLE qualifiedName partitionNames? properties?
     ;
 
 adminCancelRepairTableStatement
