@@ -140,7 +140,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     private static TGetTableSchemaRequest createScanRequest(long schemaId, long dbId, long tableId, TUniqueId queryId) {
         TGetTableSchemaRequest request = new TGetTableSchemaRequest();
         request.setSchema_meta(createSchemaMeta(schemaId, dbId, tableId));
-        request.setRequest_source(TTableSchemaRequestSource.SCAN);
+        request.setSource(TTableSchemaRequestSource.SCAN);
         request.setQuery_id(queryId);
         return request;
     }
@@ -148,7 +148,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     private static TGetTableSchemaRequest createLoadRequest(long schemaId, long dbId, long tableId, long txnId) {
         TGetTableSchemaRequest request = new TGetTableSchemaRequest();
         request.setSchema_meta(createSchemaMeta(schemaId, dbId, tableId));
-        request.setRequest_source(TTableSchemaRequestSource.LOAD);
+        request.setSource(TTableSchemaRequestSource.LOAD);
         request.setTxn_id(txnId);
         return request;
     }
@@ -170,7 +170,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
         return Stream.of(
                 Arguments.of("MissingSchemaMeta",
                         (Consumer<TGetTableSchemaRequest>) request -> {
-                            request.setRequest_source(TTableSchemaRequestSource.SCAN);
+                            request.setSource(TTableSchemaRequestSource.SCAN);
                             request.setQuery_id(new TUniqueId(1, 1));
                         },
                         "schema meta not set"),
@@ -183,13 +183,13 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
                 Arguments.of("ScanWithoutQueryId",
                         (Consumer<TGetTableSchemaRequest>) request -> {
                             request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
-                            request.setRequest_source(TTableSchemaRequestSource.SCAN);
+                            request.setSource(TTableSchemaRequestSource.SCAN);
                         },
                         "query id not set for scan"),
                 Arguments.of("LoadWithoutTxnId",
                         (Consumer<TGetTableSchemaRequest>) request -> {
                             request.setSchema_meta(createSchemaMeta(1L, 1L, 1L));
-                            request.setRequest_source(TTableSchemaRequestSource.LOAD);
+                            request.setSource(TTableSchemaRequestSource.LOAD);
                         },
                         "txn id not set for load")
         );

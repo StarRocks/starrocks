@@ -2230,7 +2230,7 @@ enum TTableSchemaRequestSource {
 
 struct TGetTableSchemaRequest {
     1: optional PlanNodes.TTableSchemaMeta schema_meta;
-    2: optional TTableSchemaRequestSource request_source;
+    2: optional TTableSchemaRequestSource source;
     3: optional i64 tablet_id;
     // Valid if request_source is SCAN
     4: optional Types.TUniqueId query_id;
