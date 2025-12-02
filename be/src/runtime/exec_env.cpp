@@ -94,7 +94,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "udf/python/env.h"
-#include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/mem_info.h"
@@ -495,9 +494,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-#if !defined(__APPLE__) && !defined(BE_TEST)
-    _bfd_parser = BfdParser::create();
-#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache(this);
@@ -816,9 +812,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
-#if !defined(__APPLE__)
-    SAFE_DELETE(_bfd_parser);
-#endif
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
