@@ -17,10 +17,10 @@
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
 #endif
-#include <xxhash.h>
 
 #include "util/cpu_info.h"
 #include "util/murmur_hash3.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 

@@ -14,8 +14,6 @@
 
 #include "storage/persistent_index.h"
 
-#include <xxhash.h>
-
 #include <cstring>
 #include <numeric>
 #include <utility>
@@ -46,6 +44,7 @@
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
 #include "util/stopwatch.hpp"
+#include "util/xxh3.h"
 
 namespace starrocks {
 

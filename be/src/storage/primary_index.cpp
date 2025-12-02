@@ -14,8 +14,6 @@
 
 #include "storage/primary_index.h"
 
-#include <xxhash.h>
-
 #include <memory>
 #include <mutex>
 
@@ -34,6 +32,7 @@
 #include "types/large_int_value.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 

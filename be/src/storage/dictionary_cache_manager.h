@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <xxhash.h>
-
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -32,6 +30,7 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/type_traits.h"
 #include "util/phmap/phmap.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 

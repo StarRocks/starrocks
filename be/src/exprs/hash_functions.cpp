@@ -14,11 +14,10 @@
 
 #include "exprs/hash_functions.h"
 
-#include <xxhash.h>
-
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 
