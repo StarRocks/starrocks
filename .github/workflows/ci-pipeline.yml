@@ -30,6 +30,8 @@ jobs:
       PASS: ${{ steps.check.outputs.pass }}
       TEST_PR: ${{ steps.check_test_case.outputs.TEST_PR }}
       PRE_COMMIT: ${{ steps.check_blacklist.outputs.pre_commit }}
+      ONLY_BE_TEST: ${{ steps.check_blacklist.outputs.ONLY_BE_TEST }}
+      ONLY_FE_TEST: ${{ steps.check_blacklist.outputs.ONLY_FE_TEST }}
     steps:
       - name: Sync Check
         id: check
@@ -98,7 +100,6 @@ jobs:
           SHA: ${{ steps.upload_info.outputs.SHA }}
         run: |
           cd ci-tool
-          # TODO: check fork repo
           ./scripts/check-testcase.sh
 
       - name: Check Feature Issue
@@ -176,6 +177,20 @@ jobs:
         run: |
           cd ci-tool
           ./scripts/check-approve.sh
+      
+      - name: Check Test Case Info
+        if: always() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''
+        id: check_test_case_info
+        run: |
+          echo "TEST_PR=${{ steps.check_test_case.outputs.TEST_PR }}" >> ./test-pr-info.txt
+
+      - name: Upload the Test Case Info
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-pr-info
+          path: ./test-pr-info.txt  
+          retention-days: 3
+          overwrite: true
 
   be-checker:
     runs-on: ubuntu-latest
@@ -184,6 +199,7 @@ jobs:
     if: needs.basic-checker.outputs.PASS == 'true'
     env:
       PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
+      ONLY_BE_TEST: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
@@ -225,34 +241,6 @@ jobs:
           path: ./be-path-filter/
           retention-days: 3
           overwrite: true
-
-      # pr 的当前 commit 内的 diff
-      - name: Commit path filter
-        uses: dorny/paths-filter@v3
-        id: commit-filter
-        if: env.PRE_COMMIT != ''
-        with:
-          base: HEAD~1  # 上一个 commit
-          ref: HEAD  
-          working-directory: ${{ github.workspace }}
-          filters: |
-            be:
-              - 'be/!(test)**'
-              - 'gensrc/**'
-              - 'run-be-ut.sh'
-              - 'build.sh'
-              - 'thirdparty/**'
-              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-            thirdparty:
-              - 'thirdparty/**'
-              - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-      
-      - name: Prepare commit diff info
-        run: |
-          if [[ "${{ steps.commit-filter.outputs.be }}" != "true" && "${{ steps.commit-filter.outputs.thirdparty }}" != true ]]; then
-            cd be-path-filter
-            echo "true" > commit_only_test.txt
-          fi
 
       - name: Upload the BE Commit Filter Info
         uses: actions/upload-artifact@v4
