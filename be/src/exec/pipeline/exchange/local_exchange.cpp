@@ -169,16 +169,6 @@ Status PartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
-    // Read exchange_hash_function_version from query options
-    int32_t exchange_hash_function_version = 0;
-    if (state->query_options().__isset.exchange_hash_function_version) {
-        exchange_hash_function_version = state->query_options().exchange_hash_function_version;
-    }
-    // Set hash function version for all partitioners
-    for (auto& partitioner : _partitioners) {
-        static_cast<ShufflePartitioner*>(partitioner.get())
-                ->set_exchange_hash_function_version(exchange_hash_function_version);
-    }
     return Status::OK();
 }
 
