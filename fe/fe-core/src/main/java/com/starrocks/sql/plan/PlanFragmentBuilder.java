@@ -1859,16 +1859,14 @@ public class PlanFragmentBuilder {
 
                     if (like.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
                         String pattern = ((ConstantOperator) like.getChild(1)).getVarchar();
-                        if (!pattern.contains("%")) {
-                            switch (columnRefOperator.getName()) {
-                                case "TABLE_SCHEMA":
-                                case "DATABASE_NAME":
-                                    scanNode.setSchemaDb(pattern);
-                                    break;
-                                case "TABLE_NAME":
-                                    scanNode.setSchemaTable(pattern);
-                                    break;
-                            }
+                        switch (columnRefOperator.getName()) {
+                            case "TABLE_SCHEMA":
+                            case "DATABASE_NAME":
+                                scanNode.setSchemaDb(pattern);
+                                break;
+                            case "TABLE_NAME":
+                                scanNode.setSchemaTable(pattern);
+                                break;
                         }
                     }
                 }
