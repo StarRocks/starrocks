@@ -14,21 +14,16 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.jupiter.api.Assertions;
-=======
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
-import com.starrocks.sql.ast.expression.TypeDef;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -36,7 +31,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
->>>>>>> 6358bdebf6 ([BugFix] Fix temporary partition value conflict in concurrent transactions (#66025))
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -46,12 +40,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-<<<<<<< HEAD
-import static org.junit.Assert.assertEquals;
-=======
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
->>>>>>> 6358bdebf6 ([BugFix] Fix temporary partition value conflict in concurrent transactions (#66025))
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.when;
 
@@ -69,9 +59,6 @@ public class CatalogUtilsTest extends StarRocksTestBase {
     @Mock
     private PhysicalPartition physicalPartition;
 
-<<<<<<< HEAD
-    @Before
-=======
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
@@ -83,7 +70,6 @@ public class CatalogUtilsTest extends StarRocksTestBase {
     }
 
     @BeforeEach
->>>>>>> 6358bdebf6 ([BugFix] Fix temporary partition value conflict in concurrent transactions (#66025))
     public void setUp() {
         MockitoAnnotations.openMocks(this);
     }
@@ -186,7 +172,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
             }
         } catch (Exception e) {
             if (expectedException) {
-                logSysInfo("got expected exception: " + e.getMessage());
+                // Expected exception, do nothing
             } else {
                 throw e;
             }
@@ -380,8 +366,8 @@ public class CatalogUtilsTest extends StarRocksTestBase {
                 false, "tp_test", Arrays.asList("hangzhou"), null);
         // Set column def list for the partition desc
         List<ColumnDef> columnDefList = new ArrayList<>();
-        columnDefList.add(new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(20))));
-        partitionDesc.setColumnDefList(columnDefList);
+        columnDefList.add(new ColumnDef("province", new TypeDef(ScalarType.createVarcharType(20))));
+        partitionDesc.analyze(columnDefList, null);
 
         // Test: temp partition should not throw exception for value not in formal partitions
         Assertions.assertDoesNotThrow(() -> {
@@ -391,7 +377,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         // Test: formal partition with duplicate value should throw exception
         SingleItemListPartitionDesc dupPartitionDesc = new SingleItemListPartitionDesc(
                 false, "p_test", Arrays.asList("beijing"), null);
-        dupPartitionDesc.setColumnDefList(columnDefList);
+        dupPartitionDesc.analyze(columnDefList, null);
 
         Assertions.assertThrows(DdlException.class, () -> {
             CatalogUtils.checkPartitionValuesExistForAddListPartition(table, dupPartitionDesc, false);
