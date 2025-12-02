@@ -628,8 +628,8 @@ else()
     set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
 endif()
 
-if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
-    # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
+if (NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
+    # In other words, turn to dynamic link when ENABLE_MULTI_DYNAMIC_LIBS or MAKE_TEST and BUILD_TYPE == *SAN
     # otherwise do static link gcc's lib
     set(STARROCKS_STATIC_LINK_LIBS ${STARROCKS_STATIC_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
