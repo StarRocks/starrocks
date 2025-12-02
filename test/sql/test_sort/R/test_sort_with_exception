@@ -30,7 +30,7 @@ admin enable failpoint 'chunks_sorter_full_sort_done_bad_alloc';
 -- result:
 E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
 -- !result
-admin disable failpoint 'chunks_sorter_full_sort_partial_sort_bad_alloc';
+admin disable failpoint 'chunks_sorter_full_sort_done_bad_alloc';
 -- result:
 -- !result
 admin enable failpoint 'chunks_sorter_topn_sort_bad_alloc';

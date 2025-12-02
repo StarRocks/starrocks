@@ -16,7 +16,7 @@ admin disable failpoint 'chunks_sorter_full_sort_partial_sort_bad_alloc';
 
 admin enable failpoint 'chunks_sorter_full_sort_done_bad_alloc';
 [UC]select *,row_number() over (partition by c0 order by c1) from t0;
-admin disable failpoint 'chunks_sorter_full_sort_partial_sort_bad_alloc';
+admin disable failpoint 'chunks_sorter_full_sort_done_bad_alloc';
 
 admin enable failpoint 'chunks_sorter_topn_sort_bad_alloc';
 [UC]select * from t0 order by c1 limit 4096;
