@@ -14,17 +14,19 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
 #include "column/field.h"
+#include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
@@ -736,6 +738,50 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
                 // This doesn't require the column to be in the schema
                 chunk->append_column(tablet_id_column, slot->id());
                 chunk->set_slot_id_to_index(slot->id(), chunk->num_columns() - 1);
+            }
+        }
+
+        // Remove columns that don't have slot_ids (e.g., helper columns added to read row count
+        // when only virtual columns are selected). This ensures _columns.size() == _slot_id_to_index.size()
+        // which is required for clone_empty_with_slot().
+        if (chunk->schema() != nullptr && chunk->num_columns() > chunk->get_slot_id_to_index_map().size()) {
+            std::vector<size_t> columns_to_remove;
+            const auto& slot_id_to_index = chunk->get_slot_id_to_index_map();
+            std::unordered_set<size_t> slot_index_set;
+            for (const auto& [slot_id, index] : slot_id_to_index) {
+                slot_index_set.insert(index);
+            }
+
+            // Find columns without slot_ids
+            for (size_t i = 0; i < chunk->num_columns(); i++) {
+                if (slot_index_set.find(i) == slot_index_set.end()) {
+                    columns_to_remove.push_back(i);
+                }
+            }
+
+            // Remove columns in reverse order to avoid index shifting
+            if (!columns_to_remove.empty()) {
+                std::sort(columns_to_remove.begin(), columns_to_remove.end());
+
+                // Update slot_id_to_index: for each slot_id, count how many removed columns
+                // have indices less than its index, then subtract that count
+                for (const auto& [slot_id, old_index] : slot_id_to_index) {
+                    size_t decrement = 0;
+                    for (size_t removed_idx : columns_to_remove) {
+                        if (removed_idx < old_index) {
+                            decrement++;
+                        } else {
+                            break; // columns_to_remove is sorted, so we can break early
+                        }
+                    }
+                    if (decrement > 0) {
+                        chunk->set_slot_id_to_index(slot_id, old_index - decrement);
+                    }
+                }
+
+                // Sort in descending order for removal (remove from end to avoid index shifting)
+                std::sort(columns_to_remove.begin(), columns_to_remove.end(), std::greater<size_t>());
+                chunk->remove_columns_by_index(columns_to_remove);
             }
         }
 
