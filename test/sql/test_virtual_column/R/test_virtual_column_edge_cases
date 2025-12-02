@@ -1,4 +1,4 @@
--- name: test_virtual_column_edge_cases @sequential
+-- name: test_virtual_column_edge_cases
 create database if not exists test_virtual_column_db;
 -- result:
 -- !result
@@ -22,20 +22,20 @@ insert into empty_table values (1, 10);
 -- !result
 [UC]select _tablet_id_, k1, k2 from empty_table;
 -- result:
-12060088	1	10
+12060348	1	10
 -- !result
 [UC]select * from (
     select _tablet_id_, k1, k2 from empty_table
 ) t order by k1;
 -- result:
-12060088	1	10
+12060348	1	10
 -- !result
 [UC]with t as (
     select _tablet_id_, k1, k2 from empty_table
 )
 select * from t order by k1;
 -- result:
-12060088	1	10
+12060348	1	10
 -- !result
 create table table2 (
     k1 int,
@@ -54,15 +54,15 @@ union all
 select _tablet_id_, k1, k2 from table2
 order by k1;
 -- result:
-12060088	1	10
-12060097	2	20
+12060348	1	10
+12060357	2	20
 -- !result
 [UC]select k1, k2, _tablet_id_,
     row_number() over (partition by _tablet_id_ order by k1) as rn
 from empty_table
 order by k1;
 -- result:
-1	10	12060088	1
+1	10	12060348	1
 -- !result
 [UC]select _tablet_id_, count(*) as cnt
 from empty_table
@@ -70,19 +70,19 @@ group by _tablet_id_
 having count(*) > 0
 order by _tablet_id_;
 -- result:
-12060088	1
+12060348	1
 -- !result
 [UC]select distinct _tablet_id_ from empty_table order by _tablet_id_;
 -- result:
-12060088
+12060348
 -- !result
 [UC]select typeof(_tablet_id_) as col_type, _tablet_id_ from empty_table limit 1;
 -- result:
-bigint	12060088
+bigint	12060348
 -- !result
 [UC]select _tablet_id_ as t1, _tablet_id_ as t2, k1, k2 from empty_table order by k1;
 -- result:
-12060088	12060088	1	10
+12060348	12060348	1	10
 -- !result
 drop table if exists empty_table;
 -- result:
