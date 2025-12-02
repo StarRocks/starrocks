@@ -490,4 +490,7 @@ auto HashVariantResolver<HashVariantType>::instance() -> HashVariantResolver<Has
 template class HashVariantResolver<AggHashSetVariant>;
 template class HashVariantResolver<AggHashMapVariant>;
 
+DEFINE_FAIL_POINT(agg_hash_set_bad_alloc);
+DEFINE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
+
 } // namespace starrocks
