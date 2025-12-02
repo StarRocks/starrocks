@@ -46,10 +46,13 @@ public:
 
     static void put_object(const std::string& object_content);
 
+    static std::shared_ptr<Aws::S3::S3Client> get_s3_client(Aws::Client::ClientConfiguration config);
+
 protected:
     inline static const char* s_bucket_name = nullptr;
     inline static const char* ak = nullptr;
     inline static const char* sk = nullptr;
+    inline static const char* sts = nullptr;
 };
 
 void PocoHttpClientTest::SetUpTestCase() {
@@ -66,11 +69,17 @@ void PocoHttpClientTest::SetUpTestCase() {
                                                       : config::object_storage_access_key_id.c_str();
     sk = config::object_storage_secret_access_key.empty() ? getenv("STARROCKS_UT_S3_SK")
                                                           : config::object_storage_secret_access_key.c_str();
+
+    sts = config::object_storage_session_token_for_ut.empty() ? getenv("STARROCKS_UT_S3_SESSION_TOKEN")
+                                                              : config::object_storage_session_token_for_ut.c_str();
     if (ak == nullptr) {
         FAIL() << "s3 access key id not set";
     }
     if (sk == nullptr) {
         FAIL() << "s3 secret access key not set";
+    }
+    if (sts == nullptr) {
+        FAIL() << "s3 sts token not set";
     }
     put_object(kObjectContent);
 }
@@ -79,14 +88,19 @@ void PocoHttpClientTest::TearDownTestCase() {
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
 
+std::shared_ptr<Aws::S3::S3Client> PocoHttpClientTest::get_s3_client(Aws::Client::ClientConfiguration config) {
+    auto credentials = config::object_storage_session_token_for_ut.empty()
+                               ? std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk)
+                               : std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk, sts);
+    return std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
+                                               Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                               !config::object_storage_endpoint_path_style_access);
+}
+
 void PocoHttpClientTest::put_object(const std::string& object_content) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
-
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
-    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
 
     std::shared_ptr<Aws::IOStream> stream = Aws::MakeShared<Aws::StringStream>("", object_content);
 
@@ -95,7 +109,7 @@ void PocoHttpClientTest::put_object(const std::string& object_content) {
     request.SetKey(kObjectName);
     request.SetBody(stream);
 
-    Aws::S3::Model::PutObjectOutcome outcome = client->PutObject(request);
+    Aws::S3::Model::PutObjectOutcome outcome = get_s3_client(config)->PutObject(request);
     CHECK(outcome.IsSuccess()) << outcome.GetError().GetMessage();
 }
 
@@ -112,12 +126,7 @@ TEST_F(PocoHttpClientTest, TestNormalAccess) {
     // Create a client configuration object and set the custom retry strategy
     config.retryStrategy = retryStrategy;
 
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
-
-    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
-
-    auto stream = std::make_unique<starrocks::io::S3InputStream>(client, s_bucket_name, kObjectName);
+    auto stream = std::make_unique<starrocks::io::S3InputStream>(get_s3_client(config), s_bucket_name, kObjectName);
     char buf[6];
     ASSIGN_OR_ABORT(auto r, stream->read(buf, sizeof(buf)));
     ASSERT_EQ("012345", std::string_view(buf, r));
@@ -136,11 +145,7 @@ TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
     // Create a client configuration object and set the custom retry strategy
     config.retryStrategy = retryStrategy;
 
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
-    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
-
-    auto stream = std::make_unique<starrocks::io::S3InputStream>(client, s_bucket_name, kObjectName);
+    auto stream = std::make_unique<starrocks::io::S3InputStream>(get_s3_client(config), s_bucket_name, kObjectName);
     char buf[6];
     auto r = stream->read(buf, sizeof(buf));
     EXPECT_TRUE(r.status().message().find("Poco::Exception") != std::string::npos);
@@ -161,7 +166,7 @@ TEST_F(PocoHttpClientTest, TestErrorAkSk) {
     config.retryStrategy = retryStrategy;
 
     std::string error_sk = "12345";
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, error_sk.data());
+    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, error_sk.data(), sts);
     auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
                                                       Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
 
@@ -184,12 +189,7 @@ TEST_F(PocoHttpClientTest, TestNotFoundKey) {
     // Create a client configuration object and set the custom retry strategy
     config.retryStrategy = retryStrategy;
 
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
-
-    auto client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
-
-    auto stream = std::make_unique<starrocks::io::S3InputStream>(client, s_bucket_name, "not_found_key");
+    auto stream = std::make_unique<starrocks::io::S3InputStream>(get_s3_client(config), s_bucket_name, "not_found_key");
     char buf[6];
     auto r = stream->read(buf, sizeof(buf));
     EXPECT_TRUE(r.status().message().find("SdkResponseCode=404") != std::string::npos);
