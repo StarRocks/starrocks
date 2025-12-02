@@ -1,4 +1,4 @@
--- name: test_virtual_column_edge_cases @sequential
+-- name: test_virtual_column_edge_cases
 
 -- Test edge cases and error handling for virtual column _tablet_id_
 

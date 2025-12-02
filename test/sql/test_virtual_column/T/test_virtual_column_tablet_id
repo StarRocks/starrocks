@@ -1,4 +1,4 @@
--- name: test_virtual_column_tablet_id @sequential
+-- name: test_virtual_column_tablet_id
 
 -- Test virtual column _tablet_id_ for OLAP table
 create database if not exists test_virtual_column_db;
@@ -35,7 +35,7 @@ group by _tablet_id_
 order by _tablet_id_;
 
 -- Test 4: Virtual column with aggregation
-[UC]select _tablet_id_, min(k1) as min_k1, max(k1) as max_k1, count(*) as rows
+[UC]select _tablet_id_, min(k1) as min_k1, max(k1) as max_k1, count(*) as cnt
 from olap_table
 group by _tablet_id_
 order by _tablet_id_;
