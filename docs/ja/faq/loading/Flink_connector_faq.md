@@ -90,3 +90,32 @@ StarRocks Tools を使用してステートメントをエクスポートでき�
 **解決策:**
 
 3 つのしきい値のうち、どれかが最初に達成されると、そのしきい値が最初に有効になります。これは、チェックポイント間隔の値には影響されません。チェックポイント間隔の値は、exactly once にのみ機能します。interval-ms は at_least_once によって使用されます。
+
+## Flink Connector を使用した部分更新が "NULL value in non-nullable column" で失敗するのはなぜですか？
+
+次のプロパティを設定します。
+
+```SQL
+sink.properties.partial_update=true
+sink.properties.columns=<primary_key,columns_to_update>
+```
+
+## JSON データを使用した Flink インポートエラー "The size of this batch exceed the max size [104857600]" をどのように処理しますか？
+
+バッチ頻度を減らすか、`sink.properties.ignore_json_size` を `true` に設定します（これによりメモリ使用量が増加する可能性があります）。
+
+## Flink CDC で bigint unsigned フィールドが文字列に変換され、その値が変更された場合はどうすればよいですか？
+
+次の設定を追加します。
+
+```SQL
+'debezium.bigint.unsigned.handling.mode' = 'precise'
+```
+
+## Flink コネクタを使用してデータをインポートする際に "None of hosts in load_url could be connected" と表示されるのはなぜですか？
+
+`load_url` が到達不能またはタイムアウトしています。プロパティ `sink.connect.timeout-ms` の値を増やします（範囲：[100, 60000]）。
+
+## Kafka を消費する際に Routine Load が "Bad message format" を報告するのはなぜですか？
+
+Kafka は通信にホスト名を使用します。StarRocks ノードをホストするすべてのサーバーの `/etc/hosts` に Kafka ノードのホスト名解決を追加します。
