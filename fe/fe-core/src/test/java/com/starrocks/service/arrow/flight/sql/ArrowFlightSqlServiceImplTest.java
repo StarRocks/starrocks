@@ -280,6 +280,64 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
+    public void testGetFlightInfoStatementInvalidProxy() throws ExecutionException, InterruptedException, TimeoutException {
+        DefaultCoordinator mockCoordinator = mock(DefaultCoordinator.class);
+        JobSpec mockJobSpec = mock(JobSpec.class);
+        ExecPlan mockPlan = mock(ExecPlan.class);
+        when(mockContext.waitForDeploymentFinished(anyLong())).thenReturn(mockCoordinator);
+        when(mockCoordinator.getJobSpec()).thenReturn(mockJobSpec);
+        when(mockJobSpec.getExecPlan()).thenReturn(mockPlan);
+
+        FlightSql.CommandStatementQuery command = FlightSql.CommandStatementQuery.newBuilder()
+                .setQuery("SELECT 1").build();
+        FlightInfo info = service
+                .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes()));
+        assertNotNull(info);
+
+        when(mockContext.returnFromFE()).thenReturn(false);
+        when(mockContext.isFromFECoordinator()).thenReturn(false);
+
+        QueryState mockState = mock(QueryState.class);
+        when(mockContext.getState()).thenReturn(mockState);
+        when(mockState.isError()).thenReturn(false);
+
+        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
+        when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
+        when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+        when(mockSessionVariable.getArrowFlightProxy()).thenReturn("invalid proxy");
+
+
+        ExecutionDAG mockDAG = mock(ExecutionDAG.class);
+        when(mockCoordinator.getExecutionDAG()).thenReturn(mockDAG);
+
+        ExecutionFragment mockFragment = mock(ExecutionFragment.class);
+        when(mockDAG.getRootFragment()).thenReturn(mockFragment);
+
+        FragmentInstance mockInstance = mock(FragmentInstance.class);
+        when(mockFragment.getInstances()).thenReturn(Collections.singletonList(mockInstance));
+
+        ComputeNode mockNode = mock(ComputeNode.class);
+        when(mockInstance.getWorker()).thenReturn(mockNode);
+        when(mockNode.getHost()).thenReturn("127.0.0.1");
+        when(mockNode.getArrowFlightPort()).thenReturn(8815);
+        when(mockNode.getBrpcAddress()).thenReturn(new TNetworkAddress("127.0.0.1", 9020));
+
+        TUniqueId mockInstanceId = new TUniqueId(3, 4);
+        when(mockInstance.getInstanceId()).thenReturn(mockInstanceId);
+
+        ArrowFlightSqlServiceImpl spyService = Mockito.spy(service);
+        FlightInfo mockFlightInfo = mock(FlightInfo.class);
+        doReturn(mockFlightInfo).when(spyService).buildFlightInfo(any(), any(), any(), any());
+
+        assertThrows(RuntimeException.class, () ->
+                spyService
+                        .getFlightInfoStatement(command, mockCallContext, FlightDescriptor.command("SELECT 1".getBytes())
+                ));
+    }
+
+    @Test
     public void testClosePreparedStatement() {
         FlightSql.ActionClosePreparedStatementRequest request = FlightSql
                 .ActionClosePreparedStatementRequest.newBuilder().build();

@@ -589,6 +589,10 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             ByteString handle;
             Location endpoint;
+            if (!validProxyFormat(sv.getArrowFlightProxy())) {
+                throw new RuntimeException(String.format("Invalid proxy format [arrow_flight_proxy=%s]",
+                        sv.getArrowFlightProxy()));
+            }
             if (sv.getArrowFlightProxy().isEmpty()) {
                 // route directly to BE
                 handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
@@ -675,6 +679,15 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         StringBuilder builder = new StringBuilder();
         builder.append(Long.toHexString(id.hi)).append("-").append(Long.toHexString(id.lo));
         return builder.toString();
+    }
+
+    private boolean validProxyFormat(String arrowFlightProxy) {
+        if (arrowFlightProxy.isEmpty()) {
+            return true;
+        }
+
+        String[] split = arrowFlightProxy.split(":");
+        return (split.length == 2 || split.length == 4);
     }
 
     @VisibleForTesting
