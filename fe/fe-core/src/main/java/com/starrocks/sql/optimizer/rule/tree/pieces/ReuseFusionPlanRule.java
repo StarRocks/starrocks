@@ -413,17 +413,26 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
                 if (filter != null && !aggregate.getGroupingKeys().isEmpty()) {
                     if (pieceRowCountRef[0] != null) {
                         originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, pieceRowCountRef[0]);
-                        extraOutputRefs.add(pieceRowCountRef[0]);
+                        if (!extraOutputRefs.contains(pieceRowCountRef[0])) {
+                            extraOutputRefs.add(pieceRowCountRef[0]);
+                        }
                     } else {
                         Function anyFn = ExprUtils.getBuiltinFunction(FunctionSet.ANY_VALUE,
                                 new Type[] {BooleanType.BOOLEAN}, Function.CompareMode.IS_IDENTICAL);
                         CallOperator anyTrue = new CallOperator(FunctionSet.ANY_VALUE, BooleanType.BOOLEAN,
                                 List.of(ConstantOperator.createBoolean(true)), anyFn);
                         CallOperator anyIfCall = addFilterAggCall(anyTrue, filter, aggFilterProject, false);
-                        ColumnRefOperator hitRef = factory.create("row_hit", BooleanType.BOOLEAN, true);
-                        aggToRefs.put(anyIfCall, hitRef);
+                        ColumnRefOperator hitRef;
+                        if (aggToRefs.containsKey(anyIfCall)) {
+                            hitRef = aggToRefs.get(anyIfCall);
+                        } else {
+                            hitRef = factory.create("row_hit", BooleanType.BOOLEAN, true);
+                            aggToRefs.put(anyIfCall, hitRef);
+                        }
                         originalPiece.pieceIdToRowCountRef.put(originalPiece.planId, hitRef);
-                        extraOutputRefs.add(hitRef);
+                        if (!extraOutputRefs.contains(hitRef)) {
+                            extraOutputRefs.add(hitRef);
+                        }
                     }
                 }
             }

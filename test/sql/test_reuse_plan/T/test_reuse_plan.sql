@@ -709,6 +709,86 @@ JOIN (
 ORDER BY 1;
 
 -- ========================================
+-- Pattern 19: Identical filters
+-- Test for row_hit column reuse when multiple pieces have same filter
+-- ========================================
+
+-- 19.1 Two branches with identical filter
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+
+-- 19.2 Three branches - first and third have identical filter
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 >= 4 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+
+-- 19.3 Multiple branches with same filter (stress test)
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 >= 4 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 = 5 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+
+-- 19.4 Identical filter with multiple aggregations
+SELECT k2, SUM(v1) as sum_v1, AVG(v2) as avg_v2, COUNT(*) as cnt 
+FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v1, AVG(v2) as avg_v2, COUNT(*) as cnt 
+FROM t0 WHERE k1 >= 4 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v1, AVG(v2) as avg_v2, COUNT(*) as cnt 
+FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+
+-- 19.5 Identical complex filter with compound predicates
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 AND k2 = 10 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 >= 40 AND k2 = 20 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 AND k2 = 10 GROUP BY k2
+ORDER BY 1, 2;
+
+-- 19.6 Identical filter with JOIN (SPJG pattern)
+SELECT t0.k2, SUM(t0.v1) as sum_v 
+FROM t0 INNER JOIN t1 ON t0.k1 = t1.k1 
+WHERE t0.k1 < 3 GROUP BY t0.k2
+UNION ALL
+SELECT t0.k2, SUM(t0.v1) as sum_v 
+FROM t0 INNER JOIN t1 ON t0.k1 = t1.k1 
+WHERE t0.k1 >= 4 GROUP BY t0.k2
+UNION ALL
+SELECT t0.k2, SUM(t0.v1) as sum_v 
+FROM t0 INNER JOIN t1 ON t0.k1 = t1.k1 
+WHERE t0.k1 < 3 GROUP BY t0.k2
+ORDER BY 1, 2;
+
+-- 19.7 All branches have identical filter
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+
+-- 19.8 Identical filter with NULL handling
+SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 < 4 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 >= 5 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 < 4 GROUP BY k2
+ORDER BY 1, 2;
+
+-- ========================================
 -- Cleanup
 -- ========================================
 DROP TABLE IF EXISTS t0;

@@ -786,6 +786,111 @@ ORDER BY 1;
 30	3
 30	3
 -- !result
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	3
+10	3
+-- !result
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 >= 4 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	3
+10	3
+20	None
+30	11
+-- !result
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 >= 4 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 = 5 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	2
+10	2
+10	2
+20	1
+30	1
+30	2
+-- !result
+SELECT k2, SUM(v1) as sum_v1, AVG(v2) as avg_v2, COUNT(*) as cnt 
+FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v1, AVG(v2) as avg_v2, COUNT(*) as cnt 
+FROM t0 WHERE k1 >= 4 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v1, AVG(v2) as avg_v2, COUNT(*) as cnt 
+FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	3	10.0	2
+10	3	10.0	2
+20	None	40.0	1
+30	11	50.0	2
+-- !result
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 AND k2 = 10 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 >= 40 AND k2 = 20 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v1) as sum_v FROM t0 WHERE k1 < 3 AND k2 = 10 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	3
+10	3
+-- !result
+SELECT t0.k2, SUM(t0.v1) as sum_v 
+FROM t0 INNER JOIN t1 ON t0.k1 = t1.k1 
+WHERE t0.k1 < 3 GROUP BY t0.k2
+UNION ALL
+SELECT t0.k2, SUM(t0.v1) as sum_v 
+FROM t0 INNER JOIN t1 ON t0.k1 = t1.k1 
+WHERE t0.k1 >= 4 GROUP BY t0.k2
+UNION ALL
+SELECT t0.k2, SUM(t0.v1) as sum_v 
+FROM t0 INNER JOIN t1 ON t0.k1 = t1.k1 
+WHERE t0.k1 < 3 GROUP BY t0.k2
+ORDER BY 1, 2;
+-- result:
+10	3
+10	3
+20	None
+30	5
+-- !result
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+UNION ALL
+SELECT k2, COUNT(*) as cnt FROM t0 WHERE k1 < 3 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	2
+10	2
+10	2
+-- !result
+SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 < 4 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 >= 5 GROUP BY k2
+UNION ALL
+SELECT k2, SUM(v2) as sum_v FROM t0 WHERE k1 < 4 GROUP BY k2
+ORDER BY 1, 2;
+-- result:
+10	10
+10	10
+20	30
+20	30
+30	50
+-- !result
 DROP TABLE IF EXISTS t0;
 -- result:
 -- !result

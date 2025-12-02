@@ -1135,4 +1135,28 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "MultiCastDataSinks");
     }
+
+    @Test
+    public void testFusionReuse() throws Exception {
+        String plan = getPlanFragment("query_dump/fusion_reuse_case", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 33\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 60\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 88\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  4:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum_if(994: sum), any_value_if(995: row_hit, TRUE), sum_if(997: sum), any_value_if(998: row_hit," +
+                " TRUE)\n" +
+                "  |  group by: 977: io_id, 984: org_id\n" +
+                "  |  having: (995: row_hit IS NOT NULL) OR (998: row_hit IS NOT NULL)");
+    }
 }
