@@ -25,6 +25,10 @@ def	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	BASE TABLE	StarRo
 unique_view_with_null	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11003
 unique_table_with_null	db_1b289bc796044317a138ee5a6c79b56a	unique_table_with_null	OLAP	UNIQUE_KEYS	`k1`, `k2`, `k3`, `k4`, `k5`		`k1`, `k2`, `k3`, `k4`, `k5`	HASH	3	`k1`, `k2`, `k3`, `k4`, `k5`	{"compression":"LZ4","fast_schema_evolution":"true","replicated_storage":"true","replication_num":"1"}	11003
 -- !result
+select CREATOR from information_schema.tables where TABLE_NAME='unique_table_with_null';
+-- result:
+'root'@'%'
+-- !result
 set enable_evaluate_schema_scan_rule=true;
 -- result:
 -- !result
