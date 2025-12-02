@@ -270,9 +270,9 @@ std::string Status::code_as_string() const {
     case TStatusCode::LEADER_TRANSFERRED:
         return "Leader transferred";
     case TStatusCode::TABLE_NOT_EXIST:
-        return "Table not exists";
+        return "Table not exist";
     case TStatusCode::QUERY_NOT_EXIST:
-        return "Query not exists";
+        return "Query not exist";
     }
     return {};
 }
