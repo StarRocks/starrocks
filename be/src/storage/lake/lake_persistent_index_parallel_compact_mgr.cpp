@@ -227,6 +227,13 @@ void LakePersistentIndexParallelCompactMgr::shutdown() {
     }
 }
 
+Status LakePersistentIndexParallelCompactMgr::update_max_threads(int max_threads) {
+    if (_thread_pool) {
+        return _thread_pool->update_max_threads(max_threads);
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndexParallelCompactMgr::compact(
         const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
         bool merge_base_level, std::vector<PersistentIndexSstablePB>* output_sstables) {

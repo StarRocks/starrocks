@@ -149,6 +149,14 @@ Status HorizontalPkTabletWriter::finish(SegmentPB* segment) {
     return HorizontalGeneralTabletWriter::finish(segment);
 }
 
+StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const {
+    auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, _tablet_id, _schema, _txn_id, _flush_pool,
+                                                             _is_compaction, _bundle_file_context,
+                                                             const_cast<GlobalDictByNameMaps*>(_global_dicts));
+    RETURN_IF_ERROR(writer->open());
+    return writer;
+}
+
 VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                                uint32_t max_rows_per_segment, ThreadPool* flush_pool,

@@ -86,6 +86,8 @@ public:
 
     void shutdown();
 
+    Status update_max_threads(int max_threads);
+
     Status compact(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
                    const TabletMetadataPtr& metadata, bool merge_base_level,
                    std::vector<PersistentIndexSstablePB>* output_sstables);

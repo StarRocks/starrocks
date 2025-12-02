@@ -204,7 +204,50 @@ size_t LoadChunkSpiller::total_bytes() const {
     return _block_manager ? _block_manager->total_bytes() : 0;
 }
 
-Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_agg,
+StatusOr<std::vector<ChunkIteratorPtr>> LoadChunkSpiller::get_spill_block_iterators(size_t target_size,
+                                                                                    size_t memory_usage_per_merge,
+                                                                                    bool do_sort, bool do_agg) {
+    std::vector<ChunkIteratorPtr> result;
+    auto& groups = _block_manager->block_container()->block_groups();
+    RETURN_IF(groups.empty(), result);
+    std::vector<ChunkIteratorPtr> merge_inputs;
+    size_t current_input_bytes = 0;
+    for (size_t i = 0; i < groups.size(); ++i) {
+        auto& group = groups[i];
+        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
+        current_input_bytes += group.data_size();
+        // We need to stop merging if:
+        // 1. The current input block group size exceed the target_size,
+        //    because we don't want to generate too large segment file.
+        // 2. The input chunks memory usage exceed the load_spill_memory_usage_per_merge,
+        //    because we don't want each thread cost too much memory.
+        if (merge_inputs.size() > 0 &&
+            (current_input_bytes >= target_size ||
+             merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
+            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+            auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+            RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            result.push_back(merge_itr);
+            merge_inputs.clear();
+            current_input_bytes = 0;
+            break;
+        }
+    }
+    if (!merge_inputs.empty()) {
+        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+        auto merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+        RETURN_IF_ERROR(merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        result.push_back(merge_itr);
+    }
+    LOG(INFO) << fmt::format(
+            "LoadChunkSpiller get_spill_block_iterators finished, load_id:{} fragment_instance_id:{} blockgroups:{} "
+            "iterators:{}",
+            (std::ostringstream() << _block_manager->load_id()).str(),
+            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), result.size());
+    return result;
+}
+
+Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                                      std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func) {
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());
@@ -247,10 +290,11 @@ Status LoadChunkSpiller::merge_write(size_t target_size, bool do_sort, bool do_a
         // We need to stop merging if:
         // 1. The current input block group size exceed the target_size,
         //    because we don't want to generate too large segment file.
-        // 2. The input chunks memory usage exceed the load_spill_max_merge_bytes,
+        // 2. The input chunks memory usage exceed the load_spill_memory_usage_per_merge,
         //    because we don't want each thread cost too much memory.
-        if (merge_inputs.size() > 0 && (current_input_bytes + group.data_size() >= target_size ||
-                                        merge_inputs.size() * config::load_spill_max_chunk_bytes >= target_size)) {
+        if (merge_inputs.size() > 0 &&
+            (current_input_bytes + group.data_size() >= target_size ||
+             merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
             RETURN_IF_ERROR(merge_func());
             merge_inputs.clear();
             current_input_bytes = 0;

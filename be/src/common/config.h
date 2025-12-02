@@ -441,7 +441,7 @@ CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_get, "true");
 // Compaction threadpool max thread num for pk index get in shared-data mode.
-CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "4");
+CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "0");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiple, "10");
@@ -1761,10 +1761,14 @@ CONF_mBool(enable_load_spill, "true");
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
 // Max merge input bytes during spill merge. Default is 1024MB.
 CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
+// Max memory usage per merge during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_memory_usage_per_merge, "1073741824");
 // Max memory used for merge load spill blocks.
 CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 // Upper bound of spill merge thread count
 CONF_mInt64(load_spill_merge_max_thread, "16");
+// Enable parallel spill merge inside single tablet
+CONF_mBool(enable_load_spill_parallel_merge, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 // Row count threshold to trigger lazy load for PK column. Default is 1,000,000.

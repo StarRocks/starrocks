@@ -91,19 +91,83 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
         }
     }
 
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
-    auto write_func = [&char_field_indexes, schema, this](Chunk* chunk) {
-        ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
-        return _writer->write(*chunk, nullptr);
-    };
-    auto flush_func = [this]() { return _writer->flush(); };
+    if (config::enable_load_spill_parallel_merge) {
+        auto token =
+                StorageEngine::instance()->load_spill_block_merge_executor()->create_in_tablet_parallel_merge_token();
+        ASSIGN_OR_RETURN(auto merge_iterators,
+                         _load_chunk_spiller->get_spill_block_iterators(config::load_spill_max_merge_bytes,
+                                                                        config::load_spill_memory_usage_per_merge,
+                                                                        true /* do_sort */, do_agg));
+        std::vector<std::unique_ptr<TabletWriter> > writers;
+        for (size_t i = 0; i < merge_iterators.size(); ++i) {
+            ASSIGN_OR_RETURN(auto writer, _writer->clone());
+            writers.push_back(std::move(writer));
+        }
+        std::mutex mtx;
+        Status final_status = Status::OK();
+        auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
+        for (size_t i = 0; i < merge_iterators.size(); ++i) {
+            auto submit_st = token->submit_func([&, i]() {
+                SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
+                MonotonicStopWatch timer;
+                timer.start();
+                auto merge_itr = merge_iterators[i];
+                auto chunk_shared_ptr = ChunkHelper::new_chunk(*schema, config::vector_chunk_size);
+                auto chunk = chunk_shared_ptr.get();
+                auto st = Status::OK();
+                while (true) {
+                    chunk->reset();
+                    auto itr_st = merge_itr->get_next(chunk);
+                    if (itr_st.is_end_of_file()) {
+                        break;
+                    } else if (itr_st.ok()) {
+                        ChunkHelper::padding_char_columns(char_field_indexes, *schema, writers[i]->tablet_schema(),
+                                                          chunk);
+                        st = writers[i]->write(*chunk, nullptr);
+                        if (!st.ok()) {
+                            break;
+                        }
+                    } else {
+                        st = itr_st;
+                        break;
+                    }
+                }
+                if (st.ok()) {
+                    st = writers[i]->flush();
+                }
+                timer.stop();
+                LOG(INFO) << fmt::format(
+                        "SpillMemTableSink parallel merge blocks to segment finished, txn:{} tablet:{} "
+                        "writer_index:{}/{}, cost {} ms",
+                        _writer->txn_id(), _writer->tablet_id(), i, merge_iterators.size(),
+                        timer.elapsed_time() / 1000000);
+                std::lock_guard<std::mutex> lg(mtx);
+                final_status.update(st);
+            });
+            if (!submit_st.ok()) {
+                std::lock_guard<std::mutex> lg(mtx);
+                final_status.update(submit_st);
+            }
+        }
+        RETURN_IF_ERROR(token->wait());
+        RETURN_IF_ERROR(final_status);
+        _writer->merge_other_writers(writers);
+    } else {
+        auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
+        auto write_func = [&char_field_indexes, schema, this](Chunk* chunk) {
+            ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
+            return _writer->write(*chunk, nullptr);
+        };
+        auto flush_func = [this]() { return _writer->flush(); };
 
-    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes, true /* do_sort */, do_agg,
-                                                 write_func, flush_func);
-    LOG_IF(WARNING, !st.ok()) << fmt::format(
-            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
-            _writer->tablet_id(), st.message());
-    return st;
+        Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes,
+                                                     config::load_spill_memory_usage_per_merge, true /* do_sort */,
+                                                     do_agg, write_func, flush_func);
+        LOG_IF(WARNING, !st.ok()) << fmt::format(
+                "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
+                _writer->tablet_id(), st.message());
+        return st;
+    }
 }
 
 int64_t SpillMemTableSink::txn_id() {

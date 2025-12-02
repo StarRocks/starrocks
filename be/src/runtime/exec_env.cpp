@@ -578,9 +578,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
+    max_thread_count = config::pk_index_parallel_get_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
     RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_get")
                             .set_min_threads(1)
-                            .set_max_threads(std::max(1, config::pk_index_parallel_get_threadpool_max_threads))
+                            .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_get_thread_pool));
 
