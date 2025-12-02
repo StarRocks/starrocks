@@ -76,7 +76,7 @@ public class TableSchemaService {
         long schemaId = request.getSchema_meta().getSchema_id();
         long dbId = request.getSchema_meta().getDb_id();
         long tableId = request.getSchema_meta().getTable_id();
-        TTableSchemaRequestSource requestSource = request.getRequest_source();
+        TTableSchemaRequestSource requestSource = request.getSource();
 
         try {
             SchemaStatusOr coordinatorResult = null;
@@ -225,8 +225,8 @@ public class TableSchemaService {
     private static Status validateParameters(TGetTableSchemaRequest request) {
         try {
             Preconditions.checkArgument(request.isSetSchema_meta(), "schema meta not set");
-            Preconditions.checkArgument(request.isSetRequest_source(), "request source not set");
-            TTableSchemaRequestSource requestSource = request.getRequest_source();
+            Preconditions.checkArgument(request.isSetSource(), "request source not set");
+            TTableSchemaRequestSource requestSource = request.getSource();
             switch (requestSource) {
                 case SCAN -> Preconditions.checkArgument(request.isSetQuery_id(), "query id not set for scan");
                 case LOAD -> Preconditions.checkArgument(request.isSetTxn_id(), "txn id not set for load");
