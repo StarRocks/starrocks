@@ -524,8 +524,12 @@ Status SegmentIterator::ScanContext::read_columns(Chunk* chunk, const SparseRang
                 RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(range, col.get(),
                                                                             _column_predicate_map[_predicate_order[0]],
                                                                             selection, selected_idx, &processed_rows));
+                size_t appended_rows = col->size() - original_row_num;
+                if (processed_rows >= appended_rows && stats != nullptr) {
+                    stats->rows_vec_cond_filtered += (processed_rows - appended_rows);
+                }
                 _first_column_total_rows_read += processed_rows;
-                _first_column_total_rows_passed += (col->size() - original_row_num);
+                _first_column_total_rows_passed += appended_rows;
                 _is_filtered = true;
             } else {
                 // for rowId column iterator, apply selection if _is_filtered is true
@@ -2607,6 +2611,7 @@ void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
     const ColumnPredicateMap& column_predicate_map = _opts.pred_tree.get_immediate_column_predicate_map();
     if (column_predicate_map.empty()) {
         ctx->_only_output_one_predicate_col_with_filter_push_down = false;
+        ctx->_enable_predicate_col_late_materialize = false;
         return;
     }
 
