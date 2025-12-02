@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_writer.h"
 
 #include "storage/lake/tablet_manager.h"
+#include "storage/segment_writer.h"
 
 namespace starrocks::lake {
 

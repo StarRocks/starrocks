@@ -30,6 +30,7 @@ class Chunk;
 class Column;
 class TabletSchema;
 class ThreadPool;
+class SegmentWriter;
 
 struct OlapWriterStatistics;
 
