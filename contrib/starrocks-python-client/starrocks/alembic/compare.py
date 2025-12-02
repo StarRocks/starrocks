@@ -46,6 +46,7 @@ from starrocks.common.params import (
     ColumnAggInfoKey,
     ColumnAggInfoKeyWithPrefix,
     DialectName,
+    InvalidTableProperty,
     SRKwargsPrefix,
     TableInfoKey,
     TableKind,
@@ -1765,8 +1766,8 @@ def _compare_table_properties_impl(
     meta_properties: Dict[str, str] = meta_table_attributes.get(TableInfoKey.PROPERTIES, {})
     logger.debug("Compares %s PROPERTIES. conn_properties: %s, meta_properties: %s", object_label.lower(), conn_properties, meta_properties)
 
-    normalized_conn = CaseInsensitiveDict(conn_properties)
-    normalized_meta = CaseInsensitiveDict(meta_properties)
+    normalized_conn = InvalidTableProperty.purify_dict(CaseInsensitiveDict(conn_properties), run_mode, table_name=table_name)
+    normalized_meta = InvalidTableProperty.purify_dict(CaseInsensitiveDict(meta_properties), run_mode, table_name=table_name)
     # logger.debug("PROPERTIES. normalized_conn: %s, normalized_meta: %s", normalized_conn, normalized_meta)
 
     properties_to_set = {}

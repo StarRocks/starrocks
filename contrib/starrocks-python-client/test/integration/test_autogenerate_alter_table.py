@@ -46,7 +46,7 @@ from sqlalchemy import Column, Engine, Integer, MetaData, String, Table
 
 from starrocks.alembic.compare import compare_starrocks_table
 from starrocks.common.params import AlterTableEnablement, TableInfoKeyWithPrefix
-from starrocks.common.types import PartitionType
+from starrocks.common.types import PartitionType, SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
 from test.conftest_sr import create_test_engine, test_default_schema
 from test import test_utils
@@ -605,7 +605,10 @@ class TestAlterTableIntegration:
                 assert isinstance(op, AlterTablePropertiesOp)
                 assert op.table_name == table_name
                 assert op.schema == self.test_schema
-                assert op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
+                if self.engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                    assert "default.replication_num" in op.properties
+                else:
+                    assert op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
 
             finally:
                 # Clean up
@@ -756,7 +759,10 @@ class TestAlterTableIntegration:
                 order_op: AlterTableOrderOp = result[1]
                 assert order_op.order_by == "id"
                 properties_op: AlterTablePropertiesOp = result[2]
-                assert properties_op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
+                if self.engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                    assert "default.replication_num" in properties_op.properties
+                else:
+                    assert properties_op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
 
             finally:
                 conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")

@@ -732,10 +732,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec.append(agg_info)
 
         # NULL or NOT NULL.
-        is_nullable_set = False
         if not column.nullable:
             colspec.append("NOT NULL")
-            is_nullable_set = True
         # else: omit explicit NULL (default)
 
         # AUTO_INCREMENT or default value or computed column
@@ -761,7 +759,6 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
             colspec[idx_type] = "BIGINT"  # AUTO_INCREMENT column must be BIGINT
             if column.nullable:
                 colspec.append("NOT NULL")
-                is_nullable_set = True
             colspec.append("AUTO_INCREMENT")
         else:
             default = self.get_column_default_string(column)
@@ -769,15 +766,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 colspec[1] = "BIGINT"
                 if column.nullable:
                     colspec.append("NOT NULL")
-                    is_nullable_set = True
                 colspec.append("AUTO_INCREMENT")
 
             elif default is not None:
                 colspec.append("DEFAULT " + default)
-
-        # Uncomment below if we want to explicitly set NULL that the column is nullable and not changed by other clauses.
-        # if column.nullable and not is_nullable_set:
-        #     colspec.append("NULL")
 
         # Computed
         if column.computed is not None:
@@ -1309,8 +1301,12 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     def initialize(self, connection: Connection) -> None:
         super().initialize(connection)
+        self._init_run_mode(connection)
+
+    def _init_run_mode(self, connection: Connection) -> None:
         if self.run_mode is None:
             self.run_mode = self._get_run_mode(connection)
+            logger.debug("system run mode: %s" % self.run_mode)
 
     def _get_server_version_info(self, connection: Connection) -> Tuple[int, ...]:
         # get database server version info explicitly over the wire
@@ -1353,7 +1349,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             rows = result.fetchall()
             if rows and len(rows) > 0:
                 # The result format is: | Key | AliasNames | Value | Type | IsMutable | Comment |
-                return rows[0][2]  # Value column
+                return rows[0][2].lower()  # Value column
             else:
                 # Default to shared_nothing if not found
                 return SystemRunMode.SHARED_NOTHING
@@ -1563,7 +1559,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         if partition_clause:
             table_config_dict['PARTITION_CLAUSE'] = partition_clause
 
-        return parser.parse(
+        return parser.parse_table(
             table=table_rows[0],
             table_config=table_config_dict,
             columns=column_rows,

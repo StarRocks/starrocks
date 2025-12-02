@@ -35,7 +35,7 @@ from starrocks.common.params import (
     TableKind,
     TableObjectInfoKey,
 )
-from starrocks.common.types import PartitionType
+from starrocks.common.types import PartitionType, TableEngine
 from starrocks.common.utils import SQLParseError, TableAttributeNormalizer
 
 from .common import utils
@@ -195,7 +195,7 @@ class StarRocksTableDefinitionParser(object):
         self._re_csv_int = _re_compile(r"\d+")
         self._re_csv_str = _re_compile(r"\x27(?:\x27\x27|[^\x27])*\x27")
 
-    def parse(
+    def parse_table(
         self,
         table: _DecodingRow,
         table_config: Dict[str, Any],
@@ -494,16 +494,24 @@ class StarRocksTableDefinitionParser(object):
             buckets=table_config.get(TableConfigKey.DISTRIBUTE_BUCKET),
         )
 
-    def _parse_common_table_options(self, table_row: Optional[_DecodingRow]) -> Dict[str, Any]:
+    def _parse_common_table_options(self, table_kind: str, table_row: Optional[_DecodingRow]) -> Dict[str, Any]:
         """
         Parses common options from an information_schema.tables row.
+        Args:
+            table_kind: Table kind, such as 'TABLE' or 'MATERIALIZED VIEW'.
+            table_row: A row from `information_schema.tables`.
         """
         opts = {}
         if not table_row:
             return opts
         if table_row.TABLE_COMMENT and table_row.TABLE_COMMENT != 'OLAP':
             # logger.debug("table.TABLE_COMMENT: %s", table_row.TABLE_COMMENT)
-            opts[TableInfoKeyWithPrefix.COMMENT] = table_row.TABLE_COMMENT
+            if table_kind == TableKind.MATERIALIZED_VIEW and table_row.TABLE_COMMENT == 'MATERIALIZED_VIEW':
+                pass  # SR will automatically set the COMMENT `MATERIALIZED_VIEW` for MV if not provided
+            elif table_kind == TableKind.VIEW and table_row.TABLE_COMMENT == 'VIEW':
+                pass  # SR will automatically set the COMMENT `VIEW` for VIEW if not provided
+            else:
+                opts[TableInfoKeyWithPrefix.COMMENT] = table_row.TABLE_COMMENT
         return opts
 
     def _parse_general_table_options(self, table_name: str, schema: Optional[str] = None, table_config: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -559,7 +567,7 @@ class StarRocksTableDefinitionParser(object):
         Returns:
             A dictionary of StarRocks-specific table options with the 'starrocks_' prefix.
         """
-        opts = self._parse_common_table_options(table)
+        opts = self._parse_common_table_options(TableKind.TABLE, table)
         table_fqn = utils.gen_simple_qualified_name(table_name, schema)
         logger.debug("parse table options for table: %r.", table_fqn)
 
@@ -568,6 +576,9 @@ class StarRocksTableDefinitionParser(object):
 
         if table_engine := table_config.get(TableConfigKey.TABLE_ENGINE):
             # logger.debug("table_config.%s: %s", TableConfigKey.TABLE_ENGINE, table_engine)
+            # change CLOUD_NATIVE to OLAP for shared-data mode.
+            if table_engine.upper() == TableEngine.CLOUD_NATIVE:
+                table_engine = TableEngine.OLAP
             # if table_engine.upper() != TableEngine.OLAP:
             #     raise NotImplementedError(f"Table engine {table_engine} is not supported now.")
             opts[TableInfoKeyWithPrefix.ENGINE] = table_engine.upper()
@@ -616,7 +627,7 @@ class StarRocksTableDefinitionParser(object):
             sorted_columns = self._sort_columns(column_rows)
             state.columns = [self._parse_column(col) for col in sorted_columns]
 
-        table_options = self._parse_common_table_options(table_row)
+        table_options = self._parse_common_table_options(TableKind.VIEW, table_row)
 
         # table_options[TableInfoKeyWithPrefix.SECURITY] = view_row.SECURITY_TYPE.upper()
         # Parse SECURITY from SHOW CREATE VIEW output
@@ -688,7 +699,7 @@ class StarRocksTableDefinitionParser(object):
         # logger.debug("partial parsed mv state. mv: %s, state: %s", mv_fqn, parsed_state)
 
         # 2. Augment/overwrite with more reliable info from other sources.
-        parsed_state.table_options.update(self._parse_common_table_options(table_row))
+        parsed_state.table_options.update(self._parse_common_table_options(TableKind.MATERIALIZED_VIEW, table_row))
 
         if config_row:
             general_options = self._parse_general_table_options(mv_name, schema, table_config=config_row)

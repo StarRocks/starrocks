@@ -343,7 +343,7 @@ class TestColumnFlagReflection:
                 GENERATION_EXPRESSION=None,
             ),
         ]
-        state = parser.parse(
+        state = parser.parse_table(
             table=table_row,
             table_config={},
             columns=columns,
