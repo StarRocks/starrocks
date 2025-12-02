@@ -310,6 +310,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_profile_log = true;
     @ConfField
+    public static boolean enable_profile_log_compress = false;
+    @ConfField
     public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int profile_log_roll_num = 5;
