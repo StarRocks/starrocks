@@ -1858,7 +1858,7 @@ public class PlanFragmentBuilder {
                     }
 
                     if (like.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
-                        String pattern = ((ConstantOperator) like.getChild(1)).getVarchar();
+                        String pattern = constantOperator.getVarchar();
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
