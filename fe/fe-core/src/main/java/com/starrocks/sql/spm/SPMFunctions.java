@@ -66,13 +66,13 @@ public class SPMFunctions {
     private static final Set<String> CONTAIN_VALUES_FUNCTIONS = Set.of(CONST_LIST_FUNC, CONST_VAR_FUNC);
 
     public static Function getSPMFunction(FunctionCallExpr expr, List<Type> argsTypes) {
-        if (!SPM_FUNCTIONS.contains(StringUtils.lowerCase(expr.getFnName().getFunction()))) {
+        if (!SPM_FUNCTIONS.contains(StringUtils.lowerCase(expr.getFunctionName()))) {
             return null;
         }
         if (expr.getChildren().stream().anyMatch(p -> !p.isConstant())) {
             throw new SemanticException("spm function's parameters must be const");
         }
-        return getSPMFunction(expr.getFnName().getFunction(), NullType.NULL, argsTypes);
+        return getSPMFunction(expr.getFunctionName(), NullType.NULL, argsTypes);
     }
 
     private static Function getSPMFunction(String fnName, Type type, List<Type> argsTypes) {
@@ -125,7 +125,7 @@ public class SPMFunctions {
             expr = expr.getChild(1);
         }
         return (expr instanceof FunctionCallExpr)
-                && SPM_FUNCTIONS.contains(((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase());
+                && SPM_FUNCTIONS.contains(((FunctionCallExpr) expr).getFunctionName().toLowerCase());
     }
 
     public static boolean isSPMFunctions(ScalarOperator operator) {
@@ -225,7 +225,7 @@ public class SPMFunctions {
     }
 
     private static boolean checkParameters(FunctionCallExpr spmExpr, List<Expr> checkParameters) {
-        String fn = spmExpr.getFnName().getFunction();
+        String fn = spmExpr.getFunctionName();
         try {
             Expr checkExpr;
             if (CONST_RANGE_FUNC.equalsIgnoreCase(fn)) {
@@ -258,7 +258,7 @@ public class SPMFunctions {
         if (!other.isConstant()) {
             return false;
         }
-        String fn = spmExpr.getFnName().getFunction();
+        String fn = spmExpr.getFunctionName();
         if (CONTAIN_VALUES_FUNCTIONS.contains(fn)) {
             return true;
         }
@@ -270,7 +270,7 @@ public class SPMFunctions {
             return false;
         }
         FunctionCallExpr spmFunc = (FunctionCallExpr) spmIn.getChild(1);
-        String fn = spmFunc.getFnName().getFunction();
+        String fn = spmFunc.getFunctionName();
         if (CONST_LIST_FUNC.equalsIgnoreCase(fn)) {
             return true;
         }

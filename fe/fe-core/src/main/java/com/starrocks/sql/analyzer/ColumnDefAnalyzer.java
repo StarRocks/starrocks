@@ -272,7 +272,7 @@ public class ColumnDefAnalyzer {
             }
         } else if (defaultExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             boolean supported = isValidDefaultFunction(functionName + "()");
 
             if (!supported) {

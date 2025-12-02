@@ -574,7 +574,7 @@ public class CreateTableAnalyzer {
             if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
                 if (stmt.isIcebergEngine()) {
-                    String fnName = ((FunctionCallExpr) expr).getFnName().getFunction();
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + fnName;
                     expr.resetFnName(null, fnName);
                 }
@@ -758,10 +758,10 @@ public class CreateTableAnalyzer {
                 }
                 Expr expr = column.getGeneratedColumnExpr(columns);
                 if (expr instanceof FunctionCallExpr) {
-                    if (null != ((FunctionCallExpr) expr).getFnName().getDb()) {
+                    if (null != ((FunctionCallExpr) expr).getDbName()) {
                         throw new SemanticException("Iceberg transform expression should not have db name");
                     }
-                    String fnName = ((FunctionCallExpr) expr).getFnName().getFunction();
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     if (fnName.equalsIgnoreCase("year") ||
                             fnName.equalsIgnoreCase("month") ||
                             fnName.equalsIgnoreCase("day") ||

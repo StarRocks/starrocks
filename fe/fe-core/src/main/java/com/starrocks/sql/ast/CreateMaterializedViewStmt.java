@@ -251,7 +251,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             Expr expr;
             if (selectListItemExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
-                String functionName = functionCallExpr.getFnName().getFunction();
+                String functionName = functionCallExpr.getFunctionName();
                 switch (functionName.toLowerCase()) {
                     case "sum":
                     case "min":
@@ -452,7 +452,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     && ((FunctionCallExpr) selectListItemExpr).isAggregateFunction()) {
                 // Aggregate Function must match pattern.
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
-                String functionName = functionCallExpr.getFnName().getFunction().toLowerCase();
+                String functionName = functionCallExpr.getFunctionName().toLowerCase();
                 // current version not support count(distinct) function in creating materialized view
                 if (!isReplay && functionCallExpr.isDistinct()) {
                     throw new UnsupportedMVException(
@@ -550,7 +550,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                                             SelectListItem selectListItem,
                                             List<SlotRef> baseSlotRefs) {
         FunctionCallExpr node = (FunctionCallExpr) selectListItem.getExpr();
-        String functionName = node.getFnName().getFunction();
+        String functionName = node.getFunctionName();
         Preconditions.checkState(node.getChildren().size() == 1, "Aggregate function only support one child");
 
         if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
@@ -601,7 +601,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private MVColumnItem buildAggColumnItemWithPattern(SelectListItem selectListItem,
                                                        List<SlotRef> baseSlotRefs) {
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItem.getExpr();
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         Expr defineExpr = functionCallExpr.getChild(0);
         AggregateType mvAggregateType = null;
         Type baseType = defineExpr.getType();
@@ -617,7 +617,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         } else {
             if (defineExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr argFunc = (FunctionCallExpr) defineExpr;
-                String argFuncName = argFunc.getFnName().getFunction();
+                String argFuncName = argFunc.getFunctionName();
                 switch (argFuncName) {
                     case FunctionSet.TO_BITMAP:
                     case FunctionSet.HLL_HASH:

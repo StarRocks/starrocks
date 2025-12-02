@@ -618,7 +618,7 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(msg);
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
-        String functionName = fn.getFnName().getFunction();
+        String functionName = fn.getFunctionName();
         if (!functionName.equalsIgnoreCase(FunctionSet.HLL_HASH)
                 && !functionName.equalsIgnoreCase("hll_empty")) {
             throw new LoadException(msg);
@@ -638,7 +638,7 @@ public class SparkLoadPendingTask extends LoadTask {
             throw new LoadException(msg);
         }
         FunctionCallExpr fn = (FunctionCallExpr) expr;
-        String functionName = fn.getFnName().getFunction();
+        String functionName = fn.getFunctionName();
         if (!functionName.equalsIgnoreCase(FunctionSet.TO_BITMAP)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH)
                 && !functionName.equalsIgnoreCase(FunctionSet.BITMAP_HASH64)
