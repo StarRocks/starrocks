@@ -157,6 +157,7 @@ public:
     void try_enable_pk_parallel_execution();
 
     bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
+    void force_set_enable_pk_parallel_execution() { _enable_pk_parallel_execution = true; }
 
 protected:
     TabletManager* _tablet_mgr;

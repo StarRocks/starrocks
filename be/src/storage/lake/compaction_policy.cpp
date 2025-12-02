@@ -91,7 +91,7 @@ uint32_t sstable_score(const std::shared_ptr<const TabletMetadataPB>& metadata) 
             fileset_set.insert(UniqueId::gen_uid());
         }
     }
-    return fileset_set.size();
+    return fileset_set.size() * config::pk_index_compaction_score_ratio;
 }
 
 StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,

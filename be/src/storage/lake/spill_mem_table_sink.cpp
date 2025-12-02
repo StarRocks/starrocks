@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
+#include "storage/storage_engine.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
@@ -149,9 +150,10 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
                 final_status.update(submit_st);
             }
         }
-        RETURN_IF_ERROR(token->wait());
+        token->wait();
         RETURN_IF_ERROR(final_status);
         _writer->merge_other_writers(writers);
+        return Status::OK();
     } else {
         auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
         auto write_func = [&char_field_indexes, schema, this](Chunk* chunk) {

@@ -424,8 +424,8 @@ CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // Enable parallel execution within tablet for primary key tables.
 CONF_mBool(enable_pk_parallel_execution, "true");
 // The minimum threshold of data size for enabling pk parallel execution.
-// Default is 300MB.
-CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
+// Default is 100MB.
+CONF_mInt64(pk_parallel_execution_threshold_bytes, "104857600");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 // Default is 4.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
@@ -436,6 +436,10 @@ CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "104857600"
 // Target file size for primary key index in shared-data mode.
 // Default is 64MB.
 CONF_mInt64(pk_index_target_file_size, "67108864");
+// Compaction score ratio for primary key index in shared-data mode.
+// E.g. if we have N fileset, the compaction score will be N * pk_index_compaction_score_ratio
+// Default is 2.
+CONF_mInt32(pk_index_compaction_score_ratio, "2");
 // Whether enable parallel compaction for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.

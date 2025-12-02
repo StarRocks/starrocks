@@ -104,6 +104,10 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
     };
 
     auto cal_compaction_score = [&](int64_t fileset_num, int64_t level_size) -> double {
+        if (fileset_num <= 0) {
+            // Not need to compact single fileset
+            return 0.0;
+        }
         // Read amplification score: more filesets means more files to scan during queries
         // Formula: base_score + read_amplification_penalty
         //        = fileset_num + (fileset_num - 1) * 2

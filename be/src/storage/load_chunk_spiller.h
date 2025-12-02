@@ -23,6 +23,9 @@ namespace starrocks {
 
 class RuntimeState;
 class LoadSpillBlockManager;
+class ChunkIterator;
+
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:

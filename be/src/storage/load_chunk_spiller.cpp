@@ -212,6 +212,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> LoadChunkSpiller::get_spill_block_iterat
     RETURN_IF(groups.empty(), result);
     std::vector<ChunkIteratorPtr> merge_inputs;
     size_t current_input_bytes = 0;
+    size_t total_blocks = 0;
+    size_t total_block_bytes = 0;
     for (size_t i = 0; i < groups.size(); ++i) {
         auto& group = groups[i];
         merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
@@ -230,8 +232,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> LoadChunkSpiller::get_spill_block_iterat
             result.push_back(merge_itr);
             merge_inputs.clear();
             current_input_bytes = 0;
-            break;
         }
+        total_block_bytes += group.data_size();
+        total_blocks += group.blocks().size();
     }
     if (!merge_inputs.empty()) {
         auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
@@ -241,9 +244,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> LoadChunkSpiller::get_spill_block_iterat
     }
     LOG(INFO) << fmt::format(
             "LoadChunkSpiller get_spill_block_iterators finished, load_id:{} fragment_instance_id:{} blockgroups:{} "
-            "iterators:{}",
+            "iterators:{} total_blocks:{} total_block_bytes:{}",
             (std::ostringstream() << _block_manager->load_id()).str(),
-            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), result.size());
+            (std::ostringstream() << _block_manager->fragment_instance_id()).str(), groups.size(), result.size(),
+            total_blocks, total_block_bytes);
     return result;
 }
 
