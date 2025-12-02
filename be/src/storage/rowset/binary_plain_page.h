@@ -305,6 +305,9 @@ public:
         offsets.clear();
         offsets.resize(_num_elems + 1);
         offsets[0] = 0; // Start from 0
+        if (_num_elems == 0) {
+            return;
+        }
 
         uint32_t base_offset = offset_uncheck(0); // Get the base offset
         for (uint32_t i = 0; i < _num_elems - 1; ++i) {
