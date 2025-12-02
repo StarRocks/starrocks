@@ -131,7 +131,7 @@ public class AnalyticEvalNode extends PlanNode {
         List<String> orderByElementStrs = Lists.newArrayList();
 
         for (OrderByElement element : orderByElements) {
-            orderByElementStrs.add(element.toSql());
+            orderByElementStrs.add(ExprToSql.toSql(element));
         }
 
         return MoreObjects.toStringHelper(this)
@@ -192,11 +192,12 @@ public class AnalyticEvalNode extends PlanNode {
 
         if (analyticWindow == null) {
             if (!orderByElements.isEmpty()) {
-                msg.analytic_node.setWindow(AnalyticWindow.DEFAULT_WINDOW.toThrift());
+                msg.analytic_node.setWindow(
+                        ExprToThriftVisitor.analyticWindowToThrift(AnalyticWindow.DEFAULT_WINDOW));
             }
         } else {
             // TODO: Window boundaries should have range_offset_predicate set
-            msg.analytic_node.setWindow(analyticWindow.toThrift());
+            msg.analytic_node.setWindow(ExprToThriftVisitor.analyticWindowToThrift(analyticWindow));
         }
 
         if (partitionByEq != null) {
@@ -256,9 +257,9 @@ public class AnalyticEvalNode extends PlanNode {
 
             for (OrderByElement element : orderByElements) {
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    strings.add(element.toSql());
+                    strings.add(ExprToSql.toSql(element));
                 } else {
-                    strings.add(element.explain());
+                    strings.add(ExprToSql.explain(element));
                 }
             }
 
@@ -268,7 +269,7 @@ public class AnalyticEvalNode extends PlanNode {
 
         if (analyticWindow != null) {
             output.append(prefix).append("window: ");
-            output.append(analyticWindow.toSql());
+            output.append(ExprToSql.toSql(analyticWindow));
             output.append("\n");
         }
 
@@ -348,7 +349,7 @@ public class AnalyticEvalNode extends PlanNode {
                 normalizer.normalizeOrderedExprs(OrderByElement.getOrderByExprs(orderByElements)));
         analyticNode.setAnalytic_functions(normalizer.normalizeExprs(analyticFnCalls));
         if (analyticWindow != null) {
-            analyticNode.setWindow(analyticWindow.toThrift());
+            analyticNode.setWindow(ExprToThriftVisitor.analyticWindowToThrift(analyticWindow));
         }
         if (intermediateTupleDesc != null) {
             analyticNode.setIntermediate_tuple_id(normalizer.remapTupleId(intermediateTupleDesc.getId()).asInt());

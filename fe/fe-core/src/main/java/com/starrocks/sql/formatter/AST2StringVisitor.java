@@ -987,7 +987,7 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
             sb.append("ORDER BY ").append(visitAstList(orderByElements)).append(" ");
         }
         if (window != null) {
-            sb.append(window.toSql());
+            sb.append(ExprToSql.toSql(window));
         }
         sb.append(")");
         return sb.toString();

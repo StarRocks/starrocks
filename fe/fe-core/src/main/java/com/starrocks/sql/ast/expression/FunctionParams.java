@@ -37,7 +37,6 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.sql.ast.OrderByElement;
-import com.starrocks.sql.ast.expression.ExprToSql;
 
 import java.util.Arrays;
 import java.util.List;
@@ -122,7 +121,7 @@ public class FunctionParams {
     public String getOrderByStringToSql() {
         if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();
-            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::toSql).
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(ExprToSql::toSql).
                     collect(Collectors.joining(" ")));
             return sb.toString();
         } else {
@@ -133,7 +132,7 @@ public class FunctionParams {
     public String getOrderByStringToExplain() {
         if (orderByElements != null && !orderByElements.isEmpty()) {
             StringBuilder sb = new StringBuilder();
-            sb.append(" ORDER BY ").append(orderByElements.stream().map(OrderByElement::explain).
+            sb.append(" ORDER BY ").append(orderByElements.stream().map(ExprToSql::explain).
                     collect(Collectors.joining(" ")));
             return sb.toString();
         } else {

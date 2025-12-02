@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -227,11 +228,11 @@ import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
 import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
-import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.CURRENT_ROW;
-import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.FOLLOWING;
-import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.PRECEDING;
-import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
-import static com.starrocks.sql.ast.expression.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.CURRENT_ROW;
+import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.FOLLOWING;
+import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.PRECEDING;
+import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING;
+import static com.starrocks.sql.ast.expression.AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.type.DateType.DATETIME;
@@ -830,15 +831,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitFrameBound(FrameBound node, ParseTreeContext context) {
         switch (node.getType()) {
             case UNBOUNDED_PRECEDING:
-                return new AnalyticWindow.Boundary(UNBOUNDED_PRECEDING, null);
+                return new AnalyticWindowBoundary(UNBOUNDED_PRECEDING, null);
             case UNBOUNDED_FOLLOWING:
-                return new AnalyticWindow.Boundary(UNBOUNDED_FOLLOWING, null);
+                return new AnalyticWindowBoundary(UNBOUNDED_FOLLOWING, null);
             case CURRENT_ROW:
-                return new AnalyticWindow.Boundary(CURRENT_ROW, null);
+                return new AnalyticWindowBoundary(CURRENT_ROW, null);
             case PRECEDING:
-                return new AnalyticWindow.Boundary(PRECEDING, (Expr) visit(node.getValue().get(), context));
+                return new AnalyticWindowBoundary(PRECEDING, (Expr) visit(node.getValue().get(), context));
             case FOLLOWING:
-                return new AnalyticWindow.Boundary(FOLLOWING, (Expr) visit(node.getValue().get(), context));
+                return new AnalyticWindowBoundary(FOLLOWING, (Expr) visit(node.getValue().get(), context));
         }
 
         throw new ParsingException("Unsupported frame bound type: " + node.getType());
@@ -849,12 +850,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (node.getEnd().isPresent()) {
             return new AnalyticWindow(
                     getFrameType(node.getType()),
-                    (AnalyticWindow.Boundary) visit(node.getStart(), context),
-                    (AnalyticWindow.Boundary) visit(node.getEnd().get(), context));
+                    (AnalyticWindowBoundary) visit(node.getStart(), context),
+                    (AnalyticWindowBoundary) visit(node.getEnd().get(), context));
         } else {
             return new AnalyticWindow(
                     getFrameType(node.getType()),
-                    (AnalyticWindow.Boundary) visit(node.getStart(), context));
+                    (AnalyticWindowBoundary) visit(node.getStart(), context));
         }
     }
 

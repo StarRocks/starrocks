@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 
 // DictMappingExpr.
 // The original expression will be rewritten as a dictionary mapping function in the global field optimization.
@@ -53,6 +52,6 @@ public class DictMappingExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDictMappingExpr(this, context);
+        return visitor.visitDictMappingExpr(this, context);
     }
 }

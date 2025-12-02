@@ -43,7 +43,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.QualifiedName;
@@ -399,7 +398,7 @@ public class SlotRef extends Expr {
      * Below function is added by new analyzer
      */
     @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context)  {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitSlot(this, context);
     }
 

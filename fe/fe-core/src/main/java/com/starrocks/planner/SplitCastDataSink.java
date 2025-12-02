@@ -17,6 +17,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDataStreamSink;
@@ -66,7 +67,7 @@ public class SplitCastDataSink extends DataSink {
         List<TDataStreamSink> streamSinkList = dataStreamSinks.stream().map(d -> d.toThrift().getStream_sink())
                 .collect(Collectors.toList());
         List<TExpr> tSplitExprs = this.splitExprs.stream()
-                .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
+                .map(ExprToThriftVisitor::treeToThrift)
                 .collect(Collectors.toList());
         TSplitDataStreamSink sink = new TSplitDataStreamSink();
         sink.setSinks(streamSinkList);

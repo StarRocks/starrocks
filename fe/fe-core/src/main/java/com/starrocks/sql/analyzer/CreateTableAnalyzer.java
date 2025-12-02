@@ -451,7 +451,8 @@ public class CreateTableAnalyzer {
             if (keysType != KeysType.DUP_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -490,7 +491,8 @@ public class CreateTableAnalyzer {
             // we should check sort key column type if table is primary key table
             if (keysType == KeysType.PRIMARY_KEYS) {
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -511,7 +513,8 @@ public class CreateTableAnalyzer {
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));

@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -338,7 +339,9 @@ public class LogicalPlanPrinter {
                     .map(e -> String.format("%d: %s", e.getKey().getId(),
                             scalarOperatorStringFunction.apply(e.getValue())))
                     .collect(Collectors.joining(", "));
-            String windowDefStr = window.getAnalyticWindow() != null ? window.getAnalyticWindow().toSql() : "NONE";
+            String windowDefStr = window.getAnalyticWindow() != null
+                    ? ExprToSql.toSql(window.getAnalyticWindow())
+                    : "NONE";
             String partitionByStr = window.getPartitionExpressions().stream()
                     .map(scalarOperatorStringFunction).collect(Collectors.joining(", "));
             String orderByStr = window.getOrderByElements().stream().map(Ordering::toString)
@@ -553,7 +556,8 @@ public class LogicalPlanPrinter {
                     analytic.getAnalyticCall().toString() + " " +
                     analytic.getPartitionExpressions() + " " +
                     analytic.getOrderByElements() + " " +
-                    (analytic.getAnalyticWindow() == null ? "" : analytic.getAnalyticWindow().toSql()) +
+                    (analytic.getAnalyticWindow() == null ? "" :
+                            ExprToSql.toSql(analytic.getAnalyticWindow())) +
                     ")", step, Collections.singletonList(child));
         }
 

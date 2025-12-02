@@ -17,6 +17,7 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -26,11 +27,13 @@ import com.starrocks.thrift.TSlotRef;
 /**
  * Convert {@link Expr} nodes into their normalized Thrift representation.
  */
-public class ExprToNormalFormVisitor extends ExprToThriftVisitor {
+public class ExprToNormalFormVisitor implements AstVisitorExtendInterface<Void, TExprNode> {
     private final FragmentNormalizer normalizer;
+    private final AstVisitorExtendInterface<Void, TExprNode> delegate;
 
     private ExprToNormalFormVisitor(FragmentNormalizer normalizer) {
         this.normalizer = normalizer;
+        this.delegate = ExprToThriftVisitor.getVisitor();
     }
 
     public static TExpr treeToNormalForm(Expr expr, FragmentNormalizer normalizer) {
@@ -60,5 +63,11 @@ public class ExprToNormalFormVisitor extends ExprToThriftVisitor {
         msg.vslot_ref.setNullable(node.isNullable());
         msg.vslot_ref.setSlot_id(normalizer.remapSlotId(new SlotId(node.getSlotId())).asInt());
         return null;
+    }
+
+    // Delegate all other methods to the default visitor
+    @Override
+    public Void visitExpression(Expr node, TExprNode msg) {
+        return node.accept(delegate, msg);
     }
 }

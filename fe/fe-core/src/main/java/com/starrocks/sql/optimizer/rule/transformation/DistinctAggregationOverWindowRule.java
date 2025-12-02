@@ -81,8 +81,8 @@ public class DistinctAggregationOverWindowRule implements TreeRewriteRule {
             LogicalWindowOperator windowOp = optExpression.getOp().cast();
 
             boolean isWindowWithSlidingFrame = windowOp.getAnalyticWindow() != null &&
-                    !(windowOp.getAnalyticWindow().getRightBoundary().getType().isAbsolutePos() &&
-                            windowOp.getAnalyticWindow().getLeftBoundary().getType().isAbsolutePos());
+                    !(windowOp.getAnalyticWindow().getRightBoundary().getBoundaryType().isAbsolutePos() &&
+                            windowOp.getAnalyticWindow().getLeftBoundary().getBoundaryType().isAbsolutePos());
 
             if (isWindowWithSlidingFrame || !windowOp.getOrderByElements().isEmpty()) {
                 return Optional.empty();
