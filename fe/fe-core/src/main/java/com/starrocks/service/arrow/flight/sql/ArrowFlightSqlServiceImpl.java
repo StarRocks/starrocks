@@ -61,6 +61,7 @@ import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.util.AutoCloseables;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.WriteChannel;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
@@ -456,7 +457,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private void getStreamResultFromBE(String queryId, String fragmentInstanceId, 
                                     String beHost, int bePort, ServerStreamListener listener) {
         FlightStream beStream = null;
-        
+
         try {
             String beKey = beHost + ":" + bePort;
             FlightClient beClient = beClientCache.computeIfAbsent(beKey, key -> {
@@ -471,16 +472,23 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             
             Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
             beStream = beClient.getStream(ticket);
+            final FlightStream streamToCancel = beStream;
             VectorSchemaRoot root = beStream.getRoot();
-            
+
+            listener.setOnCancelHandler(() -> {
+                try {
+                    streamToCancel.cancel("Client cancelled request", null);
+                } catch (Exception e) {
+                    LOG.warn("[ARROW] Error cancelling BE stream", e);
+                }
+            });
+
             // Start streaming to client
             listener.start(root);
             while (beStream.next()) {
-                listener.putNext();
+                listener.putNext(); // TODO is backpressure check necessary
             }
-            
             listener.completed();
-            
         } catch (Exception e) {
             LOG.error("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
             listener.error(CallStatus.INTERNAL
@@ -667,5 +675,10 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         StringBuilder builder = new StringBuilder();
         builder.append(Long.toHexString(id.hi)).append("-").append(Long.toHexString(id.lo));
         return builder.toString();
+    }
+
+    @VisibleForTesting
+    void addToCacheForTesting(String key, FlightClient client) {
+        this.beClientCache.put(key, client);
     }
 }

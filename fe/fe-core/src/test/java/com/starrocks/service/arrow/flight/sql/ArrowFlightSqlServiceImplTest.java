@@ -43,6 +43,7 @@ import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
+import org.apache.arrow.flight.FlightClient;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightInfo;
@@ -57,6 +58,7 @@ import org.apache.arrow.flight.ServerHeaderMiddleware;
 import org.apache.arrow.flight.SessionOptionValue;
 import org.apache.arrow.flight.SetSessionOptionsRequest;
 import org.apache.arrow.flight.SetSessionOptionsResult;
+import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
 import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -378,17 +380,34 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testGetStreamResultWithBEProxyTicket() {
-        // Test parsing a 4-part proxy ticket format
-        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8:19abc7b87307530-9965dc19f22a94a9:127.0.0.1:9419";
+    public void testGetStreamResultWithBEProxyTicket() throws Exception {
+        // Setup mocks
+        FlightClient mockBeClient = mock(FlightClient.class);
+        FlightStream mockBeStream = mock(FlightStream.class);
+        VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
 
+        // Set the mock cache in your service (you'll need to expose this for testing)
+        service.addToCacheForTesting("127.0.0.1:9400", mockBeClient);
+
+        // Configure mock behavior
+        when(mockBeClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
+        when(mockBeStream.getRoot()).thenReturn(mockRoot);
+        when(mockBeStream.next()).thenReturn(true).thenReturn(false); // One batch then done
+
+        // Test
+        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8:19abc7b87307530-9965dc19f22a94a9:127.0.0.1:9400";
         FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
                 .setStatementHandle(ByteString.copyFromUtf8(proxyTicket))
                 .build();
-
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
         service.getStreamStatement(ticket, mockCallContext, listener);
+
+        // Verify
+        verify(listener).start(mockRoot);
+        verify(listener).putNext();
+        verify(listener).completed();
+        verify(mockBeStream).close();
     }
 
     @Test
