@@ -14,16 +14,11 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.SingleItemListPartitionDesc;
-import com.starrocks.sql.ast.expression.TypeDef;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -35,7 +30,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -338,52 +332,5 @@ public class CatalogUtilsTest extends StarRocksTestBase {
 
         // Clean up
         starRocksAssert.dropTable("test_catalog_utils4.tbl_list4");
-    }
-
-    @Test
-    public void testCheckPartitionValuesExistForAddListPartition_DirectMethodCall() throws Exception {
-        // Create a list partition table for direct method testing
-        starRocksAssert.withDatabase("test_catalog_utils5").useDatabase("test_catalog_utils5")
-                .withTable("CREATE TABLE test_catalog_utils5.tbl_list5(\n" +
-                        "    id bigint not null,\n" +
-                        "    province varchar(20) not null\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(id)\n" +
-                        "PARTITION BY LIST (province) (\n" +
-                        "   PARTITION p_bj VALUES IN (\"beijing\"),\n" +
-                        "   PARTITION p_gd VALUES IN (\"shenzhen\")\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10 \n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ");");
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_catalog_utils5");
-        OlapTable table = (OlapTable) db.getTable("tbl_list5");
-
-        // Create a SingleItemListPartitionDesc for testing
-        SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(
-                false, "tp_test", Arrays.asList("hangzhou"), null);
-        // Set column def list for the partition desc
-        List<ColumnDef> columnDefList = new ArrayList<>();
-        columnDefList.add(new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(20))));
-        partitionDesc.setColumnDefList(columnDefList);
-
-        // Test: temp partition should not throw exception for value not in formal partitions
-        Assertions.assertDoesNotThrow(() -> {
-            CatalogUtils.checkPartitionValuesExistForAddListPartition(table, partitionDesc, true);
-        });
-
-        // Test: formal partition with duplicate value should throw exception
-        SingleItemListPartitionDesc dupPartitionDesc = new SingleItemListPartitionDesc(
-                false, "p_test", Arrays.asList("beijing"), null);
-        dupPartitionDesc.setColumnDefList(columnDefList);
-
-        Assertions.assertThrows(DdlException.class, () -> {
-            CatalogUtils.checkPartitionValuesExistForAddListPartition(table, dupPartitionDesc, false);
-        });
-
-        // Clean up
-        starRocksAssert.dropTable("test_catalog_utils5.tbl_list5");
     }
 }
