@@ -306,6 +306,10 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
   - Required: No
   - Description: Whether to support querying objects under nested namespace. Default: `false`.
 
+- `iceberg.catalog.rest.view-endpoints-enabled`
+  - Required: No
+  - Description: Whether to enable view endpoints for view-related operations. If set to `false`, view operations like `getView` will be disabled. Default: `true`.
+
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
