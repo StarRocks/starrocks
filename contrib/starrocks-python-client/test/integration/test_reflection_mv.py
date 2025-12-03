@@ -16,9 +16,10 @@ import logging
 import time
 
 import pytest
-from sqlalchemy import Inspector, MetaData, exc, inspect, text
+from sqlalchemy import MetaData, exc, inspect, text
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.schema import Table
 
