@@ -1071,11 +1071,21 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
+bool PrimaryIndex::need_rebuild() {
+    if (_persistent_index != nullptr) {
+        return _persistent_index->need_rebuild();
+    }
+    return false;
+}
+
 Status PrimaryIndex::load(Tablet* tablet) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, tablet->tablet_id());
     std::lock_guard<std::mutex> lg(_lock);
-    if (_loaded) {
+    if (_loaded && !need_rebuild()) {
         return _status;
+    }
+    if (need_rebuild()) {
+        unload();
     }
     _status = _do_load(tablet);
     _loaded = true;

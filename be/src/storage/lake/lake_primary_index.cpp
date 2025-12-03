@@ -42,8 +42,11 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
                                    const MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
-    if (_loaded) {
+    if (_loaded && !need_rebuild()) {
         return _status;
+    }
+    if (need_rebuild()) {
+        unload();
     }
     _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
