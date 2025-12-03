@@ -92,7 +92,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
         return Status::OK();
     };
 
-    RETURN_IF_ERROR(set_conf("metadata.broker.list", ctx->kafka_info->brokers));
+    RETURN_IF_ERROR(set_conf("bootstrap.servers", ctx->kafka_info->brokers));
     RETURN_IF_ERROR(set_conf("group.id", _group_id));
     // For transaction producer, producer will append one control msg to the group of msgs,
     // but the control msg will not return to consumer,
