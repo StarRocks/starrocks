@@ -113,9 +113,12 @@ private:
 class RuntimeFilterHolder {
 public:
     void set_collector(RuntimeFilterCollectorPtr&& collector) {
-        DCHECK(_collector.load(std::memory_order_acquire) == nullptr);
-        _collector_ownership = std::move(collector);
-        _collector.store(_collector_ownership.get(), std::memory_order_release);
+        RuntimeFilterCollector* expected = nullptr;
+
+        if (_collector.compare_exchange_strong(expected, collector.get(), std::memory_order_release,
+                                               std::memory_order_acquire)) {
+            _collector_ownership = std::move(collector);
+        }
     }
     RuntimeFilterCollector* get_collector() { return _collector.load(std::memory_order_acquire); }
     bool is_ready() { return get_collector() != nullptr; }
