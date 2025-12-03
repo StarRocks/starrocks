@@ -198,25 +198,7 @@ Datum ArrayViewColumn::get(size_t idx) const {
     return {res};
 }
 
-void ArrayViewColumn::fnv_hash_at(uint32_t* seed, uint32_t idx) const {
-    DCHECK(false) << "ArrayViewColumn::fnv_hash_at() is not supported";
-    throw std::runtime_error("ArrayViewColumn::fnv_hash_at() is not supported");
-}
-
-void ArrayViewColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "ArrayViewColumn::fnv_hash() is not supported";
-    throw std::runtime_error("ArrayViewColumn::fnv_hash() is not supported");
-}
-
-void ArrayViewColumn::crc32_hash_at(uint32_t* seed, uint32_t idx) const {
-    DCHECK(false) << "ArrayViewColumn::crc32_hash_at() is not supported";
-    throw std::runtime_error("ArrayViewColumn::crc32_hash_at() is not supported");
-}
-
-void ArrayViewColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "ArrayViewColumn::crc32_hash() is not supported";
-    throw std::runtime_error("ArrayViewColumn::crc32_hash() is not supported");
-}
+// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
 
 int64_t ArrayViewColumn::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "ArrayViewColumn::xor_checksum() is not supported";

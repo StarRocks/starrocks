@@ -510,51 +510,7 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
     return !safe_eq && has_null_eq ? EQUALS_NULL : EQUALS_TRUE;
 }
 
-void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets_data = _offsets->immutable_data();
-    uint32_t offset = offsets_data[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t map_size = offsets_data[idx + 1] - offset;
-
-    *hash = HashUtil::fnv_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
-    uint32_t base_hash = *hash;
-    for (size_t i = 0; i < map_size; ++i) {
-        uint32_t pair_hash = base_hash;
-        uint32_t ele_offset = offset + static_cast<uint32_t>(i);
-        _keys->fnv_hash_at(&pair_hash, ele_offset);
-        _values->fnv_hash_at(&pair_hash, ele_offset);
-
-        // for get same hash on un-order map, we need to satisfies the commutative law
-        *hash += pair_hash;
-    }
-}
-
-void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
-    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
-    const auto offsets_data = _offsets->immutable_data();
-    uint32_t offset = offsets_data[idx];
-    // Should use size_t not uint32_t for compatible
-    size_t map_size = offsets_data[idx + 1] - offset;
-
-    *hash = HashUtil::zlib_crc_hash(&map_size, static_cast<uint32_t>(sizeof(map_size)), *hash);
-    uint32_t base_hash = *hash;
-    for (size_t i = 0; i < map_size; ++i) {
-        uint32_t pair_hash = base_hash;
-        uint32_t ele_offset = offset + i;
-        _keys->crc32_hash_at(&pair_hash, ele_offset);
-        _values->crc32_hash_at(&pair_hash, ele_offset);
-
-        // for get same hash on un-order map, we need to satisfies the commutative law
-        *hash += pair_hash;
-    }
-}
-
-// TODO: fnv_hash and crc32_hash in map column may has performance problem
-// We need to make it possible in the future to provide vistor interface to iterator data
-// as much as possible
-
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
+// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
 // xor_checksum is not refactored - keep original implementation
 
 int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {

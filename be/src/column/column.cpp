@@ -122,40 +122,31 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
 }
 
 void Column::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    ColumnHashVisitor<FNVHash> visitor(seed, from, to);
-    (void)accept(&visitor);
+    fnv_hash_column(*this, seed, from, to);
 }
 
 void Column::fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
-    ColumnHashVisitor<FNVHash> visitor(seed, selection, from, to);
-    (void)accept(&visitor);
+    fnv_hash_column_with_selection(*this, seed, selection, from, to);
 }
 
 void Column::fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
-    ColumnHashVisitor<FNVHash> visitor(seed, sel, sel_size);
-    (void)accept(&visitor);
+    fnv_hash_column_selective(*this, seed, sel, sel_size);
 }
 
 void Column::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    ColumnHashVisitor<CRC32Hash> visitor(seed, from, to);
-    (void)accept(&visitor);
+    crc32_hash_column(*this, seed, from, to);
 }
 
 void Column::crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
-    ColumnHashVisitor<CRC32Hash> visitor(seed, selection, from, to);
-    (void)accept(&visitor);
+    crc32_hash_column_with_selection(*this, seed, selection, from, to);
 }
 
 void Column::crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
-    ColumnHashVisitor<CRC32Hash> visitor(seed, sel, sel_size);
-    (void)accept(&visitor);
+    crc32_hash_column_selective(*this, seed, sel, sel_size);
 }
 
 void Column::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
-    ColumnHashVisitor<MurmurHash3Hash> visitor(hash, from, to);
-    (void)accept(&visitor);
+    murmur_hash3_x86_32_column(*this, hash, from, to);
 }
-
-// xor_checksum is not refactored - each column type implements it directly
 
 } // namespace starrocks

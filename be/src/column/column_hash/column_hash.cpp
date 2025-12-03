@@ -15,10 +15,11 @@
 #include "column/column_hash/column_hash.h"
 
 #include <cstring>
-#include <memory>
 #include <string>
+#include <type_traits>
 
 #include "column/array_column.h"
+#include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column_base.h"
@@ -28,7 +29,6 @@
 #include "column/struct_column.h"
 #include "common/status.h"
 #include "runtime/time_types.h"
-#include "util/decimal_types.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -36,105 +36,67 @@ namespace starrocks {
 // Hash function type tags
 struct FNVHash {
     static constexpr const char* name() { return "FNV"; }
-    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
         return HashUtil::fnv_hash(data, bytes, seed);
     }
 };
 
 struct CRC32Hash {
     static constexpr const char* name() { return "CRC32"; }
-    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
         return HashUtil::zlib_crc_hash(data, bytes, seed);
     }
 };
 
 struct MurmurHash3Hash {
     static constexpr const char* name() { return "MurmurHash3"; }
-    static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
         return HashUtil::murmur_hash3_32(data, bytes, seed);
     }
 };
 
-// HashKernel - generic implementation for different column types
-template <typename ColumnType>
-class HashKernel {
-    // General template - can be specialized for different column types
-};
-
-// Specialization for FixedLengthColumnBase
-template <typename T>
-class HashKernel<FixedLengthColumnBase<T>> {
-public:
-    // Core method: hash a single element
-    template <typename HashFunc>
-    static void hash_element(const T& value, uint32_t* hash, HashFunc&& hash_func) {
-        hash_func(value, hash);
-    }
-
-    // Hash a range of elements - reuse hash_element
-    template <typename HashFunc>
-    static void hash_range(const FixedLengthColumnBase<T>& column, uint32_t* hashes, uint32_t from, uint32_t to,
-                           HashFunc&& hash_func) {
-        const auto datas = column.immutable_data();
-        for (uint32_t i = from; i < to; ++i) {
-            hash_element(datas[i], &hashes[i], hash_func);
-        }
-    }
-
-    // Hash with selection mask - reuse hash_element
-    template <typename HashFunc>
-    static void hash_with_selection(const FixedLengthColumnBase<T>& column, uint32_t* hashes, uint8_t* selection,
-                                    uint16_t from, uint16_t to, HashFunc&& hash_func) {
-        const auto datas = column.immutable_data();
-        for (uint16_t i = from; i < to; i++) {
-            if (selection[i]) {
-                hash_element(datas[i], &hashes[i], hash_func);
-            }
-        }
-    }
-
-    // Hash selective indices - reuse hash_element
-    template <typename HashFunc>
-    static void hash_selective(const FixedLengthColumnBase<T>& column, uint32_t* hashes, uint16_t* sel,
-                               uint16_t sel_size, HashFunc&& hash_func) {
-        const auto datas = column.immutable_data();
-        for (uint16_t i = 0; i < sel_size; i++) {
-            hash_element(datas[sel[i]], &hashes[sel[i]], hash_func);
-        }
-    }
-
-    // Hash single element at index - reuse hash_element
-    template <typename HashFunc>
-    static void hash_at(const FixedLengthColumnBase<T>& column, uint32_t* hash, uint32_t idx, HashFunc&& hash_func) {
-        const auto datas = column.immutable_data();
-        hash_element(datas[idx], hash, hash_func);
+struct XXHash3 {
+    static constexpr const char* name() { return "XXHash"; }
+    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+        return HashUtil::xx_hash3_64(data, bytes, seed);
     }
 };
 
-// ColumnHashVisitorImpl - internal implementation
 template <typename HashFunction>
-class ColumnHashVisitorImpl {
+class ColumnHashVisitor final : public ColumnVisitorAdapter<ColumnHashVisitor<HashFunction>> {
 public:
-    ColumnHashVisitorImpl(uint32_t* hashes, uint32_t from, uint32_t to)
-            : _hashes(hashes), _from(from), _to(to), _selection(nullptr), _sel(nullptr), _sel_size(0) {}
+    // range
+    ColumnHashVisitor(uint32_t* hashes, uint32_t from, uint32_t to)
+            : ColumnVisitorAdapter<ColumnHashVisitor<HashFunction>>(this), _hashes(hashes), _from(from), _to(to) {}
 
-    ColumnHashVisitorImpl(uint32_t* hashes, uint8_t* selection, uint16_t from, uint16_t to)
-            : _hashes(hashes), _from(from), _to(to), _selection(selection), _sel(nullptr), _sel_size(0) {}
+    // range with selection
+    ColumnHashVisitor(uint32_t* hashes, uint8_t* selection, uint16_t from, uint16_t to)
+            : ColumnVisitorAdapter<ColumnHashVisitor<HashFunction>>(this),
+              _hashes(hashes),
+              _from(from),
+              _to(to),
+              _selection(selection) {}
 
-    ColumnHashVisitorImpl(uint32_t* hashes, uint16_t* sel, uint16_t sel_size)
-            : _hashes(hashes), _from(0), _to(0), _selection(nullptr), _sel(sel), _sel_size(sel_size) {}
+    // range with selective
+    ColumnHashVisitor(uint32_t* hashes, uint16_t* sel, uint16_t sel_size)
+            : ColumnVisitorAdapter<ColumnHashVisitor<HashFunction>>(this),
+              _hashes(hashes),
+              _sel(sel),
+              _sel_size(sel_size) {}
 
-    ColumnHashVisitorImpl(uint32_t* hash, uint32_t idx)
-            : _hashes(hash), _from(idx), _to(idx + 1), _selection(nullptr), _sel(nullptr), _sel_size(0) {}
+    // single value
+    ColumnHashVisitor(uint32_t* hashes, uint32_t idx)
+            : ColumnVisitorAdapter<ColumnHashVisitor<HashFunction>>(this), _hashes(hashes), _from(idx), _to(idx + 1) {}
 
-    // Template method for FixedLengthColumnBase<T>
+    ~ColumnHashVisitor() override = default;
+
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
-        auto hash_func = [](const T& value, uint32_t* hash) {
+        auto hash_value = [](const T& value, uint32_t* hash) {
             if constexpr (std::is_same_v<HashFunction, CRC32Hash> && (IsDate<T> || IsTimestamp<T>)) {
                 std::string str = value.to_string();
                 *hash = HashFunction::hash(str.data(), static_cast<int32_t>(str.size()), *hash);
-            } else if constexpr (std::is_same_v<HashFunction, CRC32Hash> && IsDecimal<T>) {
+            } else if constexpr (IsDecimal<T>) {
                 int64_t int_val = value.int_value();
                 int32_t frac_val = value.frac_value();
                 uint32_t seed = HashFunction::hash(&int_val, sizeof(int_val), *hash);
@@ -158,250 +120,243 @@ public:
                 *hash = HashFunction::hash(&value, sizeof(T), *hash);
             }
         };
-        
-        if (_sel != nullptr && _sel_size > 0) {
-            HashKernel<FixedLengthColumnBase<T>>::hash_selective(column, _hashes, _sel, _sel_size, hash_func);
-        } else if (_selection != nullptr) {
-            HashKernel<FixedLengthColumnBase<T>>::hash_with_selection(column, _hashes, _selection, _from, _to, hash_func);
-        } else {
-            HashKernel<FixedLengthColumnBase<T>>::hash_range(column, _hashes, _from, _to, hash_func);
-        }
+
+        const auto datas = column.immutable_data();
+        for_each_index([&](uint32_t idx) {
+            uint32_t* slot_ptr = slot(idx);
+            hash_value(datas[idx], slot_ptr);
+        });
         return Status::OK();
     }
 
-    // Overloads for specific column types
-    Status do_visit(const DecimalV3Column<int32_t>& column) {
-        return do_visit(static_cast<const FixedLengthColumnBase<int32_t>&>(column));
+    // Overloads for specific column types - DecimalV3Column inherits from FixedLengthColumnBase
+    // so we can directly call the template version
+    template <typename T>
+    Status do_visit(const DecimalV3Column<T>& column) {
+        return do_visit(static_cast<const FixedLengthColumnBase<T>&>(static_cast<const Column&>(column)));
     }
 
-    Status do_visit(const DecimalV3Column<int64_t>& column) {
-        return do_visit(static_cast<const FixedLengthColumnBase<int64_t>&>(column));
-    }
-
-    Status do_visit(const DecimalV3Column<int128_t>& column) {
-        return do_visit(static_cast<const FixedLengthColumnBase<int128_t>&>(column));
-    }
-
-    Status do_visit(const DecimalV3Column<int256_t>& column) {
-        return do_visit(static_cast<const FixedLengthColumnBase<int256_t>&>(column));
-    }
-
-    Status do_visit(const BinaryColumn& column) {
+    template <typename SizeT>
+    Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
         const auto& bytes = column.get_bytes();
-        if (_sel != nullptr && _sel_size > 0) {
-            for (uint16_t i = 0; i < _sel_size; i++) {
-                uint16_t idx = _sel[i];
-                _hashes[idx] = HashFunction::hash(bytes.data() + offsets[idx],
-                                                 static_cast<int32_t>(offsets[idx + 1] - offsets[idx]), _hashes[idx]);
-            }
-        } else if (_selection != nullptr) {
-            for (uint32_t i = _from; i < _to; ++i) {
-                if (!_selection[i]) continue;
-                _hashes[i] = HashFunction::hash(bytes.data() + offsets[i],
-                                               static_cast<int32_t>(offsets[i + 1] - offsets[i]), _hashes[i]);
-            }
-        } else {
-            for (uint32_t i = _from; i < _to; ++i) {
-                _hashes[i] = HashFunction::hash(bytes.data() + offsets[i],
-                                               static_cast<int32_t>(offsets[i + 1] - offsets[i]), _hashes[i]);
-            }
-        }
-        return Status::OK();
-    }
-
-    Status do_visit(const LargeBinaryColumn& column) {
-        const auto& offsets = column.get_offset();
-        const auto& bytes = column.get_bytes();
-        if (_sel != nullptr && _sel_size > 0) {
-            for (uint16_t i = 0; i < _sel_size; i++) {
-                uint16_t idx = _sel[i];
-                _hashes[idx] = HashFunction::hash(bytes.data() + offsets[idx],
-                                                 static_cast<int32_t>(offsets[idx + 1] - offsets[idx]), _hashes[idx]);
-            }
-        } else if (_selection != nullptr) {
-            for (uint32_t i = _from; i < _to; ++i) {
-                if (!_selection[i]) continue;
-                _hashes[i] = HashFunction::hash(bytes.data() + offsets[i],
-                                               static_cast<int32_t>(offsets[i + 1] - offsets[i]), _hashes[i]);
-            }
-        } else {
-            for (uint32_t i = _from; i < _to; ++i) {
-                _hashes[i] = HashFunction::hash(bytes.data() + offsets[i],
-                                               static_cast<int32_t>(offsets[i + 1] - offsets[i]), _hashes[i]);
-            }
-        }
+        for_each_index([&](uint32_t idx) {
+            uint32_t* slot_ptr = slot(idx);
+            auto len = offsets[idx + 1] - offsets[idx];
+            *slot_ptr = HashFunction::hash(bytes.data() + offsets[idx], static_cast<int32_t>(len), *slot_ptr);
+        });
         return Status::OK();
     }
 
     Status do_visit(const NullableColumn& column) {
         if (!column.has_null()) {
-            ColumnHashVisitor<HashFunction> visitor(_hashes, _from, _to);
+            auto visitor = clone_visitor();
             return column.data_column()->accept(&visitor);
         }
+
         const auto null_data = column.null_column()->immutable_data();
-        uint32_t value = 0x9e3779b9;
-        uint32_t from = _from;
-        while (from < _to) {
-            uint32_t new_from = from + 1;
-            while (new_from < _to && null_data[from] == null_data[new_from]) {
-                ++new_from;
-            }
-            if (null_data[from]) {
-                for (uint32_t i = from; i < new_from; ++i) {
-                    _hashes[i] = _hashes[i] ^ (value + (_hashes[i] << 6) + (_hashes[i] >> 2));
+        constexpr uint32_t value = 0x9e3779b9;
+        auto mix_null = [&](uint32_t idx) {
+            uint32_t* slot_ptr = slot(idx);
+            *slot_ptr = *slot_ptr ^ (value + (*slot_ptr << 6) + (*slot_ptr >> 2));
+        };
+
+        // Fast path: no selection arrays involved, so we can work on continuous ranges.
+        if (_selection == nullptr && _sel == nullptr) {
+            uint32_t cursor = _from;
+            while (cursor < _to) {
+                uint32_t next = cursor + 1;
+                while (next < _to && null_data[next] == null_data[cursor]) {
+                    ++next;
                 }
+                if (null_data[cursor]) {
+                    for (uint32_t idx = cursor; idx < next; ++idx) {
+                        mix_null(idx);
+                    }
+                } else {
+                    ColumnHashVisitor<HashFunction> visitor(_hashes, cursor, next);
+                    (void)column.data_column()->accept(&visitor);
+                }
+                cursor = next;
+            }
+            return Status::OK();
+        }
+
+        // Fallback: respect selection/sel arrays by handling row by row.
+        for_each_index([&](uint32_t idx) {
+            if (null_data[idx]) {
+                mix_null(idx);
             } else {
-                ColumnHashVisitor<HashFunction> visitor(_hashes, from, new_from);
+                ColumnHashVisitor<HashFunction> visitor(slot(idx), idx);
                 (void)column.data_column()->accept(&visitor);
             }
-            from = new_from;
-        }
+        });
         return Status::OK();
     }
 
     Status do_visit(const ConstColumn& column) {
         DCHECK(column.size() > 0);
-        for (uint32_t i = _from; i < _to; ++i) {
-            ColumnHashVisitor<HashFunction> visitor(&_hashes[i], static_cast<uint32_t>(i), static_cast<uint32_t>(i + 1));
-            (void)column.data_column()->accept(&visitor);
-        }
+        const ColumnPtr& data = column.data_column();
+        for_each_index([&](uint32_t idx) {
+            ColumnHashVisitor<HashFunction> visitor(slot(idx), idx);
+            (void)data->accept(&visitor);
+        });
         return Status::OK();
     }
 
     Status do_visit(const ArrayColumn& column) {
         const auto& offsets = column.offsets_column()->immutable_data();
-        for (uint32_t i = _from; i < _to; ++i) {
-            uint32_t array_size = offsets[i + 1] - offsets[i];
-            _hashes[i] = HashFunction::hash(&array_size, sizeof(array_size), _hashes[i]);
+        const ColumnPtr& elements = column.elements_column();
+        for_each_index([&](uint32_t idx) {
+            uint32_t array_size = offsets[idx + 1] - offsets[idx];
+            uint32_t* slot_ptr = slot(idx);
+            *slot_ptr = HashFunction::hash(&array_size, sizeof(array_size), *slot_ptr);
             if (array_size > 0) {
-                ColumnHashVisitor<HashFunction> visitor(_hashes + i, offsets[i], offsets[i + 1]);
-                (void)column.elements_column()->accept(&visitor);
+                ColumnHashVisitor<HashFunction> visitor(slot_ptr, offsets[idx], offsets[idx + 1]);
+                (void)elements->accept(&visitor);
             }
-        }
+        });
         return Status::OK();
     }
 
     Status do_visit(const MapColumn& column) {
         const auto& offsets = column.offsets_column()->immutable_data();
-        for (uint32_t i = _from; i < _to; ++i) {
-            uint32_t map_size = offsets[i + 1] - offsets[i];
-            _hashes[i] = HashFunction::hash(&map_size, sizeof(map_size), _hashes[i]);
+        const ColumnPtr& keys = column.keys_column();
+        const ColumnPtr& values = column.values_column();
+        for_each_index([&](uint32_t idx) {
+            uint32_t map_size = offsets[idx + 1] - offsets[idx];
+            uint32_t* slot_ptr = slot(idx);
+            *slot_ptr = HashFunction::hash(&map_size, sizeof(map_size), *slot_ptr);
             if (map_size > 0) {
-                ColumnHashVisitor<HashFunction> visitor(_hashes + i, offsets[i], offsets[i + 1]);
-                (void)column.keys_column()->accept(&visitor);
-                (void)column.values_column()->accept(&visitor);
+                ColumnHashVisitor<HashFunction> visitor(slot_ptr, offsets[idx], offsets[idx + 1]);
+                (void)keys->accept(&visitor);
+                (void)values->accept(&visitor);
             }
-        }
+        });
         return Status::OK();
     }
 
     Status do_visit(const StructColumn& column) {
         for (const ColumnPtr& field : column.fields()) {
-            ColumnHashVisitor<HashFunction> visitor(_hashes, _from, _to);
+            auto visitor = clone_visitor();
             (void)field->accept(&visitor);
         }
         return Status::OK();
     }
 
-    Status do_visit(const ObjectColumn<JsonValue>& column) {
-        std::string s;
-        const auto& pool = column.get_pool();
-        for (uint32_t i = _from; i < _to; ++i) {
-            s.resize(pool[i].serialize_size());
-            size_t size = pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
-            _hashes[i] = HashFunction::hash(s.data(), static_cast<int32_t>(size), _hashes[i]);
-        }
-        return Status::OK();
-    }
+    Status do_visit(const JsonColumn& column) { return Status::NotSupported("JsonColumn is not supported"); }
 
-    Status do_visit(const ObjectColumn<VariantValue>& column) {
-        std::string s;
+    Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
+
+    template <typename ObjectType>
+    Status do_visit(const ObjectColumn<ObjectType>& column) {
+        std::string buffer;
         const auto& pool = column.get_pool();
-        for (uint32_t i = _from; i < _to; ++i) {
-            s.resize(pool[i].serialize_size());
-            size_t size = pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
-            _hashes[i] = HashFunction::hash(s.data(), static_cast<int32_t>(size), _hashes[i]);
-        }
+        for_each_index([&](uint32_t idx) {
+            buffer.resize(pool[idx].serialize_size());
+            size_t size = pool[idx].serialize(reinterpret_cast<uint8_t*>(buffer.data()));
+            uint32_t* slot_ptr = slot(idx);
+            *slot_ptr = HashFunction::hash(buffer.data(), static_cast<int32_t>(size), *slot_ptr);
+        });
         return Status::OK();
     }
 
 private:
+    template <typename Fn>
+    void for_each_index(Fn&& fn) const {
+        if (_sel != nullptr && _sel_size > 0) {
+            for (uint16_t i = 0; i < _sel_size; ++i) {
+                fn(_sel[i]);
+            }
+        } else if (_selection != nullptr) {
+            for (uint32_t i = _from; i < _to; ++i) {
+                if (_selection[i]) {
+                    fn(i);
+                }
+            }
+        } else {
+            for (uint32_t i = _from; i < _to; ++i) {
+                fn(i);
+            }
+        }
+    }
+
+    ColumnHashVisitor<HashFunction> clone_visitor() const {
+        if (_sel != nullptr && _sel_size > 0) {
+            return ColumnHashVisitor<HashFunction>(_hashes, _sel, _sel_size);
+        } else if (_selection != nullptr) {
+            return ColumnHashVisitor<HashFunction>(_hashes, _selection, static_cast<uint16_t>(_from),
+                                                   static_cast<uint16_t>(_to));
+        } else {
+            return ColumnHashVisitor<HashFunction>(_hashes, _from, _to);
+        }
+    }
+
+    [[always_inline]] uint32_t* slot(uint32_t idx) const { return _hashes + idx; }
+
+private:
+    // outoput hash values
     uint32_t* _hashes;
+    // range
     uint32_t _from;
     uint32_t _to;
+    // selection
     uint8_t* _selection;
+    // selective
     uint16_t* _sel;
     uint16_t _sel_size;
 };
 
-// ColumnHashVisitor implementation - forward all visit methods to ColumnHashVisitorImpl
-template <typename HashFunction>
-ColumnHashVisitor<HashFunction>::ColumnHashVisitor(uint32_t* hashes, uint32_t from, uint32_t to)
-        : _impl(std::make_unique<ColumnHashVisitorImpl<HashFunction>>(hashes, from, to)) {}
-
-template <typename HashFunction>
-ColumnHashVisitor<HashFunction>::ColumnHashVisitor(uint32_t* hashes, uint8_t* selection, uint16_t from, uint16_t to)
-        : _impl(std::make_unique<ColumnHashVisitorImpl<HashFunction>>(hashes, selection, from, to)) {}
-
-template <typename HashFunction>
-ColumnHashVisitor<HashFunction>::ColumnHashVisitor(uint32_t* hashes, uint16_t* sel, uint16_t sel_size)
-        : _impl(std::make_unique<ColumnHashVisitorImpl<HashFunction>>(hashes, sel, sel_size)) {}
-
-template <typename HashFunction>
-ColumnHashVisitor<HashFunction>::ColumnHashVisitor(uint32_t* hash, uint32_t idx)
-        : _impl(std::make_unique<ColumnHashVisitorImpl<HashFunction>>(hash, idx)) {}
-
-template <typename HashFunction>
-ColumnHashVisitor<HashFunction>::~ColumnHashVisitor() = default;
-
-// Forward all visit methods to ColumnHashVisitorImpl
-#define FORWARD_VISIT(ColumnType) \
-    template <typename HashFunction> \
-    Status ColumnHashVisitor<HashFunction>::visit(const ColumnType& column) { \
-        return _impl->do_visit(column); \
-    }
-
-FORWARD_VISIT(Int8Column)
-FORWARD_VISIT(UInt8Column)
-FORWARD_VISIT(Int16Column)
-FORWARD_VISIT(UInt16Column)
-FORWARD_VISIT(Int32Column)
-FORWARD_VISIT(UInt32Column)
-FORWARD_VISIT(Int64Column)
-FORWARD_VISIT(UInt64Column)
-FORWARD_VISIT(Int128Column)
-FORWARD_VISIT(FloatColumn)
-FORWARD_VISIT(DoubleColumn)
-FORWARD_VISIT(DateColumn)
-FORWARD_VISIT(TimestampColumn)
-FORWARD_VISIT(DecimalColumn)
-FORWARD_VISIT(Decimal32Column)
-FORWARD_VISIT(Decimal64Column)
-FORWARD_VISIT(Decimal128Column)
-FORWARD_VISIT(Decimal256Column)
-FORWARD_VISIT(FixedLengthColumn<int96_t>)
-FORWARD_VISIT(FixedLengthColumn<uint24_t>)
-FORWARD_VISIT(FixedLengthColumn<decimal12_t>)
-FORWARD_VISIT(BinaryColumn)
-FORWARD_VISIT(LargeBinaryColumn)
-FORWARD_VISIT(NullableColumn)
-FORWARD_VISIT(ConstColumn)
-FORWARD_VISIT(ArrayColumn)
-FORWARD_VISIT(MapColumn)
-FORWARD_VISIT(StructColumn)
-FORWARD_VISIT(ObjectColumn<JsonValue>)
-FORWARD_VISIT(ObjectColumn<VariantValue>)
-
-#undef FORWARD_VISIT
-
 // Explicit template instantiations
-template class ColumnHashVisitorImpl<FNVHash>;
-template class ColumnHashVisitorImpl<CRC32Hash>;
-template class ColumnHashVisitorImpl<MurmurHash3Hash>;
 template class ColumnHashVisitor<FNVHash>;
 template class ColumnHashVisitor<CRC32Hash>;
 template class ColumnHashVisitor<MurmurHash3Hash>;
+template class ColumnHashVisitor<XXHash3>;
+
+// FNV Hash
+void fnv_hash_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
+    ColumnHashVisitor<FNVHash> visitor(hashes, from, to);
+    (void)column.accept(&visitor);
+}
+
+void fnv_hash_column_with_selection(const Column& column, uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                    uint16_t to) {
+    ColumnHashVisitor<FNVHash> visitor(hashes, selection, from, to);
+    (void)column.accept(&visitor);
+}
+void fnv_hash_column_selective(const Column& column, uint32_t* hashes, uint16_t* sel, uint16_t sel_size) {
+    ColumnHashVisitor<FNVHash> visitor(hashes, sel, sel_size);
+    (void)column.accept(&visitor);
+}
+
+// CRC32 Hash
+void crc32_hash_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
+    ColumnHashVisitor<CRC32Hash> visitor(hashes, from, to);
+    (void)column.accept(&visitor);
+}
+void crc32_hash_column_with_selection(const Column& column, uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                      uint16_t to) {
+    ColumnHashVisitor<CRC32Hash> visitor(hashes, selection, from, to);
+    (void)column.accept(&visitor);
+}
+void crc32_hash_column_selective(const Column& column, uint32_t* hashes, uint16_t* sel, uint16_t sel_size) {
+    ColumnHashVisitor<CRC32Hash> visitor(hashes, sel, sel_size);
+    (void)column.accept(&visitor);
+}
+
+// Murmur Hash
+void murmur_hash3_x86_32_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
+    ColumnHashVisitor<MurmurHash3Hash> visitor(hashes, from, to);
+    (void)column.accept(&visitor);
+}
+void murmur_hash3_x86_32_column_with_selection(const Column& column, uint32_t* hashes, uint8_t* selection,
+                                               uint16_t from, uint16_t to) {
+    ColumnHashVisitor<MurmurHash3Hash> visitor(hashes, selection, from, to);
+    (void)column.accept(&visitor);
+}
+void murmur_hash3_x86_32_column_selective(const Column& column, uint32_t* hashes, uint16_t* sel, uint16_t sel_size) {
+    ColumnHashVisitor<MurmurHash3Hash> visitor(hashes, sel, sel_size);
+    (void)column.accept(&visitor);
+}
 
 } // namespace starrocks
-

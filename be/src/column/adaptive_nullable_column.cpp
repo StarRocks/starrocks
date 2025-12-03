@@ -286,15 +286,7 @@ void AdaptiveNullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, s
     }
 }
 
-void AdaptiveNullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    materialized_nullable();
-    return NullableColumn::fnv_hash(hash, from, to);
-}
-
-void AdaptiveNullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    materialized_nullable();
-    return NullableColumn::crc32_hash(hash, from, to);
-}
+// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
 
 int64_t AdaptiveNullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     materialized_nullable();
