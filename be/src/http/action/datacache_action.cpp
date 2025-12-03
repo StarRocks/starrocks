@@ -77,9 +77,9 @@ void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjs
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
 }
 
-double DataCacheAction::_calc_rate(size_t quota, size_t used) {
-    if (quota > 0) {
-        return std::round(static_cast<double>(used) / static_cast<double>(quota) * 100.0) / 100.0;
+double DataCacheAction::_calc_rate(size_t total, size_t count) {
+    if (total > 0) {
+        return std::round(static_cast<double>(count) / static_cast<double>(total) * 100.0) / 100.0;
     }
     return 0;
 }
