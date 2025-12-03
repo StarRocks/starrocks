@@ -123,14 +123,22 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     /**
      * Create a prepared statement.// TODO: Note that, we only support the statement without parameters.
      *
-     * <p> JDBC and ODBC always use prepared statements to execute queries, even if the simple Statement::execute() is called.
-     * The RPC sequence for Statement::execute() is : createPreparedStatement -> getFlightInfoPreparedStatement
-     * -> getStreamStatement.
+     * <p> JDBC and ADBC always use prepared statements to execute queries, even if the simple Statement::execute() is called.
+     * The RPC sequence for Statement::execute() is:
+     *    createPreparedStatement -> getFlightInfoPreparedStatement-> getStreamStatement.
      * The RPC for Statement::close() is closePreparedStatement.
+     *
+     * <p> For a single connection, multiple prepared statements may be created.
+     * When executing a query with a cursor, if the query is identical to the previous one, the existing preparedStmtId is reused
+     * instead of creating a new one via createPreparedStatement. Specifically:
+     * - If the current query is identical to the previous one, the RPC sequence for Statement::execute() is:
+     *     getFlightInfoPreparedStatement -> getStreamStatement.
+     * - Otherwise, the RPC sequence for Statement::execute() is:
+     *     closePreparedStatement(prevPreparedStmtId) -> getFlightInfoPreparedStatement -> getStreamStatement.
      */
     @Override
-    public void createPreparedStatement(
-            FlightSql.ActionCreatePreparedStatementRequest request, CallContext context, StreamListener<Result> listener) {
+    public void createPreparedStatement(FlightSql.ActionCreatePreparedStatementRequest request, CallContext context,
+                                        StreamListener<Result> listener) {
         EXECUTOR.submit(() -> {
             try {
                 String token = context.peerIdentity();
@@ -454,6 +462,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         ctx.removeResult(queryId);
     }
 
+    /**
+     * In ADBC, a single connection can execute multiple statements concurrently, but since ConnectContext is not thread-safe,
+     * we currently cannot support this behavior.
+     * Therefore, use {@link ArrowFlightSqlConnectContext#acquireRunningToken(long)} to ensure that only one statement is
+     * executing at any given time on the same connection.
+     * TODO: Refactor ConnectContext into ConnectContext + StatementContext to support concurrent execution of multiple
+     *  statements on a single connection.
+     */
     protected FlightInfo getFlightInfoFromQuery(ArrowFlightSqlConnectContext ctx, FlightDescriptor descriptor, String query) {
         try {
             ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx, query);
