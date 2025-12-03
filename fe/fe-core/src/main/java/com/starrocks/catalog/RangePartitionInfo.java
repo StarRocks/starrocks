@@ -326,6 +326,18 @@ public class RangePartitionInfo extends PartitionInfo {
         }
     }
 
+    // return ranges without empty ranges, like shadow partition range
+    public Map<Long, Range<PartitionKey>> getNonEmptyRanges(boolean isTemp) {
+        Set<Map.Entry<Long, Range<PartitionKey>>> entrySet = null;
+        if (isTemp) {
+            entrySet = idToTempRange.entrySet();
+        } else {
+            entrySet = idToRange.entrySet();
+        }
+        return entrySet.stream().filter(x -> !x.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
     public Range<PartitionKey> getRange(long partitionId) {
         Range<PartitionKey> range = idToRange.get(partitionId);
         if (range == null) {
