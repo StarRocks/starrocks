@@ -395,6 +395,12 @@ public:
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
 
+    // data cache metrics
+    METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_disk_quota_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_disk_used_bytes, MetricUnit::BYTES);
+
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;

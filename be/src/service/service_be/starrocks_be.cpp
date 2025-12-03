@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/datacache.h"
+#include "cache/datacache_metrics.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
@@ -125,15 +126,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
+    [[maybe_unused]] bool use_same_datacache_instance = false;
 #ifdef USE_STAROS
     auto* local_cache = cache_env->local_disk_cache();
     if (config::datacache_unified_instance_enable && local_cache && local_cache->is_initialized()) {
         auto* starcache = reinterpret_cast<StarCacheEngine*>(local_cache);
         init_staros_worker(starcache->starcache_instance());
+        use_same_datacache_instance = true;
     } else {
         init_staros_worker(nullptr);
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
+#endif
+#ifndef __APPLE__
+    // Register datacache metrics
+    register_datacache_metrics(use_same_datacache_instance);
 #endif
 
     // set up thrift client before providing any service to the external
