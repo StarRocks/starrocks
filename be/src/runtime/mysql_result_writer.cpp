@@ -43,10 +43,24 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
+#include "runtime/mysql_column_writer.h"
 #include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
+
+namespace {
+
+struct ColumnSerializeContext {
+    ColumnSerializeContext(MysqlColumnViewer viewer_, MysqlSerializeFn serializer_, const TypeDescriptor& type_desc_)
+            : viewer(std::move(viewer_)), serializer(serializer_), type_desc(type_desc_) {}
+
+    MysqlColumnViewer viewer;
+    MysqlSerializeFn serializer;
+    TypeDescriptor type_desc;
+};
+
+} // namespace
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      bool is_binary_format, RuntimeProfile* parent_profile)
@@ -72,6 +86,11 @@ Status MysqlResultWriter::init(RuntimeState* state) {
     }
 
     return Status::OK();
+}
+
+void MysqlResultWriter::_init_profile() {
+    BufferControlResultWriter::_init_profile();
+    _expr_eval_timer = ADD_CHILD_TIMER(_parent_profile, "ExprEvalTime", "AppendChunkTime");
 }
 
 Status MysqlResultWriter::append_chunk(Chunk* chunk) {
@@ -109,37 +128,53 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
     result_rows.resize(num_rows);
 
     Columns result_columns;
-    // Step 1: compute expr
     int num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
-    for (int i = 0; i < num_columns; ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
-        column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                         ? ColumnHelper::convert_time_column_from_double_to_str(column)
-                         : column;
-        result_columns.emplace_back(std::move(column));
+    std::vector<ColumnSerializeContext> column_ctxs;
+    column_ctxs.reserve(num_columns);
+
+    {
+        SCOPED_TIMER(_expr_eval_timer);
+        for (int i = 0; i < num_columns; ++i) {
+            ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
+            const auto& root_type = _output_expr_ctxs[i]->root()->type();
+            TypeDescriptor serializer_type = root_type;
+            LogicalType physical_type = root_type.type;
+            if (root_type.type == TYPE_TIME) {
+                column = ColumnHelper::convert_time_column_from_double_to_str(column);
+                physical_type = TYPE_VARCHAR;
+                serializer_type.type = TYPE_VARCHAR;
+            }
+
+            auto viewer = type_dispatch_basic(physical_type, MysqlColumnViewerBuilder(), column);
+            auto serializer = get_mysql_serializer(physical_type);
+            column_ctxs.emplace_back(std::move(viewer), serializer, serializer_type);
+            result_columns.emplace_back(std::move(column));
+        }
     }
 
-    // Step 2: convert chunk to mysql row format row by row
     {
         _row_buffer->reserve(128);
         SCOPED_TIMER(_convert_tuple_timer);
+        size_t max_row_len = 0;
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
             if (_is_binary_format) {
                 _row_buffer->start_binary_row(num_columns);
             }
-            // TODO: codegen here
-            for (auto& result_column : result_columns) {
-                if (_is_binary_format && !result_column->is_nullable()) {
-                    _row_buffer->update_field_pos();
-                }
-                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
+            for (int col = 0; col < num_columns; ++col) {
+                auto& ctx = column_ctxs[col];
+                ctx.serializer(ctx.viewer, ctx.type_desc, _row_buffer, i, _is_binary_format);
             }
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);
-            _row_buffer->reserve(len * 1.1);
+            if (len > max_row_len) {
+                max_row_len = len;
+            }
+            if (max_row_len > 0) {
+                _row_buffer->reserve(max_row_len);
+            }
         }
     }
     return result;
@@ -151,24 +186,38 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
     std::vector<TFetchDataResultPtr> results;
 
     Columns result_columns;
-    // Step 1: compute expr
     int num_columns = _output_expr_ctxs.size();
     result_columns.reserve(num_columns);
 
-    for (int i = 0; i < num_columns; ++i) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
-        column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
-                         ? ColumnHelper::convert_time_column_from_double_to_str(column)
-                         : column;
-        result_columns.emplace_back(std::move(column));
+    std::vector<ColumnSerializeContext> column_ctxs;
+    column_ctxs.reserve(num_columns);
+
+    {
+        SCOPED_TIMER(_expr_eval_timer);
+        for (int i = 0; i < num_columns; ++i) {
+            ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
+            const auto& root_type = _output_expr_ctxs[i]->root()->type();
+            TypeDescriptor serializer_type = root_type;
+            LogicalType physical_type = root_type.type;
+            if (root_type.type == TYPE_TIME) {
+                column = ColumnHelper::convert_time_column_from_double_to_str(column);
+                physical_type = TYPE_VARCHAR;
+                serializer_type.type = TYPE_VARCHAR;
+            }
+
+            auto viewer = type_dispatch_basic(physical_type, MysqlColumnViewerBuilder(), column);
+            auto serializer = get_mysql_serializer(physical_type);
+            column_ctxs.emplace_back(std::move(viewer), serializer, serializer_type);
+            result_columns.emplace_back(std::move(column));
+        }
     }
 
-    // Step 2: convert chunk to mysql row format row by row
     {
         TRY_CATCH_ALLOC_SCOPE_START()
         _row_buffer->reserve(128);
         size_t current_bytes = 0;
         int current_rows = 0;
+        size_t max_row_len = 0;
         SCOPED_TIMER(_convert_tuple_timer);
         auto result = std::make_unique<TFetchDataResult>();
         auto& result_rows = result->result_batch.rows;
@@ -179,11 +228,9 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
             if (_is_binary_format) {
                 _row_buffer->start_binary_row(num_columns);
             }
-            for (auto& result_column : result_columns) {
-                if (_is_binary_format && !result_column->is_nullable()) {
-                    _row_buffer->update_field_pos();
-                }
-                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
+            for (int col = 0; col < num_columns; ++col) {
+                auto& ctx = column_ctxs[col];
+                ctx.serializer(ctx.viewer, ctx.type_desc, _row_buffer, i, _is_binary_format);
             }
             size_t len = _row_buffer->length();
 
@@ -199,7 +246,12 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 current_rows = 0;
             }
             _row_buffer->move_content(&result_rows[current_rows]);
-            _row_buffer->reserve(len * 1.1);
+            if (len > max_row_len) {
+                max_row_len = len;
+            }
+            if (max_row_len > 0) {
+                _row_buffer->reserve(max_row_len);
+            }
 
             current_bytes += len;
             current_rows += 1;
