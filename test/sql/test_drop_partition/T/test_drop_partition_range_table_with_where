@@ -63,6 +63,28 @@ ALTER TABLE t1 DROP PARTITIONS WHERE  k1 is null;
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
 ALTER TABLE t1 DROP PARTITIONS WHERE k1 <= current_date();
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
-
 drop table t1;
+
+-- test shadow partition should not be dropped
+CREATE TABLE t1
+(
+    k1 date,
+    k2 string,
+    v1 int 
+)
+PARTITION BY date_trunc('day', k1)
+DISTRIBUTED BY HASH(k2) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%';
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name = '$shadow_automatic_partition';
+insert into t1 values('2020-01-01','2020-02-02', 1);
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%';
+ALTER TABLE t1 DROP PARTITIONS WHERE k1 >= '2020-01-01';
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%';
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name = '$shadow_automatic_partition';
+insert into t1 values('2020-01-01','2020-02-02', 1);
+select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%';
+drop table t1;
+
 drop database db_${uuid0};
