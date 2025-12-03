@@ -19,6 +19,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"
@@ -771,8 +772,11 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
     COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 
-    COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
-    COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
+    int64_t total_pages_num = _reader->stats().total_pages_num;
+    int64_t cached_pages_num = _reader->stats().cached_pages_num;
+    COUNTER_UPDATE(_read_pages_num_counter, total_pages_num);
+    COUNTER_UPDATE(_cached_pages_num_counter, cached_pages_num);
+    DataCacheHitRateCounter::instance()->update_page_cache_stat(cached_pages_num, total_pages_num);
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
