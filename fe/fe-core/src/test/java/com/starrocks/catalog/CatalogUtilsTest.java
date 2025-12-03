@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -22,8 +24,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
-import com.starrocks.sql.ast.expression.TypeDef;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -364,10 +364,10 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         // Create a SingleItemListPartitionDesc for testing
         SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(
                 false, "tp_test", Arrays.asList("hangzhou"), null);
-        // Set column def list for the partition desc
+        // Set column def list for the partition desc via analyze method
         List<ColumnDef> columnDefList = new ArrayList<>();
-        columnDefList.add(new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(20))));
-        partitionDesc.setColumnDefList(columnDefList);
+        columnDefList.add(new ColumnDef("province", new TypeDef(ScalarType.createVarcharType(20))));
+        partitionDesc.analyze(columnDefList, null);
 
         // Test: temp partition should not throw exception for value not in formal partitions
         Assertions.assertDoesNotThrow(() -> {
@@ -377,7 +377,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         // Test: formal partition with duplicate value should throw exception
         SingleItemListPartitionDesc dupPartitionDesc = new SingleItemListPartitionDesc(
                 false, "p_test", Arrays.asList("beijing"), null);
-        dupPartitionDesc.setColumnDefList(columnDefList);
+        dupPartitionDesc.analyze(columnDefList, null);
 
         Assertions.assertThrows(DdlException.class, () -> {
             CatalogUtils.checkPartitionValuesExistForAddListPartition(table, dupPartitionDesc, false);
