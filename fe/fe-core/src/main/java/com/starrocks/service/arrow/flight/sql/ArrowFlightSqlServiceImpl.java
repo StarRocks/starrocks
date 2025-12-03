@@ -24,7 +24,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.sql.ast.expression.Expr;
