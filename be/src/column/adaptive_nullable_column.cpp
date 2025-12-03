@@ -286,8 +286,6 @@ void AdaptiveNullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, s
     }
 }
 
-// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
-
 int64_t AdaptiveNullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     materialized_nullable();
     return NullableColumn::xor_checksum(from, to);

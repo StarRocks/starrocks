@@ -73,8 +73,6 @@ std::string DecimalV3Column<T>::debug_item(size_t idx) const {
     return DecimalV3Cast::to_string<T>(data[idx], _precision, _scale);
 }
 
-// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
-
 template <typename T>
 int64_t DecimalV3Column<T>::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of DecimalV3Column

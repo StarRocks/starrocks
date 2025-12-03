@@ -52,8 +52,6 @@ int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::C
     return x->compare(*y);
 }
 
-// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
-
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     JsonValue* value = get_object(idx);
     DCHECK(value != nullptr);

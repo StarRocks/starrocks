@@ -198,8 +198,6 @@ Datum ArrayViewColumn::get(size_t idx) const {
     return {res};
 }
 
-// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
-
 int64_t ArrayViewColumn::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "ArrayViewColumn::xor_checksum() is not supported";
     throw std::runtime_error("ArrayViewColumn::xor_checksum() is not supported");

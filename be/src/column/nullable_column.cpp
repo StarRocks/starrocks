@@ -343,10 +343,6 @@ void NullableColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t ch
     _data_column->deserialize_and_append_batch_nullable(srcs, chunk_size, null_column_data(), _has_null);
 }
 
-// Note: the hash function should be same with RawValue::get_hash_value_fvn
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     if (!_has_null) {
         return _data_column->xor_checksum(from, to);

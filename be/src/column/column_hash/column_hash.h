@@ -36,4 +36,7 @@ void murmur_hash3_x86_32_column_with_selection(const Column& column, uint32_t* h
                                                uint16_t from, uint16_t to);
 void murmur_hash3_x86_32_column_selective(const Column& column, uint32_t* hashes, uint16_t* sel, uint16_t sel_size);
 
+// XXH3
+void xxh3_64_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to);
+
 } // namespace starrocks

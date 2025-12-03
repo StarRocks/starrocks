@@ -456,9 +456,6 @@ void ArrayColumn::compare_column(const Column& rhs_column, std::vector<int8_t>* 
     }
 }
 
-// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 int64_t ArrayColumn::xor_checksum(uint32_t from, uint32_t to) const {
     const auto offsets = _offsets->immutable_data();
     // The XOR of ArrayColumn

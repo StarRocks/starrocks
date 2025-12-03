@@ -64,9 +64,6 @@ void ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
     throw std::runtime_error("ConstColumn does not support update_rows");
 }
 
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call xor_checksum";
     return 0;

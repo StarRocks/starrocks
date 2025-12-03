@@ -23,6 +23,7 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column_base.h"
+#include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
@@ -93,10 +94,12 @@ public:
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         auto hash_value = [](const T& value, uint32_t* hash) {
+            // Specialized implementation for CRC32, for compatibility
             if constexpr (std::is_same_v<HashFunction, CRC32Hash> && (IsDate<T> || IsTimestamp<T>)) {
+                // TODO: don't create the string
                 std::string str = value.to_string();
                 *hash = HashFunction::hash(str.data(), static_cast<int32_t>(str.size()), *hash);
-            } else if constexpr (IsDecimal<T>) {
+            } else if constexpr (std::is_same_v<HashFunction, CRC32Hash> && IsDecimal<T>) {
                 int64_t int_val = value.int_value();
                 int32_t frac_val = value.frac_value();
                 uint32_t seed = HashFunction::hash(&int_val, sizeof(int_val), *hash);
@@ -104,14 +107,22 @@ public:
             } else if constexpr (std::is_same_v<HashFunction, MurmurHash3Hash>) {
                 uint32_t hash_value = 0;
                 if constexpr (IsDate<T>) {
+                    // Julian Day -> epoch day
+                    // TODO, This is not a good place to do a project, this is just for test.
+                    // If we need to make it more general, we should do this project in `IcebergMurmurHashProject`
+                    // but consider that use date type column as bucket transform is rare, we can do it later.
                     int64_t long_value = value.julian() - date::UNIX_EPOCH_JULIAN;
                     hash_value = HashFunction::hash(&long_value, sizeof(int64_t), 0);
                 } else if constexpr (std::is_same_v<T, int32_t>) {
+                    // Integer and long hash results must be identical for all integer values.
+                    // This ensures that schema evolution does not change bucket partition values if integer types are promoted.
                     int64_t long_value = value;
                     hash_value = HashFunction::hash(&long_value, sizeof(int64_t), 0);
                 } else if constexpr (std::is_same_v<T, int64_t>) {
                     hash_value = HashFunction::hash(&value, sizeof(T), 0);
                 } else {
+                    // for decimal/timestamp type, the storage is very different from iceberg,
+                    // and consider they are merely used, these types are forbidden by fe
                     DCHECK(false) << "Unsupported type for MurmurHash3";
                     return;
                 }
@@ -133,7 +144,36 @@ public:
     // so we can directly call the template version
     template <typename T>
     Status do_visit(const DecimalV3Column<T>& column) {
-        return do_visit(static_cast<const FixedLengthColumnBase<T>&>(static_cast<const Column&>(column)));
+        if constexpr (std::is_same_v<HashFunction, CRC32Hash>) {
+            // Specialized implementation for CRC32, for compatibility
+            // When decimal-v2 columns are used as distribution keys and users try to upgrade
+            // decimal-v2 column to decimal-v3 by schema change, decimal128(27,9) shall be the
+            // only acceptable target type, so keeping result of crc32_hash on type decimal128(27,9)
+            // compatible with type decimal-v2 is required in order to keep data layout consistency.
+            const auto data = column.immutable_data();
+            auto precision = column.precision();
+            auto scale = column.scale();
+            if constexpr (std::is_same_v<T, int128_t>) {
+                if (precision == 27 && scale == 9) {
+                    for_each_index([&](uint32_t idx) {
+                        uint32_t* slot_ptr = slot(idx);
+                        auto& decimal_v2_value = (DecimalV2Value&)(data[idx]);
+                        int64_t int_val = decimal_v2_value.int_value();
+                        int32_t frac_val = decimal_v2_value.frac_value();
+                        uint32_t seed = HashFunction::hash(&int_val, sizeof(int_val), *slot_ptr);
+                        *slot_ptr = HashFunction::hash(&frac_val, sizeof(frac_val), seed);
+                    });
+                    return Status::OK();
+                }
+            }
+            for_each_index([&](uint32_t idx) {
+                uint32_t* slot_ptr = slot(idx);
+                *slot_ptr = HashFunction::hash(&data[idx], sizeof(T), *slot_ptr);
+            });
+            return Status::OK();
+        } else {
+            return do_visit(static_cast<const FixedLengthColumnBase<T>&>(column));
+        }
     }
 
     template <typename SizeT>
@@ -161,6 +201,7 @@ public:
             *slot_ptr = *slot_ptr ^ (value + (*slot_ptr << 6) + (*slot_ptr >> 2));
         };
 
+        // TODO: optimize performance for sparse nulls
         // Fast path: no selection arrays involved, so we can work on continuous ranges.
         if (_selection == nullptr && _sel == nullptr) {
             uint32_t cursor = _from;
@@ -205,6 +246,7 @@ public:
     }
 
     Status do_visit(const ArrayColumn& column) {
+        // TODO: optimize performance
         const auto& offsets = column.offsets_column()->immutable_data();
         const ColumnPtr& elements = column.elements_column();
         for_each_index([&](uint32_t idx) {
@@ -244,7 +286,14 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const JsonColumn& column) { return Status::NotSupported("JsonColumn is not supported"); }
+    Status do_visit(const JsonColumn& column) {
+        for_each_index([&](uint32_t idx) {
+            int64_t h = column.get_object(idx)->hash();
+            uint32_t* slot_ptr = slot(idx);
+            *slot_ptr = HashFunction::hash(&h, sizeof(h), *slot_ptr);
+        });
+        return Status::OK();
+    }
 
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
 
@@ -359,4 +408,9 @@ void murmur_hash3_x86_32_column_selective(const Column& column, uint32_t* hashes
     (void)column.accept(&visitor);
 }
 
+// XXH3
+void xxh3_64_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
+    ColumnHashVisitor<XXHash3> visitor(hashes, from, to);
+    (void)column.accept(&visitor);
+}
 } // namespace starrocks

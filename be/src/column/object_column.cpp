@@ -262,9 +262,6 @@ int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::Colu
     return 0;
 }
 
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 template <typename T>
 int64_t ObjectColumn<T>::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "object column shouldn't call xor_checksum";

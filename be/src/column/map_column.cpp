@@ -510,9 +510,6 @@ int MapColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq
     return !safe_eq && has_null_eq ? EQUALS_NULL : EQUALS_TRUE;
 }
 
-// Hash implementations moved to column_hash/column_hash.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of MapColumn
     // XOR the offsets column and elements column

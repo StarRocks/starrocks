@@ -370,9 +370,6 @@ int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe
     return safe_eq ? EQUALS_TRUE : ret;
 }
 
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
     int64_t xor_checksum = 0;

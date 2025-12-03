@@ -283,9 +283,6 @@ void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs,
     }
 }
 
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
-// xor_checksum is not refactored - keep original implementation
-
 template <typename T>
 int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
     const auto datas = this->immutable_data();

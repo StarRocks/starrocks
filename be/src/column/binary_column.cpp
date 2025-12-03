@@ -783,8 +783,6 @@ void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& s
                                                                                        has_null);
 }
 
-// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
-
 template <typename T>
 int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of BinaryColumn
