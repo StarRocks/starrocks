@@ -403,7 +403,7 @@ public class QueryAnalyzer {
                     if (fieldType.isOnlyMetricType() && !unionRelation.getQualifier().equals(SetQualifier.ALL)) {
                         throw new SemanticException("%s not support set operation", fieldType);
                     }
-                    if (!outputTypes[fieldIdx].equals(relation.getRelationFields().getFieldByIndex(fieldIdx).getType())) {
+                    if (!outputTypes[fieldIdx].matchesType(relation.getRelationFields().getFieldByIndex(fieldIdx).getType())) {
                         throw new SemanticException(String.format("Unequality return types '%s' and '%s' in recursive cte",
                                 outputTypes[fieldIdx],
                                 relation.getRelationFields().getFieldByIndex(fieldIdx).getType()));
