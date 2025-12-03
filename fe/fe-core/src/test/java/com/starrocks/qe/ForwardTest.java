@@ -18,6 +18,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -74,6 +75,9 @@ public class ForwardTest {
         Assertions.assertEquals(result.errorMsg, "Unknown thread id: 1");
     }
 
+    /**
+     * Mockup {@link ConnectProcessor#proxyExecute(TMasterOpRequest, Frontend)}.
+     */
     @Test
     public void testKillWithUnknownException() throws Exception {
         final FrontendServiceImpl service = new FrontendServiceImpl(ExecuteEnv.getInstance());
@@ -96,12 +100,12 @@ public class ForwardTest {
 
         new MockUp<ConnectProcessor>() {
             @Mock
-            public TMasterOpResult proxyExecute(TMasterOpRequest request) {
+            public TMasterOpResult proxyExecute(TMasterOpRequest request, Frontend requestFE) {
                 throw new RuntimeException("unknown exception");
             }
         };
 
         final TMasterOpResult result = service.forward(request);
-        Assertions.assertEquals(result.errorMsg, "unknown exception");
+        Assertions.assertEquals("unknown exception", result.errorMsg);
     }
 }
