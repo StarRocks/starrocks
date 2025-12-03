@@ -127,6 +127,8 @@ import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.qe.feedback.analyzer.PlanTuningAnalyzer;
 import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
+import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
+import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -689,6 +691,7 @@ public class StmtExecutor {
             WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
 
+        RecursiveCTEExecutor cteExecutor = null;
         try {
             context.getState().setIsQuery(context.isQueryStmt(parsedStmt));
             if (parsedStmt.isExistQueryScopeHint()) {
@@ -705,6 +708,18 @@ public class StmtExecutor {
                 context.setExplainLevel(parsedStmt.getExplainLevel());
             } else {
                 context.setExplainLevel(null);
+            }
+
+            if (RecursiveCTEAstCheck.hasRecursiveCte(parsedStmt)) {
+                redirectStatus = RedirectStatus.FORWARD_WITH_SYNC;
+                if (isForwardToLeader()) {
+                    context.setIsForward(true);
+                    forwardToLeader();
+                    return;
+                }
+                cteExecutor = new RecursiveCTEExecutor();
+                parsedStmt = cteExecutor.splitOuterStmt(parsedStmt, context);
+                cteExecutor.prepareRecursiveCTE();
             }
 
             redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
@@ -988,6 +1003,9 @@ public class StmtExecutor {
 
             // process post-action after query is finished
             context.onQueryFinished();
+            if (cteExecutor != null) {
+                cteExecutor.finalizeRecursiveCTE();
+            }
         }
     }
 

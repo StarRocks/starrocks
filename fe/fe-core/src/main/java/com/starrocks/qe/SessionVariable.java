@@ -466,6 +466,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
+    public static final String RECURSIVE_CTE_MAX_DEPTH = "recursive_cte_max_depth";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -2066,6 +2068,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
+
+    @VarAttr(name = RECURSIVE_CTE_MAX_DEPTH)
+    private int recursiveCteMaxDepth = 5;
+
+    public int getRecursiveCteMaxDepth() {
+        return recursiveCteMaxDepth;
+    }
+
+    public void setRecursiveCteMaxDepth(int recursiveCteMaxDepth) {
+        this.recursiveCteMaxDepth = recursiveCteMaxDepth;
+    }
 
     public boolean isEnableSplitTopNAgg() {
         return enableSplitTopNAgg;
