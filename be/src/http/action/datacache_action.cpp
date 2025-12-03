@@ -147,6 +147,11 @@ void DataCacheAction::_handle_stat(HttpRequest* req) {
         root.AddMember("miss_bytes_last_minute", rapidjson::Value(metrics.detail_l2->miss_bytes_last_minite),
                        allocator);
 
+        root.AddMember("buffer_item_count", rapidjson::Value(metrics.detail_l2->buffer_item_count), allocator);
+        root.AddMember("buffer_item_bytes", rapidjson::Value(metrics.detail_l2->buffer_item_bytes), allocator);
+        root.AddMember("object_item_count", rapidjson::Value(metrics.detail_l2->object_item_count), allocator);
+        root.AddMember("object_item_bytes", rapidjson::Value(metrics.detail_l2->object_item_bytes), allocator);
+
         root.AddMember("read_mem_bytes", rapidjson::Value(metrics.detail_l2->read_mem_bytes), allocator);
         root.AddMember("read_disk_bytes", rapidjson::Value(metrics.detail_l2->read_disk_bytes), allocator);
 
