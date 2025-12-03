@@ -449,9 +449,11 @@ public class RuntimeProfile {
         String valueStr = printCounter(counter.getValue(), counter.getType());
         
         // If min/max values are present and different from the main value, append them
-        if (counter.getMinValue().isPresent() && counter.getMaxValue().isPresent()) {
-            long minVal = counter.getMinValue().get();
-            long maxVal = counter.getMaxValue().get();
+        Optional<Long> minOpt = counter.getMinValue();
+        Optional<Long> maxOpt = counter.getMaxValue();
+        if (minOpt.isPresent() && maxOpt.isPresent()) {
+            long minVal = minOpt.get();
+            long maxVal = maxOpt.get();
             long value = counter.getValue();
             
             // Only show min/max if they differ from the aggregated value
