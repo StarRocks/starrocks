@@ -174,6 +174,6 @@ void SymbolAction::handle(HttpRequest* req) {
     // Symbol resolution is not available. The binary needs to be passed
     // to pprof to resolve all symbols.
     std::string str = "Symbol resolution is not available. Please use pprof with the binary file to resolve symbols.";
-    HttpChannel::send_reply(req, str);
+    HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, str);
 }
 } // namespace starrocks
