@@ -18,6 +18,17 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
+<<<<<<< HEAD
+=======
+
+#include "common/process_exit.h"
+#ifdef __APPLE__
+#include <mach/mach_init.h>
+#include <mach/mach_port.h>
+#include <mach/thread_act.h>
+#include <pthread.h>
+#endif
+>>>>>>> c24a7de0ab ([BugFix] Fix BE still reported as alive on SIGSEGV (#66212))
 
 #include <cerrno>
 #include <cstdio>
@@ -160,6 +171,8 @@ static void dontdump_unused_pages() {
 static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        set_process_is_crashing();
+
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
         dontdump_unused_pages();
     }
