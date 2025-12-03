@@ -19,14 +19,14 @@
 #include "fmt/format.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
+#include "udf/udf_downloder.h"
 #include "util/defer_op.h"
 #include "util/md5.h"
 #include "util/uuid_generator.h"
 
 namespace starrocks {
-
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
-                              const std::string& expected_checksum) {
+                              const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration) {
     auto success = false;
     auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
     auto fp = fopen(tmp_file.c_str(), "w");
@@ -46,10 +46,11 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
         return Status::InternalError(
                 fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
     }
-
+    std::string real_url;
+    RETURN_IF_ERROR(get_real_url(url, &real_url, FSOptions(&cloud_configuration)));
     Md5Digest digest;
     HttpClient client;
-    RETURN_IF_ERROR(client.init(url));
+    RETURN_IF_ERROR(client.init(real_url));
     Status status;
 
     auto download_cb = [&status, &tmp_file, fp, &digest, &url](const void* data, size_t length) {
@@ -82,5 +83,37 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
 
     success = true;
     return Status::OK();
+}
+
+Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
+    bool is_http = url.starts_with("http://");
+    bool is_local = url.starts_with("file://");
+    bool is_dfs = (!is_http) && (!is_local);
+    if (is_dfs) {
+        return get_java_udf_url(url, real_url, options);
+    }
+    *real_url = url;
+    return Status::OK();
+}
+
+Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
+    std::string file_name;
+    std::size_t pos = url.find_last_of('/');
+    if (pos == std::string::npos) {
+        file_name = url;
+    } else {
+        file_name = url.substr(pos + 1);
+    }
+    const char* starrocks_home = std::getenv("STARROCKS_HOME");
+    std::string target_path = std::string(starrocks_home) + "/plugins/java_udf/" + file_name;
+    std::string target_url = std::string("file://") + target_path;
+    udf_downloder downloader;
+    Status status = downloader.download_remote_file_2_local(url, target_path, options);
+    if (status.ok()) {
+        *real_url = target_url;
+        return Status::OK();
+    }
+    LOG(ERROR) << "Failed to download remote file " << status.to_string();
+    return Status::RuntimeError(" Failed to download remote file on " + url);
 }
 } // namespace starrocks
