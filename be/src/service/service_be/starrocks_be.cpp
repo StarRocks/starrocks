@@ -22,6 +22,7 @@
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "cache/datacache.h"
+#include "cache/datacache_metrics.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
@@ -39,12 +40,6 @@
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
-<<<<<<< HEAD
-=======
-#include "storage/lake/tablet_manager.h"
-#endif
-#include "cache/datacache_metrics.h"
->>>>>>> 3dfe8f4bce ([Enhancement] Add datacache metrics for memory and disk monitoring (#66168))
 #include "service/staros_worker.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
