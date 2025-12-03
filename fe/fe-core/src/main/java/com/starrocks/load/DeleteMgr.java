@@ -92,6 +92,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -581,9 +582,9 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String value = ((LiteralExpr) predicate.getChild(childNo)).getStringValue();
         if (column.getPrimitiveType() == PrimitiveType.BOOLEAN) {
             if (value.equalsIgnoreCase("true")) {
-                predicate.setChild(childNo, LiteralExpr.create("1", IntegerType.TINYINT));
+                predicate.setChild(childNo, LiteralExprFactory.create("1", IntegerType.TINYINT));
             } else if (value.equalsIgnoreCase("false")) {
-                predicate.setChild(childNo, LiteralExpr.create("0", IntegerType.TINYINT));
+                predicate.setChild(childNo, LiteralExprFactory.create("0", IntegerType.TINYINT));
             }
         } else if (column.getType().isStringType()) {
             byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
@@ -593,7 +594,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
         }
 
-        LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(column.getType()));
+        LiteralExpr result = LiteralExprFactory.create(value, Objects.requireNonNull(column.getType()));
         if (result instanceof DecimalLiteral) {
             ((DecimalLiteral) result).checkPrecisionAndScale(column.getType(), column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {

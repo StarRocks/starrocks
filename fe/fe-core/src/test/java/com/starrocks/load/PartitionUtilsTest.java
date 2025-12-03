@@ -19,8 +19,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -38,11 +40,11 @@ public class PartitionUtilsTest {
     @Test
     public void testConvertDateLiteralToDouble() throws Exception {
         Object result = PartitionUtils.convertDateLiteralToNumber(
-                new DateLiteral("2015-03-01", DateType.DATE));
+                new DateLiteral(DateUtils.parseStrictDateTime("2015-03-01"), DateType.DATE));
         assertEquals(1031777L, result);
 
         result = PartitionUtils.convertDateLiteralToNumber(
-                new DateLiteral("2015-03-01 12:00:00", DateType.DATETIME));
+                new DateLiteral(DateUtils.parseStrictDateTime("2015-03-01 12:00:00"), DateType.DATETIME));
         assertEquals(20150301120000L, result);
     }
 
@@ -68,8 +70,8 @@ public class PartitionUtilsTest {
         {
             List<List<LiteralExpr>> multiLiteralExprs = new ArrayList<>();
             multiLiteralExprs.add(Lists.newArrayList(
-                    DateLiteral.create("2024-10-09", DateType.DATE),
-                    DateLiteral.create("2024-10-10", DateType.DATE)
+                    LiteralExprFactory.create("2024-10-09", DateType.DATE),
+                    LiteralExprFactory.create("2024-10-10", DateType.DATE)
             ));
             multiLiteralExprs.add(Lists.newArrayList(
                     StringLiteral.create("hangzhou"),
@@ -84,8 +86,8 @@ public class PartitionUtilsTest {
 
         {
             List<LiteralExpr> literalExprs = Lists.newArrayList(
-                    DateLiteral.create("2024-10-09", DateType.DATE),
-                    DateLiteral.create("2024-10-10", DateType.DATE)
+                    LiteralExprFactory.create("2024-10-09", DateType.DATE),
+                    LiteralExprFactory.create("2024-10-10", DateType.DATE)
             );
 
             List<List<Object>> partitionKeys = PartitionUtils.calListPartitionKeys(null, literalExprs);

@@ -12,33 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/LargeIntLiteral.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
@@ -63,17 +41,17 @@ public class LargeIntLiteral extends LiteralExpr {
         analysisDone();
     }
 
-    public LargeIntLiteral(boolean isMax) throws AnalysisException {
+    public LargeIntLiteral(boolean isMax) {
         super();
         type = IntegerType.LARGEINT;
         value = isMax ? LARGE_INT_MAX : LARGE_INT_MIN;
         analysisDone();
     }
 
-    public LargeIntLiteral(String value) throws AnalysisException {
+    public LargeIntLiteral(String value) {
         this(value, NodePosition.ZERO);
     }
-    public LargeIntLiteral(String value, NodePosition pos) throws AnalysisException {
+    public LargeIntLiteral(String value, NodePosition pos) {
         super(pos);
         BigInteger bigInt;
         try {
@@ -82,10 +60,10 @@ public class LargeIntLiteral extends LiteralExpr {
             // 256, and for int8_t, 256 is invalid, while -256 is valid. So we check the right border
             // is LARGE_INT_MAX_ABS
             if (bigInt.compareTo(LARGE_INT_MIN) < 0 || bigInt.compareTo(LARGE_INT_MAX_ABS) > 0) {
-                throw new AnalysisException("Large int literal is out of range: " + value);
+                throw new ParsingException("Large int literal is out of range: " + value);
             }
         } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid integer literal: " + value, e);
+            throw new ParsingException("Invalid integer literal: " + value, e);
         }
         this.value = bigInt;
         type = IntegerType.LARGEINT;
@@ -172,7 +150,7 @@ public class LargeIntLiteral extends LiteralExpr {
         } else if (expr.type.isFloatingPointType()) {
             return Double.compare(value.doubleValue(), expr.getDoubleValue());
         } else if (expr.type.isDecimalV2()) {
-            return new BigDecimal(value).compareTo(((DecimalLiteral) expr).getValue());
+            return new BigDecimal(value).compareTo(new BigDecimal(expr.getStringValue()));
         } else if (expr.type.isBoolean()) {
             return value.compareTo(new BigInteger(String.valueOf(expr.getLongValue())));
         } else {
@@ -198,7 +176,7 @@ public class LargeIntLiteral extends LiteralExpr {
 
 
     @Override
-    public void swapSign() throws NotImplementedException {
+    public void swapSign() throws UnsupportedOperationException {
         // swapping sign does not change the type
         value = value.negate();
     }
@@ -211,6 +189,6 @@ public class LargeIntLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitLargeIntLiteral(this, context);
+        return visitor.visitLargeIntLiteral(this, context);
     }
 }

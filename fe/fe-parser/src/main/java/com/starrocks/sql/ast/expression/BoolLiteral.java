@@ -12,32 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/BoolLiteral.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -62,11 +41,11 @@ public class BoolLiteral extends LiteralExpr {
         type = BooleanType.BOOLEAN;
     }
 
-    public BoolLiteral(String value) throws AnalysisException {
+    public BoolLiteral(String value) {
         this(value, NodePosition.ZERO);
     }
 
-    public BoolLiteral(String value, NodePosition pos) throws AnalysisException {
+    public BoolLiteral(String value, NodePosition pos) {
         super(pos);
         this.type = BooleanType.BOOLEAN;
         if (value.trim().equalsIgnoreCase("true") || value.trim().equals("1")) {
@@ -74,7 +53,7 @@ public class BoolLiteral extends LiteralExpr {
         } else if (value.trim().equalsIgnoreCase("false") || value.trim().equals("0")) {
             this.value = false;
         } else {
-            throw new AnalysisException("Invalid BOOLEAN literal: " + value);
+            throw new ParsingException("Invalid BOOLEAN literal: " + value);
         }
     }
 
@@ -142,10 +121,9 @@ public class BoolLiteral extends LiteralExpr {
         return value ? 1.0 : 0.0;
     }
 
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitBoolLiteral(this, context);
+        return visitor.visitBoolLiteral(this, context);
     }
 
     @Override

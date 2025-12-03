@@ -42,6 +42,7 @@ import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -331,9 +332,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID)) {
                 LiteralExpr value;
                 if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
-                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
+                    value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
                 } else {
-                    value = LiteralExpr.create(String.valueOf(file.specId()), IntegerType.INT);
+                    value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 }
 
                 extendedColumns.put(slot.getId().asInt(), ExprToThriftVisitor.treeToThrift(value));

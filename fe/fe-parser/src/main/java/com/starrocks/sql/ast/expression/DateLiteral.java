@@ -12,39 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/DateLiteral.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -60,22 +34,6 @@ public class DateLiteral extends LiteralExpr {
     private static final DateLiteral MAX_DATETIME = new DateLiteral(9999, 12, 31, 23, 59, 59, 999999);
     // The default precision of datetime is 0
     private int precision = 0;
-
-    // Date Literal persist type in meta
-    private enum DateLiteralType {
-        DATETIME(0),
-        DATE(1);
-
-        private final int value;
-
-        DateLiteralType(int value) {
-            this.value = value;
-        }
-
-        public int value() {
-            return value;
-        }
-    }
 
     private DateLiteral() {
         super();
@@ -97,12 +55,6 @@ public class DateLiteral extends LiteralExpr {
                 copy(MIN_DATETIME);
             }
         }
-        analysisDone();
-    }
-
-    public DateLiteral(String s, Type type) throws AnalysisException {
-        super();
-        init(s, type);
         analysisDone();
     }
 
@@ -128,7 +80,7 @@ public class DateLiteral extends LiteralExpr {
         this.type = DateType.DATETIME;
     }
 
-    public DateLiteral(LocalDateTime dateTime, Type type) throws AnalysisException {
+    public DateLiteral(LocalDateTime dateTime, Type type) {
         this.year = dateTime.getYear();
         this.month = dateTime.getMonthValue();
         this.day = dateTime.getDayOfMonth();
@@ -137,9 +89,12 @@ public class DateLiteral extends LiteralExpr {
         this.second = dateTime.getSecond();
         this.microsecond = dateTime.getNano() / 1000;
         this.type = type;
+        if (type.isDatetime()) {
+            precision = inferPrecision(this.microsecond);
+        }
 
         if (isNullable()) {
-            throw new AnalysisException("Invalid date value");
+            throw new ParsingException("Invalid date value");
         }
     }
 
@@ -163,26 +118,6 @@ public class DateLiteral extends LiteralExpr {
         return new DateLiteral(type, true);
     }
 
-    private void init(String s, Type type) throws AnalysisException {
-        try {
-            Preconditions.checkArgument(type.isDateType());
-            LocalDateTime dateTime = DateUtils.parseStrictDateTime(s);
-            year = dateTime.getYear();
-            month = dateTime.getMonthValue();
-            day = dateTime.getDayOfMonth();
-            hour = dateTime.getHour();
-            minute = dateTime.getMinute();
-            second = dateTime.getSecond();
-            microsecond = dateTime.getNano() / 1000;
-            this.type = type;
-            if (type.isDatetime() && s.contains(".") && microsecond == 0) {
-                precision = s.length() - s.indexOf(".") - 1;
-            }
-        } catch (Exception ex) {
-            throw new AnalysisException("date literal [" + s + "] is invalid");
-        }
-    }
-
     private void copy(DateLiteral other) {
         hour = other.hour;
         minute = other.minute;
@@ -198,6 +133,18 @@ public class DateLiteral extends LiteralExpr {
     @Override
     public Expr clone() {
         return new DateLiteral(this);
+    }
+
+    private int inferPrecision(long microValue) {
+        if (microValue == 0) {
+            return 0;
+        }
+        int digits = 6;
+        while (digits > 0 && microValue % 10 == 0) {
+            microValue /= 10;
+            digits--;
+        }
+        return digits;
     }
 
     @Override
@@ -250,7 +197,7 @@ public class DateLiteral extends LiteralExpr {
             return LocalDateTime.of((int) getYear(), (int) getMonth(), (int) getDay(),
                     (int) getHour(), (int) getMinute(), (int) getSecond(), (int) microsecond * 1000);
         } else {
-            throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
+            throw new ParsingException("Invalid date type: " + type);
         }
     }
 
@@ -335,6 +282,10 @@ public class DateLiteral extends LiteralExpr {
         return precision;
     }
 
+    public void setPrecision(int precision) {
+        this.precision = precision;
+    }
+
     private long year;
     private long month;
     private long day;
@@ -360,51 +311,7 @@ public class DateLiteral extends LiteralExpr {
     }
 
     @Override
-    public void parseMysqlParam(ByteBuffer data) {
-        int len = getParamLen(data);
-        if (type.getPrimitiveType() == PrimitiveType.DATE) {
-            if (len >= 4) {
-                year = (int) data.getChar();
-                month = (int) data.get();
-                day = (int) data.get();
-                hour = 0;
-                minute = 0;
-                second = 0;
-                microsecond = 0;
-            } else {
-                copy(MIN_DATE);
-            }
-            return;
-        }
-        if (type.getPrimitiveType() == PrimitiveType.DATETIME) {
-            if (len >= 4) {
-                year = (int) data.getChar();
-                month = (int) data.get();
-                day = (int) data.get();
-                microsecond = 0;
-                if (len > 4) {
-                    hour = (int) data.get();
-                    minute = (int) data.get();
-                    second = (int) data.get();
-                } else {
-                    hour = 0;
-                    minute = 0;
-                    second = 0;
-                    microsecond = 0;
-                }
-                if (len > 7) {
-                    microsecond = data.getInt();
-                    // choose the highest scale to keep microsecond value
-                    type = TypeFactory.createDecimalV2Type(6);
-                }
-            } else {
-                copy(MIN_DATETIME);
-            }
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDateLiteral(this, context);
+        return visitor.visitDateLiteral(this, context);
     }
 }

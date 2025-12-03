@@ -32,6 +32,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.Type;
@@ -68,7 +69,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
                 partitionKey.setNullPartitionValue(rawValue);
                 exprValue = NullLiteral.create(type);
             } else {
-                exprValue = LiteralExpr.create(rawValue, type);
+                exprValue = LiteralExprFactory.create(rawValue, type);
             }
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }

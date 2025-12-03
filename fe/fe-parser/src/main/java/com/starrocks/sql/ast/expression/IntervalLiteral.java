@@ -15,7 +15,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -60,6 +59,6 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitIntervalLiteral(this, context);
+        return visitor.visitIntervalLiteral(this, context);
     }
 }

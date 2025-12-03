@@ -29,6 +29,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -124,7 +125,7 @@ public final class PListCell extends PCell {
                     String.format("item size %s is not equal to columns size %s", item.size(), columns.size()));
             List<LiteralExpr> literalExprs = Lists.newArrayList();
             for (int i = 0; i < item.size(); i++) {
-                literalExprs.add(LiteralExpr.create(item.get(i), columns.get(i).getType()));
+                literalExprs.add(LiteralExprFactory.create(item.get(i), columns.get(i).getType()));
             }
             partitionKeys.add(new PartitionKey(literalExprs, types));
         }

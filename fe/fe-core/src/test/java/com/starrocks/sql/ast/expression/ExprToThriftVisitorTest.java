@@ -17,7 +17,7 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.sql.ast.QueryRelation;
@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -214,7 +215,7 @@ public class ExprToThriftVisitorTest {
                 literal.setType(FloatType.DOUBLE);
                 literal.setOriginType(FloatType.DOUBLE);
                 return literal;
-            } catch (AnalysisException e) {
+            } catch (ParsingException e) {
                 throw new RuntimeException(e);
             }
         }
@@ -226,17 +227,17 @@ public class ExprToThriftVisitorTest {
                 literal.setType(type);
                 literal.setOriginType(type);
                 return literal;
-            } catch (AnalysisException e) {
+            } catch (ParsingException e) {
                 throw new RuntimeException(e);
             }
         }
 
         private static Expr buildDateLiteral() {
             try {
-                DateLiteral literal = new DateLiteral("2024-01-02", DateType.DATE);
+                DateLiteral literal = new DateLiteral(DateUtils.parseStrictDateTime("2024-01-02"), DateType.DATE);
                 literal.setOriginType(DateType.DATE);
                 return literal;
-            } catch (AnalysisException e) {
+            } catch (ParsingException e) {
                 throw new RuntimeException(e);
             }
         }
@@ -382,14 +383,14 @@ public class ExprToThriftVisitorTest {
 
         private static Expr buildTimestampArithmeticExpr() {
             try {
-                DateLiteral dateLiteral = new DateLiteral("2024-01-01", DateType.DATE);
+                DateLiteral dateLiteral = new DateLiteral(DateUtils.parseStrictDateTime("2024-01-01"), DateType.DATE);
                 TimestampArithmeticExpr expr =
                         new TimestampArithmeticExpr(ArithmeticExpr.Operator.ADD, dateLiteral,
                                 new IntLiteral(1), "DAY", false);
                 expr.setType(DateType.DATE);
                 expr.setOriginType(DateType.DATE);
                 return expr;
-            } catch (AnalysisException e) {
+            } catch (ParsingException e) {
                 throw new RuntimeException(e);
             }
         }

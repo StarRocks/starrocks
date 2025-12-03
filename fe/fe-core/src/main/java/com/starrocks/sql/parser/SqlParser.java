@@ -35,7 +35,6 @@ import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
@@ -283,21 +282,5 @@ public class SqlParser {
             parser.setErrorHandler(new StarRocksDefaultErrorStrategy());
             return Pair.create(parseFunction.apply(parser), parser);
         }
-    }
-
-    public static String getTokenDisplay(Token t) {
-        if (t == null) {
-            return "<no token>";
-        }
-
-        String s = t.getText();
-        if (s == null) {
-            if (t.getType() == Token.EOF) {
-                s = EOF;
-            } else {
-                s = "<" + t.getType() + ">";
-            }
-        }
-        return s;
     }
 }

@@ -22,6 +22,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.SetListItem;
@@ -167,8 +168,9 @@ public class SetExecutorTest {
         testUserVariableImp(new LargeIntLiteral("1"), IntegerType.LARGEINT);
         testUserVariableImp(new FloatLiteral(1D, FloatType.FLOAT), FloatType.FLOAT);
         testUserVariableImp(new FloatLiteral(1D, FloatType.DOUBLE), FloatType.DOUBLE);
-        testUserVariableImp(new DateLiteral("2020-01-01", DateType.DATE), DateType.DATE);
-        testUserVariableImp(new DateLiteral("2020-01-01 00:00:00", DateType.DATETIME), DateType.DATETIME);
+        testUserVariableImp(new DateLiteral(DateUtils.parseStrictDateTime("2020-01-01"), DateType.DATE), DateType.DATE);
+        testUserVariableImp(new DateLiteral(DateUtils.parseStrictDateTime("2020-01-01 00:00:00"),
+                DateType.DATETIME), DateType.DATETIME);
         testUserVariableImp(new DecimalLiteral("1", DecimalType.DECIMAL32_INT), DecimalType.DECIMAL32_INT);
         testUserVariableImp(new DecimalLiteral("1", DecimalType.DECIMAL64_INT), DecimalType.DECIMAL64_INT);
         testUserVariableImp(new DecimalLiteral("1", DecimalType.DECIMAL128_INT), DecimalType.DECIMAL128_INT);

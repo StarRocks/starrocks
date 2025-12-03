@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.common;
+package com.starrocks.sql.parser;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.BaseMessage;
+import static com.starrocks.sql.parser.ErrorMsgProxy.BaseMessage;
 
 public interface ParserErrorMsg {
 

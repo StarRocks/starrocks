@@ -18,7 +18,6 @@
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 
 public final class MaxLiteral extends LiteralExpr {
 
@@ -45,14 +44,8 @@ public final class MaxLiteral extends LiteralExpr {
         return 1;
     }
 
-
-    @Override
-    public String toString() {
-        return ExprToSql.toSql(this);
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitMaxLiteral(this, context);
+        return visitor.visitMaxLiteral(this, context);
     }
 }

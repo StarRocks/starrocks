@@ -19,7 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterDatabaseRenameStatementAnalyzer {
     public static void analyze(AlterDatabaseRenameStatement statement, ConnectContext context) {

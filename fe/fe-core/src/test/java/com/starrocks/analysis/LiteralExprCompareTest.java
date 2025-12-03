@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
@@ -25,6 +26,7 @@ import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
@@ -68,22 +70,24 @@ public class LiteralExprCompareTest {
 
     @Test
     public void dateFormat1Test() throws AnalysisException {
-        LiteralExpr date = new DateLiteral("2015-02-15 12:12:12", DateType.DATE);
+        LiteralExpr date = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15 12:12:12"), DateType.DATE);
     }
 
     @Test
     public void dateFormat2Test() throws AnalysisException {
-        LiteralExpr datetime = new DateLiteral("2015-02-15", DateType.DATETIME);
+        LiteralExpr datetime = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15"), DateType.DATETIME);
     }
 
     @Test
     public void dateTest() throws AnalysisException {
-        LiteralExpr date1 = new DateLiteral("2015-02-15", DateType.DATE);
-        LiteralExpr date1Same = new DateLiteral("2015-02-15", DateType.DATE);
-        LiteralExpr date1Large = new DateLiteral("2015-02-16", DateType.DATE);
-        LiteralExpr datetime1 = new DateLiteral("2015-02-15 13:14:00", DateType.DATETIME);
-        LiteralExpr datetime1Same = new DateLiteral("2015-02-15 13:14:00", DateType.DATETIME);
-        LiteralExpr datetime1Large = new DateLiteral("2015-02-15 13:14:15", DateType.DATETIME);
+        LiteralExpr date1 = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15"), DateType.DATE);
+        LiteralExpr date1Same = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15"), DateType.DATE);
+        LiteralExpr date1Large = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-16"), DateType.DATE);
+        LiteralExpr datetime1 = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15 13:14:00"), DateType.DATETIME);
+        LiteralExpr datetime1Same = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15 13:14:00"),
+                DateType.DATETIME);
+        LiteralExpr datetime1Large = new DateLiteral(DateUtils.parseStrictDateTime("2015-02-15 13:14:15"),
+                DateType.DATETIME);
 
         // infinity
         LiteralExpr maxDate1 = new DateLiteral(DateType.DATE, true);
@@ -94,10 +98,12 @@ public class LiteralExprCompareTest {
         LiteralExpr maxDatetime1Same = new DateLiteral(DateType.DATETIME, true);
         LiteralExpr minDatetime1 = new DateLiteral(DateType.DATETIME, false);
         LiteralExpr minDatetime1Same = new DateLiteral(DateType.DATETIME, false);
-        LiteralExpr date8 = new DateLiteral("9999-12-31", DateType.DATE);
-        LiteralExpr date9 = new DateLiteral("9999-12-31 23:59:59.999999", DateType.DATETIME);
-        LiteralExpr date10 = new DateLiteral("0000-01-01", DateType.DATE);
-        LiteralExpr date11 = new DateLiteral("0000-01-01 00:00:00", DateType.DATETIME);
+        LiteralExpr date8 = new DateLiteral(DateUtils.parseStrictDateTime("9999-12-31"), DateType.DATE);
+        LiteralExpr date9 = new DateLiteral(DateUtils.parseStrictDateTime("9999-12-31 23:59:59.999999"),
+                DateType.DATETIME);
+        LiteralExpr date10 = new DateLiteral(DateUtils.parseStrictDateTime("0000-01-01"), DateType.DATE);
+        LiteralExpr date11 = new DateLiteral(DateUtils.parseStrictDateTime("0000-01-01 00:00:00"),
+                DateType.DATETIME);
 
         Assertions.assertTrue(date1.equals(date1Same) && date1.compareLiteral(date1Same) == 0);
         Assertions.assertTrue(date1.equals(date1Same) && date1.compareLiteral(date1Same) == 0);
@@ -194,11 +200,11 @@ public class LiteralExprCompareTest {
         // self equal
         Assertions.assertTrue(0 == double1.compareLiteral(double1));
 
-        LiteralExpr floatType = LiteralExpr.create("3.14", FloatType.FLOAT);
+        LiteralExpr floatType = LiteralExprFactory.create("3.14", FloatType.FLOAT);
         Assertions.assertEquals(PrimitiveType.FLOAT, floatType.getType().getPrimitiveType());
         Assertions.assertEquals(true, floatType.equals(new FloatLiteral(3.14, FloatType.FLOAT)));
 
-        LiteralExpr doubleType = LiteralExpr.create("3.14", FloatType.DOUBLE);
+        LiteralExpr doubleType = LiteralExprFactory.create("3.14", FloatType.DOUBLE);
         Assertions.assertEquals(PrimitiveType.DOUBLE, doubleType.getType().getPrimitiveType());
         Assertions.assertEquals(true, doubleType.equals(new FloatLiteral(3.14, FloatType.DOUBLE)));
     }
@@ -237,8 +243,8 @@ public class LiteralExprCompareTest {
         // infinity
         LiteralExpr infinity1 = MaxLiteral.MAX_VALUE;
         LiteralExpr infinity2 = MaxLiteral.MAX_VALUE;
-        LiteralExpr infinity3 = LiteralExpr.createInfinity(type, false);
-        LiteralExpr infinity4 = LiteralExpr.createInfinity(type, false);
+        LiteralExpr infinity3 = LiteralExprFactory.createInfinity(type, false);
+        LiteralExpr infinity4 = LiteralExprFactory.createInfinity(type, false);
 
         // value equal
         Assertions.assertTrue(tinyint1.equals(tinyint1));

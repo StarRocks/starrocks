@@ -17,7 +17,6 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.VarbinaryType;
@@ -27,7 +26,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import javax.validation.constraints.NotNull;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.Locale.ENGLISH;
 
 public class VarBinaryLiteral extends LiteralExpr {
@@ -160,7 +159,7 @@ public class VarBinaryLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitVarBinaryLiteral(this, context);
+        return visitor.visitVarBinaryLiteral(this, context);
     }
 
 }

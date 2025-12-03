@@ -27,6 +27,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
@@ -123,9 +124,9 @@ public class IcebergPartitionTraits extends DefaultTraits {
                 if (field.transform().dedupName().equalsIgnoreCase("time")) {
                     rawValue = IcebergPartitionUtils.normalizeTimePartitionName(rawValue, field,
                             icebergTable.getNativeTable().schema(), column.getType());
-                    exprValue = LiteralExpr.create(rawValue, column.getType());
+                    exprValue = LiteralExprFactory.create(rawValue, column.getType());
                 } else {
-                    exprValue = LiteralExpr.create(rawValue, column.getType());
+                    exprValue = LiteralExprFactory.create(rawValue, column.getType());
                 }
             }
             partitionKey.pushColumn(exprValue, column.getType().getPrimitiveType());
@@ -154,7 +155,7 @@ public class IcebergPartitionTraits extends DefaultTraits {
             if (rawValue == null) {
                 exprValue = NullLiteral.create(type);
             } else {
-                exprValue = LiteralExpr.create(rawValue, type);
+                exprValue = LiteralExprFactory.create(rawValue, type);
             }
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }

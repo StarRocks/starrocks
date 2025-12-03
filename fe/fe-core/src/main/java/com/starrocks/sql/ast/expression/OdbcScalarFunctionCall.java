@@ -21,7 +21,7 @@ import com.starrocks.sql.parser.ParsingException;
 
 import java.util.Set;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class OdbcScalarFunctionCall implements ParseNode {
     private final Expr function;

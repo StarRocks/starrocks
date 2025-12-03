@@ -12,34 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/StringLiteral.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.VarcharType;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
@@ -156,17 +134,6 @@ public class StringLiteral extends LiteralExpr {
         return Objects.hash(super.hashCode(), value);
     }
 
-    @Override
-    public void parseMysqlParam(ByteBuffer data) {
-        int strLen = getParamLen(data);
-        if (strLen > data.remaining()) {
-            strLen = data.remaining();
-        }
-        byte[] bytes = new byte[strLen];
-        data.get(bytes);
-        value = new String(bytes, StandardCharsets.UTF_8);
-    }
-
     public static StringLiteral create(String value) {
         if (value.length() > LargeStringLiteral.LEN_LIMIT) {
             return new LargeStringLiteral(value, NodePosition.ZERO);
@@ -177,6 +144,6 @@ public class StringLiteral extends LiteralExpr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitStringLiteral(this, context);
+        return visitor.visitStringLiteral(this, context);
     }
 }
