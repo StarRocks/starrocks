@@ -273,7 +273,7 @@ BUILD_SYSTEM=${BUILD_SYSTEM:-make}
 
 # sudo apt-get install binutils-dev
 # sudo yum install binutils-devel
-# Removed: libbfd dependency no longer needed
+#check_prerequest "locate libbfd.a" "binutils-dev"
 
 # sudo apt-get install libiberty-dev
 # no need in centos 7.1
