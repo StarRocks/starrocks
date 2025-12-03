@@ -878,6 +878,15 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
         return;
     }
 
+    // Set exchange_hash_function_version from RuntimeState query_options
+    // 0: FNV (default for backward compatibility), 1: XXH3
+    if (_runtime_state != nullptr && _runtime_state->query_options().__isset.exchange_hash_function_version) {
+        eval_context.running_context.exchange_hash_function_version =
+                _runtime_state->query_options().exchange_hash_function_version;
+    } else {
+        eval_context.running_context.exchange_hash_function_version = 0; // Default to FNV
+    }
+
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_partition_index(rf_desc->layout(), {column}, &eval_context.running_context);
     } else {

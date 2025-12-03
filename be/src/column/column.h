@@ -391,6 +391,14 @@ public:
 
     // Compute xxh3 hash, faster than fnv_hash for shuffle column data
     virtual void xxh3_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    virtual void xxh3_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+        // FIXME: implement it for runtime filter
+        CHECK(false);
+    }
+    virtual void xxh3_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+        // FIXME: implement it for runtime filter
+        CHECK(false);
+    }
 
     // used by data loading compute tablet bucket
     virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
