@@ -55,7 +55,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     protected volatile String storageVolumeName;
     @SerializedName(value = "automatedSnapshotJobs")
     protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
-
+    
     protected ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
 
     public ClusterSnapshotMgr() {
@@ -140,7 +140,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         long createTimeMs = System.currentTimeMillis();
         long id = GlobalStateMgr.getCurrentState().getNextId();
         String snapshotName = AUTOMATED_NAME_PREFIX + String.valueOf(createTimeMs);
-        ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
+        ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);   
         job.logJob();
 
         addSnapshotJob(job);

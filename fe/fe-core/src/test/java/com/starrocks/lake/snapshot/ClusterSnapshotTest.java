@@ -25,6 +25,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.CheckpointException;
@@ -489,7 +490,7 @@ public class ClusterSnapshotTest {
                     new ClusterSnapshotCheckpointScheduler(feController, starMgrController);
             Assertions.assertTrue(feController != null);
             try {
-                scheduler.runCheckpointScheduler(job);
+                job.run(scheduler);
             } catch (Exception ignore) {
             }
     
@@ -515,4 +516,324 @@ public class ClusterSnapshotTest {
         }
         Assertions.assertTrue(info.isEmpty());
     }
+
+    @Test
+    public void testRunInitializingJobThrowsWhenNoConsistentIds() {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(1L, "init_fail", storageVolumeName, System.currentTimeMillis());
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return null;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return null;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return null;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "failed to capture consistent journal id for checkpoint",
+                () -> Deencapsulation.invoke(job, "runInitializingJob", context));
+    }
+
+    @Test
+    public void testRunSnapshottingJobSuccess() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(2L, "snap_success", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        final ClusterSnapshotInfo info = new ClusterSnapshotInfo(new HashMap<>());
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 5L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(true, "");
+            }
+
+            @Override
+            public ClusterSnapshotInfo getClusterSnapshotInfo() {
+                return info;
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 15L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(true, "");
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        Deencapsulation.invoke(job, "runSnapshottingJob", context);
+        Assertions.assertEquals(ClusterSnapshotJob.ClusterSnapshotJobState.UPLOADING, job.getState());
+        Assertions.assertNotNull(feController.getClusterSnapshotInfo());
+    }
+
+    @Test
+    public void testRunSnapshottingJobFeCheckpointFail() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(3L, "snap_fe_fail", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 5L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(false, "fe_error");
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 15L;
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "checkpoint failed for FE image: fe_error",
+                () -> Deencapsulation.invoke(job, "runSnapshottingJob", context));
+    }
+
+    @Test
+    public void testRunSnapshottingJobStarMgrCheckpointFail() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(4L, "snap_starmgr_fail", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 15L;
+            }
+
+            @Override
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(false, "starmgr_error");
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "checkpoint failed for starMgr image: starmgr_error",
+                () -> Deencapsulation.invoke(job, "runSnapshottingJob", context));
+    }
+
+    @Test
+    public void testRunSnapshottingJobStarMgrImageGreaterThanCheckpoint() throws Exception {
+        ClusterSnapshotJob job = new ClusterSnapshotJob(5L, "snap_starmgr_gt", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.SNAPSHOTING);
+        job.setJournalIds(10L, 20L);
+
+        CheckpointController feController = new CheckpointController("fe", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "") {
+            @Override
+            public long getImageJournalId() {
+                return 30L;
+            }
+        };
+
+        SnapshotJobContext context = new SnapshotJobContext() {
+            @Override
+            public CheckpointController getFeController() {
+                return feController;
+            }
+
+            @Override
+            public CheckpointController getStarMgrController() {
+                return starMgrController;
+            }
+
+            @Override
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(10L, 20L);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "checkpoint journal id for starMgr is smaller than image version",
+                () -> Deencapsulation.invoke(job, "runSnapshottingJob", context));
+    }
+
+    @Test
+    public void testRunUploadingJobSuccessAndFailure() throws Exception {
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+
+        SnapshotJobContext context = new ClusterSnapshotCheckpointScheduler(feController, starMgrController);
+
+        ClusterSnapshotJob job = new ClusterSnapshotJob(6L, "upload", storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.UPLOADING);
+
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void uploadClusterSnapshotToRemote(ClusterSnapshotJob j) throws StarRocksException {
+                // succeed
+            }
+        };
+
+        Deencapsulation.invoke(job, "runUploadingJob", context);
+        Assertions.assertEquals(ClusterSnapshotJob.ClusterSnapshotJobState.FINISHED, job.getState());
+
+        job.setState(ClusterSnapshotJob.ClusterSnapshotJobState.UPLOADING);
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void uploadClusterSnapshotToRemote(ClusterSnapshotJob j) throws StarRocksException {
+                throw new StarRocksException("orig");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "upload image failed, err msg: orig",
+                () -> Deencapsulation.invoke(job, "runUploadingJob", context));
+    }
+
+    private static class DummyClusterSnapshotJob extends ClusterSnapshotJob {
+        int initCnt;
+        int snapCnt;
+        int uploadCnt;
+        int finishedCnt;
+
+        DummyClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+            super(id, snapshotName, storageVolumeName, createdTimeMs);
+        }
+
+        @Override
+        protected void runInitializingJob(SnapshotJobContext context) {
+            initCnt++;
+            setState(ClusterSnapshotJobState.SNAPSHOTING);
+        }
+
+        @Override
+        protected void runSnapshottingJob(SnapshotJobContext context) {
+            snapCnt++;
+            setState(ClusterSnapshotJobState.UPLOADING);
+        }
+
+        @Override
+        protected void runUploadingJob(SnapshotJobContext context) {
+            uploadCnt++;
+            setState(ClusterSnapshotJobState.FINISHED);
+        }
+
+        @Override
+        protected void runFinishedJob() {
+            finishedCnt++;
+        }
+    }
+
+    private static class FailingClusterSnapshotJob extends ClusterSnapshotJob {
+        FailingClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
+            super(id, snapshotName, storageVolumeName, createdTimeMs);
+        }
+
+        @Override
+        protected void runInitializingJob(SnapshotJobContext context) {
+            throw new RuntimeException("boom");
+        }
+    }
+
+    @Test
+    public void testRunStateMachineAndExceptionHandling() {
+        DummyClusterSnapshotJob job = new DummyClusterSnapshotJob(7L, "dummy", storageVolumeName,
+                System.currentTimeMillis());
+        job.run(null);
+        Assertions.assertEquals(1, job.initCnt);
+        Assertions.assertEquals(1, job.snapCnt);
+        Assertions.assertEquals(1, job.uploadCnt);
+        Assertions.assertEquals(1, job.finishedCnt);
+        Assertions.assertTrue(job.isFinished());
+
+        FailingClusterSnapshotJob failingJob = new FailingClusterSnapshotJob(8L, "dummy_fail", storageVolumeName,
+                System.currentTimeMillis());
+        failingJob.run(null);
+        Assertions.assertTrue(failingJob.isError());
+        String err = Deencapsulation.getField(failingJob, "errMsg");
+        Assertions.assertEquals("boom", err);
+    }
+
 }
