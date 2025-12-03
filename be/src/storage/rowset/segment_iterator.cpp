@@ -1438,6 +1438,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 continue;
             }
             ColumnPtr& col = chunk->get_column_by_index(column_index++);
+            if (!_scan_range.empty()) {
+                RETURN_IF_ERROR(_column_iterators[cid]->seek_to_ordinal(_scan_range.begin()));
+            }
             ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range, col.get()));
             for (auto e : vec) {
                 // if buf_size is 1MB, offset is 123, and size is 2MB
@@ -2597,6 +2600,10 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
     if (options.pred_tree.empty() || options.pred_tree.num_columns() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {
+        // CACHE SELECT disable late materialization
+        if (options.lake_io_opts.cache_file_only) {
+            return new_projection_iterator(schema, std::make_shared<SegmentIterator>(segment, schema, options));
+        }
         Schema ordered_schema = reorder_schema(schema, options.pred_tree);
         auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
         return new_projection_iterator(schema, seg_iter);
