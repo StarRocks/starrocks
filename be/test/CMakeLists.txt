@@ -419,6 +419,7 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
+        ./cache/datacache_metrics_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
