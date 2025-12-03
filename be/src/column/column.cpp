@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "column/column_hash/column_hash.h"
 #include "common/statusor.h"
 
 namespace starrocks {
@@ -119,5 +120,42 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
     }
     return need_empty;
 }
+
+void Column::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    ColumnHashVisitor<FNVHash> visitor(seed, from, to);
+    (void)accept(&visitor);
+}
+
+void Column::fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+    ColumnHashVisitor<FNVHash> visitor(seed, selection, from, to);
+    (void)accept(&visitor);
+}
+
+void Column::fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+    ColumnHashVisitor<FNVHash> visitor(seed, sel, sel_size);
+    (void)accept(&visitor);
+}
+
+void Column::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    ColumnHashVisitor<CRC32Hash> visitor(seed, from, to);
+    (void)accept(&visitor);
+}
+
+void Column::crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+    ColumnHashVisitor<CRC32Hash> visitor(seed, selection, from, to);
+    (void)accept(&visitor);
+}
+
+void Column::crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+    ColumnHashVisitor<CRC32Hash> visitor(seed, sel, sel_size);
+    (void)accept(&visitor);
+}
+
+void Column::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
+    ColumnHashVisitor<MurmurHash3Hash> visitor(hash, from, to);
+    (void)accept(&visitor);
+}
+
+// xor_checksum is not refactored - each column type implements it directly
 
 } // namespace starrocks

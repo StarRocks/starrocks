@@ -370,23 +370,14 @@ int StructColumn::equals(size_t left, const Column& rhs, size_t right, bool safe
     return safe_eq ? EQUALS_TRUE : ret;
 }
 
-void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    for (const ColumnPtr& column : _fields) {
-        column->fnv_hash(seed, from, to);
-    }
-}
-
-void StructColumn::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
-    for (const ColumnPtr& column : _fields) {
-        column->crc32_hash(seed, from, to);
-    }
-}
+// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
+// xor_checksum is not refactored - keep original implementation
 
 int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
     int64_t xor_checksum = 0;
     for (const ColumnPtr& column : _fields) {
-        column->xor_checksum(from, to);
+        xor_checksum ^= column->xor_checksum(from, to);
     }
     return xor_checksum;
 }

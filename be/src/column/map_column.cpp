@@ -554,17 +554,8 @@ void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
 // We need to make it possible in the future to provide vistor interface to iterator data
 // as much as possible
 
-void MapColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        fnv_hash_at(hash + i, i);
-    }
-}
-
-void MapColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        crc32_hash_at(hash + i, i);
-    }
-}
+// Hash implementations moved to column_hash_visitor.cpp using ColumnVisitor pattern
+// xor_checksum is not refactored - keep original implementation
 
 int64_t MapColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // The XOR of MapColumn
