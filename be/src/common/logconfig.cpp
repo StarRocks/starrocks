@@ -18,6 +18,8 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
+
+#include "common/process_exit.h"
 #ifdef __APPLE__
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>
@@ -188,6 +190,8 @@ static void dontdump_unused_pages() {
 static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        set_process_is_crashing();
+
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
 #ifndef __APPLE__
         DataCache::GetInstance()->try_release_resource_before_core_dump();
