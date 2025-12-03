@@ -536,13 +536,8 @@ public class PartitionSelector {
                                                          boolean isDropPartitionCondition,
                                                          Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
-<<<<<<< HEAD
-        Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
-        if (!CollectionUtils.sizeIsEmpty(inputCells)) {
-=======
         Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getNonEmptyRanges(false);
-        if (inputCells != null && !inputCells.isEmpty()) {
->>>>>>> 10097cb429 ([BugFix] Fix shadow partition being dropped when dropping partitions by expression (#66171))
+        if (!CollectionUtils.sizeIsEmpty(inputCells)) {
             // mock partition ids since input cells has not been added into olapTable yet.
             inputCells.entrySet().stream()
                     .forEach(e -> {
