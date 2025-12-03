@@ -14,15 +14,19 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
+#include "column/column_helper.h"
 #include "column/field.h"
+#include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
@@ -333,6 +337,15 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
                                               std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
+        
+        // Check if this is a virtual column
+        if (slot->col_name() == "_tablet_id_") {
+            // Virtual column, skip tablet schema lookup
+            // It will be populated in _read_chunk_from_storage()
+            _query_slots.push_back(slot);
+            continue;
+        }
+        
         int32_t index;
         if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
             index = _tablet_schema->num_columns();
@@ -356,8 +369,20 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
     std::sort(scanner_columns.begin(), scanner_columns.end());
+    
+    // If scanner_columns is empty (only virtual columns selected), we need to read at least
+    // one column to determine the number of rows. Use the first key column for this purpose.
     if (scanner_columns.empty()) {
-        return Status::InternalError("failed to build storage scanner, no materialized slot!");
+        if (_tablet_schema->num_key_columns() > 0) {
+            // Add the first key column to scanner_columns to read row count
+            // This column won't be in _query_slots, so it won't appear in output
+            scanner_columns.push_back(0);
+        } else if (_tablet_schema->num_columns() > 0) {
+            // If no key columns, use the first column
+            scanner_columns.push_back(0);
+        } else {
+            return Status::InternalError("failed to build storage scanner, no materialized slot and no columns in table!");
+        }
     }
 
     // Return columns
@@ -587,9 +612,22 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), std::move(rowsets), &_tablet_schema);
     _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
-    if (reader_columns.size() == scanner_columns.size()) {
+    
+    // Check if virtual columns are requested
+    bool has_virtual_columns = false;
+    for (auto slot : *_slots) {
+        if (slot->is_materialized() && slot->col_name() == "_tablet_id_") {
+            has_virtual_columns = true;
+            break;
+        }
+    }
+    
+    if (reader_columns.size() == scanner_columns.size() && !has_virtual_columns) {
         _prj_iter = _reader;
     } else {
+        // Note: Do not include virtual columns in output_schema here
+        // Virtual columns will be added to the chunk in _read_chunk_from_storage()
+        // This is because ProjectionIterator requires output.num_fields() <= input.num_fields()
         starrocks::Schema output_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
@@ -669,9 +707,77 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
+        // First, set slot_id_to_index for regular columns
         for (auto slot : _query_slots) {
-            size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
-            chunk->set_slot_id_to_index(slot->id(), column_index);
+            if (slot->col_name() != "_tablet_id_") {
+                size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
+                chunk->set_slot_id_to_index(slot->id(), column_index);
+            }
+        }
+        
+        // Then, handle virtual columns
+        // Virtual columns are not in the chunk's schema, so we append them directly using slot_id
+        for (auto slot : _query_slots) {
+            if (slot->col_name() == "_tablet_id_") {
+                // Create a BIGINT column filled with tablet_id for all rows
+                size_t num_rows = chunk->num_rows();
+                auto tablet_id_column = Int64Column::create();
+                if (num_rows > 0) {
+                    tablet_id_column->resize(num_rows);
+                    auto& data = tablet_id_column->get_data();
+                    int64_t tablet_id = _scan_range->tablet_id;
+                    std::fill(data.begin(), data.end(), tablet_id);
+                }
+                
+                // Append the virtual column to the chunk using slot_id
+                // This doesn't require the column to be in the schema
+                chunk->append_column(tablet_id_column, slot->id());
+                chunk->set_slot_id_to_index(slot->id(), chunk->num_columns() - 1);
+            }
+        }
+
+        // Remove columns that don't have slot_ids (e.g., helper columns added to read row count
+        // when only virtual columns are selected). This ensures _columns.size() == _slot_id_to_index.size()
+        // which is required for clone_empty_with_slot().
+        if (chunk->schema() != nullptr && chunk->num_columns() > chunk->get_slot_id_to_index_map().size()) {
+            std::vector<size_t> columns_to_remove;
+            const auto& slot_id_to_index = chunk->get_slot_id_to_index_map();
+            std::unordered_set<size_t> slot_index_set;
+            for (const auto& [slot_id, index] : slot_id_to_index) {
+                slot_index_set.insert(index);
+            }
+
+            // Find columns without slot_ids
+            for (size_t i = 0; i < chunk->num_columns(); i++) {
+                if (slot_index_set.find(i) == slot_index_set.end()) {
+                    columns_to_remove.push_back(i);
+                }
+            }
+
+            // Remove columns in reverse order to avoid index shifting
+            if (!columns_to_remove.empty()) {
+                std::sort(columns_to_remove.begin(), columns_to_remove.end());
+
+                // Update slot_id_to_index: for each slot_id, count how many removed columns
+                // have indices less than its index, then subtract that count
+                for (const auto& [slot_id, old_index] : slot_id_to_index) {
+                    size_t decrement = 0;
+                    for (size_t removed_idx : columns_to_remove) {
+                        if (removed_idx < old_index) {
+                            decrement++;
+                        } else {
+                            break; // columns_to_remove is sorted, so we can break early
+                        }
+                    }
+                    if (decrement > 0) {
+                        chunk->set_slot_id_to_index(slot_id, old_index - decrement);
+                    }
+                }
+
+                // Sort in descending order for removal (remove from end to avoid index shifting)
+                std::sort(columns_to_remove.begin(), columns_to_remove.end(), std::greater<size_t>());
+                chunk->remove_columns_by_index(columns_to_remove);
+            }
         }
 
         if (!_non_pushdown_pred_tree.empty()) {
