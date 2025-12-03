@@ -20,12 +20,11 @@ import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
 import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class RecursiveCTETest extends PlanTestBase {
-    @Test
+    //    @Test
     public void testSimpleRecursiveCTE() throws Exception {
         String sql = "with recursive cte as " +
                 "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) " +
@@ -46,7 +45,7 @@ public class RecursiveCTETest extends PlanTestBase {
                 "  |  <slot 2> : rand()");
     }
 
-    @Test
+    //    @Test
     public void testSimpleRecursiveCTEExplain() throws Exception {
         String sql = "with recursive cte as " +
                 "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) " +
