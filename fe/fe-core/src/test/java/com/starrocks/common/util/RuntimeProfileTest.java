@@ -43,6 +43,7 @@ import com.google.gson.JsonObject;
 import com.starrocks.thrift.TCounter;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
+import com.starrocks.thrift.TCounterMinMaxType;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
@@ -914,6 +915,7 @@ public class RuntimeProfileTest {
         TCounterStrategy thresholdStrategy = new TCounterStrategy();
         thresholdStrategy.aggregate_type = TCounterAggregateType.SUM;
         thresholdStrategy.merge_type = TCounterMergeType.MERGE_ALL;
+        thresholdStrategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
         thresholdStrategy.display_threshold = 50;
 
         Counter belowThresholdCounter = new Counter(TUnit.UNIT, thresholdStrategy, 30);
@@ -928,6 +930,7 @@ public class RuntimeProfileTest {
         TCounterStrategy alwaysDisplayStrategy = new TCounterStrategy();
         alwaysDisplayStrategy.aggregate_type = TCounterAggregateType.SUM;
         alwaysDisplayStrategy.merge_type = TCounterMergeType.MERGE_ALL;
+        alwaysDisplayStrategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
         alwaysDisplayStrategy.display_threshold = -1;
 
         Counter forceZeroCounter = new Counter(TUnit.UNIT, alwaysDisplayStrategy, 0);
