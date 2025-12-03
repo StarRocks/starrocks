@@ -45,7 +45,7 @@ public:
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
                      KeyIndexSet* found_key_indexes) const;
 
-    void get_all_sstable_pbs(std::vector<PersistentIndexSstablePB>* sstable_pbs) const;
+    void get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const;
 
     size_t memory_usage() const;
 

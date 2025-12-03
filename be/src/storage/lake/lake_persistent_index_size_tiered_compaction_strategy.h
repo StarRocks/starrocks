@@ -39,7 +39,7 @@ public:
     // Pick compaction candidates from tablet metadata.
     // Use size tiered compaction strategy.
     // Parameters:
-    //   - metadata: Tablet metadata which contains persistent index sstables info.
+    //   - sstable_meta: The sstable metadata of the tablet.
     //   - candidates: Output parameter. A vector of compaction candidate groups.
     //       Each group is a vector of sstable metadata (PB) in the same fileset.
     // Returns:
@@ -48,7 +48,8 @@ public:
     //   1. Fileset is the smallest unit for selection — partial selection within a fileset is not allowed.
     //   2. Only consecutive filesets can be compacted together.
     //
-    static Status pick_compaction_candidates(const TabletMetadataPtr& metadata, CompactionCandidateResult* result);
+    static Status pick_compaction_candidates(const PersistentIndexSstableMetaPB& sstable_meta,
+                                             CompactionCandidateResult* result);
 };
 
 } // namespace starrocks::lake

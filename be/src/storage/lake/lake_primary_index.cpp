@@ -313,4 +313,30 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
     }
 }
 
+int32_t LakePrimaryIndex::current_fileset_index() const {
+    if (!_enable_persistent_index) {
+        return -1;
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->current_fileset_index();
+    } else {
+        return -1;
+    }
+}
+
+Status LakePrimaryIndex::ingest_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
+                                            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                            int32_t fileset_start_idx) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->ingest_sst_compact(compact_mgr, tablet_mgr, metadata, fileset_start_idx);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
+    }
+}
+
 } // namespace starrocks::lake

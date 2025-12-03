@@ -188,9 +188,9 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_init_multiple_sstables_in_or
     ASSERT_FALSE(fileset.is_standalone_sstable());
 
     // Verify all sstables are stored
-    std::vector<PersistentIndexSstablePB> retrieved_pbs;
+    PersistentIndexSstableMetaPB retrieved_pbs;
     fileset.get_all_sstable_pbs(&retrieved_pbs);
-    ASSERT_EQ(3, retrieved_pbs.size());
+    ASSERT_EQ(3, retrieved_pbs.sstables_size());
 }
 
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_init_overlapping_sstables_error) {
@@ -306,9 +306,9 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from) {
     ASSERT_OK(fileset.merge_from(sst2));
 
     // Verify both sstables are stored
-    std::vector<PersistentIndexSstablePB> retrieved_pbs;
+    PersistentIndexSstableMetaPB retrieved_pbs;
     fileset.get_all_sstable_pbs(&retrieved_pbs);
-    ASSERT_EQ(2, retrieved_pbs.size());
+    ASSERT_EQ(2, retrieved_pbs.sstables_size());
 }
 
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from_overlapping_error) {

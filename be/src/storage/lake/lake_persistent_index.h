@@ -185,6 +185,11 @@ public:
 
     size_t memory_usage() const override;
 
+    int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
+
+    Status ingest_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
+                              const TabletMetadataPtr& metadata, int32_t fileset_start_idx);
+
     static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
                                         std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
 

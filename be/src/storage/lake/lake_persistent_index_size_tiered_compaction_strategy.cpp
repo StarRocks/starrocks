@@ -31,11 +31,10 @@
 
 namespace starrocks::lake {
 
-Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(const TabletMetadataPtr& metadata,
-                                                                                   CompactionCandidateResult* result) {
+Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+        const PersistentIndexSstableMetaPB& sstable_meta, CompactionCandidateResult* result) {
     result->candidate_filesets.clear();
 
-    const auto& sstable_meta = metadata->sstable_meta();
     if (sstable_meta.sstables_size() == 0) {
         return Status::OK();
     }

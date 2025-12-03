@@ -440,6 +440,8 @@ CONF_mInt64(pk_index_target_file_size, "67108864");
 // E.g. if we have N fileset, the compaction score will be N * pk_index_compaction_score_ratio
 // Default is 2.
 CONF_mInt32(pk_index_compaction_score_ratio, "2");
+// Ingest sst compaction threshold for primary key index in shared-data mode.
+CONF_mInt32(pk_index_ingest_sst_compaction_threshold, "10");
 // Whether enable parallel compaction for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.

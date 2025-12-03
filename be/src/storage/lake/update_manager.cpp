@@ -276,6 +276,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // upsert+delete order in a single transaction is supported.
     // TODO: Support the actual interleaving order of upsert and delete within one transaction.
     const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
+    // When too many ingest sst files, we need to compact them.
+    int32_t ingest_fileset_start_idx = index.current_fileset_index();
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t local_id = 0; local_id < local_segments; ++local_id) {
         uint32_t global_segment_id = assigned_global_segments + local_id;
@@ -320,6 +322,18 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
                                              rowset_id + global_segment_id, metadata->version(),
                                              DelvecPagePB() /* empty */, nullptr));
+            if (index.current_fileset_index() - ingest_fileset_start_idx >=
+                config::pk_index_ingest_sst_compaction_threshold) {
+                // Do ingest sst compaction when too many sst files ingested.
+                TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_compact_us");
+                TRACE_COUNTER_INCREMENT("ingest_sst_compact_times", 1);
+                RETURN_IF_ERROR(index.ingest_sst_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
+                                                         metadata, ingest_fileset_start_idx + 1 /* new fileset*/));
+                LOG(INFO) << fmt::format(
+                        "publish_primary_key_tablet: compact ingest sst filesets for tablet {}, txn {}, fileset index "
+                        "{}->{}",
+                        tablet->id(), txn_id, ingest_fileset_start_idx, index.current_fileset_index());
+            }
         }
     }
 

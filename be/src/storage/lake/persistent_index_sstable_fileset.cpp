@@ -125,13 +125,13 @@ const std::string& PersistentIndexSstableFileset::standalone_sstable_filename() 
     return _standalone_sstable->sstable_pb().filename();
 }
 
-void PersistentIndexSstableFileset::get_all_sstable_pbs(std::vector<PersistentIndexSstablePB>* sstable_pbs) const {
+void PersistentIndexSstableFileset::get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const {
     for (const auto& [start_key, end_sstable_pair] : _sstable_map) {
         const auto& [end_key, sstable] = end_sstable_pair;
-        sstable_pbs->emplace_back(sstable->sstable_pb());
+        sstable_pbs->add_sstables()->CopyFrom(sstable->sstable_pb());
     }
     if (_standalone_sstable != nullptr) {
-        sstable_pbs->emplace_back(_standalone_sstable->sstable_pb());
+        sstable_pbs->add_sstables()->CopyFrom(_standalone_sstable->sstable_pb());
     }
 }
 

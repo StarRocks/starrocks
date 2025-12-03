@@ -351,8 +351,7 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         for (const auto& sst : candidates[i]) {
             all_sstables.push_back({sst, i});
             total_size += sst.filesize();
-            input_debug_str += fmt::format("[fileset_idx: {}, start_key: {}, end_key: {}, size: {}] ", i,
-                                           sst.range().start_key(), sst.range().end_key(), sst.filesize());
+            input_debug_str += fmt::format("[fileset_idx: {}, size: {}] ", i, sst.filesize());
         }
     }
     if (all_sstables.empty()) {
