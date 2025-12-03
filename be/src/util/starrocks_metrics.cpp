@@ -253,6 +253,12 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
+
+    // data cache metrics
+    REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
