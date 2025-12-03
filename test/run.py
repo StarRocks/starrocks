@@ -196,8 +196,6 @@ if __name__ == "__main__":
         print("In alive mode, set concurrency=1 in default!")
         concurrency = 1
 
-    arrow_mode = True # TODO(lzh): remove this
-
     # Auto-exclude no_arrow_flight_sql cases in arrow mode
     if arrow_mode:
         if attr:
