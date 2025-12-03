@@ -17,23 +17,18 @@
 #include <memory>
 
 #include "common/status.h"
-#include "formats/csv/output_stream.h"
+#include "formats/csv/output_stream_file.h"
 #include "gen_cpp/Types_types.h"
-#include "io/async_flush_output_stream.h"
 #include "util/raw_container.h"
 
 namespace starrocks::csv {
 
-class CompressedAsyncOutputStreamFile final : public OutputStream {
+class CompressedAsyncOutputStreamFile final : public AsyncOutputStreamFile {
 public:
     CompressedAsyncOutputStreamFile(io::AsyncFlushOutputStream* stream, TCompressionType::type compression_type,
                                     size_t buff_size);
 
     ~CompressedAsyncOutputStreamFile() override = default;
-
-    Status finalize() override;
-
-    std::size_t size() override { return _stream->tell(); }
 
 protected:
     Status _sync(const char* data, size_t size) override;
@@ -41,7 +36,6 @@ protected:
 private:
     Status _compress_gzip(const char* data, size_t size);
 
-    io::AsyncFlushOutputStream* _stream;
     TCompressionType::type _compression_type;
     raw::RawVector<uint8_t> _compressed_buffer;
 };

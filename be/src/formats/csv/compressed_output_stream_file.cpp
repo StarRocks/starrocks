@@ -23,12 +23,7 @@ namespace starrocks::csv {
 CompressedAsyncOutputStreamFile::CompressedAsyncOutputStreamFile(io::AsyncFlushOutputStream* stream,
                                                                  TCompressionType::type compression_type,
                                                                  size_t buff_size)
-        : OutputStream(buff_size), _stream(stream), _compression_type(compression_type) {}
-
-Status CompressedAsyncOutputStreamFile::finalize() {
-    RETURN_IF_ERROR(OutputStream::finalize());
-    return _stream->close();
-}
+        : AsyncOutputStreamFile(stream, buff_size), _compression_type(compression_type) {}
 
 Status CompressedAsyncOutputStreamFile::_sync(const char* data, size_t size) {
     if (_compression_type == TCompressionType::NO_COMPRESSION) {
