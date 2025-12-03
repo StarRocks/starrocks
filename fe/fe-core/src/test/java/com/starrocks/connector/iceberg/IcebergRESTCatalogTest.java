@@ -375,27 +375,27 @@ public class IcebergRESTCatalogTest {
         // Test when security is set to JWT and auth token is provided
         Map<String, String> properties = new HashMap<>();
         properties.put(ICEBERG_CATALOG_SECURITY, "JWT");
-        
+
         IcebergRESTCatalog catalog = new IcebergRESTCatalog(
                 "test_catalog", new Configuration(), properties);
-        
+
         // Create a mock ConnectContext with auth token using MockUp
         new MockUp<ConnectContext>() {
             @Mock
             public String getQualifiedUser() {
                 return "test_user";
             }
-            
+
             @Mock
             public String getSessionId() {
                 return "test_session";
             }
-            
+
             @Mock
             public String getAuthToken() {
                 return "test_token";
             }
-            
+
             @Mock
             public UserIdentity getCurrentUserIdentity() {
                 return new UserIdentity("test_user", "%");
@@ -415,5 +415,70 @@ public class IcebergRESTCatalogTest {
         assertNotNull(sessionContext);
         assertTrue(sessionContext.credentials().containsKey("token"));
         assertEquals("test_token", sessionContext.credentials().get("token"));
+    }
+
+    @Test
+    public void testListTablesWithViewEndpointsEnabled(@Mocked RESTSessionCatalog restCatalog) {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        new Expectations() {
+            {
+                restCatalog.listTables((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of("db", "tbl1"));
+                minTimes = 0;
+
+                // When viewEndpointsEnabled is true (default), listViews should be called
+                restCatalog.listViews((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of("db", "view1"));
+                minTimes = 0;
+            }
+        };
+
+        List<String> tables = icebergRESTCatalog.listTables(connectContext, "db");
+        // Should include both tables and views
+        Assertions.assertEquals(2, tables.size());
+        Assertions.assertTrue(tables.contains("tbl1"));
+        Assertions.assertTrue(tables.contains("view1"));
+    }
+
+    @Test
+    public void testListTablesWithViewEndpointsDisabled(@Mocked RESTSessionCatalog restCatalog) {
+        // Create catalog with viewEndpointsEnabled = false
+        Map<String, String> properties = ImmutableMap.of(
+                "iceberg.catalog.rest.view-endpoints-enabled", "false");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.listTables((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of("db", "tbl1"));
+                minTimes = 0;
+
+                // When viewEndpointsEnabled is false, listViews should NOT be called
+                // So we don't set any expectations for restCatalog.listViews()
+            }
+        };
+
+        List<String> tables = icebergRESTCatalog.listTables(connectContext, "db");
+        // Should only include tables, not views
+        Assertions.assertEquals(1, tables.size());
+        Assertions.assertTrue(tables.contains("tbl1"));
+    }
+
+    @Test
+    public void testGetViewWithViewEndpointsDisabled(@Mocked RESTSessionCatalog restCatalog) {
+        // Create catalog with viewEndpointsEnabled = false
+        Map<String, String> properties = ImmutableMap.of(
+                "iceberg.catalog.rest.view-endpoints-enabled", "false");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // When viewEndpointsEnabled is false, getView should throw exception
+        StarRocksConnectorException exception = Assertions.assertThrows(
+                StarRocksConnectorException.class,
+                () -> icebergRESTCatalog.getView(connectContext, "db", "view"));
+
+        Assertions.assertTrue(exception.getMessage().contains("View operations are disabled for this catalog"));
     }
 }
