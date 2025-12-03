@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.FunctionName;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -29,7 +26,8 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     private List<UserRef> userPrivilegeObjectList;
 
     //UnResolved AST used in syntax grantPrivWithFunc
-    private List<Pair<FunctionName, FunctionArgsDef>> functions;
+    private List<FunctionRef> functionRefs;
+    private List<FunctionArgsDef> functionArgsDefs;
 
     private final NodePosition pos;
 
@@ -40,7 +38,6 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     public GrantRevokePrivilegeObjects(NodePosition pos) {
         this.pos = pos;
     }
-
 
     public List<List<String>> getPrivilegeObjectNameTokensList() {
         return privilegeObjectNameTokensList;
@@ -58,12 +55,20 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
         this.userPrivilegeObjectList = userPrivilegeObjectList;
     }
 
-    public List<Pair<FunctionName, FunctionArgsDef>> getFunctions() {
-        return functions;
+    public List<FunctionRef> getFunctionRefs() {
+        return functionRefs;
     }
 
-    public void setFunctions(List<Pair<FunctionName, FunctionArgsDef>> functions) {
-        this.functions = functions;
+    public void setFunctionRefs(List<FunctionRef> functionRefs) {
+        this.functionRefs = functionRefs;
+    }
+
+    public List<FunctionArgsDef> getFunctionArgsDefs() {
+        return functionArgsDefs;
+    }
+
+    public void setFunctionArgsDefs(List<FunctionArgsDef> functionArgsDefs) {
+        this.functionArgsDefs = functionArgsDefs;
     }
 
     @Override

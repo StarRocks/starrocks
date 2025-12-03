@@ -114,6 +114,8 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -274,6 +276,7 @@ import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
@@ -1135,8 +1138,11 @@ public class RedirectStatusTest {
 
     @Test
     public void testCreateFunctionStmt() {
-        CreateFunctionStmt stmt = new CreateFunctionStmt("", null, null, null, java.util.Collections.emptyMap(), null, false,
-                false, NodePosition.ZERO);
+        FunctionRef functionRef = new FunctionRef(QualifiedName.of(Lists.newArrayList("db", "fn")),
+                null, NodePosition.ZERO, false);
+        FunctionArgsDef argsDef = new FunctionArgsDef(java.util.Collections.emptyList(), false);
+        CreateFunctionStmt stmt = new CreateFunctionStmt("", functionRef, argsDef, new TypeDef(BooleanType.BOOLEAN),
+                java.util.Collections.emptyMap(), null, false, false, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
@@ -1217,7 +1223,9 @@ public class RedirectStatusTest {
 
     @Test
     public void testDropFunctionStmt() {
-        DropFunctionStmt stmt = new DropFunctionStmt(null, null, NodePosition.ZERO, false);
+        FunctionRef functionRef = new FunctionRef(QualifiedName.of(Lists.newArrayList("db", "fn")),
+                null, NodePosition.ZERO, false);
+        DropFunctionStmt stmt = new DropFunctionStmt(functionRef, null, NodePosition.ZERO, false);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

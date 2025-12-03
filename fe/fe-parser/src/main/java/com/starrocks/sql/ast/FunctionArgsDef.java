@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.Type;
 
@@ -41,16 +39,11 @@ public class FunctionArgsDef {
         return isVariadic;
     }
 
-    public void analyze() {
-        argTypes = new Type[argTypeDefs.size()];
-        int i = 0;
-        for (TypeDef typeDef : argTypeDefs) {
-            TypeDefAnalyzer.analyze(typeDef);
-            argTypes[i++] = typeDef.getType();
-        }
-    }
-
     public void setArgTypes(Type[] argTypes) {
         this.argTypes = argTypes;
+    }
+
+    public List<TypeDef> getArgTypeDefs() {
+        return argTypeDefs;
     }
 }

@@ -21,6 +21,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -39,6 +40,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -264,7 +266,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateFunctionStatement(CreateFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                FunctionName name = stmt.getFunctionName();
+                String defaultDb = stmt.getFunctionRef().isGlobalFunction()
+                        ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                        : context.getDatabase();
+                FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                        stmt.getFunctionRef(), stmt.getArgsDef(), defaultDb);
+                FunctionName name = desc.getName();
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr()
                             .getGlobalFunctionMgr()
@@ -283,16 +290,21 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropFunctionStatement(DropFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                FunctionName name = stmt.getFunctionName();
+                String defaultDb = stmt.getFunctionRef().isGlobalFunction()
+                        ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                        : context.getDatabase();
+                FunctionSearchDesc functionSearchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                        stmt.getFunctionRef(), stmt.getArgsDef(), defaultDb);
+                FunctionName name = functionSearchDesc.getName();
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr().getGlobalFunctionMgr()
-                            .userDropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
+                            .userDropFunction(functionSearchDesc, stmt.dropIfExists());
                 } else {
                     Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.dropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
+                    db.dropFunction(functionSearchDesc, stmt.dropIfExists());
                 }
             });
             return null;
