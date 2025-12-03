@@ -115,9 +115,13 @@ int64_t KVStore::calc_rocksdb_write_buffer_size(MemTracker* mem_tracker) {
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
-    std::string db_path = _root_path + META_POSTFIX;
-
+    // 256MB. default is 0, which means all logs will be written to one log file
+    options.max_log_file_size = 268435456;
+    // default is 1000
+    options.keep_log_file_num = 10;
     RETURN_IF_ERROR(rocksdb::GetDBOptionsFromString(options, config::rocksdb_db_options_string, &options));
+
+    std::string db_path = _root_path + META_POSTFIX;
 
     ColumnFamilyOptions meta_cf_options;
     RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
