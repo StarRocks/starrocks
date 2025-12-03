@@ -7545,6 +7545,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
+
+        if (Config.enable_function_blacklist) {
+            if (FunctionSet.isBlackFunction(functionName)) {
+                throw new ParsingException(format("%s function has been disabled. " +
+                        "Please check function_blacklist configuration.", functionName), pos);
+            }
+        }
+
         if (functionName.equals(FunctionSet.ARRAY_GENERATE)) {
             if (context.expression().size() == 3) {
                 Expr e3 = (Expr) visit(context.expression(2));
@@ -7562,6 +7570,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 }
             }
         }
+
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));

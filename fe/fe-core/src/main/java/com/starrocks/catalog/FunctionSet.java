@@ -49,6 +49,7 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
+import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.type.AnyArrayType;
@@ -911,6 +912,12 @@ public class FunctionSet {
 
     public static final Set<String> RANK_RALATED_FUNCTIONS =
             ImmutableSet.<String>builder().add().add(ROW_NUMBER).add(RANK).add(DENSE_RANK).build();
+    
+    private static final Set<String> BLACK_FUNCTIONS =
+            Arrays.stream(Config.function_blacklist.split(","))
+                    .map(String::trim)
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toSet());
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -1943,5 +1950,9 @@ public class FunctionSet {
                 Lists.newArrayList(BooleanType.BOOLEAN),
                 BooleanType.BOOLEAN, BooleanType.BOOLEAN,
                 false, true, false));
+    }
+
+    public static boolean isBlackFunction(String functionName) {
+        return BLACK_FUNCTIONS.contains(functionName);
     }
 }
