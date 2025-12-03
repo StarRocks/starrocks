@@ -66,8 +66,10 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
     public ArrowFlightSqlResultDescriptor execute() throws InterruptedException, StarRocksException, ExecutionException {
         ArrowFlightSqlConnectContext arrowCtx = (ArrowFlightSqlConnectContext) ctx;
-        if (!arrowCtx.acquireRunningToken(arrowCtx.getSessionVariable().getQueryTimeoutS() * 1000L)) {
-            throw new StarRocksException("Query already in progress on this connection");
+        long waitTimeoutMs = Math.max(0, Config.arrow_flight_sql_connection_query_wait_timeout_ms);
+        if (!arrowCtx.acquireRunningToken(waitTimeoutMs)) {
+            throw new StarRocksException(
+                    "Another query is already in progress on this connection (waited " + waitTimeoutMs + " ms)");
         }
         arrowCtx.resetForStatement();
 
