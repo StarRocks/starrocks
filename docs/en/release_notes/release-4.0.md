@@ -10,6 +10,54 @@ After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5
 
 :::
 
+## 4.0.2
+
+Release Date: November 28, 2025
+
+### New Features
+
+- Introduced a new resource group attribute, `mem_pool`, allowing multiple resource groups to share the same memory pool and enforce a joint memory limit for the pool. This feature is backward compatible. `default_mem_pool` is used if `mem_pool` is not specified. [#64112](https://github.com/StarRocks/starrocks/pull/64112)
+
+### Improvements
+
+- Reduced remote storage access during Vacuum after File Bundling is enabled. [#65793](https://github.com/StarRocks/starrocks/pull/65793)
+- The File Bundling feature caches the latest tablet metadata. [#65640](https://github.com/StarRocks/starrocks/pull/65640)
+- Improved safety and stability for long-string scenarios. [#65433](https://github.com/StarRocks/starrocks/pull/65433) [#65148](https://github.com/StarRocks/starrocks/pull/65148)  
+- Optimized the `SplitTopNAggregateRule` logic to avoid performance regression. [#65478](https://github.com/StarRocks/starrocks/pull/65478)  
+- Applied the Iceberg/DeltaLake table statistics collection strategy to other external data sources to avoid collecting statistics when the table is a single table. [#65430](https://github.com/StarRocks/starrocks/pull/65430)  
+- Added Page Cache metrics to the Data Cache HTTP API `api/datacache/app_stat`. [#65341](https://github.com/StarRocks/starrocks/pull/65341)  
+- Supports ORC file splitting to enable parallel scanning of a single large ORC file. [#65188](https://github.com/StarRocks/starrocks/pull/65188)  
+- Added selectivity estimation for IF predicates in the optimizer. [#64962](https://github.com/StarRocks/starrocks/pull/64962)  
+- Supports constant evaluation of `hour`, `minute`, and `second` for `DATE` and `DATETIME` types in the FE. [#64953](https://github.com/StarRocks/starrocks/pull/64953)  
+- Enabled rewrite of simple aggregation to MetaScan by default. [#64698](https://github.com/StarRocks/starrocks/pull/64698)  
+- Improved multiple-replica assignment handling in shared-data clusters for enhanced reliability. [#64245](https://github.com/StarRocks/starrocks/pull/64245)  
+- Exposes cache hit ratio in audit logs and metrics. [#63964](https://github.com/StarRocks/starrocks/pull/63964)  
+- Estimates per-bucket distinct counts for histograms using HyperLogLog or sampling to provide more accurate NDV for predicates and joins. [#58516](https://github.com/StarRocks/starrocks/pull/58516)  
+- Supports FULL OUTER JOIN USING with SQL-standard semantics. [#65122](https://github.com/StarRocks/starrocks/pull/65122)  
+- Prints memory information when Optimizer times out for diagnostics. [#65206](https://github.com/StarRocks/starrocks/pull/65206)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- DECIMAL56 `mod`-related issue. [#65795](https://github.com/StarRocks/starrocks/pull/65795)  
+- Issue related to Iceberg scan range handling. [#65658](https://github.com/StarRocks/starrocks/pull/65658)  
+- MetaScan rewrite issues on temporary partitions and random buckets. [#65617](https://github.com/StarRocks/starrocks/pull/65617)  
+- `JsonPathRewriteRule` uses the wrong table after transparent materialized view rewrite. [#65597](https://github.com/StarRocks/starrocks/pull/65597)  
+- Materialized view refresh failures when `partition_retention_condition` referenced generated columns. [#65575](https://github.com/StarRocks/starrocks/pull/65575)
+- Iceberg min/max value typing issue. [#65551](https://github.com/StarRocks/starrocks/pull/65551)  
+- Issue with queries against `information_schema.tables` and `views` across different databases when `enable_evaluate_schema_scan_rule` is set to `true`. [#65533](https://github.com/StarRocks/starrocks/pull/65533)  
+- Integer overflow in JSON array comparison. [#64981](https://github.com/StarRocks/starrocks/pull/64981)  
+- MySQL Reader does not support SSL. [#65291](https://github.com/StarRocks/starrocks/pull/65291)  
+- ARM build issue caused by SVE build incompatibility. [#65268](https://github.com/StarRocks/starrocks/pull/65268)  
+- Queries based on bucket-aware execution may get stuck for bucketed Iceberg tables. [#65261](https://github.com/StarRocks/starrocks/pull/65261)  
+- Robust error propagation and memory safety issues for the lack of memory limit checks in OLAP table scan. [#65131](https://github.com/StarRocks/starrocks/pull/65131)
+
+### Behavior Changes
+
+- When a materialized view is inactivated, the system recursively inactivates its dependent materialized views. [#65317](https://github.com/StarRocks/starrocks/pull/65317)  
+- Uses the original materialized view query SQL (including comments/formatting) when generating SHOW CREATE output. [#64318](https://github.com/StarRocks/starrocks/pull/64318)
+
 ## 4.0.1
 
 Release Date: November 17, 2025
