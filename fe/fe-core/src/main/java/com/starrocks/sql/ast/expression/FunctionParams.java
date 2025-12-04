@@ -185,6 +185,28 @@ public class FunctionParams {
         exprsNames = Arrays.asList(newNames);
     }
 
+    /**
+     * Append default values for positional arguments.
+     * This method is used when calling a function that has named arguments support
+     * using positional arguments syntax.
+     * @param fn the function definition with named arguments
+     */
+    public void appendDefaultsForPositionalArgs(Function fn) {
+        String[] names = fn.getArgNames();
+        Preconditions.checkState(names != null && names.length >= exprs.size());
+        int providedCount = exprs.size();
+        // Create a new mutable list if the current list is not modifiable
+        List<Expr> newExprs = new java.util.ArrayList<>(exprs);
+        // Append default values for remaining parameters
+        for (int i = providedCount; i < names.length; i++) {
+            Expr defaultExpr = fn.getDefaultNamedExpr(names[i]);
+            Preconditions.checkState(defaultExpr != null,
+                    "Missing default value for parameter: " + names[i]);
+            newExprs.add(defaultExpr);
+        }
+        exprs = newExprs;
+    }
+
     public String getNamedArgStr() {
         Preconditions.checkState(exprs.size() == exprsNames.size());
         String result = "";
