@@ -1664,7 +1664,11 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
+<<<<<<< HEAD
                                 Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+=======
+                                Assertions.assertEquals(1, materializedView.getPartitionExprMaps().size());
+>>>>>>> d3a8abfa05 ([BugFix] Fix partition expression resolution for MV when view has same name as base table (#66274))
 
                                 OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getTable(testDb.getFullName(), "tt1");
@@ -1753,7 +1757,11 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MaterializedView materializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "mv_with_join0"));
+<<<<<<< HEAD
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+=======
+                    Assertions.assertEquals(1, materializedView.getPartitionExprMaps().size());
+>>>>>>> d3a8abfa05 ([BugFix] Fix partition expression resolution for MV when view has same name as base table (#66274))
                     TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                     OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()

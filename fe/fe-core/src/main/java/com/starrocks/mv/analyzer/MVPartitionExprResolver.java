@@ -571,7 +571,7 @@ public class MVPartitionExprResolver {
         int refBaseTableCols = -1;
         for (Expr mvRefPartitionExpr : mvRefPartitionExprs) {
             List<MVPartitionExpr> partitionExprMaps = getMVPartitionExprs(mvRefPartitionExpr, stmt);
-            if (partitionExprMaps == null || partitionExprMaps.isEmpty()) {
+            if (partitionExprMaps.isEmpty()) {
                 LOG.warn("The partition expr maps slot ref should be from the base table, eqExprs:{}",
                         partitionExprMaps);
                 throw new SemanticException("Failed to build mv partition expr from base table: " + stmt.getOrigStmt());
@@ -583,14 +583,23 @@ public class MVPartitionExprResolver {
                 throw new SemanticException(String.format("The current partition expr maps size %s should be equal to " +
                         "the size of the first partition expr maps: %s", partitionExprMaps.size(), refBaseTableCols));
             }
+<<<<<<< HEAD
             partitionExprMaps.stream()
                             .forEach(eq -> mvPartitionExprMaps.put(eq.getExpr(), eq.getSlotRef()));
+=======
+            partitionExprMaps.forEach(eq -> mvPartitionExprMaps.put(eq.getExpr(), eq.getSlotRef()));
+>>>>>>> d3a8abfa05 ([BugFix] Fix partition expression resolution for MV when view has same name as base table (#66274))
         }
         if (baseTableInfos != null) {
             Set<List<MVPartitionExpr>> mvPartitionExprs = Sets.newHashSet();
+            LinkedHashMap<Expr, SlotRef> filteredPartitionExprMaps = Maps.newLinkedHashMap();
             ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Table table = MvUtils.getTableChecked(baseTableInfo);
+                // Skip VIEW and non-partitioned tables - they should not participate in partition expr calculation
+                if (table.isView() || table.isUnPartitioned()) {
+                    continue;
+                }
                 List<MVPartitionExpr> refPartitionExprs = MvUtils.getMvPartitionExpr(mvPartitionExprMaps, table);
                 if (refPartitionExprs != null && !refPartitionExprs.isEmpty()) {
                     //  ensure the partition expr is valid
@@ -598,6 +607,7 @@ public class MVPartitionExprResolver {
                             baseTableInfo.getDbName(), baseTableInfo.getTableName());
                     for (MVPartitionExpr refPartitionExpr : refPartitionExprs) {
                         MaterializedView.analyzePartitionExpr(connectContext, table, tableName, refPartitionExpr.getExpr());
+                        filteredPartitionExprMaps.put(refPartitionExpr.getExpr(), refPartitionExpr.getSlotRef());
                     }
                     mvPartitionExprs.add(refPartitionExprs);
                 }
@@ -606,6 +616,10 @@ public class MVPartitionExprResolver {
                 String errorMessage = String.format("The size of mv partition exprs %s should be less or equal to the size " +
                         "of partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps);
                 throw new SemanticException(errorMessage);
+            }
+            if (!filteredPartitionExprMaps.isEmpty()) {
+                mvPartitionExprMaps.clear();
+                mvPartitionExprMaps.putAll(filteredPartitionExprMaps);
             }
         }
         if (mvPartitionExprMaps.isEmpty()) {
