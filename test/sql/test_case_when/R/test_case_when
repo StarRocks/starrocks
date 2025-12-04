@@ -1,10 +1,10 @@
 -- name: test_case_when
- CREATE TABLE `t0` (
-  `region` varchar(128) NOT NULL COMMENT "",
-  `order_date` date NOT NULL COMMENT "",
-  `income` decimal(7, 0) NOT NULL COMMENT "",
-  `ship_mode` int NOT NULL COMMENT "",
-  `ship_code` int) ENGINE=OLAP
+CREATE TABLE `t0` (
+ `region` varchar(128) NOT NULL COMMENT "",
+ `order_date` date NOT NULL COMMENT "",
+ `income` decimal(7, 0) NOT NULL COMMENT "",
+ `ship_mode` int NOT NULL COMMENT "",
+ `ship_code` int) ENGINE=OLAP
 DUPLICATE KEY(`region`, `order_date`)
 COMMENT "OLAP"
 PARTITION BY RANGE(`order_date`)
@@ -3786,7 +3786,7 @@ FROM (
             FROM ads_opt_t_goods_odd_important_kd_di
         ) dataset_table
     ) table_1
-) table_2
+) table_2;
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Expression CaseWhen too complex, limit: 10000. Please simplify your expression or increase Config.max_scalar_operator_flat_children..')
 -- !result

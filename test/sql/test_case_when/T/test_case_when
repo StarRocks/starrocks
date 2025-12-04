@@ -731,4 +731,4 @@ FROM (
             FROM ads_opt_t_goods_odd_important_kd_di
         ) dataset_table
     ) table_1
-) table_2
+) table_2;
