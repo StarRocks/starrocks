@@ -34,11 +34,13 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -250,7 +252,12 @@ public class RecursiveCTEExecutor {
                 visit(node.getHaving(), context);
             }
 
-            if (node.getRelation() instanceof CTERelation cteRelation &&
+            node.setRelation(rewriteCTERelation(node.getRelation(), context));
+            return null;
+        }
+
+        private Relation rewriteCTERelation(Relation relation, Void context) {
+            if (relation instanceof CTERelation cteRelation &&
                     cteRelation.isRecursive() &&
                     recursiveCTEGroups.containsKey(cteRelation.getName())) {
                 CreateTemporaryTableStmt tempTableStmt = recursiveCTEGroups.get(cteRelation.getName()).tempTableStmt;
@@ -265,10 +272,17 @@ public class RecursiveCTEExecutor {
                         new TableRelation(name, null, Lists.newArrayList(), Lists.newArrayList()), null, null, null);
                 SubqueryRelation subquery = new SubqueryRelation(new QueryStatement(selectRelation));
                 subquery.setAlias(new TableName(null, cteRelation.getName()));
-                node.setRelation(subquery);
+                return subquery;
             } else {
-                visit(node.getRelation(), context);
+                visit(relation, context);
+                return relation;
             }
+        }
+
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            node.setLeft(rewriteCTERelation(node.getLeft(), context));
+            node.setRight(rewriteCTERelation(node.getRight(), context));
             return null;
         }
 
