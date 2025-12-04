@@ -14,10 +14,6 @@
 
 #pragma once
 
-#include <gen_cpp/PlanNodes_types.h>
-#include <runtime/descriptors.h>
-#include <runtime/runtime_state.h>
-
 #include <coroutine>
 #include <cstdint>
 #include <optional>
@@ -27,8 +23,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/statusor.h"
-#include "exec/sorting/sort_helper.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
