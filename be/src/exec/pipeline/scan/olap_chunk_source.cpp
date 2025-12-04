@@ -719,7 +719,9 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
         _runtime_state->update_num_bytes_load_from_source(bytes_usage);
     }
 
-    _chunk_buffer.update_limiter(chunk);
+    if (chunk != nullptr && num_rows > 0) {
+        _chunk_buffer.update_limiter(chunk);
+    }
 }
 
 void OlapChunkSource::_update_counter() {
