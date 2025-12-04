@@ -672,11 +672,10 @@ public class TabletSchedulerTest {
         Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
         List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
 
-        new Expectations() {
-            {
-                globalStateMgr.getTabletScheduler();
-                minTimes = 0;
-                result = null;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return null;
             }
         };
 

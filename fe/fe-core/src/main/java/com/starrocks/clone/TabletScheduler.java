@@ -400,6 +400,9 @@ public class TabletScheduler extends FrontendDaemon {
      */
     public static void resetDecommStatForSingleReplicaTabletUnlocked(long tabletId, List<Replica> replicas) {
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        if (tabletScheduler == null) {
+            return;
+        }
         TabletSchedCtx tabletSchedCtx = tabletScheduler.getTabletSchedCtx(tabletId);
         if (tabletSchedCtx != null) {
             Replica decommissionedReplica = tabletSchedCtx.getDecommissionedReplica();
