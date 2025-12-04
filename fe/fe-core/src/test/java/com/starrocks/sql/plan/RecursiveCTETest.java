@@ -74,8 +74,8 @@ public class RecursiveCTETest extends PlanTestBase {
         StatementBase statementBase = statements.get(0);
 
         if (RecursiveCTEAstCheck.hasRecursiveCte(statementBase)) {
-            RecursiveCTEExecutor executor = new RecursiveCTEExecutor();
-            StatementBase sb = executor.splitOuterStmt(statementBase, connectContext);
+            RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
+            StatementBase sb = executor.splitOuterStmt(statementBase);
             executor.prepareRecursiveCTE();
             System.out.println("asd");
         }

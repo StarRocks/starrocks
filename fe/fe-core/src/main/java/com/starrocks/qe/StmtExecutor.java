@@ -717,8 +717,8 @@ public class StmtExecutor {
                     forwardToLeader();
                     return;
                 }
-                cteExecutor = new RecursiveCTEExecutor();
-                parsedStmt = cteExecutor.splitOuterStmt(parsedStmt, context);
+                cteExecutor = new RecursiveCTEExecutor(context);
+                parsedStmt = cteExecutor.splitOuterStmt(parsedStmt);
                 cteExecutor.prepareRecursiveCTE();
             }
 

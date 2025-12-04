@@ -72,11 +72,14 @@ public class RecursiveCTEExecutor {
 
     private final Map<String, TableName> cteTempTableMap = Maps.newHashMap();
 
-    private ConnectContext connectContext;
+    private final ConnectContext connectContext;
 
-    public StatementBase splitOuterStmt(StatementBase stmt, ConnectContext session) {
-        this.connectContext = session;
-        analyze(stmt, session);
+    public RecursiveCTEExecutor(ConnectContext connectContext) {
+        this.connectContext = connectContext;
+    }
+
+    public StatementBase splitOuterStmt(StatementBase stmt) {
+        analyze(stmt, connectContext);
         RecursiveCTESplitter splitter = new RecursiveCTESplitter();
         splitter.visit(stmt, null);
         return stmt;
@@ -137,6 +140,9 @@ public class RecursiveCTEExecutor {
 
     public void finalizeRecursiveCTE() {
         // drop temp tables
+        if (!connectContext.getSessionVariable().isRecursiveCteFinalizeTemporalTable()) {
+            return;
+        }
         for (TableName tempTableName : cteTempTableMap.values()) {
             try {
                 DropTemporaryTableStmt dropStmt = new DropTemporaryTableStmt(true, tempTableName, true);
