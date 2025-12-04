@@ -25,10 +25,6 @@ namespace starrocks {
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
     _close();
-    std::string* cancel_reason = _cancel_reason.exchange(nullptr, std::memory_order_acq_rel);
-    if (cancel_reason != nullptr) {
-        delete cancel_reason;
-    }
     _writer.reset();
 }
 
@@ -138,12 +134,7 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
-        std::string* cancel_reason = _cancel_reason.load(std::memory_order_acquire);
-        std::string error_msg = "fail to call execution_queue_execute";
-        if (cancel_reason != nullptr && !cancel_reason->empty()) {
-            error_msg += fmt::format(" (cancel_reason: {})", *cancel_reason);
-        }
-        task.write_cb->run(Status::InternalError(error_msg), nullptr, &failed_info);
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
     }
 }
 
@@ -178,22 +169,11 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
-        std::string* cancel_reason = _cancel_reason.load(std::memory_order_acquire);
-        std::string error_msg = "fail to call execution_queue_execute";
-        if (cancel_reason != nullptr && !cancel_reason->empty()) {
-            error_msg += fmt::format(" (cancel_reason: {})", *cancel_reason);
-        }
-        task.write_cb->run(Status::InternalError(error_msg), nullptr, &failed_info);
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
     }
 }
 
 void AsyncDeltaWriter::cancel(const Status& st) {
-    // Store cancel reason for error reporting
-    std::string* reason_ptr = new std::string(st.message());
-    std::string* old_reason = _cancel_reason.exchange(reason_ptr, std::memory_order_acq_rel);
-    if (old_reason != nullptr) {
-        delete old_reason;
-    }
     _writer->cancel(st);
 }
 
