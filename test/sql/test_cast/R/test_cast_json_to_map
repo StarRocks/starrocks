@@ -1,4 +1,4 @@
--- name: test_cast_json_to_map
+-- name: test_cast_json_to_map @no_arrow_flight_sql
 CREATE TABLE t (
     c1 int,
     c2 json

@@ -1,33 +1,33 @@
--- name: test_arrow_flight_2
-arrow: DROP DATABASE IF EXISTS flight_demo;
+-- name: test_arrow_flight_2 @arrow_flight_sql
+DROP DATABASE IF EXISTS flight_demo;
 -- result:
 -- !result
 
-arrow: CREATE DATABASE flight_demo;
+CREATE DATABASE flight_demo;
 -- result:
 -- !result
 
-arrow: USE flight_demo;
+USE flight_demo;
 -- result:
 -- !result
 
-arrow: CREATE TABLE flight_demo.test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+CREATE TABLE flight_demo.test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
 
-arrow: INSERT INTO flight_demo.test VALUES (1, 'Alice'), (2, 'Bob');
+INSERT INTO flight_demo.test VALUES (1, 'Alice'), (2, 'Bob');
 -- result:
 -- !result
 
-arrow: INSERT INTO flight_demo.test VALUES (1, 'Alice'), (2, 'Bob');
+INSERT INTO flight_demo.test VALUES (1, 'Alice'), (2, 'Bob');
 -- result:
 -- !result
 
-arrow: INSERT INTO flight_demo.test VALUES (3, 'Zac'), (4, 'Tom');
+INSERT INTO flight_demo.test VALUES (3, 'Zac'), (4, 'Tom');
 -- result:
 -- !result
 
-arrow: SELECT * FROM flight_demo.test order by id asc;
+SELECT * FROM flight_demo.test order by id asc;
 -- result:
 1	Alice
 2	Bob
@@ -35,23 +35,11 @@ arrow: SELECT * FROM flight_demo.test order by id asc;
 4	Tom
 -- !result
 
-arrow: UPDATE flight_demo.test SET name = 'Charlie' WHERE id = 1;
+UPDATE flight_demo.test SET name = 'Charlie' WHERE id = 1;
 -- result:
 -- !result
 
-arrow: SELECT * FROM flight_demo.test order by id asc;
--- result:
-1	Charlie
-2	Bob
-3	Zac
-4	Tom
--- !result
-
-arrow: UPDATE flight_demo.test SET name = 'Charlie' WHERE id = 1;
--- result:
--- !result
-
-arrow: SELECT * FROM flight_demo.test order by id asc;
+SELECT * FROM flight_demo.test order by id asc;
 -- result:
 1	Charlie
 2	Bob
@@ -59,28 +47,40 @@ arrow: SELECT * FROM flight_demo.test order by id asc;
 4	Tom
 -- !result
 
-arrow: DELETE FROM flight_demo.test WHERE id = 2;
+UPDATE flight_demo.test SET name = 'Charlie' WHERE id = 1;
 -- result:
 -- !result
 
-arrow: ALTER TABLE flight_demo.test ADD COLUMN age INT;
+SELECT * FROM flight_demo.test order by id asc;
+-- result:
+1	Charlie
+2	Bob
+3	Zac
+4	Tom
+-- !result
+
+DELETE FROM flight_demo.test WHERE id = 2;
 -- result:
 -- !result
 
-arrow: ALTER TABLE flight_demo.test MODIFY COLUMN name STRING;
+ALTER TABLE flight_demo.test ADD COLUMN age INT;
 -- result:
 -- !result
 
-arrow: INSERT INTO flight_demo.test (id, name, age) VALUES (5, 'Eve', 30);
+ALTER TABLE flight_demo.test MODIFY COLUMN name STRING;
 -- result:
 -- !result
 
-arrow: SELECT * FROM flight_demo.test WHERE id = 5;
+INSERT INTO flight_demo.test (id, name, age) VALUES (5, 'Eve', 30);
+-- result:
+-- !result
+
+SELECT * FROM flight_demo.test WHERE id = 5;
 -- result:
 5	Eve	30
 -- !result
 
-arrow: SELECT * FROM flight_demo.test order by id asc;
+SELECT * FROM flight_demo.test order by id asc;
 -- result:
 1	Charlie	None
 3	Zac	None
@@ -88,19 +88,19 @@ arrow: SELECT * FROM flight_demo.test order by id asc;
 5	Eve	30
 -- !result
 
-arrow: SHOW CREATE TABLE flight_demo.test;
+SHOW CREATE TABLE flight_demo.test;
 -- result:
 -- !result
 
-arrow: CREATE TABLE flight_demo.test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+CREATE TABLE flight_demo.test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
 
-arrow: INSERT INTO flight_demo.test2 VALUES (1, 18), (2, 20);
+INSERT INTO flight_demo.test2 VALUES (1, 18), (2, 20);
 -- result:
 -- !result
 
-arrow: SELECT * FROM (SELECT id, name FROM flight_demo.test) AS sub WHERE id = 1;
+SELECT * FROM (SELECT id, name FROM flight_demo.test) AS sub WHERE id = 1;
 -- result:
 1	Charlie
 -- !result

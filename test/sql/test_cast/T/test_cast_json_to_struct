@@ -1,4 +1,4 @@
--- name: test_cast_json_to_struct
+-- name: test_cast_json_to_struct @no_arrow_flight_sql
 
 select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int, col3 int>);
 select cast(PARSE_JSON('[1,2,3]') as struct<col1 int, col2 int>);
