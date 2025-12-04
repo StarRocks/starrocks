@@ -125,16 +125,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
      *
      * <p> JDBC and ADBC always use prepared statements to execute queries, even if the simple Statement::execute() is called.
      * The RPC sequence for Statement::execute() is:
-     *    createPreparedStatement -> getFlightInfoPreparedStatement-> getStreamStatement.
+     * createPreparedStatement -> getFlightInfoPreparedStatement-> getStreamStatement.
      * The RPC for Statement::close() is closePreparedStatement.
      *
      * <p> For a single connection, multiple prepared statements may be created.
      * When executing a query with a cursor, if the query is identical to the previous one, the existing preparedStmtId is reused
      * instead of creating a new one via createPreparedStatement. Specifically:
      * - If the current query is identical to the previous one, the RPC sequence for Statement::execute() is:
-     *     getFlightInfoPreparedStatement -> getStreamStatement.
+     * getFlightInfoPreparedStatement -> getStreamStatement.
      * - Otherwise, the RPC sequence for Statement::execute() is:
-     *     closePreparedStatement(prevPreparedStmtId) -> getFlightInfoPreparedStatement -> getStreamStatement.
+     * closePreparedStatement(prevPreparedStmtId) -> createPreparedStatement->getFlightInfoPreparedStatement->getStreamStatement.
      */
     @Override
     public void createPreparedStatement(FlightSql.ActionCreatePreparedStatementRequest request, CallContext context,

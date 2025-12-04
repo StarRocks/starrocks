@@ -131,7 +131,7 @@ class ArrowSqlLib(BaseConnectionLib):
             elif char == ';' and not in_single_quote and not in_double_quote:
                 # Statement terminator (only if not in any string)
                 current_stmt.append(char)
-                stmt = ''.join(current_stmt).strip()
+                stmt = ''.join(current_stmt)
                 if stmt and stmt != ';':  # Ignore empty statements
                     statements.append(stmt)
                 current_stmt = []
@@ -141,9 +141,16 @@ class ArrowSqlLib(BaseConnectionLib):
 
         # Handle remaining statement (if any)
         if current_stmt:
-            stmt = ''.join(current_stmt).strip()
+            stmt = ''.join(current_stmt)
             if stmt:  # Ignore empty statements
                 statements.append(stmt)
+
+        for i, raw_statement in enumerate(statements):
+            statement = raw_statement.strip()
+            if statement.startswith('--') and '\n' not in statement:
+                statements[i - 1] += raw_statement
+                statements[i] = ''
+        statements = [s for s in statements if s]
 
         return statements if statements else [sql]  # Return original if no split occurred
 
