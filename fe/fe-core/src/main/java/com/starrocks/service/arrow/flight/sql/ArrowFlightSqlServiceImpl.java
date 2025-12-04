@@ -694,7 +694,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
 
         String[] split = arrowFlightProxy.split(":");
-        return (split.length == 2 || split.length == 4);
+        return split.length == 2;
     }
 
     private Pair<Location, ByteString> parseProxy(SessionVariable sv, Coordinator defaultCoordinator,
