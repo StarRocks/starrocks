@@ -32,7 +32,7 @@
 namespace starrocks::lake {
 
 Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
-        const PersistentIndexSstableMetaPB& sstable_meta, CompactionCandidateResult* result, bool base_compact) {
+        const PersistentIndexSstableMetaPB& sstable_meta, CompactionCandidateResult* result) {
     result->candidate_filesets.clear();
 
     if (sstable_meta.sstables_size() == 0) {
@@ -140,7 +140,7 @@ Status LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidat
         }
 
         // Check if we need to start a new level
-        if (!base_compact && level_size > config::pk_index_size_tiered_min_level_size && fileset_size < level_size &&
+        if (level_size > config::pk_index_size_tiered_min_level_size && fileset_size < level_size &&
             level_size / fileset_size > (level_multiple - 1)) {
             // Close current level
             if (!transient_filesets.empty()) {

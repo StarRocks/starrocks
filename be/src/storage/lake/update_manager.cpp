@@ -325,13 +325,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                              DelvecPagePB() /* empty */, nullptr));
             bool succ = true;
             if (async_compact_cb) {
-                TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_compact_us");
+                TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_compact_wait_us");
                 ASSIGN_OR_RETURN(succ, async_compact_cb->wait_for(1000 /* ms timeout */));
                 if (succ) {
-                    LOG(INFO) << fmt::format("ingest sst compact finish. tablet {}, txn {}, fileset remain {}, trace ",
-                                             tablet->id(), txn_id,
-                                             index.current_fileset_index() - ingest_fileset_start_idx,
-                                             async_compact_cb->trace()->MetricsAsJSON());
+                    LOG(INFO) << fmt::format(
+                            "ingest sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}", tablet->id(),
+                            txn_id, index.current_fileset_index() - ingest_fileset_start_idx,
+                            async_compact_cb->trace()->MetricsAsJSON());
                     async_compact_cb = nullptr;
                 }
             }
@@ -346,7 +346,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
     }
     if (async_compact_cb) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_compact_us");
+        TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_compact_wait_us");
         RETURN_IF_ERROR(async_compact_cb->wait_for());
     }
 

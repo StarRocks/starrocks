@@ -654,8 +654,8 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::ingest_sst_compact(
     }
     // 2. generate candidate filesets using size tiered compaction strategy.
     auto result = std::make_shared<LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult>();
-    RETURN_IF_ERROR(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta,
-                                                                                                result.get(), true));
+    RETURN_IF_ERROR(
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta, result.get()));
     // 3. Do parallel compaction for each candidate set.
     ASSIGN_OR_RETURN(auto cb,
                      compact_mgr->async_compact(
