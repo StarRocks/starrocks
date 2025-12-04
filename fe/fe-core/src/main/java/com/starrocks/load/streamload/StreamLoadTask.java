@@ -55,6 +55,11 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> fb77782623 ([BugFix] Fix warehouse field NULL in loads table for stream loads (#66202))
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -72,7 +77,11 @@ import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TxnCommitAttachment;
+<<<<<<< HEAD
 import com.starrocks.warehouse.LoadJobWithWarehouse;
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> fb77782623 ([BugFix] Fix warehouse field NULL in loads table for stream loads (#66202))
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -1611,7 +1620,25 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
 
             info.setType(getStringByType());
+<<<<<<< HEAD
             return info;
+=======
+
+            // warehouse
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    info.setWarehouse(warehouse.getName());
+                } catch (Exception e) {
+                    LOG.warn("Failed to get warehouse for stream load task {}, error: {}", id, e.getMessage());
+                    info.setWarehouse("");
+                }
+            } else {
+                info.setWarehouse("");
+            }
+
+            return Lists.newArrayList(info);
+>>>>>>> fb77782623 ([BugFix] Fix warehouse field NULL in loads table for stream loads (#66202))
         } finally {
             readUnlock();
         }
