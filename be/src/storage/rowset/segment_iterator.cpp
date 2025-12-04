@@ -1179,6 +1179,11 @@ void SegmentIterator::_init_column_predicates() {
     PredicateAndNode used_pred_root;
     _opts.pred_tree.root().partition_copy([](const auto& node) { return node.visit(IndexOnlyPredicateChecker()); },
                                           &useless_pred_root, &used_pred_root);
+    // if has index only filter, remove it from pred_tree after index filter
+    if (!useless_pred_root.empty()) {
+        _opts.pred_tree = std::move(PredicateTree::create(std::move(used_pred_root)));
+        _predicate_columns = _opts.pred_tree.num_columns();
+    }
 
     PredicateAndNode expr_pred_root;
     PredicateAndNode non_expr_pred_root;
