@@ -35,6 +35,7 @@
 #include "runtime/mysql_result_writer.h"
 
 #include <column/column_helper.h>
+
 #include <optional>
 
 #include "column/chunk.h"

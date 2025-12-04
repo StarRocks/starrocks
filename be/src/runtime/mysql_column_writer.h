@@ -23,9 +23,9 @@
 #include "column/variant_column.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/decimalv3.h"
+#include "runtime/types.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "runtime/types.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
@@ -34,7 +34,7 @@ using MysqlColumnViewer = std::variant<
 #define M(NAME) ColumnViewer<NAME>,
         APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
-        ColumnViewer<TYPE_NULL>>;
+                ColumnViewer<TYPE_NULL>>;
 
 struct MysqlColumnViewerBuilder {
     template <LogicalType ltype>
@@ -109,8 +109,7 @@ struct MysqlColumnSerializer {
     }
 };
 
-using MysqlSerializeFn =
-        void (*)(const MysqlColumnViewer&, const TypeDescriptor&, MysqlRowBuffer*, size_t, bool);
+using MysqlSerializeFn = void (*)(const MysqlColumnViewer&, const TypeDescriptor&, MysqlRowBuffer*, size_t, bool);
 
 struct MysqlSerializerBuilder {
     template <LogicalType ltype>
@@ -124,4 +123,3 @@ inline MysqlSerializeFn get_mysql_serializer(LogicalType ltype) {
 }
 
 } // namespace starrocks
-
