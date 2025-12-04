@@ -21,10 +21,10 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-// ClusterSnapshotCheckpointScheduler daemon is running on master node. Coordinate two checkpoint controller
+// ClusterSnapshotJobScheduler daemon is running on master node. Coordinate two checkpoint controller
 // together to finish image checkpoint one by one and upload image for backup
-public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon implements SnapshotJobContext {
-    public static final Logger LOG = LogManager.getLogger(ClusterSnapshotCheckpointScheduler.class);
+public class ClusterSnapshotJobScheduler extends FrontendDaemon implements SnapshotJobContext {
+    public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJobScheduler.class);
     private static int CAPTURE_ID_RETRY_TIME = 10;
 
     protected final CheckpointController feController;
@@ -35,7 +35,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon implement
     protected long lastAutomatedJobStartTimeMs;
     protected volatile ClusterSnapshotJob runningJob;
 
-    public ClusterSnapshotCheckpointScheduler(CheckpointController feController,
+    public ClusterSnapshotJobScheduler(CheckpointController feController,
             CheckpointController starMgrController) {
         super("cluster_snapshot_checkpoint_scheduler", 10L);
         this.feController = feController;
@@ -85,13 +85,14 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon implement
         // skip first run when the scheduler start
         if (lastAutomatedJobStartTimeMs == 0) {
             GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                                            .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
+                    .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
             lastAutomatedJobStartTimeMs = System.currentTimeMillis(); // init last start time
             return;
         }
 
         /*
-         * Control the interval of automated cluster snapshot manually instead of by Daemon framework
+         * Control the interval of automated cluster snapshot manually instead of by
+         * Daemon framework
          * for the future purpose.
          */
         if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)
