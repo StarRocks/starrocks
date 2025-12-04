@@ -150,7 +150,7 @@ class ArrowSqlLib(BaseConnectionLib):
             if statement.startswith('--') and '\n' not in statement:
                 statements[i - 1] += raw_statement
                 statements[i] = ''
-        statements = [s for s in statements if s]
+        statements = [s for s in statements if s.strip() and s.strip() != ';']
 
         return statements if statements else [sql]  # Return original if no split occurred
 
