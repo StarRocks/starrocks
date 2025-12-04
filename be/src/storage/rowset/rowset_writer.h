@@ -178,6 +178,8 @@ private:
     Status _flush_update_file(const SegmentPB& segment_pb, butil::IOBuf& data);
 
 protected:
+    void _check_global_dict(SegmentWriter* segment_writer);
+
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;

@@ -29,6 +29,7 @@ class Chunk;
 class Column;
 class TabletSchema;
 class ThreadPool;
+class SegmentWriter;
 
 struct OlapWriterStatistics;
 
@@ -133,6 +134,18 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
 
+<<<<<<< HEAD
+=======
+    // When the system determines that pk parallel execution can be enabled
+    // (for example, during large imports or major compaction tasks), it will invoke this function.
+    // However, whether pk parallel execution is actually enabled still depends on the schema.
+    void try_enable_pk_parallel_execution();
+
+    bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
+
+    void check_global_dict(SegmentWriter* segment_writer);
+
+>>>>>>> 98bf23baf1 ([BugFix] Fix global dictionary is not updated under some cases (#66194))
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
