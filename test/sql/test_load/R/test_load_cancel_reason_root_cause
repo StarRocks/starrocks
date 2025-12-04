@@ -1,0 +1,42 @@
+-- name: test_load_cancel_reason_root_cause @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t`
+(
+    `id` int(11) NOT NULL COMMENT "用户 ID",
+    `name` varchar(65533) NULL COMMENT "用户姓名",
+    `score` int(11) NOT NULL COMMENT "用户得分"
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "write_quorum" = "ONE",
+ "replication_num" = "3"
+);
+-- result:
+-- !result
+ADMIN ENABLE FAILPOINT 'load_tablet_writer_add_chunks';
+-- result:
+-- !result
+insert into t WITH LABEL label_${uuid1} values (1, 'n1', 1);
+-- result:
+-- !result
+ADMIN DISABLE FAILPOINT 'load_tablet_writer_add_chunks';
+-- result:
+-- !result
+sync;
+-- result:
+-- !result
+select state, instr(error_msg, 'load_tablet_writer_add_chunks failpoint triggered failure') > 0 from information_schema.loads where label='label_${uuid1}';
+-- result:
+CANCELLED	1
+-- !result
+select * from t;
+-- result:
+-- !result
+
