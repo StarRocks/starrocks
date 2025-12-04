@@ -644,11 +644,10 @@ public class TabletSchedulerTest {
 
         TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
 
-        new Expectations() {
-            {
-                globalStateMgr.getTabletScheduler();
-                minTimes = 0;
-                result = tabletScheduler;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return tabletScheduler;
             }
         };
 
