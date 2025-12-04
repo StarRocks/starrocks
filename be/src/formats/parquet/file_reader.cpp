@@ -302,17 +302,12 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
-<<<<<<< HEAD
-        auto row_group_reader =
-                std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx, row_group_first_row);
-=======
         if (_file_metadata->t_metadata().row_groups[i].num_rows == 0) {
             continue;
         }
 
-        auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx,
-                                                              row_group_first_row, row_group_first_row_id);
->>>>>>> 9a03efe515 ([BugFix] Fix the core dump caused by empty row groups in parquet files (#65928))
+        auto row_group_reader =
+                std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx, row_group_first_row);
         RETURN_IF_ERROR(row_group_reader->init());
 
         _group_reader_param.stats->parquet_total_row_groups += 1;
