@@ -87,3 +87,59 @@ I0325 20:27:50.410579 15259 data_consumer_group.cpp:131] consumer group done: 41
 Routine Load 能够保证 Exactly-once 语义。
 
 一个导入任务是一个单独的事务，如果该事务在执行过程中出现错误，则事务会中止，FE 不会更新该导入任务相关分区的消费进度。并且 FE 在下一次调度任务执行队列中的导入任务时，从上次保存的分区消费位点发起消费请求，如此可以保证 Exactly once 语义。
+
+## 如果 Routine Load 返回SSL身份验证错误该怎么办？
+
+  **错误信息：**`routines:tls_process_server_certificate:certificate verify failed: broker certificate could not be verified, verify that ssl.ca.location is correctly configured or root CA certificates are installed (install ca-certificates package) (after 273ms in state SSL_HANDSHAKE)`
+
+  **原因分析：**证书中的域名与 Kafka Broker 域名不一致。详见[更多细节](https://github.com/confluentinc/librdkafka/issues/4349)。
+
+  **解决方案：**在 Routine Load Job 中添加属性 `"property.ssl.endpoint.identification.algorithm" = "none"`。
+
+## 为什么 Routine Load 报告 “JSON data is an array.strip_outer_array must be set true”？
+
+您的输入数据是一个JSON数组 `([{},{}])`。将属性 `strip_outer_array` 设置为 `true` 以展开它。
+
+## 为什么创建 Routine Load 作业时收到 “There are more than 100 routine load jobs running”？
+
+增加FE配置 `max_routine_load_job_num` 的值。
+
+## 为什么即使配置了 SASL，Routine Load 作业创建仍然失败并显示 “failed to get partition meta”？
+
+实际原因可能是 SASL 配置不正确。
+
+## 如何处理Routine Load错误 “Create replicas failed …”？
+
+调整以下FE配置：
+
+```SQL
+admin set frontend config ("tablet_create_timeout_second"="5");
+admin set frontend config ("max_create_table_timeout_second"="600");
+```
+
+您也可以在配置文件中设置它们以持久化修改。
+
+## 为什么 Routine Load 在消费 Kafka 时报告 “Bad message format”？
+
+Kafka使用主机名进行通信。在所有托管StarRocks节点的服务器上的 `/etc/hosts` 中为Kafka节点添加主机名解析。
+
+## 什么原因导致 Routine Load 失败并显示 "failed to send task: failed to submit task. error code: TOO MANY TASKS"？
+
+这是因为总的 Routine Load 并发超过了集群能力（等于 `routine_load_thread_pool_size × 活跃 BE 数量`）。
+
+解决方案：
+
+- 减少导入QPS（推荐集群QPS < 10）。根据 `cluster routine_load_task_num / routine_load_task_consume_second` 计算集群QPS。
+
+- 通过调整 `max_routine_load_batch_size` 和 `routine_load_task_timeout_second` 增加每个任务的批次大小（> 1 GB）。
+
+- 确保 `routine_load_thread_pool_size` 小于BE CPU核心数的一半。
+
+一个作业的并发由以下值的最小值决定：
+
+- `kafka_partition_num`
+- `desired_concurrent_number`
+- `alive_be_num`
+- `max_routine_load_task_concurrent_num`
+
+您可以通过减少 `max_routine_load_task_concurrent_num` 来开始调整并发。
