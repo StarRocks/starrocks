@@ -33,10 +33,6 @@ StarRocks はロード時にデータを変換することをサポートして�
 
 ソースデータファイルのサイズが 10 GB を超えており、これは Stream Load がサポートする最大ファイルサイズです。次のいずれかのアクションを取ってください。
 
-<<<<<<< HEAD
-- `seq -w 0 n` を使用して、ソースデータファイルを小さなファイルに分割します。
-- `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` を使用して、[BE configuration item](../../administration/management/BE_configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` の値を調整し、最大ファイルサイズを増やします。
-=======
 - `seq -w 0 n` を使用して、ソースデータファイルをより小さなファイルに分割します。
 - `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` を使用して、[BE configuration item](../../administration/management/BE_configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` の値を調整し、最大ファイルサイズを増やします。
 
@@ -57,4 +53,3 @@ replace 関数を使用します。
 ```Bash
 -H $'columns:k1,`role`'
 ```
->>>>>>> f1d109cc9d ([Doc] Add New Load FAQ (#66210))
