@@ -63,8 +63,9 @@ Status ArrowResultWriter::init(RuntimeState* state) {
     }
 
     std::unordered_map<int64_t, std::string> temp_id_to_col_name;
+
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, temp_id_to_col_name, &_arrow_schema, _output_expr_ctxs,
-                                            &_output_column_names));
+                                            &_output_column_names, state->arrow_flight_sql_version()));
 
     state->exec_env()->result_mgr()->set_arrow_schema(state->fragment_instance_id(), _arrow_schema);
 
@@ -96,6 +97,8 @@ StatusOr<TFetchDataResultPtrs> ArrowResultWriter::process_chunk(Chunk* chunk) {
     RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _output_expr_ctxs, _arrow_schema, arrow::default_memory_pool(),
                                                  &result));
     RETURN_IF_ERROR(_sinker->add_arrow_batch(result));
+
+    _written_rows += chunk->num_rows();
 
     return TFetchDataResultPtrs{};
 }

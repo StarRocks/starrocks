@@ -1,4 +1,4 @@
--- name: testShortCircuit
+-- name: testShortCircuit @no_arrow_flight_sql
 set enable_short_circuit=true;
 -- result:
 -- !result

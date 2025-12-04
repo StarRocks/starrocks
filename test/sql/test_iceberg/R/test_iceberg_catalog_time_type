@@ -1,4 +1,4 @@
--- name: test_iceberg_catalog_time_type
+-- name: test_iceberg_catalog_time_type @no_arrow_flight_sql
 create external catalog ice_cat_${uuid0}
 properties
 (
