@@ -134,6 +134,7 @@ private:
     std::shared_ptr<DeltaWriter> _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
     std::atomic<bool> _closed;
+    std::atomic<std::string*> _cancel_reason{nullptr};
 };
 
 class CommittedRowsetInfo {
