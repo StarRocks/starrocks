@@ -18,17 +18,6 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
-<<<<<<< HEAD
-=======
-
-#include "common/process_exit.h"
-#ifdef __APPLE__
-#include <mach/mach_init.h>
-#include <mach/mach_port.h>
-#include <mach/thread_act.h>
-#include <pthread.h>
-#endif
->>>>>>> c24a7de0ab ([BugFix] Fix BE still reported as alive on SIGSEGV (#66212))
 
 #include <cerrno>
 #include <cstdio>
@@ -40,6 +29,7 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "common/process_exit.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
