@@ -37,7 +37,7 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
 
     public ClusterSnapshotJobScheduler(CheckpointController feController,
             CheckpointController starMgrController) {
-        super("cluster_snapshot_checkpoint_scheduler", 10L);
+        super("cluster-snapshot-job-scheduler", 10L);
         this.feController = feController;
         this.starMgrController = starMgrController;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
@@ -95,24 +95,19 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
          * Daemon framework
          * for the future purpose.
          */
-        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)
-                || (runningJob != null && runningJob.isUnFinishedState())) {
+        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)) {
             return;
         }
 
         CheckpointController.exclusiveLock();
         try {
-            if (runningJob == null || !runningJob.isUnFinishedState()) {
-                runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
-            }
+            runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
 
             // set last start time when job has been created and begin to submit
             lastAutomatedJobStartTimeMs = runningJob.getCreatedTimeMs();
             runningJob.run(this);
         } finally {
-            if (runningJob != null && !runningJob.isUnFinishedState()) {
-                runningJob = null;
-            }
+            runningJob = null;
             CheckpointController.exclusiveUnlock();
         }
     }
