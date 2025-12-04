@@ -7,7 +7,7 @@ PYTHON_CMD=${PYTHON:-python}
 mkdir -p $PYTHON_OUTDIR
 
 # use protoc to generate protobuf python code
-$PYTHON_CMD -m grpc_tools.protoc -I$PROTO_SRC_PATH --python_out=$PYTHON_OUTDIR --grpc_python_out=$PYTHON_OUTDIR $PROTO_SRC_PATH/*.proto || break
+$PYTHON_CMD -m grpc_tools.protoc -I$PROTO_SRC_PATH --python_out=$PYTHON_OUTDIR --grpc_python_out=$PYTHON_OUTDIR $PROTO_SRC_PATH/*.proto || exit 1
 # fix protoc generated python code compatible issue with python3
 $PYTHON_CMD my-2to3.py -wn --no-diffs starclient/grpc_gen/*.py
 
