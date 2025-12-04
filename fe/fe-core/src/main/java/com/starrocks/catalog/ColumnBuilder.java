@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.type.Type;

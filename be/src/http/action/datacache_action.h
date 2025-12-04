@@ -46,6 +46,7 @@ private:
     void _handle_stat(HttpRequest* req);
     void _handle_app_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
+    static double _calc_rate(size_t total, size_t count);
 
     LocalDiskCacheEngine* _disk_cache;
     LocalMemCacheEngine* _mem_cache;

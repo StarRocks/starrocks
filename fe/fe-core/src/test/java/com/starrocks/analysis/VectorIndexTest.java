@@ -14,7 +14,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
@@ -29,6 +28,7 @@ import com.starrocks.common.VectorIndexParams.VectorIndexType;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;

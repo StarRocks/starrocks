@@ -1856,6 +1856,19 @@ public class PlanFragmentBuilder {
                                     "only support `regexp` or `rlike` for log grep");
                         }
                     }
+
+                    if (like.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
+                        String pattern = constantOperator.getVarchar();
+                        switch (columnRefOperator.getName()) {
+                            case "TABLE_SCHEMA":
+                            case "DATABASE_NAME":
+                                scanNode.setSchemaDb(pattern);
+                                break;
+                            case "TABLE_NAME":
+                                scanNode.setSchemaTable(pattern);
+                                break;
+                        }
+                    }
                 }
             }
 
@@ -2468,7 +2481,7 @@ public class PlanFragmentBuilder {
             }
             if (singleDistinctCount == 1) {
                 FunctionCallExpr replaceExpr = null;
-                final String functionName = functionCallExpr.getFnName().getFunction();
+                final String functionName = functionCallExpr.getFunctionName();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
                     replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,
@@ -4325,8 +4338,8 @@ public class PlanFragmentBuilder {
         }
 
         private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
-                                                            ColumnRefSet leftColumns,
-                                                            ColumnRefSet rightColumns) {
+                                                                       ColumnRefSet leftColumns,
+                                                                       ColumnRefSet rightColumns) {
             List<ScalarOperator> candidates = new ArrayList<>();
 
             for (ScalarOperator predicate : otherJoin) {

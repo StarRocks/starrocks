@@ -414,7 +414,7 @@ public class DataDescription implements ParseNode {
     private void analyzeColumnToHadoopFunction(String columnName, Expr child1) throws AnalysisException {
         Preconditions.checkState(child1 instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) child1;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         if (!HADOOP_SUPPORT_FUNCTION_NAMES.contains(functionName.toLowerCase())) {
             return;
         }

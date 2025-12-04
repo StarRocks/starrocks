@@ -199,7 +199,7 @@ select sleep(3);
 insert into ss values('2002-01-08', 1, 2);
 select sleep(3);
 function: wait_alter_table_not_pending()
-select * from ss;
+select * from ss order by event_day;
 
 
 -- name: test_time_slice_with_minute_granularity

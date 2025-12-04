@@ -306,6 +306,10 @@ REST catalog 用の `MetastoreParams`:
   - 必須: いいえ
   - 説明: 入れ子になった Namespace の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト： `false`。
 
+- `iceberg.catalog.rest.view-endpoints-enabled`
+  - 必須: いいえ
+  - 説明: ビュー関連の操作をサポートするためにビューエンドポイントを有効にするかどうか。`false`に設定すると、`getView`などのビュー操作が無効になります。デフォルト：`true`。
+
 次の例は、Tabular をメタストアとして使用する Iceberg catalog `tabular` を作成します。
 
 ```SQL

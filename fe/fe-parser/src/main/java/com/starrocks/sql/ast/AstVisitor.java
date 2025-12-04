@@ -266,6 +266,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowFunctionsStatement(ShowFunctionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowTriggersStatement(ShowTriggersStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -530,6 +534,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -681,6 +689,42 @@ public interface AstVisitor<R, C> {
 
     default R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
         return visitNode(clause, context);
+    }
+
+    default R visitAlterTableColumnClause(AlterTableColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddColumnClause(AddColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitAddColumnsClause(AddColumnsClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitDropColumnClause(DropColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitModifyColumnClause(ModifyColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitModifyColumnCommentClause(ModifyColumnCommentClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitAddFieldClause(AddFieldClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitDropFieldClause(DropFieldClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
     }
 
     // ------------------------------------------- Additional Warehouse Statement ----------------------------------------------------

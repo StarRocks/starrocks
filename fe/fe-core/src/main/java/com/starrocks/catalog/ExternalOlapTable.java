@@ -25,6 +25,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PartitionKeySerializer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;

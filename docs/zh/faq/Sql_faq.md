@@ -97,8 +97,8 @@ A JOIN B ON A.col1=B.col1 JOIN C on A.col1=C.col1 where A.col1='北京'，
 
 select * 和 select 时具体列效率差距会很大，这时应该去排查profile，看 MERGE 的具体信息。
 
-* 确认是否是存储层聚合消耗的时间过长。
-* 确认是否指标列有很多，需要对几百万行的几百列进行聚合。
+- 确认是否是存储层聚合消耗的时间过长。
+- 确认是否指标列有很多，需要对几百万行的几百列进行聚合。
 
 ```plain text
 MERGE:
@@ -183,3 +183,204 @@ StarRocks 使用 keyword 数据类型对该查询语句进行转换。因为该�
 `SHOW DATA;` 可以展示当前数据库下所有表的数据量和副本数。
 
 `SHOW DATA FROM <db_name>.<table_name>;` 可以展示指定数据库下某个表的数据量、副本数和统计行数。
+
+## 为什么在分区键上使用函数会导致查询变慢？
+
+分区键使用函数会导致分区裁剪不准确，从而降低查询性能。
+
+## 为什么 DELETE 语句不支持嵌套函数？
+
+```SQL
+mysql > DELETE FROM starrocks.ods_sale_branch WHERE create_time >= concat(substr(202201,1,4),'01') and create_time <= concat(substr(202301,1,4),'12');
+
+SQL Error [1064][42000]: Right expr of binary predicate should be value
+```
+
+BINARY 谓词必须是 `column op literal` 类型，不能是表达式。目前没有支持表达式作为比较值的计划。
+
+## 如何使用保留关键字命名列？
+
+需要对保留关键字（例如 `rank`）进行转义，如使用 `` `rank` ``。
+
+## 如何停止正在执行的 SQL？
+
+可以使用 `show processlist;` 查看执行中的 SQL，并使用 `kill <id>;` 终止对应 SQL。也可以通过 `SHOW PROC '/current_queries';` 查看与管理。
+
+## 如何清理 Idle 连接？
+
+可通过会话变量 `wait_timeout` 控制空闲连接的超时时间（单位：秒）。MySQL 默认 Idle 连接约 8 小时后会自动清理。
+
+## UNION ALL 中的多个 SQL 段是并行执行的吗？
+
+是的，它们会并行执行。
+
+## 遇到 SQL 导致 BE Crash 应该如何处理？
+
+1. 基于 `be.out` 报错堆栈查看导致 Crash 的 `query_id`。
+2. 根据 `query_id` 在 `fe.audit.log` 中找到对应的 SQL。
+
+请将以下信息收集并发给支持团队：
+
+- `be.out` 日志
+- 运行 `pstack $be_pid > pstack.log`，执行 SQL。
+- Core Dump 文件
+
+按照以下步骤收集 Core 文件：
+
+1. 获取对应的 BE 进程：
+
+   ```Bash
+   ps aux| grep be
+   ```
+
+2. 设置 Core 文件大小限制为 unlimited。
+
+   ```Bash
+   prlimit -p $bePID --core=unlimited:unlimited
+   ```
+
+   验证大小限制是否为 unlimited。
+
+   ```Bash
+   cat /proc/$bePID/limits
+   ```
+
+如果不为 `0`，则进程崩溃时，系统会在 BE 部署根目录下生成一个 Core 文件。
+
+## 如何使用 Hints 控制表关联优化器行为？
+
+支持 `broadcast` 与 `shuffle` 两种 Hint。例如：
+
+- `select * from a join [broadcast] b on a.id = b.id;`
+- `select * from a join [shuffle] b on a.id = b.id;`
+
+## 如何提高 SQL 查询并发度？
+
+通过调整会话变量 `pipeline_dop`。
+
+## 如何查看 DDL 的执行进度？
+
+- 查看默认数据库下所有列修改任务：
+
+   ```SQL
+   SHOW ALTER TABLE COLUMN;
+   ```
+
+- 查看指定表最近一次列修改任务：
+
+   ```SQL
+   SHOW ALTER TABLE COLUMN WHERE TableName="table1" ORDER BY CreateTime DESC LIMIT 1;
+   ```
+
+## 为什么浮点数比较会导致查询结果有时能查到、有时查不到？
+
+直接使用浮点数 `=` 比较会因误差导致不稳定，建议使用范围判断。
+
+## 为什么浮点数计算会出现误差？
+
+FLOAT/DOUBLE 类型在 `avg`、`sum` 等计算中存在精度误差，不同查询结果可能不一致。如需高精度，请使用 DECIMAL 类型，但性能会下降 2~3 倍。
+
+## 为什么子查询中的 ORDER BY 不生效？
+
+在分布式执行中，若不在子查询外层指定 ORDER BY，则无法保证全局有序。这是预期行为。
+
+## 为什么 row_number() 的结果在多次执行时不一致？
+
+如果 ORDER BY 的字段存在重复（如多行 `createTime` 相同），SQL 标准不保证稳定排序。建议在 ORDER BY 中加入唯一字段（如 `employee_id`）以确保稳定性。
+
+## SQL 优化或排查问题需要收集哪些信息？
+
+- `EXPLAIN COSTS <SQL>`（包含统计信息）
+- `EXPLAIN VERBOSE <SQL>`（包含数据类型、nullable、优化策略）
+- Query Profile（通过 FE Web 界面 `http://<fe_ip>:<fe_http_port>` 并导航至 Queries Tab 查看）
+- Query Dump（通过 HTTP API 获取）
+
+  ```Bash
+  wget --user=${username} --password=${password} --post-file ${query_file} http://${fe_host}:${fe_http_port}/api/query_dump?db=${database} -O ${dump_file}
+  ```
+
+Query Dumb 包含以下信息：
+
+- 查询语句
+- 查询中引用的表结构
+- 会话变量
+- BE 个数
+- 统计信息（Min，Max 值）
+- 异常信息（异常堆栈）
+
+## 如何查看数据倾斜情况？
+
+使用 `ADMIN SHOW REPLICA DISTRIBUTION FROM <table>` 查看 Tablet 分布情况。
+
+## 出现内存相关报错时如何排查？
+
+常见三类情况：
+
+- **单查询内存超限：**
+  - 报错：`Mem usage has exceed the limit of single query, You can change the limit by set session variable exec_mem_limit.`
+  - 解决方案：调整 `exec_mem_limit`
+- **查询池内存超限：**
+  - 报错：`Mem usage has exceed the limit of query pool`
+  - 解决方案：需优化 SQL。
+- **BE 总内存超限：**
+  - 报错：`Mem usage has exceed the limit of BE`
+  - 解决方案：分析内存占用。
+
+内存分析方法：
+
+```Bash
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use"
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
+```
+
+---
+
+## 报错 `StarRocks planner use long time xxx ms in logical phase` 怎么办？
+
+1. 提供分析 `fe.gc.log` 检查是否出现 Full GC。
+2. 如果该 SQL 执行计划较复杂，可调大 `new_planner_optimize_timeout`（单位：ms）：
+
+   ```SQL
+   set global new_planner_optimize_timeout = 6000;
+   ```
+
+## 遇到 Unknown Error 时如何排查？
+
+可依次尝试调整以下参数后重新执行 SQL：
+
+```SQL
+set disable_join_reorder = true;
+set enable_global_runtime_filter = false;
+set enable_query_cache = false;
+set cbo_enable_low_cardinality_optimize = false;
+```
+
+然后收集 EXPLAIN COSTS、EXPLAIN VERBOSE、PROFILE 和 Query Dump，并反馈给支持团队。
+
+## `select now()` 返回的时间是什么时区？
+
+返回的是由 `time_zone` 系统变量指定的时区。FE/BE 日志则使用机器本地时区。
+
+## 为什么高并发场景下资源正常但 SQL 仍然变慢？
+
+原因为网络或 RPC 耗时高。您可以将 BE 参数 `brpc_connection_type` 调整为 `pooled`，然后重启 BE。
+
+## 如何关闭统计信息采集？
+
+- 关闭自动收集：
+
+  ```SQL
+  enable_statistic_collect = false;
+  ```
+
+- 关闭导入触发收集：
+
+  ```SQL
+  enable_statistic_collect_on_first_load = false;
+  ```
+
+- 低版本升级到 v3.3 及以上后需手动设置：
+
+  ```SQL
+  set global analyze_mv = "";
+  ```

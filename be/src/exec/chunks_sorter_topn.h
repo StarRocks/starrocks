@@ -134,6 +134,8 @@ private:
     // the last two element [4, 5] should be pruned
     void _rank_pruning();
 
+    void _reset();
+
     const MergedRun& _lowest_merged_run() const { return _merged_runs.front(); }
 
     std::pair<const MergedRun*, int> _get_run_by_row_id(size_t rid) const {

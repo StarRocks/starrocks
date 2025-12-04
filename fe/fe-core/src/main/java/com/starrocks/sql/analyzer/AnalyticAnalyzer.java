@@ -404,6 +404,6 @@ public class AnalyticAnalyzer {
                 FunctionSet.AVG,
                 FunctionSet.COUNT);
 
-        return supportFunctions.contains(fnCall.getFnName().getFunction());
+        return supportFunctions.contains(fnCall.getFunctionName());
     }
 }

@@ -12,41 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
 
-public class DropFieldClause extends AlterTableColumnClause {
+// clause which is used to add one field to
+public class AddFieldClause extends AlterTableColumnClause {
     private final String colName;
-    private final String fieldName;
-    private final List<String> nestedParentFieldNames;
+    private final StructFieldDesc fieldDesc;
 
     public String getColName() {
         return colName;
     }
 
-    public String getFieldName() {
-        return fieldName;
+    public StructFieldDesc getFieldDesc() {
+        return fieldDesc;
     }
 
     public List<String> getNestedParentFieldNames() {
-        return nestedParentFieldNames;
+        return fieldDesc.getNestedParentFieldNames();
     }
 
-    public DropFieldClause(String colName, String fieldName, List<String> nestedParentFieldNames, 
-                          Map<String, String> properties) {
-        super(null, properties, NodePosition.ZERO);
+    public String getFieldName() {
+        return fieldDesc.getFieldName();
+    }
+
+    public Type getType() {
+        return fieldDesc.getType();
+    }
+
+    public ColumnPosition getFieldPos() {
+        return fieldDesc.getFieldPos();
+    }
+
+    public AddFieldClause(String colName, StructFieldDesc fieldDesc, Map<String, String> properties) {
+        super(properties, NodePosition.ZERO);
         this.colName = colName;
-        this.fieldName = fieldName;
-        this.nestedParentFieldNames = nestedParentFieldNames;
+        this.fieldDesc = fieldDesc;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropFieldClause(this, context);
+        return visitor.visitAddFieldClause(this, context);
     }
 }

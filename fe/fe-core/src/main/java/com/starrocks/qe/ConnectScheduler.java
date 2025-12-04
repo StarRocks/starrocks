@@ -53,7 +53,6 @@ import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -98,25 +97,22 @@ public class ConnectScheduler {
             try {
                 long now = System.currentTimeMillis();
                 synchronized (ConnectScheduler.this) {
-                    //Because unregisterConnection will be callback in NMysqlChannel's close,
-                    //unregisterConnection will remove connectionMap (in the same thread)
-                    //This will result in a concurrentModifyException.
-                    //So here we copied the connectionIds to avoid removing iterator during operate iterator
-                    ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
-                    for (Long connectId : connectionIds) {
-                        ConnectContext connectContext = connectionMap.get(connectId);
-                        try (var guard = connectContext.bindScope()) {
-                            connectContext.checkTimeout(now);
+                    // ConcurrentHashMap's iterator is weakly consistent, safe to iterate directly
+                    // even when modifications occur during iteration
+                    for (ConnectContext connectContext : connectionMap.values()) {
+                        if (connectContext != null) {
+                            try (var guard = connectContext.bindScope()) {
+                                connectContext.checkTimeout(now);
+                            }
                         }
                     }
 
                     // remove arrow flight sql timeout connect
-                    ArrayList<String> arrowFlightSqlConnections =
-                            new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
-                    for (String token : arrowFlightSqlConnections) {
-                        ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
-                        try (var guard = connectContext.bindScope()) {
-                            connectContext.checkTimeout(now);
+                    for (ConnectContext connectContext : arrowFlightSqlConnectContextMap.values()) {
+                        if (connectContext != null) {
+                            try (var guard = connectContext.bindScope()) {
+                                connectContext.checkTimeout(now);
+                            }
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 position: 20 # float position is supported
 label: 'String'
+key: 'sql-data-type-string' # differentiate from String functions
 collapsible: true
 collapsed: true
 link:

@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;

@@ -1143,7 +1143,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));
         }
 
-        FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());
+        FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName().getFunction(), node.getChildExpressions());
         expr.setFn(tableFunction);
         ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context, columnRefFactory);
 

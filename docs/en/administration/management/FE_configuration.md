@@ -513,6 +513,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: A list of logger names or package prefixes that the system will configure at startup as WARN-level loggers and route to the warning appender (SysWF) — the `fe.warn.log` file. Entries are inserted into the generated Log4j configuration (alongside builtin warn modules such as org.apache.kafka, org.apache.hudi, and org.apache.hadoop.io.compress) and produce logger elements like `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>`. Fully-qualified package and class prefixes (for example, "com.example.lib") are recommended to suppress noisy INFO/DEBUG output into the regular log and to allow warnings to be captured separately.
 - Introduced in: v3.2.13
 
+##### log_cleaner_disk_util_based_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enable automatic log cleaning based on disk usage. When enabled, logs will be cleaned when disk usage exceeds the threshold. The log cleaner runs as a background daemon on the FE node and helps prevent disk space exhaustion from log file accumulation.
+- Introduced in: -
+
+##### log_cleaner_disk_usage_threshold
+
+- Default: 80
+- Type: Int
+- Unit: Percentage
+- Is mutable: Yes
+- Description: Disk usage threshold (percentage) to trigger log cleaning. When disk usage exceeds this threshold, log cleaning will start. The cleaner checks each configured log directory independently and processes directories that exceed this threshold.
+- Introduced in: -
+
+##### log_cleaner_disk_usage_target
+
+- Default: 60
+- Type: Int
+- Unit: Percentage
+- Is mutable: Yes
+- Description: Target disk usage (percentage) after log cleaning. Log cleaning will continue until disk usage drops below this threshold. The cleaner deletes the oldest log files one by one until the target is reached.
+- Introduced in: -
+
+##### log_cleaner_audit_log_min_retention_days
+
+- Default: 3
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Minimum retention days for audit log files. Audit log files newer than this will not be deleted even if disk usage is high. This ensures that audit logs are preserved for compliance and troubleshooting purposes.
+- Introduced in: -
+
+##### log_cleaner_check_interval_second
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 300 seconds (5 minutes).
+- Introduced in: -
+
 ### Server
 
 ##### brpc_idle_wait_max_time

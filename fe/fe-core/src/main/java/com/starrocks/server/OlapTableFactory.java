@@ -519,12 +519,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            boolean enableReplicatedStorage = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine);
             if (table.isOlapTableOrMaterializedView()) {
                 // replicated storage
-                table.setEnableReplicatedStorage(
-                        PropertyAnalyzer.analyzeBooleanProp(
-                                properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                                Config.enable_replicated_storage_as_default_engine));
+                table.setEnableReplicatedStorage(enableReplicatedStorage);
 
                 boolean hasGin = table.getIndexes().stream()
                         .anyMatch(index -> index.getIndexType() == IndexType.GIN);

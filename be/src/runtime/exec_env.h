@@ -53,7 +53,6 @@
 
 namespace starrocks {
 class AgentServer;
-class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
@@ -296,7 +295,6 @@ public:
     ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
@@ -395,7 +393,6 @@ private:
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
 
-    BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
     LoadChannelMgr* _load_channel_mgr = nullptr;
     LoadStreamMgr* _load_stream_mgr = nullptr;

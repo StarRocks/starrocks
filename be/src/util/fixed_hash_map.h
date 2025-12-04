@@ -123,6 +123,11 @@ public:
 
     size_t dump_bound() { return hash_table_size; }
 
+    void clear() {
+        memset(_hash_table, 0, sizeof(ValueType) * hash_table_size);
+        _size = 0;
+    }
+
 private:
     size_t _size = 0;
     ValueType _hash_table[hash_table_size + 1];
@@ -190,6 +195,11 @@ public:
     size_t size() { return _size; }
 
     size_t capacity() { return hash_table_size; }
+
+    void clear() {
+        memset(_hash_table, 0, sizeof(uint8_t) * hash_table_size);
+        _size = 0;
+    }
 
 private:
     size_t _size = 0;
