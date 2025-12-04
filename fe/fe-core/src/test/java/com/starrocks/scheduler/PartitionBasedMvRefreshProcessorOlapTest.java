@@ -1664,7 +1664,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
-                                Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+                                Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
 
                                 OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getTable(testDb.getFullName(), "tt1");
@@ -1753,7 +1753,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MaterializedView materializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "mv_with_join0"));
-                    Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+                    Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
                     TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                     OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
