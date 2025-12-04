@@ -219,6 +219,15 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
     channel->open(open_context);
 }
 
+static void set_no_channel_response_status(const PUniqueId& id, StatusPB* status, const std::string& cancel_reason) {
+    status->set_status_code(TStatusCode::INTERNAL_ERROR);
+    if (!cancel_reason.empty()) {
+        status->add_error_msgs(cancel_reason);
+    } else {
+        status->add_error_msgs("no associated load channel " + print_id(id));
+    }
+}
+
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
     UniqueId load_id(request.id());
@@ -228,14 +237,7 @@ void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTab
     } else {
         // Try to find cancel reason to report root cause
         std::string cancel_reason = _get_cancel_reason(load_id);
-        if (!cancel_reason.empty()) {
-            // Report the root cause instead of "no associated load channel"
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs(cancel_reason);
-        } else {
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
-        }
+        set_no_channel_response_status(request.id(), response->mutable_status(), cancel_reason);
     }
 }
 
@@ -248,14 +250,7 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
     } else {
         // Try to find cancel reason to report root cause
         std::string cancel_reason = _get_cancel_reason(load_id);
-        if (!cancel_reason.empty()) {
-            // Report the root cause instead of "no associated load channel"
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs(cancel_reason);
-        } else {
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
-        }
+        set_no_channel_response_status(request.id(), response->mutable_status(), cancel_reason);
     }
 }
 
@@ -270,14 +265,7 @@ void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddS
     } else {
         // Try to find cancel reason to report root cause
         std::string cancel_reason = _get_cancel_reason(load_id);
-        if (!cancel_reason.empty()) {
-            // Report the root cause instead of "no associated load channel"
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs(cancel_reason);
-        } else {
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request->id()));
-        }
+        set_no_channel_response_status(request->id(), response->mutable_status(), cancel_reason);
     }
 }
 
