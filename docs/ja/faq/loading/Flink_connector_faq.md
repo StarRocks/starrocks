@@ -89,9 +89,6 @@ StarRocks Tools を使用してステートメントをエクスポートでき�
 
 **解決策:**
 
-<<<<<<< HEAD
-3 つのしきい値のうち、どれかが最初に達成されると、それが最初に有効になります。これは、チェックポイント間隔の値には影響されず、チェックポイント間隔は exactly once にのみ機能します。Interval-ms は at_least_once によって使用されます。
-=======
 3 つのしきい値のうち、どれかが最初に達成されると、そのしきい値が最初に有効になります。これは、チェックポイント間隔の値には影響されません。チェックポイント間隔の値は、exactly once にのみ機能します。interval-ms は at_least_once によって使用されます。
 
 ## Flink Connector を使用した部分更新が "NULL value in non-nullable column" で失敗するのはなぜですか？
@@ -122,4 +119,3 @@ sink.properties.columns=<primary_key,columns_to_update>
 ## Kafka を消費する際に Routine Load が "Bad message format" を報告するのはなぜですか？
 
 Kafka は通信にホスト名を使用します。StarRocks ノードをホストするすべてのサーバーの `/etc/hosts` に Kafka ノードのホスト名解決を追加します。
->>>>>>> f1d109cc9d ([Doc] Add New Load FAQ (#66210))
