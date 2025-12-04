@@ -458,9 +458,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private void getStreamResultFromBE(String queryId, String fragmentInstanceId, 
                                     String beHost, int bePort, ServerStreamListener listener) {
         FlightStream beStream = null;
+        String beKey = beHost + ":" + bePort;
 
         try {
-            String beKey = beHost + ":" + bePort;
             FlightClient beClient = beClientCache.computeIfAbsent(beKey, key -> {
                 Location beLocation = Location.forGrpcInsecure(beHost, bePort);
                 return FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
@@ -472,7 +472,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                     .build();
             Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
 
-            // TODO add retry logic/stale clients check
+            // TODO add retry logic
             beStream = beClient.getStream(ticket);
             final FlightStream streamToCancel = beStream;
             VectorSchemaRoot root = beStream.getRoot();
@@ -492,7 +492,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             }
             listener.completed();
         } catch (Exception e) {
-            LOG.error("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
+            LOG.warn("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
+
+            FlightClient removedClient = beClientCache.remove(beKey);
+            if (removedClient != null) {
+                try {
+                    removedClient.close();
+                } catch (Exception closeClientEx) {
+                    LOG.warn("[ARROW] Error removing stale client", closeClientEx);
+                }
+            }
+
             listener.error(CallStatus.INTERNAL
                     .withDescription("Failed to proxy result from BE: " + e.getMessage())
                     .toRuntimeException());
