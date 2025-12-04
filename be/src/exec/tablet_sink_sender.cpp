@@ -40,12 +40,88 @@ TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToT
           _write_quorum_type(write_quorum_type),
           _num_repicas(num_repicas) {}
 
+Status TabletSinkSender::send_chunk_by_range(const OlapTableSchemaParam* schema,
+                                             const std::vector<OlapTablePartition*>& partitions,
+                                             const std::vector<uint16_t>& validate_select_idx,
+                                             std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
+                                             Chunk* chunk) {
+    if (validate_select_idx.empty()) {
+        return Status::OK();
+    }
+    if (_tablet_ids.size() < chunk->num_rows()) {
+        _tablet_ids.resize(chunk->num_rows());
+    }
+    std::unordered_map<int64_t, OlapTablePartition*> partition_map;
+    std::unordered_map<int64_t, std::vector<uint16_t>> partition_row_indices_map;
+    // 1. Shuffle rows into batches by partition
+    for (uint16_t i : validate_select_idx) {
+        int64_t partition_id = partitions[i]->id;
+
+        partition_map[partition_id] = partitions[i];
+        auto& row_indices = partition_row_indices_map[partition_id];
+        if (row_indices.empty()) {
+            row_indices.reserve(chunk->num_rows());
+        }
+        row_indices.push_back(i);
+    }
+
+    // 2. Process each index
+    size_t index_size = schema->indexes().size();
+    for (size_t i = 0; i < index_size; ++i) {
+        auto* index_schema = schema->indexes()[i];
+        DCHECK(_partition_params != nullptr && _partition_params->is_range_distribution());
+        DCHECK(_partition_params->range_distribution_slot_descs().size() <= chunk->num_columns());
+
+        // Process each partition batch
+        for (auto& [part_id, part] : partition_map) {
+            const auto& row_indices = partition_row_indices_map[part_id];
+            // Get or create range router for this partition and index.
+            // Use try_emplace to avoid double lookup
+            auto [checker_iter, inserted] = _range_checkers[index_schema->index_id].try_emplace(part_id);
+            
+            RangeRouter* checker_ptr = nullptr;
+            if (inserted) {
+                // New entry, need to initialize router
+                const auto& tablets = part->indexes[i].tablets;
+                std::vector<TTabletRange> tablet_ranges;
+                tablet_ranges.reserve(tablets.size());
+                for (const auto& tablet : tablets) {
+                    DCHECK(tablet.__isset.range);
+                    tablet_ranges.emplace_back(tablet.range);
+                }
+                auto checker = std::make_unique<RangeRouter>();
+                RETURN_IF_ERROR(checker->init(tablet_ranges, _partition_params->range_distribution_slot_descs().size()));
+                checker_ptr = checker.get();
+                checker_iter->second = std::move(checker);
+            } else {
+                // Entry already exists
+                checker_ptr = checker_iter->second.get();
+            }
+
+            DCHECK(checker_ptr != nullptr);
+            const auto& slot_descs = _partition_params->range_distribution_slot_descs();
+            const auto& candidate_tablet_ids = part->indexes[i].tablet_ids;
+            RETURN_IF_ERROR(checker_ptr->route_chunk_rows(chunk, slot_descs, row_indices, candidate_tablet_ids, &_tablet_ids));
+            index_id_partition_id[index_schema->index_id].emplace(part_id);
+        }
+
+        // 3. Send chunk for this index
+        // _send_chunk_by_node uses _tablet_ids and validate_select_idx
+        RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
+    }
+    return Status::OK();
+}
+
 Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                                     const std::vector<OlapTablePartition*>& partitions,
                                     const std::vector<uint32_t>& record_hashes,
                                     const std::vector<uint16_t>& validate_select_idx,
                                     std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                     Chunk* chunk) {
+    if (_partition_params->is_range_distribution()) {
+        return send_chunk_by_range(schema, partitions, validate_select_idx, index_id_partition_id, chunk);
+    }
+
     size_t num_rows = chunk->num_rows();
     size_t selection_size = validate_select_idx.size();
     if (selection_size == 0) {

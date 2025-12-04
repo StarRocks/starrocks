@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TVariant;
 import com.starrocks.type.Type;
 
 import java.util.List;
@@ -43,7 +44,7 @@ public abstract class Variant implements Comparable<Variant> {
 
     public abstract String getStringValue();
 
-    // public abstract TVariant toThrift();
+    public abstract TVariant toThrift();
 
     // public abstract VariantPB toProto();
 
@@ -104,4 +105,5 @@ public abstract class Variant implements Comparable<Variant> {
         }
         return Integer.compare(key1Length, key2Length);
     }
+
 }

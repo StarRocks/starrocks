@@ -59,10 +59,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -94,6 +96,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -108,6 +111,7 @@ import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.thrift.TOlapTableSink;
+import com.starrocks.thrift.TOlapTableTablet;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
@@ -506,7 +510,8 @@ public class OlapTableSink extends DataSink {
                 }
                 break;
             }
-            case RANDOM: {
+            case RANDOM:
+            case RANGE: {
                 break;
             }
             default:
@@ -536,6 +541,9 @@ public class OlapTableSink extends DataSink {
         partitionParam.setTable_id(table.getId());
         partitionParam.setVersion(0);
         partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
+        if (table.getDefaultDistributionInfo().getType() == DistributionInfo.DistributionInfoType.RANGE) {
+            partitionParam.setRange_distribution_columns(MetaUtils.getRangeDistributionColumnNames(table));
+        }
 
         PartitionType partType = table.getPartitionInfo().getType();
         List<Column> partitionColumns = table.getPartitionInfo().getPartitionColumns(table.getIdToColumn());
@@ -759,6 +767,12 @@ public class OlapTableSink extends DataSink {
     private static void setMaterializedIndexes(PhysicalPartition partition, TOlapTablePartition tPartition) {
         for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            tIndex.setTablets(index.getTablets().stream().map(tablet -> {
+                TOlapTableTablet tTablet = new TOlapTableTablet();
+                tTablet.setId(tablet.getId());
+                tTablet.setRange(tablet.getRange().toThrift());
+                return tTablet;
+            }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
         }
     }
@@ -955,7 +969,9 @@ public class OlapTableSink extends DataSink {
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {
-        return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex();
+        return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex() &&
+               // disable colocate mv index for range distribution for now
+               table.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANGE;
     }
 
     public boolean canUsePipeLine() {

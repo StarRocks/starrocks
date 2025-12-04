@@ -234,7 +234,7 @@ message TransactionStatePB {
 
 message VariantPB {
     optional PTypeDesc type = 1;
-    optional int64 int_value = 2;
+    optional int64 long_value = 2;
     optional string string_value = 3;
 }
 
