@@ -1709,7 +1709,7 @@ public class StmtExecutor {
             context.getSessionVariable().setInsertTimeoutS(insertTimeout);
 
             // Cancel task if context is killed (e.g., by client cancel)
-            if (cancelableTask != null && !cancelableTask.isDone()) {
+            if (!analyzeStmt.isAsync() && cancelableTask != null && !cancelableTask.isDone()) {
                 cancelableTask.cancel(true);
             }
         }
