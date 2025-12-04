@@ -21,14 +21,50 @@
 
 #include "common/status.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "gutil/ref_counted.h"
 #include "storage/lake/tablet_metadata.h"
 #include "util/threadpool.h"
+#include "util/trace.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
 
 class TabletManager;
 class PersistentIndexSstable;
+
+class AsyncCompactCB {
+public:
+    AsyncCompactCB(std::unique_ptr<ThreadPoolToken> token,
+                   std::function<Status(const std::vector<PersistentIndexSstablePB>&)> callback);
+    virtual ~AsyncCompactCB() = default;
+
+    void add_result(const std::vector<PersistentIndexSstablePB>& ssts);
+
+    void update_status(const Status& status);
+
+    // -1 means wait forever.
+    // return true when all tasks are done before timeout.
+    // return false when timeout happens.
+    // It should be called in main thread to wait for compaction done.
+    StatusOr<bool> wait_for(int timeout_ms = -1);
+
+    ThreadPoolToken* thread_pool_token() { return _thread_pool_token.get(); }
+
+    Trace* trace();
+
+    int64_t create_us() const { return _create_us; }
+
+private:
+    std::unique_ptr<ThreadPoolToken> _thread_pool_token;
+    std::function<Status(const std::vector<PersistentIndexSstablePB>&)> _callback;
+    Status _status;
+    std::mutex _mutex;
+    std::vector<PersistentIndexSstablePB> _output_sstables;
+    scoped_refptr<Trace> _trace_guard;
+    int64_t _create_us;
+};
+
+using AsyncCompactCBPtr = std::unique_ptr<AsyncCompactCB>;
 
 // SeekRange represents a basic key range unit for compaction tasks split.
 struct SeekRange {
@@ -39,7 +75,7 @@ struct SeekRange {
     bool full_contains(const PersistentIndexSstableRangePB& range) const;
 };
 
-class LakePersistentIndexParallelCompactTask {
+class LakePersistentIndexParallelCompactTask : public Runnable {
 public:
     LakePersistentIndexParallelCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
                                            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
@@ -52,11 +88,13 @@ public:
               _output_fileset_id(fileset_id),
               _seek_range(seek_range) {}
 
-    Status run();
+    void set_cb(AsyncCompactCB* cb) { _cb = cb; }
 
-    const std::vector<PersistentIndexSstablePB>& output_sstables() { return _output_sstables; }
+    void run() override;
 
 private:
+    Status do_run();
+
     size_t input_sstable_file_cnt() const;
 
 private:
@@ -71,6 +109,7 @@ private:
     bool _merge_base_level = false;
     UniqueId _output_fileset_id;
     SeekRange _seek_range;
+    AsyncCompactCB* _cb;
 
     // output sstable pb
     std::vector<PersistentIndexSstablePB> _output_sstables;
@@ -88,6 +127,10 @@ public:
 
     Status update_max_threads(int max_threads);
 
+    StatusOr<AsyncCompactCBPtr> async_compact(
+            const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
+            bool merge_base_level, const std::function<Status(const std::vector<PersistentIndexSstablePB>&)>& callback);
+
     Status compact(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
                    const TabletMetadataPtr& metadata, bool merge_base_level,
                    std::vector<PersistentIndexSstablePB>* output_sstables);
@@ -96,7 +139,7 @@ public:
     // The final task number will be decided by config pk_index_parallel_compaction_task_split_threshold_bytes
     void generate_compaction_tasks(const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
                                    const TabletMetadataPtr& metadata, bool merge_base_level,
-                                   std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
+                                   std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks);
 
 private:
     // Check if two key ranges overlap

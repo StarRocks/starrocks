@@ -49,7 +49,7 @@ public:
     //   2. Only consecutive filesets can be compacted together.
     //
     static Status pick_compaction_candidates(const PersistentIndexSstableMetaPB& sstable_meta,
-                                             CompactionCandidateResult* result);
+                                             CompactionCandidateResult* result, bool base_compact = false);
 };
 
 } // namespace starrocks::lake

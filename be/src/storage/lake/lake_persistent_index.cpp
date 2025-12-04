@@ -644,38 +644,43 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex:
 }
 
 // During large import, we may have many sst files to ingest and get, so we do parallel compaction to speedup the process.
-Status LakePersistentIndex::ingest_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
-                                               TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                               int32_t fileset_start_idx) {
+StatusOr<AsyncCompactCBPtr> LakePersistentIndex::ingest_sst_compact(
+        lake::LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
+        const TabletMetadataPtr& metadata, int32_t fileset_start_idx) {
     // 1. Pick sstable for merge, start from fileset_start_idx.
     PersistentIndexSstableMetaPB sstable_meta;
     for (int i = fileset_start_idx; i < _sstable_filesets.size(); i++) {
         _sstable_filesets[i]->get_all_sstable_pbs(&sstable_meta);
     }
-    // 2. geenrate candidate filesets using size tiered compaction strategy.
-    LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
-    RETURN_IF_ERROR(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta, &result));
+    // 2. generate candidate filesets using size tiered compaction strategy.
+    auto result = std::make_shared<LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult>();
+    RETURN_IF_ERROR(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta,
+                                                                                                result.get(), true));
     // 3. Do parallel compaction for each candidate set.
-    std::vector<PersistentIndexSstablePB> output_sstables;
-    RETURN_IF_ERROR(compact_mgr->compact(result.candidate_filesets, metadata,
-                                         fileset_start_idx == 0 /* merge_base_level */, &output_sstables));
-    // 4. Merge output sstables into current index.
-    //    reuse `apply_opcompaction` to do this.
-    TxnLogPB txn_log;
-    for (const auto& candidate : result.candidate_filesets) {
-        for (const auto& sstable_pb : candidate) {
-            txn_log.mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
-        }
-    }
-    uint64_t max_rss_rowid =
-            txn_log.op_compaction().input_sstables(txn_log.op_compaction().input_sstables_size() - 1).max_rss_rowid();
-    for (const auto& sstable_pb : output_sstables) {
-        auto* output_sstable = txn_log.mutable_op_compaction()->add_output_sstables();
-        output_sstable->CopyFrom(sstable_pb);
-        output_sstable->set_max_rss_rowid(max_rss_rowid);
-    }
-    RETURN_IF_ERROR(apply_opcompaction(txn_log.op_compaction()));
-    return Status::OK();
+    ASSIGN_OR_RETURN(auto cb,
+                     compact_mgr->async_compact(
+                             result->candidate_filesets, metadata, fileset_start_idx == 0 /* merge_base_level */,
+                             [&, result](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                 // 4. Merge output sstables into current index.
+                                 //    reuse `apply_opcompaction` to do this.
+                                 TxnLogPB txn_log;
+                                 for (const auto& candidate : result->candidate_filesets) {
+                                     for (const auto& sstable_pb : candidate) {
+                                         txn_log.mutable_op_compaction()->add_input_sstables()->CopyFrom(sstable_pb);
+                                     }
+                                 }
+                                 uint64_t max_rss_rowid =
+                                         txn_log.op_compaction()
+                                                 .input_sstables(txn_log.op_compaction().input_sstables_size() - 1)
+                                                 .max_rss_rowid();
+                                 for (const auto& sstable_pb : sstables) {
+                                     auto* output_sstable = txn_log.mutable_op_compaction()->add_output_sstables();
+                                     output_sstable->CopyFrom(sstable_pb);
+                                     output_sstable->set_max_rss_rowid(max_rss_rowid);
+                                 }
+                                 return apply_opcompaction(txn_log.op_compaction());
+                             }));
+    return cb;
 }
 
 Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
@@ -688,6 +693,9 @@ Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexPara
     LakePersistentIndexSizeTieredCompactionStrategy::CompactionCandidateResult result;
     RETURN_IF_ERROR(LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
             metadata->sstable_meta(), &result));
+    if (result.candidate_filesets.empty()) {
+        return Status::OK();
+    }
     // 2. Do parallel compaction for each candidate set.
     std::vector<PersistentIndexSstablePB> output_sstables;
     RETURN_IF_ERROR(

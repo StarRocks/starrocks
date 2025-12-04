@@ -1862,7 +1862,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     // 2. multiple time delete, try to generate lots of small sst files
     int64_t old_config = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1;
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 51; i++) {
         auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 1, true, false);
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -1886,9 +1886,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     config::l0_max_mem_usage = old_config;
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 51);
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() > 10);
+    EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() == 51);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst
     {
@@ -1910,8 +1910,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     size_t sst_cnt = new_tablet_metadata->sstable_meta().sstables_size();
-    EXPECT_TRUE(sst_cnt > 10);
-    EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
+    EXPECT_TRUE(sst_cnt == 51);
+    EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) == 76);
     // 4. compaction with sst
     {
         int64_t txn_id = next_id();

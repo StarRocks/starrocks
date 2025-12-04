@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/primary_index.h"
@@ -90,8 +91,9 @@ public:
 
     int32_t current_fileset_index() const;
 
-    Status ingest_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
-                              const TabletMetadataPtr& metadata, int32_t fileset_start_idx);
+    StatusOr<AsyncCompactCBPtr> ingest_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr,
+                                                   TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                                   int32_t fileset_start_idx);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

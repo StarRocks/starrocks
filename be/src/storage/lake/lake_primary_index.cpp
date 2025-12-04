@@ -325,11 +325,11 @@ int32_t LakePrimaryIndex::current_fileset_index() const {
     }
 }
 
-Status LakePrimaryIndex::ingest_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
-                                            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                            int32_t fileset_start_idx) {
+StatusOr<AsyncCompactCBPtr> LakePrimaryIndex::ingest_sst_compact(
+        lake::LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
+        const TabletMetadataPtr& metadata, int32_t fileset_start_idx) {
     if (!_enable_persistent_index) {
-        return Status::OK();
+        return nullptr;
     }
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {

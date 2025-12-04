@@ -75,7 +75,22 @@ size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
     return cnt;
 }
 
-Status LakePersistentIndexParallelCompactTask::run() {
+void LakePersistentIndexParallelCompactTask::run() {
+    DCHECK(_cb != nullptr);
+    Status status = do_run();
+    _cb->update_status(status);
+    if (status.ok()) {
+        _cb->add_result(_output_sstables);
+    }
+}
+
+Status LakePersistentIndexParallelCompactTask::do_run() {
+    Trace* trace = _cb->trace();
+    scoped_refptr<Trace> child_trace(new Trace);
+    Trace* sub_trace = child_trace.get();
+    trace->AddChildTrace("SubCompactionTask", sub_trace);
+    ADOPT_TRACE(sub_trace);
+    TRACE_COUNTER_INCREMENT("queuing_latency_us", butil::gettimeofday_us() - _cb->create_us());
     TRACE_COUNTER_SCOPE_LATENCY_US("task_latency_us");
     const size_t file_cnt = input_sstable_file_cnt();
     if (file_cnt == 0 || _tablet_mgr == nullptr) {
@@ -209,12 +224,60 @@ Status LakePersistentIndexParallelCompactTask::run() {
     return Status::OK();
 }
 
+AsyncCompactCB::AsyncCompactCB(std::unique_ptr<ThreadPoolToken> token,
+                               std::function<Status(const std::vector<PersistentIndexSstablePB>&)> callback) {
+    _thread_pool_token = std::move(token);
+    _callback = std::move(callback);
+    _trace_guard = scoped_refptr<Trace>(new Trace());
+    _create_us = butil::gettimeofday_us();
+}
+
+Trace* AsyncCompactCB::trace() {
+    return _trace_guard.get();
+}
+
+StatusOr<bool> AsyncCompactCB::wait_for(int timeout_ms) {
+    if (_thread_pool_token == nullptr) {
+        return true;
+    }
+    bool succ = true;
+    if (timeout_ms < 0) {
+        _thread_pool_token->wait();
+    } else {
+        succ = _thread_pool_token->wait_for(MonoDelta::FromMilliseconds(timeout_ms));
+    }
+    if (succ) {
+        ADOPT_TRACE(_trace_guard.get());
+        RETURN_IF_ERROR(_status);
+        std::sort(_output_sstables.begin(), _output_sstables.end(),
+                  [&](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+                      return comparator->Compare(Slice(a.range().start_key()), Slice(b.range().start_key())) < 0;
+                  });
+        RETURN_IF_ERROR(_callback(_output_sstables));
+        _thread_pool_token = nullptr;
+        TRACE_COUNTER_INCREMENT("total_latency_us", butil::gettimeofday_us() - _create_us);
+    }
+    return succ;
+}
+
+void AsyncCompactCB::add_result(const std::vector<PersistentIndexSstablePB>& ssts) {
+    std::lock_guard<std::mutex> lg(_mutex);
+    for (const auto& sst : ssts) {
+        _output_sstables.push_back(sst);
+    }
+}
+
+void AsyncCompactCB::update_status(const Status& status) {
+    std::lock_guard<std::mutex> lg(_mutex);
+    _status.update(status);
+}
+
 LakePersistentIndexParallelCompactMgr::~LakePersistentIndexParallelCompactMgr() {
     shutdown();
 }
 
 Status LakePersistentIndexParallelCompactMgr::init() {
-    ThreadPoolBuilder builder("lake_persistent_index_compact");
+    ThreadPoolBuilder builder("pk_index_compact");
     builder.set_min_threads(1);
     builder.set_max_threads(std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads));
     return builder.build(&_thread_pool);
@@ -234,71 +297,45 @@ Status LakePersistentIndexParallelCompactMgr::update_max_threads(int max_threads
     return Status::OK();
 }
 
-Status LakePersistentIndexParallelCompactMgr::compact(
+StatusOr<AsyncCompactCBPtr> LakePersistentIndexParallelCompactMgr::async_compact(
         const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
-        bool merge_base_level, std::vector<PersistentIndexSstablePB>* output_sstables) {
-    scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
-    Trace* trace = trace_gurad.get();
-    ADOPT_TRACE(trace);
-    std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>> tasks;
+        bool merge_base_level, const std::function<Status(const std::vector<PersistentIndexSstablePB>&)>& callback) {
+    std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>> tasks;
     generate_compaction_tasks(candidates, metadata, merge_base_level, &tasks);
-    const int64_t start_ts = butil::gettimeofday_us();
-    // if only one task in tasks, run in current thread
+    AsyncCompactCBPtr cb;
     if (tasks.empty()) {
         // do nothing
-    } else if (tasks.size() == 1) {
-        RETURN_IF_ERROR(tasks[0]->run());
-        for (const auto& sst : tasks[0]->output_sstables()) {
-            output_sstables->push_back(sst);
-        }
     } else {
         // run via thread pool
-        auto latch = BThreadCountDownLatch(tasks.size());
-        Status final_status = Status::OK();
-        std::mutex output_mutex;
+        cb = std::make_unique<AsyncCompactCB>(_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT), callback);
         for (int i = 0; i < tasks.size(); ++i) {
-            auto submit_st = _thread_pool->submit_func([&, i]() {
-                scoped_refptr<Trace> child_trace(new Trace);
-                Trace* sub_trace = child_trace.get();
-                trace->AddChildTrace("SubCompactionTask", sub_trace);
-                ADOPT_TRACE(sub_trace);
-                TRACE_COUNTER_INCREMENT("queuing_latency_us", butil::gettimeofday_us() - start_ts);
-                Status st = tasks[i]->run();
-                if (!st.ok()) {
-                    LOG(ERROR) << "Persistent index parallel compaction task failed: " << st;
-                    std::lock_guard<std::mutex> lg(output_mutex);
-                    final_status.update(st);
-                } else {
-                    // protect output_sstables via mutex
-                    std::lock_guard<std::mutex> lg(output_mutex);
-                    for (const auto& sst : tasks[i]->output_sstables()) {
-                        output_sstables->push_back(sst);
-                    }
-                }
-                latch.count_down();
-            });
+            tasks[i]->set_cb(cb.get());
+            auto submit_st = cb->thread_pool_token()->submit(tasks[i]);
             if (!submit_st.ok()) {
                 LOG(ERROR) << "Failed to submit persistent index parallel compaction task to thread pool: "
                            << submit_st;
-                latch.count_down();
-                std::lock_guard<std::mutex> lg(output_mutex);
-                final_status.update(submit_st);
+                cb->update_status(submit_st);
             }
         }
-        latch.wait();
-        RETURN_IF_ERROR(final_status);
-        // add output_sstables in order of start_key
-        std::sort(output_sstables->begin(), output_sstables->end(),
-                  [&](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
-                      return comparator->Compare(Slice(a.range().start_key()), Slice(b.range().start_key())) < 0;
-                  });
     }
-    TRACE_COUNTER_INCREMENT("total_latency_us", butil::gettimeofday_us() - start_ts);
+    return cb;
+}
+
+Status LakePersistentIndexParallelCompactMgr::compact(
+        const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
+        bool merge_base_level, std::vector<PersistentIndexSstablePB>* output_sstables) {
+    ASSIGN_OR_RETURN(auto cb, async_compact(candidates, metadata, merge_base_level,
+                                            [output_sstables](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                output_sstables->insert(output_sstables->end(), sstables.begin(),
+                                                                        sstables.end());
+                                                return Status::OK();
+                                            }));
+    if (cb == nullptr) return Status::OK();
+    RETURN_IF_ERROR(cb->wait_for());
     LOG(INFO) << strings::Substitute(
             "Lake persistent index parallel compaction completed for tablet $0, merge_base_level=$1, "
-            "input filesets=$2, output sstables=$3, tasks=$4, trace=$5",
-            metadata->id(), merge_base_level, candidates.size(), output_sstables->size(), tasks.size(),
-            trace->MetricsAsJSON());
+            "input filesets=$2, output sstables=$3, trace=$4",
+            metadata->id(), merge_base_level, candidates.size(), output_sstables->size(), cb->trace()->MetricsAsJSON());
     return Status::OK();
 }
 
@@ -314,7 +351,7 @@ bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string
 // TODO : use data sample to improve segment generation.
 void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, const TabletMetadataPtr& metadata,
-        bool merge_base_level, std::vector<std::unique_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
+        bool merge_base_level, std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>>* tasks) {
     if (candidates.empty()) {
         return;
     }
@@ -325,14 +362,12 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         for (const auto& sst : fileset) {
             if (!sst.has_range()) {
                 // Found an sstable with infinite boundary, no parallel splitting
-                tasks->push_back(std::make_unique<LakePersistentIndexParallelCompactTask>(
+                tasks->push_back(std::make_shared<LakePersistentIndexParallelCompactTask>(
                         candidates, _tablet_mgr, metadata, merge_base_level, UniqueId::gen_uid(), SeekRange()));
                 return;
             }
         }
     }
-
-    std::string input_debug_str = "";
 
     // Collect all sstables with their fileset index
     struct SstableWithFileset {
@@ -351,7 +386,6 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         for (const auto& sst : candidates[i]) {
             all_sstables.push_back({sst, i});
             total_size += sst.filesize();
-            input_debug_str += fmt::format("[fileset_idx: {}, size: {}] ", i, sst.filesize());
         }
     }
     if (all_sstables.empty()) {
@@ -423,22 +457,14 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         }
     }
 
-    std::string debug_str = "";
-    // iterator segments for debug
-    for (const auto& seg : segments) {
-        debug_str += fmt::format("[seek: {}, stop: {}, file_cnt: {}] ", seg.seek_range.seek_key,
-                                 seg.seek_range.stop_key, seg.file_cnt);
-    }
-    LOG(INFO) << fmt::format(
-            "LakePersistentIndexParallelCompactMgr: generated {} compaction segments for tablet {}, input sstables {} "
-            "debug str {}",
-            segments.size(), metadata->id(), input_debug_str, debug_str);
+    LOG(INFO) << fmt::format("LakePersistentIndexParallelCompactMgr: generated {} compaction segments for tablet {}",
+                             segments.size(), metadata->id());
 
     // Create tasks from segments
     UniqueId fileset_id = UniqueId::gen_uid();
     for (auto& seg : segments) {
         if (seg.file_cnt > 0) {
-            tasks->push_back(std::make_unique<LakePersistentIndexParallelCompactTask>(
+            tasks->push_back(std::make_shared<LakePersistentIndexParallelCompactTask>(
                     std::move(seg.filesets), _tablet_mgr, metadata, merge_base_level, fileset_id, seg.seek_range));
         }
     }

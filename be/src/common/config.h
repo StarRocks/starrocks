@@ -438,10 +438,10 @@ CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "104857600"
 CONF_mInt64(pk_index_target_file_size, "67108864");
 // Compaction score ratio for primary key index in shared-data mode.
 // E.g. if we have N fileset, the compaction score will be N * pk_index_compaction_score_ratio
-// Default is 2.
-CONF_mInt32(pk_index_compaction_score_ratio, "2");
+// Default is 1.5.
+CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 // Ingest sst compaction threshold for primary key index in shared-data mode.
-CONF_mInt32(pk_index_ingest_sst_compaction_threshold, "10");
+CONF_mInt32(pk_index_ingest_sst_compaction_threshold, "5");
 // Whether enable parallel compaction for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
@@ -1777,8 +1777,8 @@ CONF_mInt64(load_spill_merge_max_thread, "16");
 CONF_mBool(enable_load_spill_parallel_merge, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
-// Row count threshold to trigger lazy load for PK column. Default is 1,000,000.
-CONF_mInt64(pk_column_lazy_load_row_cnt, "1000000");
+// Row count threshold to trigger lazy load for PK column. Default is 500,000.
+CONF_mInt64(pk_column_lazy_load_row_cnt, "500000");
 // Batch size for column mode partial update when processing insert rows.
 // If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
 // Default is 4096.
