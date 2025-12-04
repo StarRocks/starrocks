@@ -7,17 +7,13 @@ use db_${uuid0};
 -- !result
 CREATE TABLE `t`
 (
-    `id` int(11) NOT NULL COMMENT "用户 ID",
-    `name` varchar(65533) NULL COMMENT "用户姓名",
-    `score` int(11) NOT NULL COMMENT "用户得分"
+    `id` int(11) NOT NULL ,
+    `name` varchar(65533) NULL ,
+    `score` int(11) NOT NULL 
 )
 ENGINE=OLAP
 PRIMARY KEY(`id`)
-DISTRIBUTED BY HASH(`id`)
-PROPERTIES (
- "write_quorum" = "ONE",
- "replication_num" = "3"
-);
+DISTRIBUTED BY HASH(`id`);
 -- result:
 -- !result
 ADMIN ENABLE FAILPOINT 'load_tablet_writer_add_chunks';
@@ -25,6 +21,7 @@ ADMIN ENABLE FAILPOINT 'load_tablet_writer_add_chunks';
 -- !result
 insert into t WITH LABEL label_${uuid1} values (1, 'n1', 1);
 -- result:
+[REGEX]E: \(5609, 'load_tablet_writer_add_chunks failpoint triggered failure, rpc: .*
 -- !result
 ADMIN DISABLE FAILPOINT 'load_tablet_writer_add_chunks';
 -- result:
@@ -39,4 +36,17 @@ CANCELLED	1
 select * from t;
 -- result:
 -- !result
-
+ADMIN ENABLE FAILPOINT 'load_memtable_flush';
+-- result:
+-- !result
+insert into t WITH LABEL label_${uuid2} values (1, 'n1', 1);
+-- result:
+[REGEX]E: \(5609, '.* load_memtable_flush failpoint triggered failure, .*
+-- !result
+select state, instr(error_msg, 'load_memtable_flush failpoint triggered failure') > 0 from information_schema.loads where label='label_${uuid2}';
+-- result:
+CANCELLED	1
+-- !result
+ADMIN DISABLE FAILPOINT 'load_memtable_flush';
+-- result:
+-- !result
