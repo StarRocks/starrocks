@@ -2698,7 +2698,7 @@ functionCall
     | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
-    | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
+    | qualifiedName '(' argumentList? ')'  over?                                          #simpleFunctionCall
     ;
 
 aggregationFunction

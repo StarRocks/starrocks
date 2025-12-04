@@ -7768,6 +7768,57 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
     }
 
+    /**
+     * Get all argument expressions from argumentList context.
+     * Supports both positional arguments (expressionList) and named arguments (namedArgumentList).
+     */
+    private List<Expr> getArgumentExprs(StarRocksParser.ArgumentListContext argumentList) {
+        if (argumentList == null) {
+            return Collections.emptyList();
+        }
+
+        if (argumentList.expressionList() != null) {
+            return visit(argumentList.expressionList().expression(), Expr.class);
+        }
+
+        // Named arguments
+        return visit(argumentList.namedArgumentList().namedArgument(), Expr.class);
+    }
+
+    /**
+     * Get the number of argument expressions from argumentList context.
+     * Supports both positional arguments (expressionList) and named arguments (namedArgumentList).
+     */
+    private int getArgumentExprCount(StarRocksParser.ArgumentListContext argumentList) {
+        if (argumentList == null) {
+            return 0;
+        }
+        if (argumentList.expressionList() != null) {
+            return argumentList.expressionList().expression().size();
+        }
+        return argumentList.namedArgumentList().namedArgument().size();
+    }
+
+    /**
+     * Get a single argument expression at specified index from argumentList context.
+     * Supports both positional arguments (expressionList) and named arguments (namedArgumentList).
+     * For named arguments, extracts the expression value from NamedArgument.
+     */
+    private Expr getArgumentExpr(StarRocksParser.ArgumentListContext argumentList, int index) {
+        if (argumentList == null) {
+            throw new IndexOutOfBoundsException("argumentList is null");
+        }
+        if (argumentList.expressionList() != null) {
+            return (Expr) visit(argumentList.expressionList().expression(index));
+        }
+        // For named arguments, extract the expression value
+        Expr arg = (Expr) visit(argumentList.namedArgumentList().namedArgument(index));
+        if (arg instanceof NamedArgument) {
+            return ((NamedArgument) arg).getExpr();
+        }
+        return arg;
+    }
+
     @Override
     public ParseNode visitSimpleFunctionCall(com.starrocks.sql.parser.StarRocksParser.SimpleFunctionCallContext context) {
         String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
@@ -7776,11 +7827,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         FunctionName fnName = FunctionName.createFnName(fullFunctionName);
         String functionName = fnName.getFunction();
         if (functionName.equals(FunctionSet.ARRAY_GENERATE)) {
-            if (context.expression().size() == 3) {
-                Expr e3 = (Expr) visit(context.expression(2));
+            if (getArgumentExprCount(context.argumentList()) == 3) {
+                Expr e3 = getArgumentExpr(context.argumentList(), 2);
                 if (e3 instanceof IntervalLiteral) {
-                    Expr e1 = (Expr) visit(context.expression(0));
-                    Expr e2 = (Expr) visit(context.expression(1));
+                    Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                    Expr e2 = getArgumentExpr(context.argumentList(), 1);
                     List<Expr> exprs = Lists.newLinkedList();
                     exprs.add(e1);
                     exprs.add(e2);
@@ -7793,9 +7844,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
-            if (context.expression().size() == 2) {
-                Expr e1 = (Expr) visit(context.expression(0));
-                Expr e2 = (Expr) visit(context.expression(1));
+            int argCount = getArgumentExprCount(context.argumentList());
+            if (argCount == 2) {
+                Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                Expr e2 = getArgumentExpr(context.argumentList(), 1);
                 if (!(e2 instanceof IntervalLiteral)) {
                     e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
                 }
@@ -7805,29 +7857,38 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                         "floor"), pos);
 
                 return functionCallExpr;
-            } else if (context.expression().size() == 3) {
-                Expr e1 = (Expr) visit(context.expression(0));
-                Expr e2 = (Expr) visit(context.expression(1));
+            } else if (argCount == 3) {
+                Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                Expr e2 = getArgumentExpr(context.argumentList(), 1);
                 if (!(e2 instanceof IntervalLiteral)) {
                     e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
                 }
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
 
-                ParseNode e3 = visit(context.expression(2));
-                if (!(e3 instanceof UnitBoundary)) {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
+                // e3 may be UnitBoundary which is not an Expr, so use visit directly
+                ParseNode e3Node;
+                if (context.argumentList().expressionList() != null) {
+                    e3Node = visit(context.argumentList().expressionList().expression(2));
+                } else {
+                    e3Node = visit(context.argumentList().namedArgumentList().namedArgument(2));
+                    if (e3Node instanceof NamedArgument) {
+                        e3Node = ((NamedArgument) e3Node).getExpr();
+                    }
                 }
-                UnitBoundary unitBoundary = (UnitBoundary) e3;
+                if (!(e3Node instanceof UnitBoundary)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3Node.getPos());
+                }
+                UnitBoundary unitBoundary = (UnitBoundary) e3Node;
                 FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
                         unitBoundary.getDescription().toLowerCase()), pos);
 
                 return functionCallExpr;
-            } else if (context.expression().size() == 4) {
-                Expr e1 = (Expr) visit(context.expression(0));
-                Expr e2 = (Expr) visit(context.expression(1));
-                Expr e3 = (Expr) visit(context.expression(2));
-                Expr e4 = (Expr) visit(context.expression(3));
+            } else if (argCount == 4) {
+                Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                Expr e2 = getArgumentExpr(context.argumentList(), 1);
+                Expr e3 = getArgumentExpr(context.argumentList(), 2);
+                Expr e4 = getArgumentExpr(context.argumentList(), 3);
 
                 if (!(e3 instanceof StringLiteral)) {
                     throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
@@ -7844,12 +7905,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (DATE_FUNCTIONS.contains(functionName)) {
-            if (context.expression().size() != 2) {
+            if (getArgumentExprCount(context.argumentList()) != 2) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
 
-            Expr e1 = (Expr) visit(context.expression(0));
-            Expr e2 = (Expr) visit(context.expression(1));
+            Expr e1 = getArgumentExpr(context.argumentList(), 0);
+            Expr e2 = getArgumentExpr(context.argumentList(), 1);
             if (!(e2 instanceof IntervalLiteral)) {
                 e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
             }
@@ -7860,7 +7921,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (functionName.equals(FunctionSet.ELEMENT_AT)) {
-            List<Expr> params = visit(context.expression(), Expr.class);
+            List<Expr> params = getArgumentExprs(context.argumentList());
             if (params.size() != 2) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
@@ -7868,7 +7929,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (functionName.equals(FunctionSet.ISNULL)) {
-            List<Expr> params = visit(context.expression(), Expr.class);
+            List<Expr> params = getArgumentExprs(context.argumentList());
             if (params.size() != 1) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
@@ -7876,7 +7937,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (functionName.equals(FunctionSet.ISNOTNULL)) {
-            List<Expr> params = visit(context.expression(), Expr.class);
+            List<Expr> params = getArgumentExprs(context.argumentList());
             if (params.size() != 1) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
@@ -7884,12 +7945,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
-            if (context.expression().size() < 1) {
+            int argCount = getArgumentExprCount(context.argumentList());
+            if (argCount < 1) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
 
-            Expr e1 = (Expr) visit(context.expression(0));
-            Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
+            Expr e1 = getArgumentExpr(context.argumentList(), 0);
+            Expr e2 = argCount > 1 ? getArgumentExpr(context.argumentList(), 1) : null;
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
         }
 
@@ -7900,18 +7962,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             Expr e2;
             String collectionDelimiter = ",";
             String mapDelimiter = ":";
-            if (context.expression().size() == 1) {
-                e0 = (Expr) visit(context.expression(0));
+            int argCount = getArgumentExprCount(context.argumentList());
+            if (argCount == 1) {
+                e0 = getArgumentExpr(context.argumentList(), 0);
                 e1 = new StringLiteral(collectionDelimiter, pos);
                 e2 = new StringLiteral(mapDelimiter, pos);
-            } else if (context.expression().size() == 2) {
-                e0 = (Expr) visit(context.expression(0));
-                e1 = (Expr) visit(context.expression(1));
+            } else if (argCount == 2) {
+                e0 = getArgumentExpr(context.argumentList(), 0);
+                e1 = getArgumentExpr(context.argumentList(), 1);
                 e2 = new StringLiteral(mapDelimiter, pos);
-            } else if (context.expression().size() == 3) {
-                e0 = (Expr) visit(context.expression(0));
-                e1 = (Expr) visit(context.expression(1));
-                e2 = (Expr) visit(context.expression(2));
+            } else if (argCount == 3) {
+                e0 = getArgumentExpr(context.argumentList(), 0);
+                e1 = getArgumentExpr(context.argumentList(), 1);
+                e2 = getArgumentExpr(context.argumentList(), 2);
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(FunctionSet.STR_TO_MAP));
             }
@@ -7931,31 +7994,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (functionName.equals(FunctionSet.MAP)) {
-            List<Expr> exprs;
-            if (context.expression() != null) {
-                int num = context.expression().size();
-                if (num % 2 == 1) {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
-                            "Arguments must be in key/value pairs"), pos);
-                }
-                exprs = visit(context.expression(), Expr.class);
-            } else {
-                exprs = Collections.emptyList();
+            List<Expr> exprs = getArgumentExprs(context.argumentList());
+            int num = exprs.size();
+            if (num % 2 == 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
+                        "Arguments must be in key/value pairs"), pos);
             }
             return new MapExpr(AnyMapType.ANY_MAP, exprs, pos);
         }
 
         if (functionName.equals(FunctionSet.SUBSTR) || functionName.equals(FunctionSet.SUBSTRING)) {
             List<Expr> exprs = Lists.newArrayList();
-            if (context.expression().size() == 2) {
-                Expr e1 = (Expr) visit(context.expression(0));
-                Expr e2 = (Expr) visit(context.expression(1));
+            int argCount = getArgumentExprCount(context.argumentList());
+            if (argCount == 2) {
+                Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                Expr e2 = getArgumentExpr(context.argumentList(), 1);
                 exprs.add(e1);
                 addArgumentUseTypeInt(e2, exprs);
-            } else if (context.expression().size() == 3) {
-                Expr e1 = (Expr) visit(context.expression(0));
-                Expr e2 = (Expr) visit(context.expression(1));
-                Expr e3 = (Expr) visit(context.expression(2));
+            } else if (argCount == 3) {
+                Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                Expr e2 = getArgumentExpr(context.argumentList(), 1);
+                Expr e3 = getArgumentExpr(context.argumentList(), 2);
                 exprs.add(e1);
                 addArgumentUseTypeInt(e2, exprs);
                 addArgumentUseTypeInt(e3, exprs);
@@ -7964,9 +8023,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (functionName.equals(FunctionSet.LPAD) || functionName.equals(FunctionSet.RPAD)) {
-            if (context.expression().size() == 2) {
-                Expr e1 = (Expr) visit(context.expression(0));
-                Expr e2 = (Expr) visit(context.expression(1));
+            int argCount = getArgumentExprCount(context.argumentList());
+            if (argCount == 2) {
+                Expr e1 = getArgumentExpr(context.argumentList(), 0);
+                Expr e2 = getArgumentExpr(context.argumentList(), 1);
                 FunctionCallExpr functionCallExpr = new FunctionCallExpr(
                         fnName, Lists.newArrayList(e1, e2, new StringLiteral(" ")), pos);
                 return functionCallExpr;
@@ -7974,12 +8034,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         if (functionName.equals(FunctionSet.DICT_MAPPING)) {
-            List<Expr> params = visit(context.expression(), Expr.class);
+            List<Expr> params = getArgumentExprs(context.argumentList());
             return new DictQueryExpr(params);
         }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
-                new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
+                new FunctionParams(false, getArgumentExprs(context.argumentList())), pos);
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
