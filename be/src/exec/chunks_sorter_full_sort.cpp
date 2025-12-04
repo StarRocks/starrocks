@@ -20,11 +20,7 @@
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD
-=======
 #include "util/defer_op.h"
-#include "util/runtime_profile.h"
->>>>>>> 6b5abef714 ([Enhancement] Rapid memory release on AGG/SORT (#66157))
 
 namespace starrocks {
 DEFINE_FAIL_POINT(chunks_sorter_full_sort_partial_sort_bad_alloc);
