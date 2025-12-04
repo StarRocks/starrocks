@@ -983,6 +983,9 @@ public class ConnectProcessor {
                 executor = new StmtExecutor(ctx, statement);
             }
             ctx.setExecutor(executor);
+            if (ctx.getIsLastStmt()) {
+                executor.addRunningQueryDetail(statement);
+            }
             executor.setProxy();
             executor.execute();
         } catch (IOException e) {
@@ -995,6 +998,9 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
         } finally {
+            if (executor != null) {
+                executor.addFinishedQueryDetail();
+            }
             ctx.setExecutor(null);
         }
 
