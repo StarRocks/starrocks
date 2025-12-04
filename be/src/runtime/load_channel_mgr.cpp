@@ -274,12 +274,12 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
     std::string cancel_reason = request.has_reason() ? request.reason() : "";
-    
+
     // Record cancel reason for root cause reporting
     if (!cancel_reason.empty()) {
         _record_cancel_reason(load_id, cancel_reason);
     }
-    
+
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
@@ -464,7 +464,7 @@ void LoadChannelMgr::_clean_expired_cancel_reasons() {
     // Keep cancel reasons for 60 seconds after channel is removed
     // This should be enough time for any pending add_chunk requests to find the root cause
     constexpr int64_t CANCEL_REASON_RETENTION_SECONDS = 60;
-    
+
     time_t now = time(nullptr);
     std::lock_guard l(_lock);
     for (auto it = _cancel_reasons.begin(); it != _cancel_reasons.end(); /**/) {
