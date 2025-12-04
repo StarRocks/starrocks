@@ -132,8 +132,10 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         _seg_writer.reset();
     }
     if (_pk_sst_writer && _pk_sst_writer->has_file_info()) {
-        ASSIGN_OR_RETURN(auto sst_file_info, _pk_sst_writer->flush_sst_writer());
+        ASSIGN_OR_RETURN(auto sst_ret, _pk_sst_writer->flush_sst_writer());
+        auto [sst_file_info, sst_range] = std::move(sst_ret);
         _ssts.emplace_back(sst_file_info);
+        _sst_ranges.emplace_back(sst_range);
     }
     return Status::OK();
 }
@@ -143,6 +145,17 @@ Status HorizontalPkTabletWriter::finish(SegmentPB* segment) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
     return HorizontalGeneralTabletWriter::finish(segment);
+}
+
+StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const {
+    auto writer = std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, _tablet_id, _schema, _txn_id, _flush_pool,
+                                                             _is_compaction, _bundle_file_context,
+                                                             const_cast<GlobalDictByNameMaps*>(_global_dicts));
+    RETURN_IF_ERROR(writer->open());
+    if (enable_pk_parallel_execution()) {
+        writer->force_set_enable_pk_parallel_execution();
+    }
+    return writer;
 }
 
 VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
@@ -186,8 +199,10 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
 Status VerticalPkTabletWriter::finish(SegmentPB* segment) {
     for (auto& sst_writer : _pk_sst_writers) {
         if (sst_writer->has_file_info()) {
-            ASSIGN_OR_RETURN(auto sst_file_info, sst_writer->flush_sst_writer());
+            ASSIGN_OR_RETURN(auto sst_ret, sst_writer->flush_sst_writer());
+            auto [sst_file_info, sst_range] = std::move(sst_ret);
             _ssts.emplace_back(sst_file_info);
+            _sst_ranges.emplace_back(sst_range);
         }
     }
     _pk_sst_writers.clear();

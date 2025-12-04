@@ -63,7 +63,8 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
 }
 
 Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                             WritableFile* wf, uint64_t* filesz) {
+                                             WritableFile* wf, uint64_t* filesz,
+                                             PersistentIndexSstableRangePB* range_pb) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -79,6 +80,11 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
+    if (range_pb != nullptr) {
+        auto [key_start, key_end] = builder.KeyRange();
+        range_pb->set_start_key(key_start.to_string());
+        range_pb->set_end_key(key_end.to_string());
+    }
     return Status::OK();
 }
 
@@ -88,6 +94,16 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    std::unique_ptr<RandomAccessFile> rf;
+    if (config::enable_pk_index_parallel_get) {
+        RandomAccessFileOptions opts;
+        if (!_sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
+    }
+    options.file = rf.get();
     // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
@@ -194,6 +210,10 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
+}
+
+std::pair<Slice, Slice> PersistentIndexSstableStreamBuilder::key_range() const {
+    return _table_builder->KeyRange();
 }
 
 } // namespace starrocks::lake

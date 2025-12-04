@@ -426,8 +426,34 @@ CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // Enable parallel execution within tablet for primary key tables.
 CONF_mBool(enable_pk_parallel_execution, "true");
 // The minimum threshold of data size for enabling pk parallel execution.
-// Default is 300MB.
-CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
+// Default is 100MB.
+CONF_mInt64(pk_parallel_execution_threshold_bytes, "104857600");
+// Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
+// Default is 4.
+CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
+// The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
+// smaller than this threshold, the task will not be split.
+// Default is 100MB.
+CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "104857600");
+// Target file size for primary key index in shared-data mode.
+// Default is 64MB.
+CONF_mInt64(pk_index_target_file_size, "67108864");
+// Compaction score ratio for primary key index in shared-data mode.
+// E.g. if we have N fileset, the compaction score will be N * pk_index_compaction_score_ratio
+// Default is 2.
+CONF_mInt32(pk_index_compaction_score_ratio, "2");
+// Ingest sst compaction threshold for primary key index in shared-data mode.
+CONF_mInt32(pk_index_ingest_sst_compaction_threshold, "10");
+// Whether enable parallel compaction for primary key index in shared-data mode.
+CONF_mBool(enable_pk_index_parallel_compaction, "true");
+// Whether enable parallel get for primary key index in shared-data mode.
+CONF_mBool(enable_pk_index_parallel_get, "true");
+// Compaction threadpool max thread num for pk index get in shared-data mode.
+CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "0");
+// The parameters for pk index size-tiered compaction strategy.
+CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
+CONF_mInt64(pk_index_size_tiered_level_multiple, "10");
+CONF_mInt64(pk_index_size_tiered_level_num, "5");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -1746,12 +1772,18 @@ CONF_mBool(enable_load_spill, "true");
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
 // Max merge input bytes during spill merge. Default is 1024MB.
 CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
+// Max memory usage per merge during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_memory_usage_per_merge, "1073741824");
 // Max memory used for merge load spill blocks.
 CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 // Upper bound of spill merge thread count
 CONF_mInt64(load_spill_merge_max_thread, "16");
+// Enable parallel spill merge inside single tablet
+CONF_mBool(enable_load_spill_parallel_merge, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
+// Row count threshold to trigger lazy load for PK column. Default is 1,000,000.
+CONF_mInt64(pk_column_lazy_load_row_cnt, "1000000");
 // Batch size for column mode partial update when processing insert rows.
 // If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
 // Default is 4096.

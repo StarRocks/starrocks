@@ -184,8 +184,8 @@ size_t PersistentIndexMemtable::memory_usage() const {
     return _keys_heap_size + _map.bytes_used();
 }
 
-Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize) {
-    return PersistentIndexSstable::build_sstable(_map, wf, filesize);
+Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb) {
+    return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb);
 }
 
 void PersistentIndexMemtable::clear() {

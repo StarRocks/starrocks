@@ -68,6 +68,7 @@
 #include "types/array_type_info.h"
 #include "types/logical_type.h"
 #include "util/starrocks_metrics.h"
+#include "util/trace.h"
 
 namespace starrocks {
 
@@ -207,7 +208,9 @@ private:
         std::shared_ptr<VectorIndexReader> ann_reader;
 
         // Helper method to check if rowid should always be built
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -247,8 +250,12 @@ private:
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -582,6 +589,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    TRACE_COUNTER_SCOPE_LATENCY_US("segment_init_us");
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");

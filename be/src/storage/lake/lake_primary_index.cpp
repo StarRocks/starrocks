@@ -201,15 +201,16 @@ Status LakePrimaryIndex::apply_opcompaction(const TabletMetadata& metadata,
     return Status::OK();
 }
 
-Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version,
-                                    const DelvecPagePB& delvec_page, DelVectorPtr delvec) {
+Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range,
+                                    uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
+                                    DelVectorPtr delvec) {
     if (!_enable_persistent_index) {
         return Status::OK();
     }
 
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (lake_persistent_index != nullptr) {
-        return lake_persistent_index->ingest_sst(sst_meta, rssid, version, delvec_page, std::move(delvec));
+        return lake_persistent_index->ingest_sst(sst_meta, sst_range, rssid, version, delvec_page, std::move(delvec));
     } else {
         return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
@@ -309,6 +310,32 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
     default:
         return Status::InternalError("Unsupported lake_persistent_index_type " +
                                      PersistentIndexTypePB_Name(metadata->persistent_index_type()));
+    }
+}
+
+int32_t LakePrimaryIndex::current_fileset_index() const {
+    if (!_enable_persistent_index) {
+        return -1;
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->current_fileset_index();
+    } else {
+        return -1;
+    }
+}
+
+Status LakePrimaryIndex::ingest_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
+                                            TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                            int32_t fileset_start_idx) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->ingest_sst_compact(compact_mgr, tablet_mgr, metadata, fileset_start_idx);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
 }
 

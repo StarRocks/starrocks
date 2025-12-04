@@ -276,6 +276,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // upsert+delete order in a single transaction is supported.
     // TODO: Support the actual interleaving order of upsert and delete within one transaction.
     const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
+    // When too many ingest sst files, we need to compact them.
+    int32_t ingest_fileset_start_idx = index.current_fileset_index();
     // 2. Handle segment one by one to save memory usage.
     for (uint32_t local_id = 0; local_id < local_segments; ++local_id) {
         uint32_t global_segment_id = assigned_global_segments + local_id;
@@ -317,8 +319,21 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         if (op_write.ssts_size() > 0 && condition_column < 0 && use_cloud_native_pk_index(*metadata)) {
             // TODO support condition column with sst ingestion.
             // rowset_id + segment_id is the rssid of this segment
-            RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), rowset_id + global_segment_id,
-                                             metadata->version(), DelvecPagePB() /* empty */, nullptr));
+            RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
+                                             rowset_id + global_segment_id, metadata->version(),
+                                             DelvecPagePB() /* empty */, nullptr));
+            if (index.current_fileset_index() - ingest_fileset_start_idx >=
+                config::pk_index_ingest_sst_compaction_threshold) {
+                // Do ingest sst compaction when too many sst files ingested.
+                TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_compact_us");
+                TRACE_COUNTER_INCREMENT("ingest_sst_compact_times", 1);
+                RETURN_IF_ERROR(index.ingest_sst_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
+                                                         metadata, ingest_fileset_start_idx + 1 /* new fileset*/));
+                LOG(INFO) << fmt::format(
+                        "publish_primary_key_tablet: compact ingest sst filesets for tablet {}, txn {}, fileset index "
+                        "{}->{}",
+                        tablet->id(), txn_id, ingest_fileset_start_idx, index.current_fileset_index());
+            }
         }
     }
 
@@ -727,21 +742,56 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
                                  PrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
+    std::unique_ptr<ThreadPoolToken> token;
+    std::mutex mutex;
+    Status status = Status::OK();
+    Trace* trace = Trace::CurrentTrace();
+    if (config::enable_pk_index_parallel_get) {
+        token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    }
     for (; !upsert->done(); upsert->next()) {
         auto current = upsert->current();
         if (skip_pk_index_update) {
-            // use get instead of upsert
-            std::vector<uint64_t> old_values(current.first->size(), NullIndexValue);
-            RETURN_IF_ERROR(index.get(*current.first, &old_values));
-            for (unsigned long old : old_values) {
-                if (old != NullIndexValue) {
-                    (*new_deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+            auto func = [&, current]() {
+                // use get instead of upsert
+                ADOPT_TRACE(trace);
+                MutableColumnPtr pk_column;
+                auto st = upsert->encoded_pk_column(current.first.get(), pk_column);
+                std::vector<uint64_t> old_values(pk_column ? pk_column->size() : 0, NullIndexValue);
+                if (st.ok()) {
+                    st = index.get(*pk_column, &old_values);
                 }
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+                if (status.ok()) {
+                    for (unsigned long old : old_values) {
+                        if (old != NullIndexValue) {
+                            (*new_deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                        }
+                    }
+                }
+            };
+            if (token) {
+                auto st = token->submit_func(func);
+                TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+                // collect status when submit fail, need to wait for previously submitted tasks
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            } else {
+                func();
+                RETURN_IF_ERROR(status);
             }
         } else {
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *current.first, new_deletes));
+            MutableColumnPtr pk_column;
+            RETURN_IF_ERROR(upsert->encoded_pk_column(current.first.get(), pk_column));
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *pk_column, new_deletes));
         }
     }
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
+        token->wait();
+    }
+    RETURN_IF_ERROR(status);
     return upsert->status();
 }
 
@@ -1253,8 +1303,9 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
         // metadata.next_rowset_id() + i is the rssid of output rowset's i-th segment
         DelvecPagePB delvec_page_pb = builder->delvec_page(metadata.next_rowset_id() + i);
         delvec_page_pb.set_version(metadata.version());
-        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), metadata.next_rowset_id() + i, metadata.version(),
-                                         delvec_page_pb, delvecs[i].second));
+        RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i),
+                                         metadata.next_rowset_id() + i, metadata.version(), delvec_page_pb,
+                                         delvecs[i].second));
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
     // 5. update TabletMeta
@@ -1600,6 +1651,10 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
 }
 
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
+    if (config::enable_pk_index_parallel_compaction) {
+        return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
+                                                           metadata, txn_log);
+    }
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
 }
 

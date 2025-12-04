@@ -173,7 +173,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk2));
 
     // Test flush_sst_writer
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
 
     // Verify file info
     ASSERT_FALSE(file_info.path.empty());
@@ -200,7 +201,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
     }
 
     // Flush and get result
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
 
     // Verify results
     ASSERT_FALSE(file_info.path.empty());
@@ -225,7 +227,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
 
     // Now operations should work
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk));
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
     ASSERT_FALSE(file_info.path.empty());
 }
 
@@ -247,7 +250,8 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk));
 
     // Flush
-    ASSIGN_OR_ABORT(auto file_info, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
     ASSERT_FALSE(file_info.path.empty());
     ASSERT_GT(file_info.size, 0);
 }
@@ -264,8 +268,9 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     auto chunk1 = generate_data(30);
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk1));
 
-    ASSIGN_OR_ABORT(auto file_info1, pk_sst_writer->flush_sst_writer());
-    ASSERT_FALSE(file_info1.path.empty());
+    ASSIGN_OR_ABORT(auto sst_ret, pk_sst_writer->flush_sst_writer());
+    auto [file_info, sst_range] = std::move(sst_ret);
+    ASSERT_FALSE(file_info.path.empty());
 
     // Reuse the writer for a second file
     ASSERT_OK(pk_sst_writer->reset_sst_writer(location_provider, _fs));
@@ -273,11 +278,12 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     auto chunk2 = generate_data(40, 30);
     ASSERT_OK(pk_sst_writer->append_sst_record(chunk2));
 
-    ASSIGN_OR_ABORT(auto file_info2, pk_sst_writer->flush_sst_writer());
+    ASSIGN_OR_ABORT(auto sst_ret2, pk_sst_writer->flush_sst_writer());
+    auto [file_info2, sst_range2] = std::move(sst_ret2);
     ASSERT_FALSE(file_info2.path.empty());
 
     // The two files should be different
-    ASSERT_NE(file_info1.path, file_info2.path);
+    ASSERT_NE(file_info.path, file_info2.path);
 }
 
 TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {

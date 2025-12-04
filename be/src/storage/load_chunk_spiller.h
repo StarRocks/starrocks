@@ -23,6 +23,9 @@ namespace starrocks {
 
 class RuntimeState;
 class LoadSpillBlockManager;
+class ChunkIterator;
+
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:
@@ -59,8 +62,11 @@ public:
 
     StatusOr<size_t> spill(const Chunk& chunk);
 
-    Status merge_write(size_t target_size, bool do_sort, bool do_agg, std::function<Status(Chunk*)> write_func,
-                       std::function<Status()> flush_func);
+    Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
+                       std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
+
+    StatusOr<std::vector<ChunkIteratorPtr>> get_spill_block_iterators(size_t target_size, size_t memory_usage_per_merge,
+                                                                      bool do_sort, bool do_agg);
 
     bool empty();
 

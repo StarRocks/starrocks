@@ -74,6 +74,9 @@ public:
     // Finish() call, returns the size of the final generated file.
     uint64_t FileSize() const;
 
+    // Return the key range of the table being built.
+    std::pair<Slice, Slice> KeyRange() const;
+
 private:
     bool ok() const { return status().ok(); }
     void WriteBlock(BlockBuilder* block, BlockHandle* handle);

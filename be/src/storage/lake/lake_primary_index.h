@@ -28,6 +28,7 @@ namespace lake {
 class Tablet;
 class MetaFileBuilder;
 class TabletManager;
+class LakePersistentIndexParallelCompactMgr;
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
@@ -68,8 +69,8 @@ public:
 
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
-    Status ingest_sst(const FileMetaPB& sst_meta, uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
-                      DelVectorPtr delvec);
+    Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
+                      int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
     double get_local_pk_index_write_amp_score();
 
@@ -86,6 +87,11 @@ public:
     //
     // |rowset_id| The rowset that keys belong to. Used for setup rebuild point (cloud native index only).
     Status erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes, uint32_t rowset_id);
+
+    int32_t current_fileset_index() const;
+
+    Status ingest_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
+                              const TabletMetadataPtr& metadata, int32_t fileset_start_idx);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

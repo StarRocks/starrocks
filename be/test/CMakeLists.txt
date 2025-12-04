@@ -500,6 +500,9 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
+    ./storage/lake/lake_persistent_index_fileset_test.cpp
+    ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
+    ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
@@ -596,6 +599,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/sstable_predicate_test.cpp
+    ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_engine_test.cpp
     ./storage/storage_types_test.cpp
     ./storage/table_reader_remote_test.cpp
