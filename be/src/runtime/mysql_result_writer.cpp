@@ -35,6 +35,7 @@
 #include "runtime/mysql_result_writer.h"
 
 #include <column/column_helper.h>
+#include <optional>
 
 #include "column/chunk.h"
 #include "column/const_column.h"
@@ -53,11 +54,16 @@ namespace {
 
 struct ColumnSerializeContext {
     ColumnSerializeContext(MysqlColumnViewer viewer_, MysqlSerializeFn serializer_, const TypeDescriptor& type_desc_)
-            : viewer(std::move(viewer_)), serializer(serializer_), type_desc(type_desc_) {}
+            : viewer(std::move(viewer_)), serializer(serializer_), type_desc(type_desc_), use_viewer(true) {}
 
-    MysqlColumnViewer viewer;
+    explicit ColumnSerializeContext(ColumnPtr column_)
+            : fallback_column(std::move(column_)), serializer(nullptr), use_viewer(false) {}
+
+    std::optional<MysqlColumnViewer> viewer;
+    ColumnPtr fallback_column;
     MysqlSerializeFn serializer;
     TypeDescriptor type_desc;
+    bool use_viewer;
 };
 
 } // namespace
@@ -147,10 +153,16 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
                 serializer_type.type = TYPE_VARCHAR;
             }
 
-            auto viewer = type_dispatch_basic(physical_type, MysqlColumnViewerBuilder(), column);
-            auto serializer = get_mysql_serializer(physical_type);
-            column_ctxs.emplace_back(std::move(viewer), serializer, serializer_type);
             result_columns.emplace_back(std::move(column));
+            auto& stored_column = result_columns.back();
+
+            if (is_scalar_logical_type(physical_type)) {
+                auto viewer = type_dispatch_basic(physical_type, MysqlColumnViewerBuilder(), stored_column);
+                auto serializer = get_mysql_serializer(physical_type);
+                column_ctxs.emplace_back(std::move(viewer), serializer, serializer_type);
+            } else {
+                column_ctxs.emplace_back(stored_column);
+            }
         }
     }
 
@@ -165,7 +177,14 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
             }
             for (int col = 0; col < num_columns; ++col) {
                 auto& ctx = column_ctxs[col];
-                ctx.serializer(ctx.viewer, ctx.type_desc, _row_buffer, i, _is_binary_format);
+                if (ctx.use_viewer) {
+                    ctx.serializer(ctx.viewer.value(), ctx.type_desc, _row_buffer, i, _is_binary_format);
+                } else {
+                    if (_is_binary_format && !ctx.fallback_column->is_nullable()) {
+                        _row_buffer->update_field_pos();
+                    }
+                    ctx.fallback_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
+                }
             }
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);
@@ -205,10 +224,16 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 serializer_type.type = TYPE_VARCHAR;
             }
 
-            auto viewer = type_dispatch_basic(physical_type, MysqlColumnViewerBuilder(), column);
-            auto serializer = get_mysql_serializer(physical_type);
-            column_ctxs.emplace_back(std::move(viewer), serializer, serializer_type);
             result_columns.emplace_back(std::move(column));
+            auto& stored_column = result_columns.back();
+
+            if (is_scalar_logical_type(physical_type)) {
+                auto viewer = type_dispatch_basic(physical_type, MysqlColumnViewerBuilder(), stored_column);
+                auto serializer = get_mysql_serializer(physical_type);
+                column_ctxs.emplace_back(std::move(viewer), serializer, serializer_type);
+            } else {
+                column_ctxs.emplace_back(stored_column);
+            }
         }
     }
 
@@ -230,7 +255,14 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
             }
             for (int col = 0; col < num_columns; ++col) {
                 auto& ctx = column_ctxs[col];
-                ctx.serializer(ctx.viewer, ctx.type_desc, _row_buffer, i, _is_binary_format);
+                if (ctx.use_viewer) {
+                    ctx.serializer(ctx.viewer.value(), ctx.type_desc, _row_buffer, i, _is_binary_format);
+                } else {
+                    if (_is_binary_format && !ctx.fallback_column->is_nullable()) {
+                        _row_buffer->update_field_pos();
+                    }
+                    ctx.fallback_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
+                }
             }
             size_t len = _row_buffer->length();
 
