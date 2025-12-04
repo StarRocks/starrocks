@@ -37,7 +37,6 @@
 #include "util/logging.h"
 #include "util/stack_util.h"
 
-
 namespace starrocks {
 
 static bool logging_initialized = false;
