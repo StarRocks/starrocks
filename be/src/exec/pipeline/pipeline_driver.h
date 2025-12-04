@@ -647,7 +647,7 @@ protected:
 
     std::unique_ptr<PipelineTimerTask> _global_rf_timer;
 
-    bool _local_prepare_is_done{false};
+    std::atomic<bool> _local_prepare_is_done{false};
 
 protected:
     // metrics
