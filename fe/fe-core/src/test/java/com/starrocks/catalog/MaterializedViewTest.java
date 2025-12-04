@@ -1226,4 +1226,60 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertEquals(baseTable.getName(), baseTableInfo.getTableName());
         Assertions.assertEquals(baseTable.getId(), baseTableInfo.getTableId());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPartitionRefreshStrategy() {
+        String sql = "create materialized view test_mv1 " +
+                "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "("
+                + "\"replication_num\" = \"1\""
+                + ")" +
+                "as select k2, sum(v1) as total from base_t1 group by k2;";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_mv1"));
+            Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
+        });
+    }
+
+    @Test
+    public void testViewAndBaseTableWithTheSameName() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.base_t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        starRocksAssert.withDatabase("mv_db").useDatabase("mv_db")
+                .withView("CREATE VIEW mv_db.base_t1 AS " +
+                        "SELECT test.base_t1.k1 AS k1, test.base_t1.k2 AS k2 " +
+                        "FROM test.base_t1 " +
+                        "JOIN test.base_t2 ON test.base_t1.k1 = test.base_t2.k1;");
+
+        starRocksAssert.useDatabase("mv_db")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv_db.mv_cross_db_test \n" +
+                        "PARTITION BY (k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
+                        "AS SELECT k1, k2 FROM mv_db.base_t1;");
+
+        Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("mv_db");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(mvDb.getFullName(), "mv_cross_db_test"));
+        Assertions.assertNotNull(mv);
+        Assertions.assertTrue(mv.isActive());
+        Assertions.assertEquals(1, mv.getPartitionExprMaps().size());
+    }
+>>>>>>> d3a8abfa05 ([BugFix] Fix partition expression resolution for MV when view has same name as base table (#66274))
 }
