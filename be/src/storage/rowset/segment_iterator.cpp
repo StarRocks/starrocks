@@ -1181,7 +1181,7 @@ void SegmentIterator::_init_column_predicates() {
                                           &useless_pred_root, &used_pred_root);
     // if has index only filter, remove it from pred_tree after index filter
     if (!useless_pred_root.empty()) {
-        _opts.pred_tree = std::move(PredicateTree::create(std::move(used_pred_root)));
+        _opts.pred_tree = PredicateTree::create(std::move(used_pred_root));
         _predicate_columns = _opts.pred_tree.num_columns();
     }
 
