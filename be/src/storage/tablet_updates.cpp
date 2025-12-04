@@ -2173,6 +2173,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
                                          EditVersion* commit_version) {
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
+    bool add_rowset_succ = false;
+    DeferOp rowset_gc_defer([&]() {
+        // release rowsetid if rowset commit failed
+        if (!add_rowset_succ) {
+            StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
+        }
+    });
     _compaction_state = std::make_unique<CompactionState>();
     if (!config::enable_light_pk_compaction_publish) {
         // Skip load compaction state when enable light pk compaction
@@ -2270,6 +2277,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
+        add_rowset_succ = true;
     }
     {
         auto rowset_stats = std::make_unique<RowsetStats>();
