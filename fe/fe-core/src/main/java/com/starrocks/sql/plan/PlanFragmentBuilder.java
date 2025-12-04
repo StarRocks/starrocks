@@ -2578,7 +2578,8 @@ public class PlanFragmentBuilder {
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
                         topN.getPartitionLimit(), topN.getOrderSpec(),
-                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), topN.getPreAggCall(), inputFragment);
+                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), topN.getPreAggCall(), topN.isPerPipeline(),
+                        inputFragment);
             } else {
                 return buildFinalTopNFragment(context, topN.getTopNType(), topN.getLimit(), topN.getOffset(),
                         inputFragment, optExpr);
@@ -2625,7 +2626,7 @@ public class PlanFragmentBuilder {
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       List<ColumnRefOperator> partitionByColumns, long partitionLimit,
                                                       OrderSpec orderSpec, TopNType topNType, long limit, long offset,
-                                                      Map<ColumnRefOperator, CallOperator> preAggFnCalls,
+                                                      Map<ColumnRefOperator, CallOperator> preAggFnCalls, boolean perPipeline,
                                                       PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = Lists.newArrayList();
             List<Expr> partitionExprs = Lists.newArrayList();
@@ -2728,6 +2729,7 @@ public class PlanFragmentBuilder {
             sortNode.setPreAggOutputColumnId(preAggOutputColumnIds);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
+            sortNode.setPerPipeline(perPipeline);
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
             sortNode.setHasNullableGenerateChild();
             sortNode.computeStatistics(optExpr.getStatistics());
