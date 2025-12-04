@@ -583,12 +583,7 @@ public class MVPartitionExprResolver {
                 throw new SemanticException(String.format("The current partition expr maps size %s should be equal to " +
                         "the size of the first partition expr maps: %s", partitionExprMaps.size(), refBaseTableCols));
             }
-<<<<<<< HEAD
-            partitionExprMaps.stream()
-                            .forEach(eq -> mvPartitionExprMaps.put(eq.getExpr(), eq.getSlotRef()));
-=======
             partitionExprMaps.forEach(eq -> mvPartitionExprMaps.put(eq.getExpr(), eq.getSlotRef()));
->>>>>>> d3a8abfa05 ([BugFix] Fix partition expression resolution for MV when view has same name as base table (#66274))
         }
         if (baseTableInfos != null) {
             Set<List<MVPartitionExpr>> mvPartitionExprs = Sets.newHashSet();
