@@ -4060,4 +4060,10 @@ public class Config extends ConfigBase {
     public static int compound_predicate_flatten_threshold = 512;
 
     @ConfField public static int ui_queries_sql_statement_max_length = 128;
+
+    @ConfField(mutable = true)
+    public static boolean enable_function_blacklist = true;
+
+    @ConfField
+    public static String function_blacklist = "";
 }
