@@ -2,9 +2,9 @@
 
 package com.starrocks.epack.sql.ast;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

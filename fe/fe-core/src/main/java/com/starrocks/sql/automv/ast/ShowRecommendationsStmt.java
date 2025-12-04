@@ -15,11 +15,11 @@
 package com.starrocks.sql.automv.ast;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.TableName;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;

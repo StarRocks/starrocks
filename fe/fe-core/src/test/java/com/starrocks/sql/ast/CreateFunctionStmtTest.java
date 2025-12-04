@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.sql.ast;
 
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;

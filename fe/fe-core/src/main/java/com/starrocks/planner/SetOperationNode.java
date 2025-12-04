@@ -39,9 +39,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExceptNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -165,17 +165,17 @@ public abstract class SetOperationNode extends PlanNode {
         List<List<TExpr>> texprLists = Lists.newArrayList();
 
         for (List<Expr> exprList : materializedResultExprLists_) {
-            texprLists.add(ExprToThriftVisitor.treesToThrift(exprList));
+            texprLists.add(ExprToThrift.treesToThrift(exprList));
         }
 
         List<List<TExpr>> constTexprLists = Lists.newArrayList();
         for (List<Expr> constTexprList : materializedConstExprLists_) {
-            constTexprLists.add(ExprToThriftVisitor.treesToThrift(constTexprList));
+            constTexprLists.add(ExprToThrift.treesToThrift(constTexprList));
         }
 
         List<List<TExpr>> tlocalPartitionByExprsList = Lists.newArrayList();
         for (List<Expr> localPartitionByExprs : localPartitionByExprsList) {
-            tlocalPartitionByExprsList.add(ExprToThriftVisitor.treesToThrift(localPartitionByExprs));
+            tlocalPartitionByExprsList.add(ExprToThrift.treesToThrift(localPartitionByExprs));
         }
 
         Preconditions.checkState(firstMaterializedChildIdx_ <= children.size());

@@ -16,6 +16,7 @@ package com.starrocks.epack.catalog.system.starrocks;
 
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.epack.authorization.MaskingPolicyContext;
 import com.starrocks.epack.authorization.Policy;
@@ -27,7 +28,6 @@ import com.starrocks.epack.catalog.system.SystemIdEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.thrift.TGetPolicyReferenceItem;
 import com.starrocks.thrift.TGetPolicyReferenceResponse;
 import com.starrocks.thrift.TGetPolicyReferencesRequest;

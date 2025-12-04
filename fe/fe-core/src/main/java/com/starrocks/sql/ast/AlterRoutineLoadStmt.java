@@ -24,7 +24,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.warehouse.Warehouse;
 

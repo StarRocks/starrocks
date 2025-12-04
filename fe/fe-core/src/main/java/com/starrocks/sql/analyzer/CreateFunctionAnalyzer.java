@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.common.Config;
@@ -30,7 +31,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.HdfsURI;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
@@ -86,7 +86,7 @@ public class CreateFunctionAnalyzer {
         TypeDef returnType = stmt.getReturnType();
         // check argument
         argsDef.analyze();
-        returnType.analyze();
+        TypeDefAnalyzer.analyze(returnType);
     }
 
     public String computeMd5(CreateFunctionStmt stmt) {
@@ -311,8 +311,8 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
         TypeDef returnType = stmt.getReturnType();
         String objectFile = stmt.getProperties().get(CreateFunctionStmt.FILE_KEY);
-        TypeDef intermediateType = TypeDef.createVarchar(TypeFactory.getOlapMaxVarcharLength());
-        ;
+        ScalarType intermediateType = TypeFactory.createVarchar(com.starrocks.type.TypeFactory.getOlapMaxVarcharLength());
+
         Map<String, String> properties = stmt.getProperties();
         boolean isAnalyticFn = "true".equalsIgnoreCase(properties.get(CreateFunctionStmt.IS_ANALYTIC_NAME));
 
@@ -321,7 +321,7 @@ public class CreateFunctionAnalyzer {
         AggregateFunction.AggregateFunctionBuilder builder =
                 AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
-                hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
+                hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
                 .symbolName(mainClass.getCanonicalName());
         Function function = builder.build();

@@ -15,12 +15,12 @@
 package com.starrocks.sql.automv.lifecycle;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.generator.MVName;
 import com.starrocks.sql.automv.qe.CustomizedQueryExecutor;

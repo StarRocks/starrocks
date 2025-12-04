@@ -18,8 +18,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

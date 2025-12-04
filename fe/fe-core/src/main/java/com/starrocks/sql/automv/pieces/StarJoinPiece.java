@@ -17,7 +17,7 @@ package com.starrocks.sql.automv.pieces;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.util.TieredList;

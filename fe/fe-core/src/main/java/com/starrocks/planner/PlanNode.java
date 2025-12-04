@@ -39,14 +39,14 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.sql.ast.TreeNode;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
 import com.starrocks.sql.formatter.ExprVerboseVisitor;
@@ -528,7 +528,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));
         }
         for (Expr e : conjuncts) {
-            msg.addToConjuncts(ExprToThriftVisitor.treeToThrift(e));
+            msg.addToConjuncts(ExprToThrift.treeToThrift(e));
         }
         toThrift(msg);
         container.addToNodes(msg);

@@ -39,13 +39,13 @@ import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -461,7 +461,7 @@ public class IcebergTable extends Table {
                         .findColumnName(nativeTable.spec().fields().get(i).sourceId()));
                 partInfo.setPartition_column_name(nativeTable.spec().fields().get(i).name());
                 partInfo.setTransform_expr(nativeTable.spec().fields().get(i).transform().toString());
-                partInfo.setPartition_expr(ExprToThriftVisitor.treeToThrift(partitionExprs.get(i)));
+                partInfo.setPartition_expr(ExprToThrift.treeToThrift(partitionExprs.get(i)));
                 partitionInfos.add(partInfo);
             }
             tIcebergTable.setPartition_info(partitionInfos);
@@ -476,7 +476,7 @@ public class IcebergTable extends Table {
                 THdfsPartition tPartition = new THdfsPartition();
                 List<LiteralExpr> keys = key.getKeys();
                 tPartition.setPartition_key_exprs(keys.stream()
-                        .map(ExprToThriftVisitor::treeToThrift)
+                        .map(ExprToThrift::treeToThrift)
                         .collect(Collectors.toList()));
                 tPartitionMap.putToPartitions(partitionId, tPartition);
             }

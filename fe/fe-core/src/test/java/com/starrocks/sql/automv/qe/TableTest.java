@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.automv.qe;
 
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import org.junit.Assert;
 import org.junit.Test;
 

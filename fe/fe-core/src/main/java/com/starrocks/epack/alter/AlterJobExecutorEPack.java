@@ -3,6 +3,7 @@
 package com.starrocks.epack.alter;
 
 import com.starrocks.alter.AlterJobExecutor;
+import com.starrocks.catalog.TableName;
 import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
@@ -10,7 +11,6 @@ import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
 import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 
 public class AlterJobExecutorEPack extends AlterJobExecutor implements AstVisitorEPack<Void, ConnectContext> {
     //Apply Policy clause

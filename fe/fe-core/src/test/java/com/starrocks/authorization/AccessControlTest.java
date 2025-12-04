@@ -14,11 +14,11 @@
 package com.starrocks.authorization;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

@@ -15,8 +15,8 @@
 package com.starrocks.sql.automv.pieces;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.column.OriginalColumn;
 import com.starrocks.sql.automv.util.PrettyPrinter;

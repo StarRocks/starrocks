@@ -12,31 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/TypeDef.java
+package com.starrocks.sql.analyzer;
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.sql.ast.expression;
-
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
@@ -48,44 +26,10 @@ import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 
-/**
- * Represents an anonymous type definition, e.g., used in DDL and CASTs.
- */
-public class TypeDef implements ParseNode {
-    private Type parsedType;
-    private boolean isAnalyzed;
+public class TypeDefAnalyzer {
+    public static void analyze(TypeDef typeDef) {
+        Type parsedType = typeDef.getType();
 
-    private final NodePosition pos;
-
-    public TypeDef(Type parsedType) {
-        this(parsedType, NodePosition.ZERO);
-    }
-
-    public TypeDef(Type parsedType, NodePosition pos) {
-        this.pos = pos;
-        this.parsedType = parsedType;
-    }
-
-    public static TypeDef create(PrimitiveType type) {
-        return new TypeDef(TypeFactory.createType(type));
-    }
-
-    public static TypeDef createDecimal(int precision, int scale) {
-        return new TypeDef(TypeFactory.createDecimalV2Type(precision, scale));
-    }
-
-    public static TypeDef createVarchar(int len) {
-        return new TypeDef(TypeFactory.createVarchar(len));
-    }
-
-    public static TypeDef createChar(int len) {
-        return new TypeDef(TypeFactory.createCharType(len));
-    }
-
-    public void analyze() {
-        if (isAnalyzed) {
-            return;
-        }
         // Check the max nesting depth before calling the recursive analyze() to avoid
         // a stack overflow.
         if (parsedType.exceedsMaxNestingDepth()) {
@@ -94,10 +38,9 @@ public class TypeDef implements ParseNode {
                     Type.MAX_NESTING_DEPTH, parsedType.toSql()));
         }
         analyze(parsedType);
-        isAnalyzed = true;
     }
 
-    private void analyze(Type type) {
+    private static void analyze(Type type) {
         if (!type.isSupported()) {
             throw new SemanticException("Unsupported data type: " + type.toSql());
         }
@@ -114,7 +57,7 @@ public class TypeDef implements ParseNode {
         }
     }
 
-    private void analyzeScalarType(ScalarType scalarType) {
+    private static void analyzeScalarType(ScalarType scalarType) {
         PrimitiveType type = scalarType.getPrimitiveType();
         switch (type) {
             case CHAR:
@@ -180,7 +123,7 @@ public class TypeDef implements ParseNode {
         }
     }
 
-    private void analyzeArrayType(ArrayType type) {
+    private static void analyzeArrayType(ArrayType type) {
         Type baseType = getInnermostType(type);
         if (baseType == null) {
             throw new SemanticException("Cannot get innermost type of '" + type + "'");
@@ -203,14 +146,14 @@ public class TypeDef implements ParseNode {
         return null;
     }
 
-    private void analyzeStructType(StructType type) {
+    private static void analyzeStructType(StructType type) {
         List<StructField> structFields = type.getFields();
         for (StructField structField : structFields) {
             analyze(structField.getType());
         }
     }
 
-    private void analyzeMapType(MapType type) {
+    private static void analyzeMapType(MapType type) {
         Type keyType = type.getKeyType();
         if (!keyType.isValidMapKeyType()) {
             throw new SemanticException("Invalid map.key's type: " + keyType.toSql() +
@@ -219,27 +162,5 @@ public class TypeDef implements ParseNode {
         analyze(keyType);
         Type valueType = type.getValueType();
         analyze(valueType);
-    }
-
-    public Type getType() {
-        return parsedType;
-    }
-
-    public void setType(Type type) {
-        this.parsedType = type;
-    }
-
-    @Override
-    public String toString() {
-        return parsedType.toString();
-    }
-
-    public String toSql() {
-        return parsedType.toSql();
-    }
-
-    @Override
-    public NodePosition getPos() {
-        return pos;
     }
 }

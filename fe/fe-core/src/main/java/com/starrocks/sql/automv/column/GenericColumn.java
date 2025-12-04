@@ -16,7 +16,7 @@ package com.starrocks.sql.automv.column;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.automv.pn.Apply;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;

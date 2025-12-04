@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.automv.ast;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreateTunespaceStmt extends DdlStmt {

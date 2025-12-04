@@ -3,6 +3,7 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.catalog.TableName;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -20,7 +21,6 @@ import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 import java.util.Map;

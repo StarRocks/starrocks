@@ -12,33 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/CompoundPredicate.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.sql.ast.expression;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Objects;
 
@@ -83,25 +61,19 @@ public class CompoundPredicate extends Predicate {
 
 
     public enum Operator {
-        AND("AND", TExprOpcode.COMPOUND_AND),
-        OR("OR", TExprOpcode.COMPOUND_OR),
-        NOT("NOT", TExprOpcode.COMPOUND_NOT);
+        AND("AND"),
+        OR("OR"),
+        NOT("NOT");
 
         private final String description;
-        private final TExprOpcode thriftOp;
 
-        Operator(String description, TExprOpcode thriftOp) {
+        Operator(String description) {
             this.description = description;
-            this.thriftOp = thriftOp;
         }
 
         @Override
         public String toString() {
             return description;
-        }
-
-        public TExprOpcode toThrift() {
-            return thriftOp;
         }
     }
 
@@ -115,6 +87,6 @@ public class CompoundPredicate extends Predicate {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context)  {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCompoundPredicate(this, context);
+        return visitor.visitCompoundPredicate(this, context);
     }
 }

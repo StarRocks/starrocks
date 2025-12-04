@@ -17,7 +17,7 @@ package com.starrocks.sql.automv.pieces;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 
 import java.util.Objects;
 

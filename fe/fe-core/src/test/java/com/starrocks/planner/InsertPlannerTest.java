@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -23,7 +24,6 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.TableName;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;

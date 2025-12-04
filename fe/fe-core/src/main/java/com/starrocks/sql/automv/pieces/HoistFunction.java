@@ -15,7 +15,7 @@
 package com.starrocks.sql.automv.pieces;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.automv.pn.Op;
 
 import java.util.List;

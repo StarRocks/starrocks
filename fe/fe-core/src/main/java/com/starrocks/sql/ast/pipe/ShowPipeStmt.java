@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.OrderByPair;
@@ -28,7 +29,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

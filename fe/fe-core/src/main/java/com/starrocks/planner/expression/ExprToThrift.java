@@ -12,14 +12,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.ast.expression;
+package com.starrocks.planner.expression;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArraySliceExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictMappingExpr;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TAggregateExpr;
@@ -43,10 +94,12 @@ import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.thrift.TIntLiteral;
+import com.starrocks.thrift.TJoinOp;
 import com.starrocks.thrift.TLargeIntLiteral;
 import com.starrocks.thrift.TPlaceHolder;
 import com.starrocks.thrift.TSlotRef;
 import com.starrocks.thrift.TStringLiteral;
+import com.starrocks.thrift.TVarType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
@@ -59,11 +112,11 @@ import java.util.function.BiConsumer;
 /**
  * Convert {@link Expr} nodes into their Thrift representation via {@link AstVisitorExtendInterface}.
  */
-public final class ExprToThriftVisitor {
+public final class ExprToThrift {
 
     private static final Visitor VISITOR = new Visitor();
 
-    private ExprToThriftVisitor() {
+    private ExprToThrift() {
     }
 
     public static AstVisitorExtendInterface<Void, TExprNode> getVisitor() {
@@ -83,6 +136,73 @@ public final class ExprToThriftVisitor {
             result.add(treeToThrift(expr));
         }
         return result;
+    }
+
+    public static TJoinOp joinOperatorToThrift(JoinOperator joinOperator) {
+        Preconditions.checkNotNull(joinOperator, "Join operator should not be null");
+        switch (joinOperator) {
+            case INNER_JOIN:
+                return TJoinOp.INNER_JOIN;
+            case LEFT_OUTER_JOIN:
+                return TJoinOp.LEFT_OUTER_JOIN;
+            case LEFT_SEMI_JOIN:
+                return TJoinOp.LEFT_SEMI_JOIN;
+            case LEFT_ANTI_JOIN:
+                return TJoinOp.LEFT_ANTI_JOIN;
+            case RIGHT_SEMI_JOIN:
+                return TJoinOp.RIGHT_SEMI_JOIN;
+            case RIGHT_ANTI_JOIN:
+                return TJoinOp.RIGHT_ANTI_JOIN;
+            case RIGHT_OUTER_JOIN:
+                return TJoinOp.RIGHT_OUTER_JOIN;
+            case FULL_OUTER_JOIN:
+                return TJoinOp.FULL_OUTER_JOIN;
+            case CROSS_JOIN:
+                return TJoinOp.CROSS_JOIN;
+            case NULL_AWARE_LEFT_ANTI_JOIN:
+                return TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN;
+            case ASOF_INNER_JOIN:
+                return TJoinOp.ASOF_INNER_JOIN;
+            case ASOF_LEFT_OUTER_JOIN:
+                return TJoinOp.ASOF_LEFT_OUTER_JOIN;
+            default:
+                throw new IllegalStateException("Unsupported join operator: " + joinOperator);
+        }
+    }
+
+    public static TVarType setTypeToThrift(SetType setType) {
+        Preconditions.checkNotNull(setType, "Set type should not be null");
+        if (setType == SetType.GLOBAL) {
+            return TVarType.GLOBAL;
+        }
+        if (setType == SetType.VERBOSE) {
+            return TVarType.VERBOSE;
+        }
+        return TVarType.SESSION;
+    }
+
+    public static SetType setTypeFromThrift(TVarType thriftType) {
+        if (thriftType == TVarType.GLOBAL) {
+            return SetType.GLOBAL;
+        }
+        if (thriftType == TVarType.VERBOSE) {
+            return SetType.VERBOSE;
+        }
+        return SetType.SESSION;
+    }
+
+    public static TExprOpcode compoundPredicateOperatorToThrift(CompoundPredicate.Operator operator) {
+        Preconditions.checkNotNull(operator, "Compound predicate operator should not be null");
+        switch (operator) {
+            case AND:
+                return TExprOpcode.COMPOUND_AND;
+            case OR:
+                return TExprOpcode.COMPOUND_OR;
+            case NOT:
+                return TExprOpcode.COMPOUND_NOT;
+            default:
+                throw new IllegalStateException("Unsupported compound predicate operator: " + operator);
+        }
     }
 
     public static TAnalyticWindow analyticWindowToThrift(AnalyticWindow window) {
@@ -140,11 +260,11 @@ public final class ExprToThriftVisitor {
 
         TExprNode msg = new TExprNode();
 
-        Preconditions.checkState(java.util.Objects.equals(expr.type,
-                AnalyzerUtils.replaceNullType2Boolean(expr.type)),
+        Preconditions.checkState(java.util.Objects.equals(expr.getType(),
+                AnalyzerUtils.replaceNullType2Boolean(expr.getType())),
                 "NULL_TYPE is illegal in thrift stage");
 
-        msg.type = TypeSerializer.toThrift(expr.type);
+        msg.type = TypeSerializer.toThrift(expr.getType());
         List<Expr> children = expr.getChildren();
         msg.num_children = children.size();
         msg.setHas_nullable_child(expr.hasNullableChild());
@@ -310,7 +430,6 @@ public final class ExprToThriftVisitor {
             dictionaryGetExpr.setTxn_id(node.getDictionaryTxnId());
             dictionaryGetExpr.setKey_size(node.getKeySize());
             dictionaryGetExpr.setNull_if_not_exist(node.getNullIfNotExist());
-            node.setDictionaryGetExpr(dictionaryGetExpr);
 
             msg.setNode_type(TExprNodeType.DICTIONARY_GET_EXPR);
             msg.setDictionary_get_expr(dictionaryGetExpr);
@@ -374,7 +493,7 @@ public final class ExprToThriftVisitor {
         @Override
         public Void visitCompoundPredicate(CompoundPredicate node, TExprNode msg) {
             msg.node_type = TExprNodeType.COMPOUND_PRED;
-            msg.setOpcode(node.getOp().toThrift());
+            msg.setOpcode(compoundPredicateOperatorToThrift(node.getOp()));
             return null;
         }
 

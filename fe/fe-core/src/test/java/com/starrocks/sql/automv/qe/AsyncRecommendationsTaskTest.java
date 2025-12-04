@@ -16,11 +16,11 @@ package com.starrocks.sql.automv.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.ast.ShowRecommendationsStmt;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.PrettyPrinter;

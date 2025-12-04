@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra;
@@ -34,7 +35,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TSinkCommitInfo;
 import mockit.Mock;

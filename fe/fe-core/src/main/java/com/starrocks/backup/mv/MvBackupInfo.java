@@ -15,7 +15,7 @@
 package com.starrocks.backup.mv;
 
 import com.starrocks.catalog.MvId;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 
 public class MvBackupInfo {
     private final TableName localMvName;

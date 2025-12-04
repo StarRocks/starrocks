@@ -16,7 +16,7 @@ package com.starrocks.sql.automv.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 
 import java.util.Arrays;

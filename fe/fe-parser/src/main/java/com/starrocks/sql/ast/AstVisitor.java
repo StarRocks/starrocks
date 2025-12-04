@@ -22,23 +22,30 @@ import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CloneExpr;
 import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.DictMappingExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.MultiInPredicate;
@@ -47,11 +54,13 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
 import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -763,6 +772,10 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+    default R visitMapExpr(MapExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
     // ------------------------------------------- Predicates ---------------------------------------
 
     default R visitPredicate(Predicate node, C context) {
@@ -797,6 +810,10 @@ public interface AstVisitor<R, C> {
         return visitPredicate(node, context);
     }
 
+    default R visitCompoundPredicate(CompoundPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
     // ------------------------------------------- Case/Collection ----------------------------------
 
     default R visitCaseWhenExpr(CaseExpr node, C context) {
@@ -825,6 +842,30 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+    default R visitCastExpr(CastExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDictionaryGetExpr(DictionaryGetExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitFieldReference(FieldReference node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitLimitElement(LimitElement node, C context) {
+        return visitNode(node, context);
+    }
+
+    default R visitLambdaFunctionExpr(LambdaFunctionExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitSetVarHint(SetVarHint node, C context) {
+        return visitNode(node, context);
+    }
+
     default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
         return visitExpression(node, context);
     }
@@ -846,6 +887,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitParameterExpr(Parameter node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitVariableExpr(VariableExpr node, C context) {
         return visitExpression(node, context);
     }
 

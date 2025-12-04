@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -87,7 +88,8 @@ public abstract class PlanPiecePattern {
                 public Optional<NodeDesc> visitLogicalJoin(LogicalJoinOperator node, Void context) {
                     NodeDesc desc = new NodeDesc();
                     desc.name = NodeName.Join;
-                    desc.attributes.put("", ConstantOperator.createVarchar(node.getJoinType().toThrift().name()));
+                    desc.attributes.put("", ConstantOperator.createVarchar(
+                            ExprToThrift.joinOperatorToThrift(node.getJoinType()).name()));
                     return Optional.of(desc);
                 }
 

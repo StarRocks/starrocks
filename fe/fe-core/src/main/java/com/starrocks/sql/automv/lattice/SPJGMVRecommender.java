@@ -21,7 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.generator.AggregateMVGenerator;
 import com.starrocks.sql.automv.generator.MVGenerateContext;

@@ -5,6 +5,7 @@ package com.starrocks.epack.failover;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -14,7 +15,6 @@ import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DatabaseName;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

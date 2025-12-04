@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -150,10 +149,12 @@ public class PartitionExprAnalyzer {
         } else if (expr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) expr;
             castExpr.setType(castExpr.getTargetTypeDef().getType());
-            try {
-                castExpr.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException("Failed to analyze cast expr:" + ExprToSql.toSql(castExpr), expr.getPos());
+
+            // cast was asked for in the query, check for validity of cast
+            Type childType = castExpr.getChild(0).getType();
+            // this cast may result in loss of precision, but the user requested it
+            if (childType.matchesType(castExpr.getType())) {
+                castExpr.setNoOpForReset(true);
             }
             ArrayList<Expr> children = castExpr.getChildren();
             for (Expr child : children) {

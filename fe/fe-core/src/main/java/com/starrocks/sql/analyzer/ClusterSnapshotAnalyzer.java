@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
@@ -30,7 +31,6 @@ import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
-import com.starrocks.sql.ast.expression.TableName;
 
 public class ClusterSnapshotAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {

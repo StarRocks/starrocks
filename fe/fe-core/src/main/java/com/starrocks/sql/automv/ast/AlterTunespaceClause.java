@@ -15,9 +15,9 @@
 package com.starrocks.sql.automv.ast;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.automv.qe.QueryStatementPlus;
 
 import java.util.Collections;
