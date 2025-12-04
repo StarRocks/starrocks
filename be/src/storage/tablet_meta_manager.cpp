@@ -789,7 +789,6 @@ void decode_delta_column_group_key(std::string_view enc_key, TTabletId* tablet_i
 }
 
 DEFINE_FAIL_POINT(tablet_meta_manager_rowset_commit_internal_error);
-
 Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key) {
     FAIL_POINT_TRIGGER_RETURN(tablet_meta_manager_rowset_commit_internal_error,

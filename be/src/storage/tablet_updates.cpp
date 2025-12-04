@@ -715,13 +715,6 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
             Tracer::Instance().start_trace_txn_tablet("rowset_commit_unlocked", rowset->txn_id(), _tablet.tablet_id());
     span->SetAttribute("version", version);
     auto scoped = trace::Scope(span);
-    bool add_rowset_succ = false;
-    DeferOp rowset_gc_defer([&]() {
-        // release rowsetid if rowset commit failed
-        if (!add_rowset_succ) {
-            StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
-        }
-    });
     EditVersionMetaPB edit;
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major_number(version);
@@ -788,7 +781,6 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
-        add_rowset_succ = true;
     }
     // update stats of the newly added rowset
     {
