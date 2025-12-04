@@ -107,6 +107,14 @@ public class FunctionParams {
         return exprs;
     }
 
+    public void setExprsNames(List<String> exprsNames) {
+        this.exprsNames = exprsNames;
+    }
+
+    public boolean hasNamedArguments() {
+        return exprsNames != null && !exprsNames.isEmpty() && exprsNames.stream().anyMatch(name -> !name.isEmpty());
+    }
+
     public void setIsDistinct(boolean v) {
         isDistinct = v;
     }

@@ -1089,9 +1089,65 @@ public class ExpressionAnalyzer {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
+
+            // Handle named arguments reordering before function lookup
+            List<String> exprsNames = node.getParams().getExprsNames();
+            if (exprsNames != null && !exprsNames.isEmpty()) {
+                // Named arguments are used - we need to find the function first, then reorder
+                Function fn = FunctionAnalyzer.getAnalyzedFunctionForNamedArgs(session, node, argumentTypes, exprsNames);
+                if (fn == null) {
+                    // Try to provide a more user-friendly error message
+                    FunctionAnalyzer.throwFriendlyNamedArgError(fnName, argumentTypes, exprsNames);
+                    // Fallback to generic error if no specific error was thrown
+                    String msg = String.format("No matching function with signature: %s(%s)",
+                            fnName, node.getParams().getNamedArgStr());
+                    throw new SemanticException(msg, node.getPos());
+                }
+                // Validate named arguments before reordering
+                FunctionAnalyzer.validateNamedArguments(fnName, fn, exprsNames);
+                // Reorder arguments according to function definition
+                node.getParams().reorderNamedArgAndAppendDefaults(fn);
+                // Update children to match reordered params
+                node.clearChildren();
+                node.addChildren(node.getParams().exprs());
+                // Re-analyze children after reordering
+                for (Expr child : node.getChildren()) {
+                    if (!child.isAnalyzed()) {
+                        visit(child, scope);
+                    }
+                }
+                node.setFn(fn);
+                node.setType(fn.getReturnType());
+                FunctionAnalyzer.analyze(node);
+                return null;
+            }
+
             // get function by function expression and argument types
             Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
             if (fn == null) {
+                // Try to find a function with named arguments that can accept positional arguments
+                fn = FunctionAnalyzer.getAnalyzedFunctionForPositionalCallWithNamedArgs(
+                        session, fnName, argumentTypes);
+                if (fn != null) {
+                    // Append default values for remaining parameters
+                    node.getParams().appendDefaultsForPositionalArgs(fn);
+                    // Update children to match the expanded params
+                    node.clearChildren();
+                    node.addChildren(node.getParams().exprs());
+                    // Re-analyze new children (default values)
+                    for (Expr child : node.getChildren()) {
+                        if (!child.isAnalyzed()) {
+                            visit(child, scope);
+                        }
+                    }
+                    node.setFn(fn);
+                    node.setType(fn.getReturnType());
+                    FunctionAnalyzer.analyze(node);
+                    return null;
+                }
+                // Try to provide a more user-friendly error message for positional calls
+                FunctionAnalyzer.throwFriendlyPositionalArgError(fnName, argumentTypes);
+                // Fallback to generic error if no specific error was thrown
                 String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
