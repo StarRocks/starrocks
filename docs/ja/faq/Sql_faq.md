@@ -129,4 +129,242 @@ VARCHAR は可変長データ型で、実際のデータ長に基づいて変更
 
 `SHOW DATA;` は、現在のデータベース内のすべてのテーブルのデータサイズとレプリカを表示します。
 
-`SHOW DATA FROM <db_name>.<table_name>;` は、指定されたデータベースの指定されたテーブルのデータサイズ、レプリカ数、および行数を表示します。
+`SHOW DATA FROM <db_name>.<table_name>;` は、指定されたデータベースの指定されたテーブルのデータサイズ、レプリカの数、および行数を表示します。
+
+## StarRocks on ES で Elasticsearch 外部テーブルを作成する際、関連する文字列の長さが 256 を超えると、select ステートメントを使用してその列をクエリできなくなる
+
+動的マッピングでは、Elasticsearch のデータ型は次のようになります。
+
+```json
+          "k4": {
+                "type": "text",
+                "fields": {
+                   "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 256
+                   }
+                }
+             }
+```
+
+StarRocks はキーワードデータ型を使用してクエリステートメントを変換します。列のキーワード長が 256 を超えるため、その列をクエリできません。
+
+解決策: フィールドマッピングを削除して、テキスト型を使用します。
+
+```json
+            "fields": {
+                   "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 256
+                   }
+                }
+```
+
+## StarRocks データベースとテーブルのサイズ、およびそれらが占有するディスクリソースを迅速にカウントする方法は？
+
+[SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.md) コマンドを使用して、データベースとテーブルのストレージサイズを表示できます。
+
+`SHOW DATA;` は、現在のデータベース内のすべてのテーブルのデータ量とレプリカ数を表示します。
+
+`SHOW DATA FROM <db_name>.<table_name>;` は、指定されたデータベースの特定のテーブルのデータ量、レプリカ数、および行数を表示します。
+
+## パーティションキーに関数を使用するとクエリが遅くなるのはなぜですか？
+
+パーティションキーに関数を使用すると、パーティションプルーニングが不正確になり、クエリパフォーマンスが低下する可能性があります。
+
+## DELETE ステートメントがネストされた関数をサポートしていないのはなぜですか？
+
+```SQL
+mysql > DELETE FROM starrocks.ods_sale_branch WHERE create_time >= concat(substr(202201,1,4),'01') and create_time <= concat(substr(202301,1,4),'12');
+
+SQL Error [1064][42000]: Right expr of binary predicate should be value
+```
+
+BINARY プレディケートは `column op literal` タイプでなければならず、式を使用することはできません。現在、比較値として式をサポートする計画はありません。
+
+## 予約キーワードで列を命名する方法は？
+
+予約キーワード（例: `rank`）はエスケープする必要があります。例えば、`` `rank` `` を使用します。
+
+## 実行中の SQL を停止する方法は？
+
+`show processlist;` を使用して実行中の SQL を表示し、`kill <id>;` を使用して対応する SQL を終了できます。また、`SHOW PROC '/current_queries';` を通じて表示および管理することもできます。
+
+## アイドル接続をクリーンアップする方法は？
+
+セッション変数 `wait_timeout`（単位: 秒）を使用してアイドル接続のタイムアウトを制御できます。MySQL はデフォルトで約 8 時間後にアイドル接続を自動的にクリーンアップします。
+
+## UNION ALL 内の複数の SQL セグメントは並行して実行されますか？
+
+はい、並行して実行されます。
+
+## SQL が BE をクラッシュさせた場合はどうすればよいですか？
+
+1. `be.out` エラースタックに基づいて、クラッシュを引き起こした `query_id` を見つけます。
+2. `query_id` を使用して `fe.audit.log` で対応する SQL を見つけます。
+
+次の情報をサポートチームに収集して送信してください。
+
+- `be.out` ログ
+- `pstack $be_pid > pstack.log` を実行して SQL を実行します。
+- コアダンプファイル
+
+コアファイルを収集する手順:
+
+1. 対応する BE プロセスを取得します。
+
+   ```Bash
+   ps aux| grep be
+   ```
+
+2. コアファイルサイズの制限を無制限に設定します。
+
+   ```Bash
+   prlimit -p $bePID --core=unlimited:unlimited
+   ```
+
+   サイズ制限が無制限であるかどうかを確認します。
+
+   ```Bash
+   cat /proc/$bePID/limits
+   ```
+
+`0` でない場合、プロセスがクラッシュすると、BE デプロイメントのルートディレクトリにコアファイルが生成されます。
+
+## Hints を使用してテーブルジョインオプティマイザの動作を制御する方法は？
+
+`broadcast` と `shuffle` Hints をサポートしています。例えば:
+
+- `select * from a join [broadcast] b on a.id = b.id;`
+- `select * from a join [shuffle] b on a.id = b.id;`
+
+## SQL クエリの同時実行性を向上させる方法は？
+
+セッション変数 `pipeline_dop` を調整することで実現できます。
+
+## DDL の実行進捗を確認する方法は？
+
+- デフォルトデータベース内のすべての列変更タスクを表示します。
+
+   ```SQL
+   SHOW ALTER TABLE COLUMN;
+   ```
+
+- 特定のテーブルの最新の列変更タスクを表示します。
+
+   ```SQL
+   SHOW ALTER TABLE COLUMN WHERE TableName="table1" ORDER BY CreateTime DESC LIMIT 1;
+   ```
+
+## 浮動小数点数を比較するとクエリ結果が不一致になるのはなぜですか？
+
+浮動小数点数を直接 `=` で比較すると、誤差のために不安定になる可能性があります。範囲チェックを使用することをお勧めします。
+
+## 浮動小数点計算で誤差が生じるのはなぜですか？
+
+FLOAT/DOUBLE 型は `avg`、`sum` などの計算で精度誤差が生じ、クエリ結果が不一致になる可能性があります。高精度が必要な場合は DECIMAL 型を使用してください。ただし、パフォーマンスは 2～3 倍低下します。
+
+## サブクエリ内の ORDER BY が効果を発揮しないのはなぜですか？
+
+分散実行では、サブクエリの外層で ORDER BY が指定されていない場合、グローバルな順序付けを保証できません。これは期待される動作です。
+
+## row_number() の結果が複数回の実行で不一致になるのはなぜですか？
+
+ORDER BY フィールドに重複がある場合（例: 複数の行が同じ `createTime` を持つ）、SQL 標準は安定したソートを保証しません。安定性を確保するために、ユニークなフィールド（例: `employee_id`）を ORDER BY に含めることをお勧めします。
+
+## SQL の最適化やトラブルシューティングに必要な情報は何ですか？
+
+- `EXPLAIN COSTS <SQL>`（統計情報を含む）
+- `EXPLAIN VERBOSE <SQL>`（データ型、nullable、最適化戦略を含む）
+- Query Profile（FE Web インターフェースの `http://<fe_ip>:<fe_http_port>` で Queries タブに移動して表示可能）
+- Query Dump（HTTP API を介して取得可能）
+
+  ```Bash
+  wget --user=${username} --password=${password} --post-file ${query_file} http://${fe_host}:${fe_http_port}/api/query_dump?db=${database} -O ${dump_file}
+  ```
+
+Query Dump には次の情報が含まれます：
+
+- クエリステートメント
+- クエリで参照されるテーブルスキーマ
+- セッション変数
+- BE の数
+- 統計情報（最小値、最大値）
+- 例外情報（例外スタック）
+
+## データスキューを確認する方法は？
+
+`ADMIN SHOW REPLICA DISTRIBUTION FROM <table>` を使用して、タブレットの分布を確認します。
+
+## メモリ関連のエラーをトラブルシューティングする方法は？
+
+一般的なシナリオは 3 つあります：
+
+- **単一クエリのメモリ制限を超えた場合：**
+  - エラー: `Mem usage has exceed the limit of single query, You can change the limit by set session variable exec_mem_limit.`
+  - 解決策: `exec_mem_limit` を調整します。
+- **クエリプールのメモリ制限を超えた場合：**
+  - エラー: `Mem usage has exceed the limit of query pool`
+  - 解決策: SQL を最適化します。
+- **BE の総メモリ制限を超えた場合：**
+  - エラー: `Mem usage has exceed the limit of BE`
+  - 解決策: メモリ使用量を分析します。
+
+メモリ分析方法：
+
+```Bash
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use"
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
+```
+
+---
+
+## `StarRocks planner use long time xxx ms in logical phase` エラーが発生した場合の対処法は？
+
+1. `fe.gc.log` を分析して、Full GC の発生を確認します。
+2. SQL 実行プランが複雑な場合、`new_planner_optimize_timeout`（単位: ms）を増やします：
+
+   ```SQL
+   set global new_planner_optimize_timeout = 6000;
+   ```
+
+## Unknown Error をトラブルシューティングする方法は？
+
+次のパラメータを一つずつ調整してから SQL を再実行します：
+
+```SQL
+set disable_join_reorder = true;
+set enable_global_runtime_filter = false;
+set enable_query_cache = false;
+set cbo_enable_low_cardinality_optimize = false;
+```
+
+その後、EXPLAIN COSTS、EXPLAIN VERBOSE、PROFILE、および Query Dump を収集し、サポートチームに提供してください。
+
+## `select now()` はどのタイムゾーンを返しますか？
+
+`time_zone` システム変数で指定されたタイムゾーンを返します。FE/BE ログはマシンのローカルタイムゾーンを使用します。
+
+## リソースが正常でも高い同時実行性下で SQL が遅くなるのはなぜですか？
+
+原因は高いネットワークまたは RPC レイテンシです。BE パラメータ `brpc_connection_type` を `pooled` に調整し、BE を再起動してください。
+
+## 統計収集を無効にする方法は？
+
+- 自動収集を無効にする：
+
+  ```SQL
+  enable_statistic_collect = false;
+  ```
+
+- インポートトリガーの収集を無効にする：
+
+  ```SQL
+  enable_statistic_collect_on_first_load = false;
+  ```
+
+- v3.3 以上にアップグレードしたバージョンの場合、手動で設定：
+
+  ```SQL
+  set global analyze_mv = "";
+  ```
