@@ -97,4 +97,8 @@ ViewFs 関連の設定ファイル `core-site.xml` と `hdfs-site.xml` を **bro
 
 ブローカーが展開されているすべてのホストに **/etc/krb5.conf** ファイルが構成されていることを確認してください。
 
-エラーが続く場合は、ブローカーの起動スクリプトの `JAVA_OPTS` 変数の末尾に `-Djava.security.krb5.conf:/etc/krb5.conf` を追加してください。
+エラーが続く場合は、ブローカーの起動スクリプトの `JAVA_OPTS` 変数の末尾に `-Djava.security.krb5.conf:/etc/krb5.conf` を追加します。
+
+## 11. ソース Hive テーブルが空の場合、Broker Load は失敗しますか？
+
+デフォルトでは、空のトランザクションは "all partitions have no load data" エラーを返します。空のトランザクションが成功を返すようにするには、FE 設定の `empty_load_as_error` を `false` に設定できます。
