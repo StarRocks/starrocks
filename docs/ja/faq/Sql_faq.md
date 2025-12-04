@@ -129,9 +129,6 @@ VARCHAR は可変長データ型で、実際のデータ長に基づいて変更
 
 `SHOW DATA;` は、現在のデータベース内のすべてのテーブルのデータサイズとレプリカを表示します。
 
-<<<<<<< HEAD
-`SHOW DATA FROM <db_name>.<table_name>;` は、指定されたデータベースの指定されたテーブルのデータサイズ、レプリカ数、および行数を表示します。
-=======
 `SHOW DATA FROM <db_name>.<table_name>;` は、指定されたデータベースの指定されたテーブルのデータサイズ、レプリカの数、および行数を表示します。
 
 ## StarRocks on ES で Elasticsearch 外部テーブルを作成する際、関連する文字列の長さが 256 を超えると、select ステートメントを使用してその列をクエリできなくなる
@@ -371,4 +368,3 @@ set cbo_enable_low_cardinality_optimize = false;
   ```SQL
   set global analyze_mv = "";
   ```
->>>>>>> 6d7e7ab7c3 ([Doc] Add New SQL FAQ (#66195))
