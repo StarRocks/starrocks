@@ -159,7 +159,7 @@ If your BE nodes are not directly accessible from client applications, (for exam
 
 The proxy feature is controlled by two global variables: 
 
-- `arrow_flight_proxy_enabled`: Controls whether proxy mode is enabled. Default is `true`. When enabled, there is a slight performance overhead (approximately 8-10% compared to direct BE connections).
+- `arrow_flight_proxy_enabled`: Controls whether proxy mode is enabled. Default is `true`. When enabled, there is a slight performance overhead.
 - `arrow_flight_proxy`: Specifies the proxy hostname. If empty (default), the current FE node acts as the proxy. You can set this to a specific hostname if using a different proxy endpoint.
 
 To configure these variables globally for all sessions:

@@ -15,6 +15,9 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.Any;
@@ -80,8 +83,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlServiceImpl.class);
@@ -89,7 +92,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final ArrowFlightSqlSessionManager sessionManager;
     private final Location feEndpoint;
     private final SqlInfoBuilder sqlInfoBuilder;
-    private final ConcurrentHashMap<String, FlightClient> beClientCache = new ConcurrentHashMap<>();
+    private final Cache<String, FlightClient> beClientCache = CacheBuilder.newBuilder()
+            .maximumSize(128)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .removalListener((RemovalNotification<String, FlightClient> notification) -> {
+                FlightClient client = notification.getValue();
+                if (client != null) {
+                    try {
+                        client.close();
+                    } catch (Exception e) {
+                        LOG.warn("[ARROW] Error closing client", e);
+                    }
+                }
+            })
+            .build();
 
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.arrow_max_service_task_threads_num, "arrow-flight-executor", true);
@@ -118,15 +134,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public void close() throws Exception {
         AutoCloseables.close(rootAllocator);
-
-        beClientCache.values().forEach(client -> {
-            try {
-                client.close();
-            } catch (Exception e) {
-                LOG.warn("[ARROW] Error closing FlightClient during shutdown", e);
-            }
-        });
-        beClientCache.clear();
+        beClientCache.invalidateAll();
     }
 
     @Override
@@ -450,7 +458,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                              Integer.parseInt(ticketParts[3]), listener);
         } else {
             throw CallStatus.INVALID_ARGUMENT.withDescription(
-                    "Invalid ticket format: expected 2 or 4 parts, got " + ticketParts.length)
+                    String.format("Invalid ticket format: expected 2 or 4 parts, got [%d]", ticketParts.length))
                     .toRuntimeException(); 
         }
     }
@@ -461,7 +469,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         String beKey = beHost + ":" + bePort;
 
         try {
-            FlightClient beClient = beClientCache.computeIfAbsent(beKey, key -> {
+            FlightClient beClient = beClientCache.get(beKey, () -> {
                 Location beLocation = Location.forGrpcInsecure(beHost, bePort);
                 return FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
             });
@@ -475,7 +483,6 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             // TODO add retry logic
             beStream = beClient.getStream(ticket);
             final FlightStream streamToCancel = beStream;
-            VectorSchemaRoot root = beStream.getRoot();
 
             listener.setOnCancelHandler(() -> {
                 try {
@@ -485,6 +492,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 }
             });
 
+            VectorSchemaRoot root = beStream.getRoot();
             // Start streaming to client
             listener.start(root);
             while (beStream.next()) {
@@ -494,12 +502,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         } catch (Exception e) {
             LOG.warn("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
 
-            FlightClient removedClient = beClientCache.remove(beKey);
-            if (removedClient != null) {
+            beClientCache.invalidate(beKey);
+            if (beStream != null) {
                 try {
-                    removedClient.close();
-                } catch (Exception closeClientEx) {
-                    LOG.warn("[ARROW] Error removing stale client", closeClientEx);
+                    beStream.cancel("Error during streaming", e);
+                } catch (Exception cancelStreamEx) {
+                    LOG.warn("[ARROW] Error cancelling stream", cancelStreamEx);
                 }
             }
 
