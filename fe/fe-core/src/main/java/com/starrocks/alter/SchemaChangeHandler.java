@@ -1192,11 +1192,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        // hll must be used in agg_keys
-        if (newColumn.getType().isHllType() && KeysType.AGG_KEYS != olapTable.getKeysType()) {
-            throw new DdlException("HLL type column can only be in Aggregation data model table: " + newColName);
-        }
-
         if (newColumn.getAggregationType() == AggregateType.BITMAP_UNION && KeysType.AGG_KEYS != olapTable.getKeysType()) {
             throw new DdlException("BITMAP_UNION must be used in AGG_KEYS");
         }
