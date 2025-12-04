@@ -126,7 +126,9 @@ void LoadChannelMgr::close() {
     _async_rpc_pool->shutdown();
     std::lock_guard l(_lock);
     for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
-        iter->second->cancel("load channel manager closed");
+        std::string close_reason = "load channel manager closed";
+        iter->second->cancel(close_reason);
+        _record_cancel_reason(iter->first, close_reason);
         iter->second->abort();
         iter = _load_channels.erase(iter);
     }
@@ -224,8 +226,16 @@ void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTab
     if (channel != nullptr) {
         channel->add_chunk(request, response);
     } else {
-        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
+        // Try to find cancel reason to report root cause
+        std::string cancel_reason = _get_cancel_reason(load_id);
+        if (!cancel_reason.empty()) {
+            // Report the root cause instead of "no associated load channel"
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(cancel_reason);
+        } else {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
+        }
     }
 }
 
@@ -236,8 +246,16 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
     if (channel != nullptr) {
         channel->add_chunks(request, response);
     } else {
-        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
+        // Try to find cancel reason to report root cause
+        std::string cancel_reason = _get_cancel_reason(load_id);
+        if (!cancel_reason.empty()) {
+            // Report the root cause instead of "no associated load channel"
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(cancel_reason);
+        } else {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request.id()));
+        }
     }
 }
 
@@ -250,8 +268,16 @@ void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddS
         channel->add_segment(cntl, request, response, done);
         closure_guard.release();
     } else {
-        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request->id()));
+        // Try to find cancel reason to report root cause
+        std::string cancel_reason = _get_cancel_reason(load_id);
+        if (!cancel_reason.empty()) {
+            // Report the root cause instead of "no associated load channel"
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(cancel_reason);
+        } else {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs("no associated load channel " + print_id(request->id()));
+        }
     }
 }
 
@@ -259,11 +285,18 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
                             PTabletWriterCancelResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
+    std::string cancel_reason = request.has_reason() ? request.reason() : "";
+    
+    // Record cancel reason for root cause reporting
+    if (!cancel_reason.empty()) {
+        _record_cancel_reason(load_id, cancel_reason);
+    }
+    
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
             channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()),
-                           {request.tablet_id()}, request.reason());
+                           {request.tablet_id()}, cancel_reason);
         }
     } else if (request.tablet_ids_size() > 0) {
         auto channel = _find_load_channel(load_id);
@@ -273,11 +306,11 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
                 tablet_ids.emplace_back(tablet_id);
             }
             channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()), tablet_ids,
-                           request.reason());
+                           cancel_reason);
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
-            channel->cancel(request.reason());
+            channel->cancel(cancel_reason);
             channel->abort();
         }
     }
@@ -367,13 +400,18 @@ void LoadChannelMgr::_start_load_channels_clean() {
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
-        channel->cancel("load channel timeout");
+        std::string timeout_reason = "load channel timeout";
+        channel->cancel(timeout_reason);
+        _record_cancel_reason(channel->load_id(), timeout_reason);
     }
     for (auto& channel : timeout_channels) {
         channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << print_id(channel->load_id())
                   << " timeout=" << channel->timeout();
     }
+
+    // Clean expired cancel reasons
+    _clean_expired_cancel_reasons();
 
     // clean load in writing data size
     if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
@@ -410,8 +448,43 @@ void LoadChannelMgr::abort_txn(int64_t txn_id) {
     if (channel != nullptr) {
         LOG(INFO) << "Aborting load channel because transaction was aborted. load_id=" << print_id(channel->load_id())
                   << " txn_id=" << txn_id;
-        channel->cancel("transaction aborted");
+        std::string abort_reason = "transaction aborted";
+        channel->cancel(abort_reason);
+        _record_cancel_reason(channel->load_id(), abort_reason);
         channel->abort();
+    }
+}
+
+void LoadChannelMgr::_record_cancel_reason(const UniqueId& load_id, const std::string& reason) {
+    std::lock_guard l(_lock);
+    CancelReasonInfo info;
+    info.reason = reason;
+    info.timestamp = time(nullptr);
+    _cancel_reasons[load_id] = info;
+}
+
+std::string LoadChannelMgr::_get_cancel_reason(const UniqueId& load_id) {
+    std::lock_guard l(_lock);
+    auto it = _cancel_reasons.find(load_id);
+    if (it != _cancel_reasons.end()) {
+        return it->second.reason;
+    }
+    return "";
+}
+
+void LoadChannelMgr::_clean_expired_cancel_reasons() {
+    // Keep cancel reasons for 60 seconds after channel is removed
+    // This should be enough time for any pending add_chunk requests to find the root cause
+    constexpr int64_t CANCEL_REASON_RETENTION_SECONDS = 60;
+    
+    time_t now = time(nullptr);
+    std::lock_guard l(_lock);
+    for (auto it = _cancel_reasons.begin(); it != _cancel_reasons.end(); /**/) {
+        if (difftime(now, it->second.timestamp) >= CANCEL_REASON_RETENTION_SECONDS) {
+            it = _cancel_reasons.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
