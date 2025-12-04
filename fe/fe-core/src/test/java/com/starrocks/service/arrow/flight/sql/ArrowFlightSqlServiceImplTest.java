@@ -128,6 +128,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
+        when(mockSessionVariable.isArrowFlightProxyEnabled()).thenReturn(false);
 
         CallHeaders mockHeaders = mock(CallHeaders.class);
         when(mockHeaders.get("database")).thenReturn("test_db");
@@ -248,6 +249,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
         when(mockSessionVariable.getArrowFlightProxy()).thenReturn("10.0.0.24:9400");
+        when(mockSessionVariable.isArrowFlightProxyEnabled()).thenReturn(true);
 
 
         ExecutionDAG mockDAG = mock(ExecutionDAG.class);
@@ -307,6 +309,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockSessionVariable.getQueryDeliveryTimeoutS()).thenReturn(10);
         when(mockSessionVariable.getSqlDialect()).thenReturn("mysql");
         when(mockSessionVariable.getArrowFlightProxy()).thenReturn("invalid proxy");
+        when(mockSessionVariable.isArrowFlightProxyEnabled()).thenReturn(true);
 
 
         ExecutionDAG mockDAG = mock(ExecutionDAG.class);

@@ -22,6 +22,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
@@ -469,8 +470,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
                     .setStatementHandle(ByteString.copyFromUtf8(beTicket))
                     .build();
-            
             Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
+
+            // TODO add retry logic/stale clients check
             beStream = beClient.getStream(ticket);
             final FlightStream streamToCancel = beStream;
             VectorSchemaRoot root = beStream.getRoot();
@@ -485,9 +487,25 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             // Start streaming to client
             listener.start(root);
+
+            int batchCount = 0;
+            int notReadyCount = 0;
+
             while (beStream.next()) {
-                listener.putNext(); // TODO is backpressure check necessary
+                if (!listener.isReady()) {
+                    notReadyCount++;
+                    LOG.warn("[ARROW] Backpressure detected - client not ready (batch {}, query {})",
+                            batchCount, queryId);
+                }
+                listener.putNext();
+                batchCount++;
             }
+
+            if (notReadyCount > 0) {
+                LOG.info("[ARROW] Query {} experienced backpressure in {}/{} batches ({:.1f}%)",
+                        queryId, notReadyCount, batchCount, 100.0 * notReadyCount / batchCount);
+            }
+
             listener.completed();
         } catch (Exception e) {
             LOG.error("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
@@ -587,22 +605,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Preconditions.checkNotNull(execPlan, "execPlan is null");
             Schema schema = buildSchema(execPlan);
 
-            ByteString handle;
-            Location endpoint;
-            if (!validProxyFormat(sv.getArrowFlightProxy())) {
-                throw new RuntimeException(String.format("Invalid proxy format [arrow_flight_proxy=%s]",
-                        sv.getArrowFlightProxy()));
-            }
-            if (sv.getArrowFlightProxy().isEmpty()) {
-                // route directly to BE
-                handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
-                endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
-            } else {
-                // route to variable (FE/NLB)
-                handle = buildFEProxyTicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
-                String[] split = sv.getArrowFlightProxy().split(":");
-                endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
-            }
+            Pair<Location, ByteString> parsedProxy = parseProxy(sv, defaultCoordinator, worker, rootFragmentInstanceId);
+            Location endpoint = parsedProxy.first;
+            ByteString handle = parsedProxy.second;
 
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
@@ -688,6 +693,31 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         String[] split = arrowFlightProxy.split(":");
         return (split.length == 2 || split.length == 4);
+    }
+
+    private Pair<Location, ByteString> parseProxy(SessionVariable sv, Coordinator defaultCoordinator,
+                                                  ComputeNode worker, TUniqueId rootFragmentInstanceId) {
+        ByteString handle;
+        Location endpoint;
+        if (sv.isArrowFlightProxyEnabled()) {
+            if (!validProxyFormat(sv.getArrowFlightProxy())) {
+                throw new RuntimeException(String.format("Invalid proxy format [arrow_flight_proxy=%s]",
+                        sv.getArrowFlightProxy()));
+            }
+
+            handle = buildFEProxyTicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
+            if (sv.getArrowFlightProxy().isEmpty()) { // route to FE
+                endpoint = feEndpoint;
+            } else { // route to defined proxy
+                String[] split = sv.getArrowFlightProxy().split(":");
+                endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
+            }
+        } else { // route directly to BE
+            handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
+            endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
+        }
+
+        return new Pair<>(endpoint, handle);
     }
 
     @VisibleForTesting
