@@ -9,7 +9,9 @@ on:
       - main
       - 'branch*'
 
-permissions: write-all
+permissions:
+  issues: write
+  pull-requests: write
 
 jobs:
   doc-checker:
@@ -21,31 +23,17 @@ jobs:
       (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
     outputs:
       output1: ${{ steps.doc-changes-info.outputs.doc }}
-      oss-doc: ${{ steps.doc-changes-info.outputs.oss-doc }}
-      bare-metal-doc: ${{ steps.doc-changes-info.outputs.bare-metal-doc }}
-      operator-doc: ${{ steps.doc-changes-info.outputs.operator-doc }}
     steps:
       - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
             doc:
-                - 'docs/**'
-            oss-doc:
-                - 'docs/en/**'
-                - 'docs/docusaurus/**'
-            bare-metal-doc:
-                - 'docs/enterprise-edition/bare-metal/**'
-            operator-doc:
-                - 'docs/enterprise-edition/kubernetes/**'
+            - 'docs/**'
       - name: DOC CHECK INFO
         id: doc-changes-info
         run: |
           echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
-          echo "oss-doc=${{ steps.changes.outputs.oss-doc }}" >> $GITHUB_OUTPUT
-          echo "bare-metal-doc=${{ steps.changes.outputs.bare-metal-doc }}" >> $GITHUB_OUTPUT
-          echo "operator-doc=${{ steps.changes.outputs.operator-doc }}" >> $GITHUB_OUTPUT
-
 
   remove-doc-label:
     needs: doc-checker
@@ -72,8 +60,8 @@ jobs:
           labels: documentation
 
   markdownlint:
-    needs: doc-checker
     runs-on: ubuntu-latest
+    needs: add-doc-label
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -106,94 +94,34 @@ jobs:
 
       - uses: actions/setup-node@v3
         with:
-          node-version: 21
+          node-version: 22
 
-      - name: Combine open-source and Bare-Metal Enterprise docs
-        if: needs.doc-checker.outputs.bare-metal-doc == 'true'
-        run: |
-            # docusaurus config goes in workingdir and combined
-            # open-source and Bare-Metal docs go in workingdir/docs
-            mkdir -p workingdir/docs
-            cp -r docs/en/* workingdir/docs
-            rm workingdir/docs/introduction/what_is_starrocks.md
-            rm -rf workingdir/docs/deployment
-            mkdir -p workingdir/docs/deployment
-            rsync -avhrW --progress ./docs/enterprise-edition/bare-metal/docs/ workingdir/docs
-            cp docs/en/deployment/plan_cluster.md workingdir/docs/deployment/15_plan_cluster.md
-            rm -f workingdir/docs/README.md
-
-            rm -rf workingdir/docs/quick_start
-            rm -rf workingdir/docs/cover_pages
-            rm -rf workingdir/docs/project_help
-            rm -rf workingdir/docs/developers
-            rm -rf workingdir/docs/release_notes
-            rm -rf workingdir/docs/ecosystem_release
-            rm workingdir/docs/data_source/icebergtutorial.mdx
-            rm workingdir/docs/introduction/StarRocks_intro.md
-            rm workingdir/docs/administration/stargo.md
-            rm -rf workingdir/docs/integrations/other_integrations
-            rm workingdir/docs/integrations/streaming.mdx
-            rm workingdir/docs/loading/Json_loading.md
-            rm workingdir/docs/loading/loading.mdx
-            rm workingdir/docs/loading/loading_introduction/loading_overview.mdx
-            rm workingdir/docs/loading/objectstorage.mdx
-            rm workingdir/docs/unloading/unloading.mdx
-            cp -r docs/docusaurus/* workingdir/
-            cp -r \
-            docs/enterprise-edition/bare-metal/docusaurus/docusaurus.config.js \
-            docs/enterprise-edition/bare-metal/docusaurus/package.json \
-            docs/enterprise-edition/bare-metal/docusaurus/yarn.lock \
-            docs/enterprise-edition/bare-metal/docusaurus/babel.config.js \
-            docs/enterprise-edition/bare-metal/docusaurus/sidebars.js* \
-            docs/enterprise-edition/bare-metal/docusaurus/src \
-            docs/enterprise-edition/bare-metal/docusaurus/static \
-            workingdir/
-            find workingdir/docs -name "*.md*" | xargs -d "\n" sed -i "s/displayed_sidebar:.*//"
-  
-      - name: Combine open-source and Kubernetes Enterprise docs
-        if: needs.doc-checker.outputs.operator-doc == 'true'
-        run: |
-            # docusaurus config goes in workingdir and combined
-            # open-source and Enterprise docs go in workingdir/docs
-            mkdir -p workingdir/docs
-            cp -r docs/en/* workingdir/docs
-            # some open-source docs get removed
-            rm -rf workingdir/docs/quick_start
-            rm -rf workingdir/docs/benchmarking
-            rm -rf workingdir/docs/developers
-            rm -rf workingdir/docs/project_help
-            rm -rf workingdir/docs/deployment
-            mkdir workingdir/docs/deployment
-            echo "\# helm deployment here" > workingdir/docs/deployment/helm.md
-            rm workingdir/docs/data_source/iceberg*
-            mkdir workingdir/docs/quick_start
-            # Copy in the Docusaurus configs from open-source
-            cp -r ./docs/docusaurus/* workingdir/
-            # Add in the Enterprise specific docs
-            rsync -avhrW --progress ./docs/enterprise-edition/en/ workingdir/docs/
-            # Add Enterprise specific config for Docusaurus
-            rsync -avhrW --progress ./docs/enterprise-edition/components/ workingdir/src/components/
-            rsync -avhrW --progress ./docs/enterprise-edition/img/ workingdir/static/img/
-            cp ./docs/enterprise-edition/docusaurus.config.js workingdir/docusaurus.config.js
-            cp ./docs/enterprise-edition/sidebars.json workingdir/sidebars.json
-            sed -i "s/: 'throw',/: 'warn',/" workingdir/docusaurus.config.js
-            # hide the assets dir from nav and search
-            mv workingdir/docs/assets workingdir/docs/_assets
-            find workingdir/docs -name "*.md*" | xargs -d "\n" sed -i "s/\/assets\//\/_assets\//"
-            # Remove unused files
-            rm workingdir/docs/cover_pages/deployment_preparation* workingdir/docs/cover_pages/developers* workingdir/docs/cover_pages/manage_deployment* workingdir/docs/cover_pages/shared_nothing_deployment*
-
-      - uses: articulate/actions-markdownlint@v1.1.0
+      - uses: tj-actions/changed-files@v47
+        id: changed-files
         with:
-          config: "docs/.markdownlint.json"
-          files: 'workingdir/docs/**/*.md'
-          ignore: node_modules
-          version: 0.28.1
+          files: |
+            docs/en/**/*.md
+            docs/ja/**/*.md
+            docs/zh/**/*.md
+          separator: ","
+      - name: List all changed files
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          for file in ${ALL_CHANGED_FILES}; do
+            echo "$file was changed"
+          done
+      - uses: DavidAnson/markdownlint-cli2-action@v21
+        if: steps.changed-files.outputs.any_changed == 'true'
+        with:
+          config: 'docs/.markdownlint.json'
+          globs: ${{ steps.changed-files.outputs.all_changed_files }}
+          separator: ","
 
       - name: docusaurus-mdx-checker
         if: always()
         run: |
-          npx docusaurus-mdx-checker -c workingdir/docs
+          npx docusaurus-mdx-checker -c docs
 
       - name: link check
         if: always()
@@ -202,20 +130,30 @@ jobs:
           fail: true
           args: >
             --config docs/lychee.toml
-            --offline "workingdir/docs/**/*.md"
+            --offline "docs/**/*.md"
 
-      - name: Install dependencies
-        working-directory: workingdir
-        run: |
-            yarn install
-
-      - name: Docusaurus Build
-        working-directory: workingdir
+      - name: Docusaurus build
         env:
-            NODE_OPTIONS: "--max-old-space-size=8192"
-            DISABLE_VERSIONING: true
+          NODE_OPTIONS: --max-old-space-size=8192
+          DISABLE_VERSIONING: true
+          DOCUSAURUS_IGNORE_SSG_WARNINGS: true
+        working-directory: ./docs/docusaurus
         run: |
-            yarn build
+          rm -rf ./docs
+          rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
+          mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
+          mv ../en ./docs
+          rm -rf ./docs/release_notes ./docs/ecosystem_release
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          # Using package.json and yarn.lock from a PR is not safe, so copy from main branch.
+          rm package.json
+          rm yarn.lock
+          curl -O https://raw.githubusercontent.com/StarRocks/starrocks/refs/heads/main/docs/docusaurus/package.json
+          curl -O https://raw.githubusercontent.com/StarRocks/starrocks/refs/heads/main/docs/docusaurus/yarn.lock
+          yarn install --frozen-lockfile
+          yarn clear
+          yarn build
 
   behavior-unchange:
     runs-on: ubuntu-latest
