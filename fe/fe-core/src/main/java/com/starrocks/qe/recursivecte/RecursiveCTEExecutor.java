@@ -28,6 +28,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
@@ -44,7 +45,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -86,6 +87,23 @@ public class RecursiveCTEExecutor {
         splitter.visit(stmt, null);
         return stmt;
     }
+
+    public String explainCTE(StatementBase stmt) {
+        StringBuilder sb = new StringBuilder();
+        for (String cteName : recursiveCTEGroups.keySet()) {
+            RecursiveCTEGroup group = recursiveCTEGroups.get(cteName);
+            sb.append("Recursive CTE Name: ").append(cteName).append("\n");
+            sb.append("Temporary Table Statement: ").append(AstToSQLBuilder.toSQL(group.tempTableStmt)).append("\n");
+            sb.append("Start Statement: ").append(AstToSQLBuilder.toSQL(group.startStmt)).append("\n");
+            sb.append("Recursive Statement: ").append(AstToSQLBuilder.toSQL(group.recursiveStmt)).append("\n");
+            sb.append("--------------------------------------------------\n");
+        }
+
+        sb.append("Outer Statement After Rewriting:\n");
+        sb.append(AstToSQLBuilder.toSQL(stmt)).append("\n");
+        return sb.toString();
+    }
+
 
     private void analyze(StatementBase stmt, ConnectContext context) {
         try (PlannerMetaLocker locker = new PlannerMetaLocker(context, stmt)) {
@@ -296,12 +314,14 @@ public class RecursiveCTEExecutor {
                 return null;
             }
 
-            Preconditions.checkState(node.getCteQueryStatement().getQueryRelation() instanceof SetOperationRelation);
             if (!(node.getCteQueryStatement().getQueryRelation() instanceof UnionRelation unionRelation)) {
-                return null;
+                throw new SemanticException("Recursive CTE must be a UNION ALL of anchor and recursive member.");
             }
             if (unionRelation.getRelations().size() < 2) {
-                return null;
+                throw new SemanticException("Recursive CTE must have at least anchor and recursive member.");
+            }
+            if (!SetQualifier.ALL.equals(unionRelation.getQualifier())) {
+                throw new SemanticException("Recursive CTE must be UNION ALL now.");
             }
 
             // create temporary table for recursive cte

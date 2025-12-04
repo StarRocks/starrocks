@@ -719,7 +719,15 @@ public class StmtExecutor {
                 }
                 cteExecutor = new RecursiveCTEExecutor(context);
                 parsedStmt = cteExecutor.splitOuterStmt(parsedStmt);
-                cteExecutor.prepareRecursiveCTE();
+                if (parsedStmt.isExplain()) {
+                    // Every time set no send flag and clean all data in buffer
+                    context.getMysqlChannel().reset();
+                    String explainString = cteExecutor.explainCTE(parsedStmt);
+                    handleExplainStmt(explainString);
+                    return;
+                } else {
+                    cteExecutor.prepareRecursiveCTE();
+                }
             }
 
             redirectStatus = RedirectStatus.getRedirectStatus(parsedStmt);
