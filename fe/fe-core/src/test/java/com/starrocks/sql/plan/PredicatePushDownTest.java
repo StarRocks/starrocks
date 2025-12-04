@@ -288,7 +288,7 @@ public class PredicatePushDownTest extends PlanTestBase {
     @Test
     public void testNonDeterministicFunctionPushDown10() throws Exception {
         String sql = "with input as (select * from test_all_type, unnest(split(t1a, ',')) as unnest_tbl(a)) " +
-                "select * from input where a > 1 and rand() < 0.5";;
+                "select * from input where a > 1 and rand() < 0.5";
         String planFragment = getFragmentPlan(sql);
         assertContains(planFragment, "  3:SELECT\n" +
                 "  |  predicates: CAST(11: a AS DOUBLE) > 1.0, rand() < 0.5\n" +
