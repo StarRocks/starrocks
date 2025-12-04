@@ -4077,4 +4077,92 @@ TEST_F(TabletUpdatesTest, test_apply_breakpoint_check_pindex) {
     test_apply_breakpoint_check(true);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(TabletUpdatesTest, test_on_rowset_finished_lock_timeout) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(true);
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    {
+        auto rs0 = create_rowset(_tablet, keys);
+        int32_t version = 2;
+        auto st = _tablet->rowset_commit(version, rs0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+
+    {
+        int32_t version = 3;
+        std::vector<int32_t> column_indexes = {0, 1};
+        std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
+        TEST_ENABLE_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk", Status::TimedOut("injected internal error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        StorageEngine::instance()->update_manager()->on_rowset_finished(_tablet.get(), partial_rowset.get());
+        TEST_DISABLE_ERROR_POINT("TabletUpdates::get_rss_rowids_by_pk");
+        SyncPoint::GetInstance()->DisableProcessing();
+        auto st = _tablet->rowset_commit(version, partial_rowset);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+}
+
+TEST_F(TabletUpdatesTest, test_compaction_commit_fail_release_rowset_id) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+
+    // Commit multiple rowsets to enable compaction
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    auto rs2 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    // Add more rowsets to trigger compaction
+    auto rs3 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(5, rs3).ok());
+    auto rs4 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(6, rs4).ok());
+
+    ASSERT_EQ(6, _tablet->updates()->max_version());
+
+    // Enable fail point to make compaction commit fail at meta persistence stage
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+            "tablet_meta_manager_rowset_commit_internal_error");
+    fp->setMode(trigger_mode);
+
+    // Try to run compaction, which should fail at commit stage
+    auto compaction_st = _tablet->updates()->compaction(_compaction_mem_tracker.get());
+    ASSERT_FALSE(compaction_st.ok());
+
+    // Disable fail point
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    // Verify the tablet state remains unchanged after failed compaction
+    ASSERT_EQ(6, _tablet->updates()->max_version());
+    ASSERT_EQ(N, read_tablet(_tablet, 6));
+}
+
+>>>>>>> 95b48e0424 ([BugFix] fix rowset gc issue when rowset commit fail (#66301))
 } // namespace starrocks
