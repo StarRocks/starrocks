@@ -1,4 +1,4 @@
--- name: test_configure @sequential
+-- name: test_configure @sequential @no_arrow_flight_sql
 admin set frontend config ("thrift_max_message_size"="10485760");
 set group_concat_max_len = 1073741824;
 CREATE table tab1 (
