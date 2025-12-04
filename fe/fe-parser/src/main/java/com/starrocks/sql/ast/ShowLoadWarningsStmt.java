@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.expression.Expr;
@@ -20,8 +19,6 @@ import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URL;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW LOAD WARNINGS statement used to get error detail of src data.
 public class ShowLoadWarningsStmt extends ShowStmt {
@@ -48,13 +45,12 @@ public class ShowLoadWarningsStmt extends ShowStmt {
         this.limitElement = limitElement;
     }
 
-
     public String getDbName() {
         return dbName;
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public Expr getWhereClause() {
@@ -102,6 +98,6 @@ public class ShowLoadWarningsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowLoadWarningsStatement(this, context);
+        return visitor.visitShowLoadWarningsStatement(this, context);
     }
 }

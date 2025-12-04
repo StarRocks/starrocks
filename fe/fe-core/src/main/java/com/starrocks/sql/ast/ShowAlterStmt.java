@@ -23,8 +23,6 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.HashMap;
 import java.util.List;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 /*
  * ShowAlterStmt: used to show process state of alter statement.
  * Syntax:
@@ -67,7 +65,7 @@ public class ShowAlterStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public HashMap<String, Expr> getFilterMap() {

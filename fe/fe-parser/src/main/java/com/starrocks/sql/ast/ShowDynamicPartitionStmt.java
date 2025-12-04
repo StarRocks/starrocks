@@ -19,8 +19,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 public class ShowDynamicPartitionStmt extends ShowStmt {
     private String db;
 
@@ -38,11 +36,11 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = normalizeName(db);
+        this.db = db;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDynamicPartitionStatement(this, context);
+        return visitor.visitShowDynamicPartitionStatement(this, context);
     }
 }

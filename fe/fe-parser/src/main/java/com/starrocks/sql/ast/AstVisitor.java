@@ -182,6 +182,38 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowSmallFilesStatement(ShowSmallFilesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowDeleteStatement(ShowDeleteStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTransactionStatement(ShowTransactionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTableStatusStatement(ShowTableStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowTableStatement(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -401,6 +433,18 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelLoadStatement(CancelLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelBackupStatement(CancelBackupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitCancelExportStatement(CancelExportStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -781,6 +825,14 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ------------------------------------------- User Statement ----------------------------------------------------
 
     default R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
@@ -962,6 +1014,14 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAlterCatalogStatement(AlterCatalogStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateFileStatement(CreateFileStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropFileStatement(DropFileStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

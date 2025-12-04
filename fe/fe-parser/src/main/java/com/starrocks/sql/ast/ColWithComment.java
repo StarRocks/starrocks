@@ -14,31 +14,30 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.expression.Expr;
+import com.google.common.base.Strings;
+import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Optional;
+public class ColWithComment implements ParseNode {
+    private final String colName;
+    private final String comment;
+    private final NodePosition pos;
 
-public class ProcedureArgument {
-    private final String name;
-    private final Expr value;
-
-    public ProcedureArgument(String name, Expr value) {
-        this.name = name;
-        this.value = value;
+    public ColWithComment(String colName, String comment, NodePosition pos) {
+        this.pos = pos;
+        this.colName = colName;
+        this.comment = Strings.nullToEmpty(comment);
     }
 
-    public Optional<String> getName() {
-        return Optional.ofNullable(name);
+    public String getColName() {
+        return colName;
     }
 
-    public Expr getValue() {
-        return value;
+    public String getComment() {
+        return comment;
     }
 
     @Override
-    public String toString() {
-        String valueSql = AstToSQLBuilder.toSQL(value);
-        return getName().map(n -> n + " => " + valueSql).orElse(valueSql);
+    public NodePosition getPos() {
+        return pos;
     }
 }
