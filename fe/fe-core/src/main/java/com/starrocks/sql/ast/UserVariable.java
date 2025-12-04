@@ -26,6 +26,7 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
@@ -146,7 +147,7 @@ public class UserVariable extends SetListItem {
 
         if (targetType.isScalarType()) {
             try {
-                return LiteralExpr.create(value, targetType);
+                return LiteralExprFactory.create(value, targetType);
             } catch (AnalysisException e) {
                 throw new SemanticException("Unsupported string value: %s to type: %s", value, targetType);
             }

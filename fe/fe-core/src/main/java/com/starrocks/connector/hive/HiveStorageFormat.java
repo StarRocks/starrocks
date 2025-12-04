@@ -29,6 +29,7 @@ import static com.starrocks.connector.hive.HiveClassNames.LAZY_BINARY_COLUMNAR_S
 import static com.starrocks.connector.hive.HiveClassNames.LAZY_SIMPLE_SERDE_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_OUTPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.OPENXJSON_SERDE_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_OUTPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_SERDE_CLASS;
@@ -73,6 +74,11 @@ public enum HiveStorageFormat {
             LAZY_SIMPLE_SERDE_CLASS,
             SEQUENCE_INPUT_FORMAT_CLASS,
             SEQUENCE_OUTPUT_FORMAT_CLASS
+    ),
+    OPENXJSON(
+            OPENXJSON_SERDE_CLASS,
+            TEXT_INPUT_FORMAT_CLASS,
+            HIVE_IGNORE_KEY_OUTPUT_FORMAT_CLASS
     ),
     UNSUPPORTED("UNSUPPORTED", "UNSUPPORTED", "UNSUPPORTED");
 
@@ -140,7 +146,7 @@ public enum HiveStorageFormat {
         return switch (this) {
             case PARQUET -> THdfsFileFormat.PARQUET;
             case ORC -> THdfsFileFormat.ORC;
-            case TEXTFILE -> THdfsFileFormat.TEXT;
+            case TEXTFILE, OPENXJSON -> THdfsFileFormat.TEXT;
             case AVRO -> THdfsFileFormat.AVRO;
             case RCBINARY, RCTEXT -> THdfsFileFormat.RC_FILE;
             case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;

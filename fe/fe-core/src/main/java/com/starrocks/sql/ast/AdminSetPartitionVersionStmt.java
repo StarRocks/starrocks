@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AdminSetPartitionVersionStmt extends DdlStmt {

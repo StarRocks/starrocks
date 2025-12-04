@@ -16,6 +16,7 @@ package com.starrocks.lake.delete;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.proto.BinaryPredicatePB;
@@ -32,7 +33,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;

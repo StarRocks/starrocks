@@ -52,6 +52,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -346,7 +347,7 @@ public class HiveTable extends Table {
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream()
-                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
+                    .map(ExprToThrift::treeToThrift)
                     .collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();

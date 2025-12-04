@@ -287,6 +287,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | refreshConnectionsStatement
 
     // Storage Volume Statement
     | createStorageVolumeStatement
@@ -650,6 +651,7 @@ createViewStatement
     ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
     comment?
     (SECURITY (NONE | INVOKER))?
+    properties?
     AS queryStatement
     ;
 
@@ -948,6 +950,8 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | addPartitionColumnClause
+    | dropPartitionColumnClause
     | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
@@ -1094,12 +1098,20 @@ addColumnClause
     : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
     ;
 
+addPartitionColumnClause
+    : ADD PARTITION COLUMN expressionList
+    ;
+
 addColumnsClause
     : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
     ;
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+dropPartitionColumnClause
+    : DROP PARTITION COLUMN expressionList
     ;
 
 modifyColumnClause
@@ -1917,7 +1929,7 @@ backupStatement
     : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
     SNAPSHOT qualifiedName TO repoName=identifier
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelBackupStatement
@@ -1934,7 +1946,7 @@ restoreStatement
     (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
     (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
     (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 cancelRestoreStatement
@@ -1954,7 +1966,7 @@ createRepositoryStatement
     : CREATE (READ ONLY)? REPOSITORY repoName=identifier
     WITH BROKER brokerName=identifierOrString?
     ON LOCATION location=string
-    (PROPERTIES propertyList)?
+    properties?
     ;
 
 dropRepositoryStatement
@@ -2153,6 +2165,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+refreshConnectionsStatement
+    : REFRESH CONNECTIONS (FORCE)?
     ;
 
 setUserPropertyStatement
@@ -2945,7 +2961,7 @@ statusDesc
     ;
 
 properties
-    : PROPERTIES '(' property (',' property)* ')'
+    : PROPERTIES propertyList
     ;
 
 extProperties
@@ -3098,7 +3114,7 @@ baseType
     ;
 
 decimalType
-    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128 | NUMERIC | NUMBER )
+    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128 | DECIMAL256 | NUMERIC | NUMBER )
         ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     ;
 
@@ -3174,7 +3190,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
     | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CALL | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CNGROUP | CNGROUPS | CURRENT | COLLATION | COLUMNS
-    | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
+    | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTIONS | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT

@@ -22,8 +22,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTableFunction;
@@ -130,7 +129,7 @@ public class TableFunction extends Function {
             // set default arguments' const expressions in order
             Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
             try {
-                defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
+                defaultArgs.add(new Pair("step", LiteralExprFactory.create("1", type)));
             } catch (AnalysisException ex) { //ignored
             }
             // for both named arguments and positional arguments

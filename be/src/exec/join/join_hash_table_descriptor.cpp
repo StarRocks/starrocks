@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "join_hash_table_descriptor.h"
+#include "exec/join/join_hash_table_descriptor.h"
 
 #include "exec/sorting/sort_helper.h"
 #include "util/orlp/pdqsort.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

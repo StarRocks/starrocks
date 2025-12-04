@@ -70,7 +70,9 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
@@ -189,7 +191,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
             for (OrderByElement orderByElement : stmt.getOrderByElements()) {
-                String column = orderByElement.castAsSlotRef();
+                Expr expr = orderByElement.getExpr();
+                String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                 if (column == null) {
                     throw new DdlException("Unknown column '" +
                             ExprToSql.toSql(orderByElement.getExpr()) + "' in order by clause");
@@ -253,7 +256,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
 
                 processFlatJsonConfig(properties, table, tableName);
-
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -282,6 +284,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
+
+            if (table.isCloudNativeTable()) {
+                boolean fastSchemaEvolutionV2 = properties == null ? true :
+                        PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, true);
+                ((LakeTable) table).setFastSchemaEvolutionV2(fastSchemaEvolutionV2);
+            }
+
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
                 // check reserved column for PK table
@@ -510,12 +519,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            boolean enableReplicatedStorage = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine);
             if (table.isOlapTableOrMaterializedView()) {
                 // replicated storage
-                table.setEnableReplicatedStorage(
-                        PropertyAnalyzer.analyzeBooleanProp(
-                                properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                                Config.enable_replicated_storage_as_default_engine));
+                table.setEnableReplicatedStorage(enableReplicatedStorage);
 
                 boolean hasGin = table.getIndexes().stream()
                         .anyMatch(index -> index.getIndexType() == IndexType.GIN);

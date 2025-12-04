@@ -31,6 +31,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.common.Pair;
@@ -54,8 +55,8 @@ import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -263,7 +264,7 @@ public class PartitionSelector {
         try {
             scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory);
         } catch (Exception e) {
-            LOG.warn("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
+            LOG.debug("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
         }
 
         LOG.debug("Get partition ids by where expression after deduce: {}", scalarOperator.toString());
@@ -513,7 +514,7 @@ public class PartitionSelector {
         for (Map.Entry<ColumnRefOperator, Integer> entry : colRefIdxMap.entrySet()) {
             ColumnRefOperator colRef = entry.getKey();
             try {
-                LiteralExpr literalExpr = LiteralExpr.create(values.get(entry.getValue()), colRef.getType());
+                LiteralExpr literalExpr = LiteralExprFactory.create(values.get(entry.getValue()), colRef.getType());
                 ConstantOperator replace = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                 replaceMap.put(colRef, replace);
             } catch (Exception e) {
@@ -531,7 +532,7 @@ public class PartitionSelector {
                                                          boolean isDropPartitionCondition,
                                                          Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
-        Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
+        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getNonEmptyRanges(false);
         if (inputCells != null && !inputCells.isEmpty()) {
             // mock partition ids since input cells has not been added into olapTable yet.
             inputCells.entrySet().stream()

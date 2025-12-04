@@ -46,7 +46,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
     public static final String DEFAULT_JOB_FLAG = "default_job_flag";
 
     public StatisticAutoCollector() {
-        super("AutoStatistic", Config.statistic_collect_interval_sec * 1000);
+        super("auto-statistic", Config.statistic_collect_interval_sec * 1000);
     }
 
     @Override

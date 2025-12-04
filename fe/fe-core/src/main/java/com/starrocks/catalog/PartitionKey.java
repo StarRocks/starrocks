@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -101,7 +102,7 @@ public class PartitionKey implements Comparable<PartitionKey> {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
-            partitionKey.keys.add(LiteralExpr.createInfinity(TypeFactory.createType(column.getPrimitiveType()), isMax));
+            partitionKey.keys.add(LiteralExprFactory.createInfinity(TypeFactory.createType(column.getPrimitiveType()), isMax));
             partitionKey.types.add(column.getPrimitiveType());
         }
         return partitionKey;
@@ -111,7 +112,7 @@ public class PartitionKey implements Comparable<PartitionKey> {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (PrimitiveType type : types) {
-            partitionKey.keys.add(LiteralExpr.createInfinity(TypeFactory.createType(type), isMax));
+            partitionKey.keys.add(LiteralExprFactory.createInfinity(TypeFactory.createType(type), isMax));
             partitionKey.types.add(type);
         }
         return partitionKey;
@@ -153,7 +154,7 @@ public class PartitionKey implements Comparable<PartitionKey> {
         // fill the vacancy with MIN
         for (; i < columns.size(); ++i) {
             Type type = TypeFactory.createType(columns.get(i).getPrimitiveType());
-            partitionKey.keys.add(LiteralExpr.createInfinity(type, false));
+            partitionKey.keys.add(LiteralExprFactory.createInfinity(type, false));
             partitionKey.types.add(columns.get(i).getPrimitiveType());
         }
 
@@ -471,7 +472,7 @@ public class PartitionKey implements Comparable<PartitionKey> {
             PrimitiveType type = PrimitiveType.valueOf(typeArray[index].toUpperCase());
             LiteralExpr expr = NullLiteral.create(TypeFactory.createType(type));
             try {
-                expr = LiteralExpr.create(keyArray[index], TypeFactory.createType(type));
+                expr = LiteralExprFactory.create(keyArray[index], TypeFactory.createType(type));
             } catch (AnalysisException ignored) {
             }
             typeList.add(type);

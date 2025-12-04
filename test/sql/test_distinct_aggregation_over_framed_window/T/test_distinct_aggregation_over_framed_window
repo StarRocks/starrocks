@@ -1,0 +1,486 @@
+-- name: test_distinct_aggregation_over_framed_window
+CREATE TABLE `t0` (
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+PROPERTIES("replication_num"="1");
+insert into t0 select i/19 as v1, i/11 as v2, i/5 as v3 from table(generate_series(1,100)) t(i);
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0))+murmur_hash3_32(ifnull(count,0))+murmur_hash3_32(ifnull(rank,0))+murmur_hash3_32(ifnull(d_rank,0))+murmur_hash3_32(ifnull(rn,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg,
+sum(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as sum,
+avg(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as avg,
+count(cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as count,
+rank()over(partition by v1 order by v2) as rank,
+dense_rank()over(partition by v1 order by v2) as d_rank,
+row_number()over(partition by v1 order by v2) as rn
+from t0) as t;
+with cte as(
+select distinct v1,v2,v3,
+ count(distinct v3)over(partition by v1 order by v2) as dist_count,
+ sum(distinct v3)over(partition by v1 order by v2) as dist_sum,
+ avg(distinct v3)over(partition by v1 order by v2) as dist_avg
+from t0
+),
+cte1 as(
+select v1,v2,v3,
+ count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+ sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+ avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0 
+)
+select 
+   assert_true(count(1)=count(if(cte.dist_count = cte1.dist_count, 1, NULL))), 
+   assert_true(count(1)=count(if(cte.dist_sum = cte1.dist_sum, 1, NULL))), 
+   assert_true(count(1)=count(if(cte.dist_avg = cte1.dist_avg, 1, NULL)))
+from cte join cte1 on cte.v1 = cte1.v1 and cte.v2 = cte1.v2 and cte.v3 = cte1.v3;
+/*q0*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q1*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q2*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q3*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q4*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q5*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q6*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(7,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q7*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q8*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q9*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q10*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q11*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q12*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q13*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(19,2)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q14*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q15*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q16*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q17*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q18*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q19*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q20*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(38,19)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q21*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q22*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q23*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q24*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q25*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q26*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q27*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(38,20)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q28*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q29*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q30*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q31*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q32*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q33*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q34*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(38,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q35*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q36*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q37*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q38*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q39*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q40*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q41*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as decimal(39,18)))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q42*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q43*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q44*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q45*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q46*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q47*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q48*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as boolean))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q49*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q50*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q51*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q52*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q53*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q54*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q55*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as tinyint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q56*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q57*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q58*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q59*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q60*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q61*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q62*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as int))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q63*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q64*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q65*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q66*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q67*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q68*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q69*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as smallint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q70*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q71*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q72*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q73*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q74*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q75*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q76*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as bigint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q77*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q78*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q79*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q80*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q81*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q82*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q83*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as largeint))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q84*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q85*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q86*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q87*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q88*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q89*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q90*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as float))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q91*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q92*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q93*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q94*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q95*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q96*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q97*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as double))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q98*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q99*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q100*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q101*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q102*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q103*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q104*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as string))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q105*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q106*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q107*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q108*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q109*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q110*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q111*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as varchar))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q112*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q113*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q114*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q115*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q116*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q117*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_sum,0)))) as fingerprint from (select v1,v2,v3,
+sum(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_sum
+from t0) as t;
+/*q118*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_avg,0)))) as fingerprint from (select v1,v2,v3,
+avg(distinct cast(v3 as char))over(partition by v1 order by v2) as dist_avg
+from t0) as t;
+/*q119*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct cast(days_add('2025-01-01',v3) as date))over(partition by v1 order by v2) as dist_count
+from t0) as t;
+/*q120*/select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(dist_count,0)))) as fingerprint from (select v1,v2,v3,
+count(distinct days_add('2025-01-01 00:00:00',v3))over(partition by v1 order by v2) as dist_count
+from t0) as t;

@@ -36,7 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -64,6 +63,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionKeyDesc;

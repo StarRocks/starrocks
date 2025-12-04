@@ -19,7 +19,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
@@ -27,6 +26,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -39,6 +39,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -64,7 +65,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
@@ -451,7 +451,8 @@ public class CreateTableAnalyzer {
             if (keysType != KeysType.DUP_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -490,7 +491,8 @@ public class CreateTableAnalyzer {
             // we should check sort key column type if table is primary key table
             if (keysType == KeysType.PRIMARY_KEYS) {
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -511,7 +513,8 @@ public class CreateTableAnalyzer {
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
-                    String column = orderByElement.castAsSlotRef();
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                     if (column == null) {
                         throw new SemanticException("Unknown column '%s' in order by clause",
                                 ExprToSql.toSql(orderByElement.getExpr()));
@@ -592,7 +595,7 @@ public class CreateTableAnalyzer {
                 }
                 TypeDef typeDef = new TypeDef(type);
                 try {
-                    typeDef.analyze();
+                    TypeDefAnalyzer.analyze(typeDef);
                 } catch (Exception e) {
                     throw new SemanticException("Generate partition column " + columnName
                             + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());

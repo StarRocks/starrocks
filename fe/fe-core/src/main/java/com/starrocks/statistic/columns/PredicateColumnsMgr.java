@@ -19,11 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -214,7 +214,7 @@ public class PredicateColumnsMgr {
         private static final DaemonThread INSTANCE = new DaemonThread();
 
         public DaemonThread() {
-            super("PredicateColumnsDaemonThread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
+            super("predicate-columns-daemon-thread", Config.statistic_predicate_columns_persist_interval_sec * 1000L);
         }
 
         public static DaemonThread getInstance() {

@@ -61,7 +61,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 /**
  * AggregationAnalyzer is used to analyze aggregation
@@ -123,7 +123,7 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitFieldReference(FieldReference node, Void context) {
-            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName().toString();
+            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName();
             throw new SemanticException(colInfo + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }

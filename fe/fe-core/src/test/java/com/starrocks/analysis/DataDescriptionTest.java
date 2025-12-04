@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -46,7 +47,6 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;

@@ -1802,6 +1802,42 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_table_state(self, db_name, table_name):
+        """
+        Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name
+        Returns the state of the specified table, or None if table not found
+        """
+        sql = f"show proc '/dbs/{db_name}'"
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], f"Failed to execute show proc '/dbs/{db_name}'")
+        
+        # Find the row with matching table_name
+        # Column order: TableId, TableName, IndexNum, PartitionColumnName, PartitionNum, State, ...
+        # TableName is at index 1, State is at index 5
+        for row in res["result"]:
+            if len(row) > 1 and row[1] == table_name:
+                if len(row) > 5:
+                    return row[5]  # Return State
+                else:
+                    log.warning(f"Row for table {table_name} has insufficient columns")
+                    return None
+        
+        log.warning(f"Table {table_name} not found in database {db_name}")
+        return None
+
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+        """
+        wait table state to normal
+        """
+        times = 0
+        while times < timeout_sec:
+            state = self.get_table_state(db_name, table_name)
+            if state == "NORMAL":
+                break
+            time.sleep(1)
+            times += 1
+        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
         return self.execute_sql(show_sql, True)
@@ -2179,7 +2215,7 @@ class StarrocksSQLApiLib(object):
             if orig_value is not None:
                 self.execute_sql(f"set enable_materialized_view_rewrite = {orig_value};", True)
 
-    def print_hit_materialized_view(self, query, *expects) -> bool:
+    def print_hit_materialized_view(self, query, *expects) -> str:
         """
         assert mv_name is hit in query
         """
@@ -2191,10 +2227,21 @@ class StarrocksSQLApiLib(object):
                 print(res)
                 return False
             plan = str(res["result"])
-            for expect in expects:
-                if plan.find(expect) > 0:
-                    return True
-            return False
+            if expects is not None or len(expects) > 0:
+                for expect in expects:
+                    if plan.find(expect) > 0:
+                        return True
+                return False
+            else:
+                mvs = []
+                for line in plan.split('\n'):
+                    if 'MaterializedView: true' in line:
+                        mv_name = line.split('TABLE:')[1].strip() if 'TABLE:' in line else None
+                        if mv_name:
+                            mvs.append(mv_name)
+                mvs.sort()
+                print("Hit materialized views:", ", ".join(mvs))
+                return mvs
         return self._with_materialized_view_rewrite(check_mv)
 
     def print_hit_materialized_views(self, query) -> str:
@@ -2310,6 +2357,29 @@ class StarrocksSQLApiLib(object):
             if status != "PENDING":
                 break
             time.sleep(0.5)
+
+    def wait_alter_table_waiting_txn(self, alter_type="COLUMN", timeout=120):
+        """
+        wait until the status of the latest alter table job becomes WAITING_TXN
+        """
+        status = ""
+        elapsed_time = 0
+        while elapsed_time < timeout:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                time.sleep(0.5)
+                elapsed_time += 0.5
+                continue
+
+            status = res["result"][0][9]
+            if status == "WAITING_TXN":
+                return status
+            time.sleep(0.5)
+            elapsed_time += 0.5
+        tools.assert_true(False, "wait alter table WAITING_TXN timeout after %d seconds, current status: %s" % (timeout, status))
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
@@ -2998,6 +3068,18 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
+    def assert_query_error_contains(self, query, *expects):
+        """
+        assert error message contains expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            haystack = str(res["msg"])
+            tools.assert_true(
+                haystack.find(expect) > 0,
+                "assert expect {} is not found in plan {}".format(expect, haystack),
             )
 
     def assert_explain_contains(self, query, *expects):

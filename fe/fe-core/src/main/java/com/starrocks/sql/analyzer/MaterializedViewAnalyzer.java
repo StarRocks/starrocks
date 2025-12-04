@@ -26,7 +26,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -51,6 +50,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -69,6 +69,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -100,7 +101,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
@@ -770,7 +770,8 @@ public class MaterializedViewAnalyzer {
             }
             List<String> sortKeys = new ArrayList<>();
             for (OrderByElement orderByElement : orderByElements) {
-                String column = orderByElement.castAsSlotRef();
+                Expr expr = orderByElement.getExpr();
+                String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in order by clause",
                             ExprToSql.toSql(orderByElement.getExpr()));
@@ -1861,7 +1862,7 @@ public class MaterializedViewAnalyzer {
         String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId;
         TypeDef typeDef = new TypeDef(type);
         try {
-            typeDef.analyze();
+            TypeDefAnalyzer.analyze(typeDef);
         } catch (Exception e) {
             throw new ParsingException("Generate partition column " + columnName
                     + " for multi expression partition error: " + e.getMessage());
@@ -2165,10 +2166,10 @@ public class MaterializedViewAnalyzer {
         if (retentionCondtiionExpr == null) {
             return Optional.empty();
         }
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
-                refBaseTable.getBaseSchema().stream()
-                        .map(col -> new Field(col.getName(), col.getType(), null, null))
-                        .collect(Collectors.toList())));
+        List<Field> fields = new ArrayList<>();
+        mv.getBaseSchema().forEach(col ->
+                fields.add(new Field(col.getName(), col.getType(), null, null)));
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
         ExpressionAnalyzer.analyzeExpression(retentionCondtiionExpr, new AnalyzeState(), scope, connectContext);
         Map<Expr, Expr> partitionByExprMap = getMVPartitionByExprToAdjustMap(null, mv);
         retentionCondtiionExpr = MaterializedViewAnalyzer.adjustWhereExprIfNeeded(partitionByExprMap, retentionCondtiionExpr,
@@ -2185,7 +2186,7 @@ public class MaterializedViewAnalyzer {
         }
         Expr retentionCondtiionExpr = exprOpt.get();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        List<ColumnRefOperator> columnRefOperators = refBaseTable.getBaseSchema()
+        List<ColumnRefOperator> columnRefOperators = mv.getBaseSchema()
                 .stream()
                 .map(col -> columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull()))
                 .collect(Collectors.toList());

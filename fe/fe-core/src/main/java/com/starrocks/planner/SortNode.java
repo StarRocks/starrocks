@@ -39,12 +39,12 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLateMaterializeMode;
@@ -89,6 +89,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     private List<Expr> preAggFnCalls;
 
     private List<SlotId> preAggOutputColumnId;
+
+    private boolean perPipeline;
 
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
@@ -144,6 +146,14 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     public void setPreAggFnCalls(List<Expr> preAggFnCalls) {
         this.preAggFnCalls = preAggFnCalls;
+    }
+
+    public boolean isPerPipeline() {
+        return perPipeline;
+    }
+
+    public void setPerPipeline(boolean perPipeline) {
+        this.perPipeline = perPipeline;
     }
 
     @Override
@@ -219,10 +229,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SORT_NODE;
         TSortInfo sortInfo = new TSortInfo(
-                ExprToThriftVisitor.treesToThrift(info.getOrderingExprs()),
+                ExprToThrift.treesToThrift(info.getOrderingExprs()),
                 info.getIsAscOrder(),
                 info.getNullsFirst());
-        sortInfo.setSort_tuple_slot_exprs(ExprToThriftVisitor.treesToThrift(resolvedTupleExprs));
+        sortInfo.setSort_tuple_slot_exprs(ExprToThrift.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
@@ -241,18 +251,18 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         msg.sort_node.setParallel_merge_late_materialize_mode(mode);
 
         if (info.getPartitionExprs() != null) {
-            msg.sort_node.setPartition_exprs(ExprToThriftVisitor.treesToThrift(info.getPartitionExprs()));
+            msg.sort_node.setPartition_exprs(ExprToThrift.treesToThrift(info.getPartitionExprs()));
             msg.sort_node.setPartition_limit(info.getPartitionLimit());
         }
         msg.sort_node.setTopn_type(topNType.toThrift());
         // TODO(lingbin): remove blew codes, because it is duplicate with TSortInfo
-        msg.sort_node.setOrdering_exprs(ExprToThriftVisitor.treesToThrift(info.getOrderingExprs()));
+        msg.sort_node.setOrdering_exprs(ExprToThrift.treesToThrift(info.getOrderingExprs()));
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
         msg.sort_node.setNulls_first(info.getNullsFirst());
-        msg.sort_node.setAnalytic_partition_exprs(ExprToThriftVisitor.treesToThrift(analyticPartitionExprs));
+        msg.sort_node.setAnalytic_partition_exprs(ExprToThrift.treesToThrift(analyticPartitionExprs));
         msg.sort_node.setAnalytic_partition_skewed(analyticPartitionSkewed);
         if (info.getSortTupleSlotExprs() != null) {
-            msg.sort_node.setSort_tuple_slot_exprs(ExprToThriftVisitor.treesToThrift(info.getSortTupleSlotExprs()));
+            msg.sort_node.setSort_tuple_slot_exprs(ExprToThrift.treesToThrift(info.getSortTupleSlotExprs()));
         }
         msg.sort_node.setHas_outer_join_child(hasNullableGenerateChild);
         // For profile printing `SortKeys`
@@ -277,7 +287,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         }
 
         if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
-            msg.sort_node.setPre_agg_exprs(ExprToThriftVisitor.treesToThrift(preAggFnCalls));
+            msg.sort_node.setPre_agg_exprs(ExprToThrift.treesToThrift(preAggFnCalls));
             msg.sort_node.setPre_agg_insert_local_shuffle(
                     ConnectContext.get().getSessionVariable().isInsertLocalShuffleForWindowPreAgg());
         }
@@ -286,6 +296,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     Collectors.toList());
             msg.sort_node.setPre_agg_output_slot_id(outputColumnsId);
         }
+
+        msg.sort_node.setPer_pipeline(perPipeline);
     }
 
     @Override

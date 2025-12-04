@@ -144,7 +144,9 @@ public:
         virtual double double_value() const { return bit_cast<double>(_value.load(std::memory_order_relaxed)); }
 
         virtual void set_min(int64_t min) { _min_value.emplace(min); }
+        virtual void clear_min() { _min_value.reset(); }
         virtual void set_max(int64_t max) { _max_value.emplace(max); }
+        virtual void clear_max() { _max_value.reset(); }
         virtual std::optional<int64_t> min_value() const { return _min_value; }
         virtual std::optional<int64_t> max_value() const { return _max_value; }
 

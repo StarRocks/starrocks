@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -25,7 +26,6 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 

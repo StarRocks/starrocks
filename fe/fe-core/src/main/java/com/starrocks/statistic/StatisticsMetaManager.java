@@ -22,6 +22,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -41,7 +42,6 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
@@ -76,7 +76,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
-        super("statistics meta manager", 60L * 1000L);
+        super("statistics-meta-manager", 60L * 1000L);
     }
 
     private boolean checkDatabaseExist() {

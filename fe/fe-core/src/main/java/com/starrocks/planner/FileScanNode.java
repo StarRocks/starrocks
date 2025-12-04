@@ -38,7 +38,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
@@ -59,12 +58,13 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -443,7 +443,7 @@ public class FileScanNode extends LoadScanNode {
                 expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(destSlotDesc, expr);
-            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThriftVisitor.treeToThrift(expr));
+            context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(expr));
         }
         context.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());

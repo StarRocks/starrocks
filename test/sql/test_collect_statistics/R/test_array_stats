@@ -400,3 +400,75 @@ drop stats test_array_comprehensive_ndv;
 drop stats test_array_ndv;
 -- result:
 -- !result
+admin set frontend config ("enable_manual_collect_array_ndv"="false");
+-- result:
+-- !result
+CREATE TABLE test_array_collection_size(
+    k1 int,
+    p_date date,
+    int_arr array<int>,
+    str_arr array<string>
+) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO test_array_collection_size
+select 1, '2023-01-01', [1,2,3], ['a','b','c']
+from table(generate_series(1, 200000));
+-- result:
+-- !result
+ANALYZE FULL TABLE test_array_collection_size;
+-- result:
+test_array_stats.test_array_collection_size	analyze	status	OK
+-- !result
+SELECT column_name, row_count, collection_size, data_size
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_collection_size' 
+ORDER BY column_name;
+-- result:
+int_arr	200000	3	2400000
+k1	200000	-1	800000
+p_date	200000	-1	800000
+str_arr	200000	3	9600000
+-- !result
+drop stats test_array_collection_size;
+-- result:
+-- !result
+drop table test_array_collection_size;
+-- result:
+-- !result
+delete from _statistics_.column_statistics where table_name = 'test_array_stats.test_array_collection_size';
+-- result:
+-- !result
+CREATE TABLE test_array_collection_size(
+    k1 int,
+    p_date date,
+    int_arr array<int>,
+    str_arr array<string>
+)
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO test_array_collection_size
+select 1, '2023-01-01', [1,2,3], ['a','b','c']
+from table(generate_series(1, 200001));
+-- result:
+-- !result
+SELECT column_name, row_count, collection_size, data_size
+FROM _statistics_.column_statistics 
+WHERE table_name = 'test_array_stats.test_array_collection_size' 
+ORDER BY column_name;
+-- result:
+int_arr	200001	3	3200016
+k1	200001	-1	800004
+p_date	200001	-1	800004
+str_arr	200001	3	3200016
+-- !result
+drop stats test_array_collection_size;
+-- result:
+-- !result
+drop table test_array_collection_size;
+-- result:
+-- !result

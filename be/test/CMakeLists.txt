@@ -77,6 +77,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
+        ./exec/pipeline/exec_group_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -119,11 +120,13 @@ set(EXEC_FILES
         ./exec/file_scanner/orc_scanner_test.cpp
         ./exec/file_scanner/parquet_scanner_test.cpp
         ./exec/hdfs_scanner/cache_select_scanner_test.cpp
+        ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_test.cpp
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
+        ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/ai_functions_test.cpp
@@ -209,6 +212,7 @@ set(EXEC_FILES
         ./formats/csv/default_value_converter_test.cpp
         ./formats/csv/string_converter_test.cpp
         ./formats/csv/varbinary_converter_test.cpp
+        ./formats/csv/csv_reader_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -415,6 +419,7 @@ set(EXEC_FILES
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
+        ./cache/datacache_metrics_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
@@ -439,6 +444,7 @@ if (USE_AVX2)
 endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
+target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
@@ -465,6 +471,7 @@ SET(DW_TEST_FILES
     ./storage/conjunctive_predicates_test.cpp
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
+    ./storage/data_dir_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
@@ -491,6 +498,7 @@ SET(DW_TEST_FILES
     ./storage/lake/condition_update_test.cpp
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/lake_data_source_test.cpp
+    ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
@@ -625,6 +633,7 @@ endif ()
 
 add_library(starrocks_dw_objs OBJECT ${DW_TEST_FILES})
 SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs>)
 TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
 

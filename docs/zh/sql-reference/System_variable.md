@@ -66,7 +66,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_schedule_mode
 * default_rowset_type
 * enable_group_level_query_queue
-* enable_plan_capture
 * enable_query_history
 * enable_query_queue_load
 * enable_query_queue_select
@@ -78,8 +77,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * license
 * lower_case_table_names
 * performance_schema
-* plan_capture_include_pattern
-* plan_capture_interval_seconds
 * query_cache_size
 * query_history_keep_seconds
 * query_history_load_interval_seconds
@@ -173,10 +170,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
 
-### SQL_AUTO_IS_NULL
-
-用于兼容 JDBC 连接池 C3P0，无实际作用。默认值：false。
-
 ### activate_all_roles_on_login (global)
 
 * 描述：用于控制是否在用户登录时默认激活所有角色（包括默认角色和授予的角色）。
@@ -192,11 +185,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端。无实际作用。
 * 默认值：1
 * 类型：Int
-
-### autocommit
-
-* 描述：用于兼容 MySQL 客户端。无实际作用。
-* 默认值：true
 
 ### big_query_profile_threshold
 
@@ -214,12 +202,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：default_catalog
 * 类型：String
 * 引入版本：v3.2.4
-
-### cbo_decimal_cast_string_strict
-
-* 描述：用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。
-* 默认值：true
-* 引入版本：v2.5.14
 
 ### cbo_enable_low_cardinality_optimize
 
@@ -247,7 +229,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### cbo_materialized_view_rewrite_related_mvs_limit
 
 * 描述：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
-* 默认值：64
+* 默认值：16
 * 类型：Int
 * 引入版本：v3.1.9, v3.2.5
 
@@ -262,10 +244,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码（`utf8`）。
 * 默认值：utf8
 * 类型：String
-
-### chunk_size
-
-用于指定在查询执行过程中，各个节点传输的单个数据包的行数。默认一个数据包的行数为 4096 行，即源端节点每产生 4096 行数据后，打包发给目的节点。较大的行数，会在扫描大数据量场景下提升查询的吞吐率，但可能会在小查询场景下增加查询延迟。同时，也会增加查询的内存开销。建议设置范围 1024 至 4096。
 
 ### connector_io_tasks_per_scan_operator
 
@@ -385,18 +363,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v2.5
 
-### enable_file_metacache
-
-* 描述：是否启用远端文件元数据缓存（Footer Cache）。`true` 表示开启。Footer Cache 通过将解析后生成 Footer 对象直接缓存在内存中，在后续访问相同文件 Footer 时，可以直接从缓存中获得该对象句柄进行使用，避免进行重复解析。该功能依赖 Data Cache 的内存缓存，因此需要保证 BE 参数 `datacache_enable` 为 `true` 且为 `datacache_mem_size` 配置一个合理值后才会生效。
-* 默认值：true
-* 引入版本：v3.3.0
-
-### enable_file_pagecache
-
-* 描述：是否启用远端文件页面缓存。`true` 表示开启。页面缓存将解压缩后的 Parquet 页面数据存储在内存中。在后续查询中访问相同页面时，可以直接从缓存中获取数据，避免重复的 I/O 操作和解压缩。此功能与数据缓存协同工作并使用相同的内存模块。启用后，对于具有重复页面访问模式的工作负载，可以显著提高查询性能。
-* 默认值：true
-* 引入版本：v4.0
-
 ### enable_force_rule_based_mv_rewrite
 
 * 描述：在优化器的 RBO（rule-based optimization）阶段是否针对多表查询启用查询改写。启用此功能将提高查询改写的鲁棒性。但如果查询未命中物化视图，则会增加优化耗时。
@@ -455,12 +421,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
 * 默认值：false，即默认关闭该场景下的物化视图查询改写。
 * 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
-
-### enable_materialized_view_plan_cache
-
-* 描述：是否开启物化视图查询计划缓存，用于提高物化视图查询改写性能。默认值是 `true`，即开启物化视图查询计划缓存。
-* 默认值：true
-* 引入版本：v2.5.13，v3.0.7，v3.1.4，v3.2.0，v3.3.0
 
 ### enable_materialized_view_text_match_rewrite
 
@@ -531,12 +491,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：是否为慢查询或手动标记查询开启 Query Feedback 功能。
 * 默认值：true
-* 引入版本：v3.4.0
-
-### enable_plan_analyzer
-
-* 描述：是否为所有查询开启 Query Feedback 功能。该变量仅在 `enable_plan_advisor` 为 `true` 是生效。
-* 默认值：false
 * 引入版本：v3.4.0
 
 ### enable_profile
@@ -627,12 +581,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v2.5.18，v3.1.7
 
-### enable_strict_type
-
-* 描述：是否对所有复合谓词以及 WHERE 子句中的表达式进行隐式转换。
-* 默认值：false
-* 引入版本：v3.1
-
 ### enable_sync_materialized_view_rewrite
 
 * 描述：是否启用基于同步物化视图的查询改写。
@@ -674,18 +622,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端。无实际作用。
 * 默认值：OFF
 * 类型：String
-
-### follower_query_forward_mode
-
-* 描述：用于指定将查询语句路由到 Leader FE 或 Follower FE 节点。
-
-  有效值:
-  * `default`: 将查询语句路由到 Leader FE 或 Follower FE 节点，取决于 Follower FE 节点的回放进度。如果 Follower FE 节点未完成回放，查询将会被路由至 Leader FE 节点。反之，查询会被优先路由至 Follower FE 节点。
-  * `leader`: 将查询语句路由到 Leader FE 节点。
-  * `follower`: 将查询语句路由到 Follower FE 节点。
-* 默认值：default
-* 类型：String
-* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
 
 ### forward_to_leader
 
@@ -826,16 +762,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### lower_case_table_names (global)
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
-
-### lower_upper_support_utf8
-
-* 默认值：false
-* 类型：Boolean
-* 单位：-
-* 描述：是否在 `lower` 和 `upper` 函数中支持 UTF-8 字符的大小写转换。有效值：
-  * `true`：支持 UTF-8 字符的大小写转换。
-  * `false`（默认）：不支持 UTF-8 字符的大小写转换。
-* 引入版本：v3.5.0
 
 ### materialized_view_rewrite_mode（3.2 及以后）
 
@@ -1042,20 +968,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
  用于兼容 JDBC 连接池 C3P0。无实际作用。
 
-### query_excluding_mv_names
-
-* 描述：指定需要在查询执行过程中排除的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。`query_including_mv_names` 优先于此项生效。
-* 默认值：空字符串
-* 类型：String
-* 引入版本：v3.1.11，v3.2.5
-
-### query_including_mv_names
-
-* 描述：指定需要在查询执行过程中包含的异步物化视图的名称。您可以使用此变量来限制候选物化视图的数量，并提高优化器中的查询改写性能。此项优先于 `query_excluding_mv_names` 生效。
-* 默认值：空字符串
-* 类型：String
-* 引入版本：v3.1.11，v3.2.5
-
 ### query_mem_limit
 
 * 描述：用于设置每个 BE 节点上单个查询的内存限制。该项仅在启用 Pipeline Engine 后生效。设置为 `0` 表示没有限制。
@@ -1133,18 +1045,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：0 (无限制)
 * 引入版本：v3.3.9
 
-### spill_enable_compaction
-
-* 描述: 是否对 Spill 小文件启用 Compaction。启用此功能后，可减少聚合和排序操作的内存使用量。
-* 默认值: true
-* 引入版本: v3.4
-
-### spill_enable_direct_io
-
-* 描述: 是否在 Spill 读写文件时跳过 Page Cache。如果启用此功能，Spill 将使用直接 I/O 模式直接读写文件。直接 I/O 模式可以减少对操作系统 Page Cache 的影响，但可能会导致磁盘读写时间增加。
-* 默认值: false
-* 引入版本: v3.4
-
 ### spill_mode (3.0 及以后)
 
 中间结果落盘的执行方式。默认值：`auto`。有效值包括：
@@ -1206,12 +1106,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 * 默认值：无限制
 * 类型：Long
 
-### statistic_collect_parallel
-
-* 描述：用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快采集任务的执行速度。
-* 默认值：1
-* 类型：Int
-
 ### storage_engine
 
 指定系统使用的存储引擎。StarRocks 支持的引擎类型包括：
@@ -1237,30 +1131,9 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 显示当前系统时区。不可更改。
 
-### tablet_internal_parallel_mode
-
-* 描述：Tablet 内部并行 Scan 策略。有效值:
-  * `auto`: 在 BE 或 CN 节点需要扫描的 Tablet 数小于 DOP 时，系统根据预估的 Tablet 大小自动判断是否需要并行 Scan。
-  * `force_split`: 强制对 Tablet 进行拆分和并行扫描。
-* 默认值：auto
-* 类型：String
-* 引入版本：v2.5.0
-
 ### time_zone
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
-
-### trace_log_mode
-
-* 描述：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
-  * `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
-  * `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
-
-  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
-
-* 默认值：`command`
-* 类型：String
-* 引入版本：v3.2.0
 
 ### transaction_read_only
 

@@ -95,6 +95,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: `audit_log_roll_interval` パラメータで指定された保持期間内に保持できる監査ログファイルの最大数。
 - 導入バージョン: -
 
+##### big_query_log_dir
+
+- デフォルト: Config.STARROCKS_HOME_DIR + "/log"
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: FE が big query ダンプログを書き込むディレクトリ（ファイル名: fe.big_query.log）。Log4j の設定はこのパスを使用して `fe.big_query.log` とローテートされたファイル用の RollingFile appender を作成します。ローテーションと保持は `big_query_log_roll_interval`（時間ベースのサフィックス）、`log_roll_size_mb`（サイズトリガー）、`big_query_log_roll_num`（最大ファイル数）、および `big_query_log_delete_age`（年齢ベースの削除）によって制御されます。big-query レコードは `big_query_log_cpu_second_threshold`、`big_query_log_scan_rows_threshold`、`big_query_log_scan_bytes_threshold` のようなユーザー定義の閾値を超えたクエリについて出力されます。どのモジュールがこのファイルにログを出力するかは `big_query_log_modules` で制御してください。
+- 導入バージョン: v3.2.0
+
+##### big_query_log_roll_num
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: -
+- 変更可能: No
+- 説明: `big_query_log_roll_interval` ごとに保持する FE big query ログのローテート済みファイルの最大数です。この値は RollingFile appender の DefaultRolloverStrategy の `max` 属性（`fe.big_query.log` 用）にバインドされます。ログが時間または `log_roll_size_mb` によってロールすると、StarRocks は最大で `big_query_log_roll_num` 個のインデックス付きファイルを保持します（filePattern は時間サフィックスとインデックスを使用します）。この数より古いファイルはロールオーバーにより削除される可能性があり、`big_query_log_delete_age` によって最終更新日時に基づく削除が追加で行われることがあります。この値を変更するには、FE の再起動が必要です。
+- 導入バージョン: v3.2.0
+
 ##### dump_log_delete_age
 
 - デフォルト: 7d
@@ -151,6 +169,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: true の場合、Frontend の監査サブシステムは ConnectProcessor によって処理される FE の監査ログ (fe.audit.log) にステートメントの SQL テキストを記録します。格納されるステートメントは他の制御を尊重します：暗号化されたステートメントは (AuditEncryptionChecker により) マスキングされ、認証情報は enable_sql_desensitize_in_log が設定されていると赤字化または脱感作される可能性があり、ダイジェストの記録は enable_sql_digest で制御されます。false の場合、ConnectProcessor は監査イベント内のステートメントテキストを "?" に置き換えます — 他の監査フィールド（user、host、duration、status、qe_slow_log_ms によるスロークエリ検出、メトリクス）は引き続き記録されます。SQL 監査を有効にするとフォレンジックやトラブルシューティングの可視性は向上しますが、機密性の高い SQL 内容が露出したりログの量および I/O が増加したりする可能性があります。無効にすると監査ログでの完全なステートメントの可視性を失う代わりにプライバシーが向上します。このオプションはランタイムで変更できません。
 - 導入バージョン: -
 
+##### enable_profile_log_compress
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: 有効にすると、ProfileManager が生成する JSON クエリプロファイルを PROFILE_LOG に書き込む前に `CompressionUtils.gzipCompressString` を使って GZIP 圧縮します。この圧縮は `enable_collect_query_detail_info` と `enable_profile_log` の両方が true の場合にのみ有効です。圧縮によりログ量と I/O は削減されますが CPU 負荷が増加します。PROFILE_LOG の消費者はクエリ詳細を読むために GZIP ペイロードを解凍する必要があります。圧縮が失敗した場合、コードは警告をログに出力し、圧縮されたプロファイルは書き込まれません。
+- 導入バージョン: v3.2.7
+
 ##### log_roll_size_mb
 
 - デフォルト: 1024
@@ -160,6 +187,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: システムログファイルまたは監査ログファイルの最大サイズ。
 - 導入バージョン: -
 
+##### profile_log_roll_size_mb
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: MB
+- 変更可能: No
+- 説明: FE のプロファイルログファイルをサイズベースでローテーションするトリガーとなる閾値（メガバイト単位）を設定します。この値は `ProfileFile` appender の Log4j RollingFile SizeBasedTriggeringPolicy によって使用され、プロファイルログが `profile_log_roll_size_mb` を超えるとローテーションされます。ローテーションは `profile_log_roll_interval` に達したときの時間ベースでも発生するため、いずれかの条件でロールオーバーが行われます。`profile_log_roll_num` および `profile_log_delete_age` と組み合わせて、過去のプロファイルファイルの保持数や古いファイルの削除タイミングを制御します。ローテートされたファイルの圧縮は `enable_profile_log_compress` によって制御されます。この値を変更した場合、適用するにはプロセスの再起動が必要です。
+- 導入バージョン: v3.2.5
+
 ##### qe_slow_log_ms
 
 - デフォルト: 5000
@@ -168,6 +204,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: はい
 - 説明: クエリがスロークエリであるかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超える場合、**fe.audit.log** にスロークエリとして記録されます。
 - 導入バージョン: -
+
+##### slow_lock_threshold_ms
+
+- デフォルト: 3000L
+- タイプ: long
+- 単位: Milliseconds
+- 変更可能: はい
+- 説明: ロック操作または保持中のロックを「遅い(slow)」と分類するための閾値（ms単位）。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は（コンテキストに応じて）診断ログを出力したり、スタックトレースや待ち手/所有者情報を含めたり、—LockManagerではこの遅延後にデッドロック検出を開始します。LockUtils（slow-lock ロギング）、QueryableReentrantReadWriteLock（遅いリーダーのフィルタリング）、LockManager（デッドロック検出の遅延および遅いロックのトレース）、LockChecker（定期的な遅いロック検出）、およびその他の呼び出し元（例: DiskAndTabletLoadReBalancer のログ出力）で使用されます。値を下げると感度およびログ/診断のオーバーヘッドが増加します。値を 0 または負に設定すると、初期の待機ベースのデッドロック検出遅延の動作が無効になります。slow_lock_log_every_ms、slow_lock_print_stack、slow_lock_stack_trace_reserve_levels と合わせて調整してください。
+- 導入バージョン: 3.2.0
 
 ##### sys_log_delete_age
 
@@ -186,6 +231,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: システムログファイルを保存するディレクトリ。
 - 導入バージョン: -
+
+##### sys_log_enable_compress
+
+- デフォルト: false
+- タイプ: boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: この項目が `true` に設定されていると、システムはローテートされたシステムログファイル名に ".gz" の後置を付け、Log4j によって gzip 圧縮されたローテート済み FE システムログ（例: fe.log.*）が出力されるようになります。この値は Log4j 設定生成時（Log4jConfig.initLogging / generateActiveLog4jXmlConfig）に読み取られ、RollingFile の filePattern で使用される `sys_file_postfix` プロパティを制御します。この機能を有効にすると保持ログのディスク使用量は減少しますが、ロールオーバー時の CPU と I/O が増加し、ログファイル名が変更されるためログを読むツールやスクリプトが .gz ファイルを扱える必要があります。なお、監査ログは圧縮に別の設定（`audit_log_enable_compress`）を使用します。
+- 導入バージョン: v3.2.12
+
+##### sys_log_json_max_string_length
+
+- デフォルト: 1048576
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: No
+- 説明: JSON形式のシステムログに使用される JsonTemplateLayout の "maxStringLength" 値を設定します。`sys_log_format` が `"json"` に設定されている場合、文字列値のフィールド（例えば "message" や文字列化された例外スタックトレース）は、その長さがこの上限を超えると切り詰められます。この値は `Log4jConfig.generateActiveLog4jXmlConfig()` 内で生成される Log4j XML に注入され、default、warning、audit、dump および bigquery のレイアウトに適用されます。profile レイアウトは別の設定（`sys_log_json_profile_max_string_length`）を使用します。この値を下げるとログサイズは小さくなりますが、有用な情報が切り落とされる可能性があります。
+- 導入バージョン: 3.2.11
+
+##### sys_log_json_profile_max_string_length
+
+- デフォルト: 104857600 (100 MB)
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: いいえ
+- 説明: `sys_log_format` が "json" のとき、profile（および関連機能）のログ appender に対して JsonTemplateLayout の maxStringLength を設定します。JSON 形式の profile ログ内の文字列フィールドの値はこのバイト長で切り詰められ、非文字列フィールドには影響しません。この設定は Log4jConfig の `JsonTemplateLayout maxStringLength` に適用され、`plaintext` ログが使用されている場合は無視されます。必要な全メッセージが収まるように十分大きな値にしてください。ただし、大きな値はログサイズと I/O を増加させる点に注意してください。
+- 導入バージョン: v3.2.11
 
 ##### sys_log_level
 
@@ -224,6 +296,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能: いいえ
 - 説明: StarRocks がシステムログを生成するモジュール。このパラメータが `org.apache.starrocks.catalog` に設定されている場合、StarRocks は catalog モジュールのシステムログのみを生成します。モジュール名はカンマ (,) とスペースで区切ります。
 - 導入バージョン: -
+
+##### log_cleaner_disk_util_based_enable
+
+- デフォルト: false 
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ディスク使用率に基づく自動ログクリーンアップを有効にします。有効にすると、ログディレクトリのディスク使用率がしきい値を超えた場合、ログファイルが自動的にクリーンアップされます。ログクリーンアップは FE ノードでバックグラウンドデーモンとして実行され、ログファイルの蓄積によるディスク容量の枯渇を防ぐのに役立ちます。
+- 導入バージョン: -
+
+##### log_cleaner_disk_usage_threshold
+
+- デフォルト: 80
+- タイプ: Int
+- 単位: パーセンテージ
+- 変更可能: はい
+- 説明: ログクリーンアップをトリガーするディスク使用率のしきい値（パーセンテージ）。ログディレクトリのディスク使用率がこのしきい値を超えると、ログクリーンアップが開始されます。クリーンアップは、設定された各ログディレクトリを個別にチェックし、このしきい値を超えるディレクトリを処理します。
+- 導入バージョン: -
+
+##### log_cleaner_disk_usage_target
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: パーセンテージ
+- 変更可能: はい
+- 説明: ログクリーンアップ後の目標ディスク使用率（パーセンテージ）。ログクリーンアップは、ディスク使用率がこのしきい値を下回るまで継続されます。クリーンアップは、目標値に達するまで最も古いログファイルを1つずつ削除します。
+- 導入バージョン: -
+
+##### log_cleaner_audit_log_min_retention_days
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: 日
+- 変更可能: はい
+- 説明: 監査ログファイルの最小保持日数。ディスク使用率が高くても、この値より新しい監査ログファイルは削除されません。これにより、コンプライアンスとトラブルシューティングの目的で監査ログが保持されます。
+- 導入バージョン: -
+
+##### log_cleaner_check_interval_second
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: ディスク使用率をチェックしてログをクリーンアップする間隔（秒）。クリーンアップは、各ログディレクトリのディスク使用率を定期的にチェックし、必要に応じてクリーンアップをトリガーします。デフォルト値は 300 秒（5 分）です。
+- 導入バージョン: -
+
+##### sys_log_warn_modules
+
+- デフォルト: {}
+- タイプ: String[]
+- 単位: -
+- 変更可能: いいえ
+- 説明: システム起動時に WARN レベルのロガーとして設定し、警告アペンダ（SysWF）— `fe.warn.log` ファイル— にルーティングするロガー名またはパッケージプレフィックスのリストです。エントリは生成された Log4j 設定に挿入され（org.apache.kafka、org.apache.hudi、org.apache.hadoop.io.compress といった組み込みの warn モジュールとともに）、`<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>` のような logger 要素を生成します。冗長な INFO/DEBUG 出力を通常のログに抑制し、警告を別途捕捉するために完全修飾のパッケージやクラスのプレフィックス（例: "com.example.lib"）を使用することが推奨されます。
+- 導入バージョン: v3.2.13
 
 ### サーバー
 
@@ -556,6 +682,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: グローバルロックを取得するためのタイムアウト期間。
 - 導入バージョン: -
 
+##### db_used_data_quota_update_interval_secs
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: データベースの使用データクォータを更新する間隔。StarRocksは定期的にすべてのデータベースの使用データクォータを更新して、ストレージ消費を追跡します。この値はクォータ制御とメトリクス収集に使用されます。システム負荷を過度に高めないため、許可される最小間隔は30秒です。30未満の値は拒否されます。
+- 導入バージョン: -
+
 ##### drop_backend_after_decommission
 
 - デフォルト: true
@@ -765,6 +900,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - `NO_SYNC`: トランザクションがコミットされるときにログエントリの生成とフラッシュは同時に行われません。
   - `WRITE_NO_SYNC`: トランザクションがコミットされると、ログエントリが同時に生成されますが、ディスクにフラッシュされません。
 - 導入バージョン: -
+
+##### task_ttl_second
+
+- デフォルト: 24 * 3600
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: タスクの存続時間（TTL）を秒単位で指定します。スケジュールが設定されていない手動タスクの場合、TaskBuilder はこの値を用いてタスクの expireTime を算出します（expireTime = now + task_ttl_second * 1000L）。TaskRun もランの実行タイムアウトを計算する際の上限としてこの値を参照します — 実効的な実行タイムアウトは min(`task_runs_timeout_second`, `task_runs_ttl_second`, `task_ttl_second`) です。この値を調整すると、手動で作成されたタスクが有効でいられる期間が変わり、間接的にタスクランの最大実行時間の上限を制限することになります。
+- 導入バージョン: v3.2.0
 
 ##### txn_latency_metric_report_groups
 
@@ -2613,6 +2757,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: 秒
 - 変更可能: いいえ
 - 説明: 共有データクラスタ内の FE が StarMgr と の定期的なメタデータ同期を実行する間隔。
+- 導入バージョン: -
+
+##### starmgr_grpc_server_max_worker_threads
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: FE の starmgr モジュール内で grpc サーバが使用するワーカースレッドの最大数。
+- 導入バージョン: v4.0.0, v3.5.8
+
+##### starmgr_grpc_timeout_seconds
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明:
 - 導入バージョン: -
 
 ### その他

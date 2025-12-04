@@ -101,20 +101,20 @@ public class MetricCalculator extends TimerTask {
         // internal err rate
         long currentInternalErrCounter = MetricRepo.COUNTER_QUERY_INTERNAL_ERR.getValue();
         double internalErrRate = (double) (currentInternalErrCounter - lastQueryInternalErrCounter) / interval;
-        MetricRepo.GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(errRate < 0 ? 0.0 : internalErrRate);
-        lastQueryInternalErrCounter = currentErrCounter;
+        MetricRepo.GAUGE_QUERY_INTERNAL_ERR_RATE.setValue(internalErrRate < 0 ? 0.0 : internalErrRate);
+        lastQueryInternalErrCounter = currentInternalErrCounter;
 
         // analysis error rate
         long currentAnalysisErrCounter = MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.getValue();
         double analysisErrRate = (double) (currentAnalysisErrCounter - lastQueryAnalysisErrCounter) / interval;
-        MetricRepo.GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(errRate < 0 ? 0.0 : analysisErrRate);
-        lastQueryAnalysisErrCounter = currentErrCounter;
+        MetricRepo.GAUGE_QUERY_ANALYSIS_ERR_RATE.setValue(analysisErrRate < 0 ? 0.0 : analysisErrRate);
+        lastQueryAnalysisErrCounter = currentAnalysisErrCounter;
 
         // query timeout rate
         long currentTimeoutErrCounter = MetricRepo.COUNTER_QUERY_TIMEOUT.getValue();
         double timeoutErrRate = (double) (currentTimeoutErrCounter - lastQueryTimeOutCounter) / interval;
-        MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(errRate < 0 ? 0.0 : timeoutErrRate);
-        lastQueryTimeOutCounter = currentErrCounter;
+        MetricRepo.GAUGE_QUERY_TIMEOUT_RATE.setValue(timeoutErrRate < 0 ? 0.0 : timeoutErrRate);
+        lastQueryTimeOutCounter = currentTimeoutErrCounter;
 
         lastTs = currentTs;
 

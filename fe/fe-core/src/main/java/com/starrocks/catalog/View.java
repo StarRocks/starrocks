@@ -43,7 +43,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;

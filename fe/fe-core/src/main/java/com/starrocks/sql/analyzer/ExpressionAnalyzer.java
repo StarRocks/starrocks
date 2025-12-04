@@ -28,12 +28,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -70,7 +72,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
@@ -94,7 +95,6 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -136,7 +136,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
     private final ConnectContext session;
@@ -505,17 +505,37 @@ public class ExpressionAnalyzer {
             if (!node.getChildren().isEmpty()) {
                 Type originalType = node.getType();
                 if (originalType == AnyMapType.ANY_MAP) {
-                    Type keyType = node.getKeyCommonType();
+                    Type keyType = getKeyCommonType(node);
                     if (!keyType.isValidMapKeyType()) {
                         throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
                     }
-                    Type valueType = node.getValueCommonType();
+                    Type valueType = getValueCommonType(node);
                     node.setType(new MapType(keyType, valueType));
                 }
             } else {
                 node.setType(new MapType(NullType.NULL, NullType.NULL));
             }
             return null;
+        }
+
+        private Type getKeyCommonType(MapExpr node) {
+            List<Expr> children = node.getChildren();
+            Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
+            ArrayList<Type> keyExprsType = Lists.newArrayList();
+            for (int i = 0; i < children.size(); i += 2) {
+                keyExprsType.add(children.get(i).getType());
+            }
+            return TypeManager.getCommonSuperType(keyExprsType);
+        }
+
+        public Type getValueCommonType(MapExpr node) {
+            List<Expr> children = node.getChildren();
+            Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
+            ArrayList<Type> valueExprsType = Lists.newArrayList();
+            for (int i = 1; i < children.size(); i += 2) {
+                valueExprsType.add(children.get(i).getType());
+            }
+            return TypeManager.getCommonSuperType(valueExprsType);
         }
 
         @Override
@@ -941,6 +961,79 @@ public class ExpressionAnalyzer {
             }
             String fnName = node.getFnName().getFunction();
 
+            if (fnName.equalsIgnoreCase("date_part")) {
+                if (node.getChildren().size() != 2) {
+                    throw new SemanticException("DATE_PART requires 2 arguments: DATE_PART('unit', date_expr)");
+                }
+
+                Expr unitExpr = node.getChild(0);
+                Expr dateExpr = node.getChild(1);
+
+                if (!(unitExpr instanceof StringLiteral)) {
+                    throw new SemanticException("The first argument of DATE_PART must be a constant string " + 
+                            "literal, e.g., 'year'");
+                }
+
+                String unit = ((StringLiteral) unitExpr).getStringValue().toLowerCase();
+                String targetFunction = "";
+
+                switch (unit) {
+                    case "year":
+                    case "yy":
+                    case "yyyy":
+                        targetFunction = "year";
+                        break;
+                    case "quarter":
+                    case "qq":
+                    case "q":
+                        targetFunction = "quarter";
+                        break;
+                    case "month":
+                    case "mm":
+                    case "m":
+                        targetFunction = "month";
+                        break;
+                    case "day":
+                    case "dd":
+                    case "d":
+                        targetFunction = "day";
+                        break;
+                    case "hour":
+                    case "hh":
+                        targetFunction = "hour";
+                        break;
+                    case "minute":
+                    case "mi":
+                    case "n":
+                        targetFunction = "minute";
+                        break;
+                    case "second":
+                    case "ss":
+                    case "s":
+                        targetFunction = "second";
+                        break;
+                    case "dow": 
+                        targetFunction = "dayofweek";
+                        break;
+                    case "doy":
+                        targetFunction = "dayofyear";
+                        break;
+                    case "week":
+                    case "wk":
+                    case "ww":
+                        targetFunction = "week_iso";
+                        break;
+                    default:
+                        throw new SemanticException("Unsupported unit for DATE_PART: " + unit);
+                }
+
+                node.resetFnName("", targetFunction);
+                node.clearChildren();
+                node.addChild(dateExpr);
+
+                return visitFunctionCall(node, scope);
+            }
+ 
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
 

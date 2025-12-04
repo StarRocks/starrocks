@@ -26,7 +26,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -94,6 +94,7 @@ import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
@@ -462,6 +463,13 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
             return;
         }
+        for (MaterializationContext mvContext : context.getCandidateMvs()) {
+            if (mvContext.getMv().isView()) {
+                continue;
+            }
+            // initialize query's compensate type based on query and mv's partition refresh status
+            MVCompensation ignored = mvContext.getOrInitMVCompensation(tree);
+        }
 
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
@@ -515,7 +523,6 @@ public class QueryOptimizer extends Optimizer {
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
 
-        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
         // see JoinPredicatePushdown
         if (sessionVariable.isEnableRboTablePrune()) {
             context.setEnableJoinEquivalenceDerive(false);
@@ -576,6 +583,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
+
+        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAsofJoinTemporalExpressionToChildProject());
@@ -914,6 +923,9 @@ public class QueryOptimizer extends Optimizer {
 
     private OptExpression convertDistinctAggOverWindowToNullSafeEqualJoin(OptExpression tree,
                                                                           TaskContext rootTaskContext) {
+        if (!rootTaskContext.getOptimizerContext().getSessionVariable().isEnableDistinctAggOverWindow()) {
+            return tree;
+        }
         if (Util.getStream(tree).noneMatch(op -> op instanceof LogicalWindowOperator)) {
             return tree;
         }

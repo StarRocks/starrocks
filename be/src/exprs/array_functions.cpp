@@ -1896,6 +1896,132 @@ StatusOr<ColumnPtr> ArrayFunctions::array_flatten(FunctionContext* ctx, const Co
     return result;
 }
 
+StatusOr<ColumnPtr> ArrayFunctions::arrays_zip(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    if (columns.empty()) {
+        return Status::InvalidArgument("arrays_zip function requires at least one argument");
+    }
+
+    const size_t num_rows = columns[0]->size();
+    const size_t num_arrays = columns.size();
+
+    // Unpack const columns first
+    Columns unpacked_columns;
+    unpacked_columns.reserve(num_arrays);
+    for (const auto& column : columns) {
+        unpacked_columns.emplace_back(ColumnHelper::unpack_and_duplicate_const_column(num_rows, column));
+    }
+
+    // Check if all columns have the same size
+    for (const auto& column : unpacked_columns) {
+        if (column->size() != num_rows) {
+            return Status::InvalidArgument("All arrays must have the same size");
+        }
+    }
+
+    // Collect all array columns
+    std::vector<const ArrayColumn*> array_columns;
+    std::vector<const NullableColumn*> nullable_columns;
+
+    for (const auto& column : unpacked_columns) {
+        const Column* data_column = ColumnHelper::get_data_column(column.get());
+        const ArrayColumn* array_col = down_cast<const ArrayColumn*>(data_column);
+        array_columns.push_back(array_col);
+
+        if (column->is_nullable()) {
+            nullable_columns.push_back(down_cast<const NullableColumn*>(column.get()));
+        } else {
+            nullable_columns.push_back(nullptr);
+        }
+    }
+
+    // Build struct fields - use MutableColumns to ensure proper column mutability
+    MutableColumns struct_fields;
+    for (size_t i = 0; i < num_arrays; ++i) {
+        struct_fields.emplace_back(array_columns[i]->elements().clone_empty());
+    }
+
+    // Create result array with struct elements
+    std::vector<std::string> field_names;
+    for (size_t i = 0; i < num_arrays; ++i) {
+        field_names.push_back("col" + std::to_string(i + 1));
+    }
+    auto result_elements = StructColumn::create(std::move(struct_fields), field_names);
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(num_rows + 1);
+    result_offsets->append(0);
+
+    // Process each row
+    for (size_t row = 0; row < num_rows; ++row) {
+        // Check if any input is null
+        bool is_null = false;
+        for (const auto* nullable_col : nullable_columns) {
+            if (nullable_col) {
+                const auto& null_data = nullable_col->null_column_data();
+                if (null_data[row]) {
+                    is_null = true;
+                    break;
+                }
+            }
+        }
+
+        if (!is_null) {
+            // Find the maximum array length for this row (for NULL padding)
+            size_t max_length = 0;
+            for (const auto* array_col : array_columns) {
+                size_t length = array_col->get_element_size(row);
+                if (length > max_length) {
+                    max_length = length;
+                }
+            }
+
+            // Add zipped elements with NULL padding for shorter arrays
+            for (size_t elem_idx = 0; elem_idx < max_length; ++elem_idx) {
+                for (size_t array_idx = 0; array_idx < num_arrays; ++array_idx) {
+                    size_t array_length = array_columns[array_idx]->get_element_size(row);
+                    const auto& elements = array_columns[array_idx]->elements();
+
+                    if (elem_idx < array_length) {
+                        // Element exists, get it
+                        auto offset_size = array_columns[array_idx]->get_element_offset_size(row);
+                        size_t element_index = offset_size.first + elem_idx;
+                        result_elements->fields_column()[array_idx]->append(elements, element_index, 1);
+                    } else {
+                        // Element doesn't exist - add default value
+                        result_elements->fields_column()[array_idx]->append_default();
+                    }
+                }
+            }
+        }
+
+        result_offsets->append(result_elements->size());
+    }
+
+    // ArrayColumn requires elements to be NullableColumn, so wrap the StructColumn if necessary
+    auto nullable_struct = NullableColumn::wrap_if_necessary(std::move(result_elements));
+    auto result_array = ArrayColumn::create(std::move(nullable_struct), result_offsets);
+
+    // Handle nulls if any input columns are nullable
+    NullColumnPtr result_nulls = nullptr;
+    for (const auto* nullable_col : nullable_columns) {
+        if (nullable_col && nullable_col->has_null()) {
+            if (result_nulls == nullptr) {
+                result_nulls = NullColumn::static_pointer_cast(nullable_col->null_column()->clone());
+            } else {
+                ColumnHelper::or_two_filters(num_rows, result_nulls->get_data().data(),
+                                             nullable_col->null_column()->immutable_data().data());
+            }
+        }
+    }
+
+    if (result_nulls != nullptr) {
+        return NullableColumn::create(result_array, result_nulls);
+    }
+
+    return result_array;
+}
+
 StatusOr<ColumnPtr> ArrayFunctions::null_or_empty(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 

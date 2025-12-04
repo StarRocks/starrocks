@@ -65,7 +65,7 @@ public class DomainResolver extends FrontendDaemon {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DomainResolver(AuthenticationMgr authenticationManager) {
-        super("domain resolver", 10L * 1000);
+        super("domain-resolver", 10L * 1000);
         this.authenticationManager = authenticationManager;
     }
 

@@ -24,6 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
@@ -36,7 +37,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Delimiter;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URI;

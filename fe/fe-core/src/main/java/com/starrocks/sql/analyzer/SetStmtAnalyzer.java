@@ -99,6 +99,12 @@ public class SetStmtAnalyzer {
             throw new SemanticException("No variable name in set statement.");
         }
 
+        // Validate that the variable exists
+        if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(variable)) {
+            String similarVars = GlobalStateMgr.getCurrentState().getVariableMgr().findSimilarVarNames(variable);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable, similarVars);
+        }
+
         Expr unResolvedExpression = var.getUnResolvedExpression();
         LiteralExpr resolvedExpression;
 

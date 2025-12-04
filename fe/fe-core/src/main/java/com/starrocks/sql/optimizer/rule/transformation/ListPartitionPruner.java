@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -505,9 +506,9 @@ public class ListPartitionPruner implements PartitionPruner {
             value = String.valueOf(literalExpr.getLongValue() / 1000000);
         }
         try {
-            result = LiteralExpr.create(value, type);
+            result = LiteralExprFactory.create(value, type);
         } catch (Exception e) {
-            LOG.warn("Failed to execute LiteralExpr.create", e);
+            LOG.warn("Failed to execute LiteralExprFactory.create", e);
             throw new StarRocksConnectorException("can not cast literal value " + literalExpr.getStringValue() +
                     " to target type " + type.prettyPrint());
         }

@@ -37,7 +37,7 @@ public class TaskRunStateSynchronizer extends FrontendDaemon {
     private TaskRunScheduler taskRunScheduler;
 
     public TaskRunStateSynchronizer() {
-        super("TaskRunStateSynchronizer", FeConstants.SYNC_TASK_RUNS_STATE_INTERVAL);
+        super("task-run-state-synchronizer", FeConstants.SYNC_TASK_RUNS_STATE_INTERVAL);
         taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         runningTaskRunProgressMap = new HashMap<>();
         taskRunScheduler = taskRunManager.getTaskRunScheduler();

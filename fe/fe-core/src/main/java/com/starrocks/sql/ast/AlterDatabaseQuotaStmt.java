@@ -38,7 +38,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
 
     public AlterDatabaseQuotaStmt(String dbName, QuotaType quotaType, String quotaValue, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.quotaType = quotaType;
         this.quotaValue = quotaValue;
     }

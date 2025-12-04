@@ -108,7 +108,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     protected Set<Long> publishingLakeTransactionsBatchTableId;
 
     public PublishVersionDaemon() {
-        super("PUBLISH_VERSION", Config.publish_version_interval_ms);
+        super("publish-version-daemon", Config.publish_version_interval_ms);
     }
 
     @Override

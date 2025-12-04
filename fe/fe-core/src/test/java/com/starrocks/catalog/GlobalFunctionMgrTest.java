@@ -17,25 +17,23 @@ package com.starrocks.catalog;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-
-import static org.mockito.Mockito.mock;
 
 public class GlobalFunctionMgrTest {
     private GlobalFunctionMgr globalFunctionMgr;
@@ -43,12 +41,12 @@ public class GlobalFunctionMgrTest {
     @BeforeEach
     public void setUp() {
         globalFunctionMgr = new GlobalFunctionMgr();
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return mock();
-            }
-        };
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -74,13 +72,13 @@ public class GlobalFunctionMgrTest {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
         final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
-        Function f = new Function(name, argTypes, IntegerType.INT, false);
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
         globalFunctionMgr.userAddFunction(f, false, false);
         // User adds addDoubleDouble UDF
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setAsGlobalFunction();
         final Type[] argTypes2 = {FloatType.DOUBLE, FloatType.DOUBLE};
-        Function f2 = new Function(name2, argTypes2, FloatType.DOUBLE, false);
+        Function f2 = new ScalarFunction(name2, argTypes2, FloatType.DOUBLE, false);
         globalFunctionMgr.userAddFunction(f2, false, false);
     }
 
@@ -89,7 +87,7 @@ public class GlobalFunctionMgrTest {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
         final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
-        Function f = new Function(name, argTypes, IntegerType.INT, false);
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
 
         // Add the UDF for the first time
         globalFunctionMgr.userAddFunction(f, false, false);
@@ -103,7 +101,7 @@ public class GlobalFunctionMgrTest {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
         final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
-        Function f = new Function(name, argTypes, IntegerType.INT, false);
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
 
         // Add the UDF for the first time
         globalFunctionMgr.userAddFunction(f, true, false);
@@ -123,15 +121,15 @@ public class GlobalFunctionMgrTest {
         name.setAsGlobalFunction();
 
         final Type[] varcharArgs = {VarcharType.VARCHAR};
-        Function varcharFunc = new Function(name, varcharArgs, VarcharType.VARCHAR, false);
+        Function varcharFunc = new ScalarFunction(name, varcharArgs, VarcharType.VARCHAR, false);
         globalFunctionMgr.userAddFunction(varcharFunc, false, false);
 
         final Type[] intArgs = {IntegerType.INT};
-        Function intFunc = new Function(name, intArgs, IntegerType.INT, false);
+        Function intFunc = new ScalarFunction(name, intArgs, IntegerType.INT, false);
         globalFunctionMgr.userAddFunction(intFunc, false, false);
 
         final Type[] doubleArgs = {FloatType.DOUBLE};
-        Function doubleFunc = new Function(name, doubleArgs, FloatType.DOUBLE, false);
+        Function doubleFunc = new ScalarFunction(name, doubleArgs, FloatType.DOUBLE, false);
         globalFunctionMgr.userAddFunction(doubleFunc, false, false);
 
         List<Function> functions = globalFunctionMgr.getFunctions();

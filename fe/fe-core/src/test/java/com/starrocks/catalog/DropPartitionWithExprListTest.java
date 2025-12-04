@@ -15,7 +15,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -584,9 +586,9 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     {
                                         // add new partitions
                                         LocalDateTime now = LocalDateTime.now();
-                                        addListPartition(tableName, "p5", "guangdong",
+                                        addListPartition(tableName, "p5", "guangdong_p5",
                                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                                        addListPartition(tableName, "p6", "guangdong",
+                                        addListPartition(tableName, "p6", "guangdong_p6",
                                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
 
                                         MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
@@ -635,10 +637,15 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                             "interval 1 month')", mvName);
                                     starRocksAssert.alterMvProperties(alterMVSql);
 
+                                    // trigger dynamic scheduler to ensure test more stable
+                                    DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
+                                            .getDynamicPartitionScheduler();
+                                    scheduler.runOnceForTest();
+
                                     {
                                         // all partitions are expired, no need to create partitions for mv
                                         MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
-                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
+                                        Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                                         Assertions.assertTrue(execPlan == null);
@@ -647,15 +654,15 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     {
                                         // add new partitions
                                         LocalDateTime now = LocalDateTime.now();
-                                        addListPartition(tableName, "p5", "guangdong",
+                                        addListPartition(tableName, "p5", "guangdong_p5",
                                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                                        addListPartition(tableName, "p6", "guangdong",
+                                        addListPartition(tableName, "p6", "guangdong_p6",
                                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
 
                                         MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
-                                        Assertions.assertEquals(4, mv.getVisiblePartitions().size());
+                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                                         Assertions.assertTrue(execPlan != null);
                                         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);

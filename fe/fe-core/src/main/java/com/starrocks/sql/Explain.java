@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -492,8 +493,9 @@ public class Explain {
                 String analyticCallString =
                         EXPR_PRINTER.print(entry.getKey()) + " := " +
                                 EXPR_PRINTER.print(entry.getValue())
-                                + " " + (analytic.getAnalyticWindow() == null ? AnalyticWindow.DEFAULT_WINDOW.toSql() :
-                                analytic.getAnalyticWindow().toSql());
+                                + " " + (analytic.getAnalyticWindow() == null
+                                ? ExprToSql.toSql(AnalyticWindow.DEFAULT_WINDOW)
+                                : ExprToSql.toSql(analytic.getAnalyticWindow()));
                 buildOperatorProperty(sb, analyticCallString, context.step);
             }
 

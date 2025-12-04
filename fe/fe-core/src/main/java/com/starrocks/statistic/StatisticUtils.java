@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -21,7 +22,6 @@ import com.google.common.collect.Sets;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -44,8 +44,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
@@ -126,6 +128,7 @@ public class StatisticUtils {
         // set the max task num of connector io tasks per scan operator to collectStatsIoTasksPerConnectorOperator,
         // default value is 4, avoid generate too many chunk source for collect stats in BE
         context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
+        context.getSessionVariable().setEnableSPMRewrite(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
@@ -610,7 +613,16 @@ public class StatisticUtils {
         if (column instanceof SlotRef) {
             colName = table.getColumn(((SlotRef) column).getColumnName()).getName();
         } else {
-            colName = ((SubfieldExpr) column).getPath();
+            SubfieldExpr subfieldExpr = (SubfieldExpr) column;
+            String childPath;
+            if (column.getChild(0) instanceof SlotRef) {
+                childPath = ((SlotRef) column.getChild(0)).getColumnName();
+            } else {
+                childPath = ExprToSql.toSql(column.getChild(0));
+            }
+
+            colName = childPath + "." + Joiner.on('.').join(subfieldExpr.getFieldNames());
+
         }
         return colName;
     }

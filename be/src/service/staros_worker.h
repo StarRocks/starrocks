@@ -138,6 +138,7 @@ private:
 private:
     mutable std::shared_mutex _mtx;
     std::shared_mutex _cache_mtx;
+    std::mutex _fs_cache_key_reset_mtx; // Protects fs_cache_key reset operations
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;

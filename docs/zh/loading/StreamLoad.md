@@ -247,16 +247,22 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 从 v3.4.0 开始，系统支持合并多个 Stream Load 请求。
 
-合并提交是 Stream Load 的一种优化，专为高并发、小批量（从 KB 到几十 MB）的实时加载场景设计。在早期版本中，每个 Stream Load 请求都会生成一个事务和一个数据版本，这在高并发加载场景中导致以下问题：
+:::warning
+
+请注意 Merge Commit 优化适用于单张表上存在**并发** Stream Load 作业的场景。若并发数为 1，则不建议使用该优化。同时，将 `merge_commit_async` 设为 `false` 并为 `merge_commit_interval_ms` 赋予较大值时需谨慎考虑，此类设置可能导致导入性能下降。
+
+:::
+
+Merge Commit 是 Stream Load 的一种优化，专为高并发、小批量（从 KB 到几十 MB）的实时加载场景设计。在早期版本中，每个 Stream Load 请求都会生成一个事务和一个数据版本，这在高并发加载场景中导致以下问题：
 
 - 过多的数据版本影响查询性能，限制版本数量可能导致 `too many versions` 错误。
 - 通过 Compaction 合并数据版本增加了资源消耗。
 - 生成小文件，增加 IOPS 和 I/O 延迟。在存算分离集群中，这也增加了云对象存储成本。
 - Leader FE 节点作为事务管理器，可能成为单点瓶颈。
 
-合并提交通过在时间窗口内将多个并发 Stream Load 请求合并为一个事务来缓解这些问题。这减少了高并发请求生成的事务和版本数量，从而提高了加载性能。
+Merge Commit 通过在时间窗口内将多个并发 Stream Load 请求合并为一个事务来缓解这些问题。这减少了高并发请求生成的事务和版本数量，从而提高了加载性能。
 
-合并提交支持同步和异步两种模式。每种模式都有其优缺点。您可以根据使用场景进行选择。
+Merge Commit 支持同步和异步两种模式。每种模式都有其优缺点。您可以根据使用场景进行选择。
 
 - **同步模式**
 
@@ -273,7 +279,7 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 ##### 启动 Stream Load
 
-- 运行以下命令以同步模式启动启用合并提交的 Stream Load 作业，并将合并窗口设置为 `5000` 毫秒，并行度设置为 `2`：
+- 运行以下命令以同步模式启动启用 Merge Commit 的 Stream Load 作业，并将合并窗口设置为 `5000` 毫秒，并行度设置为 `2`：
 
   ```Bash
   curl --location-trusted -u <username>:<password> \
@@ -287,7 +293,7 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
       http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
   ```
 
-- 运行以下命令以异步模式启动启用合并提交的 Stream Load 作业，并将合并窗口设置为 `60000` 毫秒，并行度设置为 `2`：
+- 运行以下命令以异步模式启动启用 Merge Commit 的 Stream Load 作业，并将合并窗口设置为 `60000` 毫秒，并行度设置为 `2`：
 
   ```Bash
   curl --location-trusted -u <username>:<password> \
@@ -304,10 +310,10 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 
 :::note
 
-- 合并提交仅支持将**同质**加载请求合并到单个数据库和表中。“同质”表示 Stream Load 参数相同，包括：通用参数、JSON 格式参数、CSV 格式参数、`opt_properties` 和合并提交参数。
+- Merge Commit 仅支持将**同质**加载请求合并到单个数据库和表中。“同质”表示 Stream Load 参数相同，包括：通用参数、JSON 格式参数、CSV 格式参数、`opt_properties` 和 Merge Commit 参数。
 - 对于加载 CSV 格式的数据，您必须确保每行以行分隔符结束。不支持 `skip_header`。
 - 服务器会自动生成事务的标签。如果指定，它们将被忽略。
-- 合并提交将多个加载请求合并为一个事务。如果一个请求包含数据质量问题，事务中的所有请求都将失败。
+- Merge Commit 将多个加载请求合并为一个事务。如果一个请求包含数据质量问题，事务中的所有请求都将失败。
 
 :::
 

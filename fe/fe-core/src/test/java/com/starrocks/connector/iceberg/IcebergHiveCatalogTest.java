@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
@@ -21,14 +20,19 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ViewAnalyzer;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -57,12 +61,11 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.type.IntegerType.INT;
 
 public class IcebergHiveCatalogTest {
-    private static final String CATALOG_NAME = "iceberg_hive_catalog";
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
     public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
-    public static ConnectContext connectContext;
-
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
+    private static final String CATALOG_NAME = "iceberg_hive_catalog";
+    public static ConnectContext connectContext;
 
     static {
         DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
@@ -180,6 +183,148 @@ public class IcebergHiveCatalogTest {
     }
 
     @Test
+    public void testCreateViewWithProperties(@Mocked HiveCatalog hiveCatalog,
+                                             @Mocked BaseView baseView,
+                                             @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
+        IcebergMetadata metadata = buildIcebergMetadata(hiveCatalog);
+
+        new Expectations() {
+            {
+                hiveCatalog.loadNamespaceMetadata(Namespace.of("db"));
+                result = ImmutableMap.of("location", "xxxxx");
+                minTimes = 1;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null,
+                NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
+        metadata.createView(connectContext, stmt);
+
+        new Expectations() {
+            {
+                representation.sql();
+                result = "select * from table";
+                minTimes = 1;
+
+                baseView.sqlFor("starrocks");
+                result = representation;
+                minTimes = 1;
+
+                baseView.properties();
+                result = ImmutableMap.of("owner", "alex");
+                minTimes = 1;
+
+                baseView.schema();
+                result = new Schema(Types.NestedField.optional(1, "k1", Types.IntegerType.get()));
+                minTimes = 1;
+
+                baseView.name();
+                result = "view";
+                minTimes = 1;
+
+                baseView.location();
+                result = "xxx";
+                minTimes = 1;
+
+                hiveCatalog.loadView(TableIdentifier.of("db", "view"));
+                result = baseView;
+                minTimes = 1;
+            }
+        };
+
+        Table table = metadata.getView(connectContext, "db", "view");
+        Assertions.assertEquals(ICEBERG_VIEW, table.getType());
+        Assertions.assertEquals("view", table.getName());
+        IcebergView icebergView = (IcebergView) table;
+        Assertions.assertEquals("alex", icebergView.getProperties().get("owner"));
+    }
+
+    @Test
+    public void testCreateViewPropertiesNotIcebergCatalog(@Mocked CatalogMgr mockCatalogMgr) {
+        final String catalogName = "catalog";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
+                result = mockCatalogMgr;
+                minTimes = 0;
+
+                mockCatalogMgr.catalogExists(catalogName);
+                result = true;
+                minTimes = 0;
+
+                mockCatalogMgr.getCatalogType(catalogName);
+                result = "hive";
+                minTimes = 0;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableName(catalogName, "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            ViewAnalyzer.analyze(stmt, connectContext);
+        });
+    }
+
+    @Test
+    public void testCreateViewPropertiesInternalCatalog(@Mocked CatalogMgr mockCatalogMgr) {
+        final String catalogName = "default_catalog";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
+                result = mockCatalogMgr;
+                minTimes = 0;
+
+                mockCatalogMgr.catalogExists(catalogName);
+                result = true;
+                minTimes = 0;
+
+                CatalogMgr.isInternalCatalog(catalogName);
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableName(catalogName, "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            ViewAnalyzer.analyze(stmt, connectContext);
+        });
+    }
+
+    @Test
+    public void testCreateViewPropertiesUnknownCatalog(@Mocked CatalogMgr mockCatalogMgr) {
+        final String catalogName = "xxx";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getCatalogMgr();
+                result = mockCatalogMgr;
+                minTimes = 0;
+
+                mockCatalogMgr.catalogExists(catalogName);
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableName(catalogName, "db", "table"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)),
+                "", false, null, NodePosition.ZERO, ImmutableMap.of("owner", "alex"));
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            ViewAnalyzer.analyze(stmt, connectContext);
+        });
+    }
+
+    @Test
     public void testAlterViewProperties(@Mocked HiveCatalog hiveCatalog, @Mocked BaseView baseView,
                                         @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(hiveCatalog);
@@ -218,5 +363,22 @@ public class IcebergHiveCatalogTest {
 
         Table table = metadata.getView(connectContext, "db", "view");
         Assertions.assertEquals("no comment", table.getComment());
+    }
+
+    @Test
+    public void testExternalCatalogViewDdlPropertiesPrinting() {
+        List<Column> cols = Lists.newArrayList(new Column("k1", INT));
+        Map<String, String> props = ImmutableMap.of(
+                "owner", "alex",
+                "comment", "this is a test view"
+        );
+
+        IcebergView view = new IcebergView(1L, "catalog", "db", "view", cols,
+                "select 1", "catalog", "db", "loc", props);
+
+        String ddl = AstToStringBuilder.getExternalCatalogViewDdlStmt(view);
+        Assertions.assertTrue(ddl.contains("PROPERTIES ("));
+        Assertions.assertTrue(ddl.contains("\"owner\" = \"alex\""));
+        Assertions.assertTrue(ddl.contains("\"comment\" = \"this is a test view\""));
     }
 }

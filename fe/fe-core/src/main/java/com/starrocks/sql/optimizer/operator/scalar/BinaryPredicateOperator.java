@@ -117,6 +117,15 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        BinaryPredicateOperator that = (BinaryPredicateOperator) obj;
+        return type == that.type;
+    }
+
+    @Override
     public int hashCodeSelf() {
         return Objects.hash(super.hashCodeSelf(), type);
     }

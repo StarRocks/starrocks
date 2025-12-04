@@ -45,7 +45,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class CatalogUtils {
 
@@ -284,7 +284,35 @@ public class CatalogUtils {
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
-            Set<Long> partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(isTemp));
+            Set<Long> partitionIds = Sets.newHashSet();
+
+            if (isTemp) {
+                // Temp partitions don't need to check against formal partitions.
+                // Temp partitions from different transactions should be isolated until commit.
+                // This fixes the issue where concurrent transactions cannot create temp partitions with same values.
+                String partitionName = partitionDesc.getPartitionName();
+                String txnPrefix = extractTxnPrefix(partitionName);
+                if (txnPrefix != null) {
+                    // This is an insert overwrite temp partition, only check temp partitions from the same txn
+                    for (Partition tempPartition : olapTable.getTempPartitions()) {
+                        if (tempPartition.getName().startsWith(txnPrefix)) {
+                            partitionIds.add(tempPartition.getId());
+                        }
+                    }
+                } else {
+                    // This is a non-insert-overwrite temp partition, check all non-txn temp partitions
+                    for (Partition tempPartition : olapTable.getTempPartitions()) {
+                        String tempTxnPrefix = extractTxnPrefix(tempPartition.getName());
+                        if (tempTxnPrefix == null) {
+                            // Add non-txn temp partitions to the check list
+                            partitionIds.add(tempPartition.getId());
+                        }
+                    }
+                }
+            } else {
+                // For formal partitions, check against all formal partitions
+                partitionIds = Sets.newHashSet(listPartitionInfo.getPartitionIds(false));
+            }
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
                 Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
@@ -303,6 +331,32 @@ public class CatalogUtils {
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+    }
+
+    /**
+     * Extract the txn prefix from partition name if it's created by insert overwrite.
+     * Insert overwrite creates temp partitions with name format: "txn<txn_id>_<original_name>"
+     * @param partitionName the partition name to check
+     * @return the txn prefix (e.g., "txn12345_") if the partition is created by insert overwrite, null otherwise
+     */
+    static String extractTxnPrefix(String partitionName) {
+        if (partitionName == null || !partitionName.startsWith("txn")) {
+            return null;
+        }
+        int underscoreIndex = partitionName.indexOf('_');
+        if (underscoreIndex <= 3) {
+            // "txn" is 3 characters, there should be at least one digit before underscore
+            return null;
+        }
+        // Verify that characters between "txn" and "_" are all digits (txn id)
+        String txnIdPart = partitionName.substring(3, underscoreIndex);
+        for (char c : txnIdPart.toCharArray()) {
+            if (!Character.isDigit(c)) {
+                return null;
+            }
+        }
+        // Return prefix including the underscore, e.g., "txn12345_"
+        return partitionName.substring(0, underscoreIndex + 1);
     }
 
     private static void checkItemValuesValid(int partitionColSize, Set<Long> partitionIds,

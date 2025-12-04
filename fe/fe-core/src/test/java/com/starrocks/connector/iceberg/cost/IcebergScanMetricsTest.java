@@ -15,7 +15,6 @@
 
 package com.starrocks.connector.iceberg.cost;
 
-import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import org.apache.iceberg.metrics.MetricsReport;
 import org.apache.iceberg.metrics.ScanReport;
 import org.junit.jupiter.api.Assertions;

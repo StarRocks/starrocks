@@ -18,6 +18,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
+import java.util.List;
 import java.util.Map;
 
 public class StatsConstants {
@@ -121,6 +122,17 @@ public class StatsConstants {
     public static final String FULL_SCHEDULE_TIMES = "full_schedule_times";
     public static final String SAMPLE_ONCE_TIMES = "sample_once_times";
     public static final String SAMPLE_SCHEDULE_TIMES = "sample_schedule_times";
+
+    public static final List<String> STATISTICS_TABLES = List.of(
+            QUERY_HISTORY_TABLE_NAME,
+            SPM_BASELINE_TABLE_NAME,
+            FULL_STATISTICS_TABLE_NAME,
+            SAMPLE_STATISTICS_TABLE_NAME,
+            EXTERNAL_FULL_STATISTICS_TABLE_NAME,
+            MULTI_COLUMN_STATISTICS_TABLE_NAME,
+            HISTOGRAM_STATISTICS_TABLE_NAME,
+            EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+    );
 
     public enum AnalyzeType {
         SAMPLE,

@@ -14,7 +14,53 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArraySliceExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.DictMappingExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
+import com.starrocks.sql.ast.expression.MultiInPredicate;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.PlaceHolderExpr;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SetVarHint;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -84,6 +130,10 @@ public interface AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    default R visitRefreshConnectionsStatement(RefreshConnectionsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     default R visitDelBackendBlackListStatement(DelBackendBlackListStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -120,6 +170,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowDataStatement(ShowDataStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -148,6 +202,42 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitShowCharsetStatement(ShowCharsetStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCollationStatement(ShowCollationStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowProcedureStatement(ShowProcedureStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowStatusStatement(ShowStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowBackupStatement(ShowBackupStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowRestoreStatement(ShowRestoreStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitShowProfilelistStatement(ShowProfilelistStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -161,6 +251,22 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitShowProcesslistStatement(ShowProcesslistStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowVariablesStatement(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFailPointStatement(ShowFailPointStatement statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowFunctionsStatement(ShowFunctionsStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -330,7 +436,6 @@ public interface AstVisitor<R, C> {
         return visitComputeNodeClause(clause, context);
     }
 
-
     // ------------------------------------------- Basic Node Types ----------------------------------------------------
 
     default R visitIdentifier(Identifier identifier, C context) {
@@ -395,7 +500,6 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-
     // ------------------------------------------- Drop Statement ----------------------------------------------------
 
     default R visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, C context) {
@@ -406,11 +510,79 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitDropDictionaryStatement(DropDictionaryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitCreateDictionaryStatement(CreateDictionaryStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
+    default R visitRefreshDictionaryStatement(RefreshDictionaryStmt clause, C context) {
+        return visitDDLStatement(clause, context);
+    }
+
     default R visitDropRepositoryStatement(DropRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCancelCompactionStatement(CancelCompactionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitPrepareStatement(PrepareStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitExecuteStatement(ExecuteStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitAlterLoadStatement(AlterLoadStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -423,6 +595,13 @@ public interface AstVisitor<R, C> {
     }
 
     // ------------------------------------------- Alter Clause ----------------------------------------------------
+    default R visitAddPartitionColumnClause(AddPartitionColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropPartitionColumnClause(DropPartitionColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
 
     default R visitAddRollupClause(AddRollupClause clause, C context) {
         return visitNode(clause, context);
@@ -433,6 +612,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropBranchClause(DropBranchClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -452,12 +635,96 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropPersistentIndexClause(DropPersistentIndexClause clause, C context) {
         return visitNode(clause, context);
     }
 
     default R visitAlterStorageVolumeCommentClause(AlterStorageVolumeCommentClause clause, C context) {
         return visitNode(clause, context);
+    }
+
+    default R visitTableRenameClause(TableRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitSwapTableClause(SwapTableClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitColumnRenameClause(ColumnRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCompactionClause(CompactionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableCommentClause(AlterTableCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableColumnClause(AlterTableColumnClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAddColumnClause(AddColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitAddColumnsClause(AddColumnsClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitDropColumnClause(DropColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitModifyColumnClause(ModifyColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitModifyColumnCommentClause(ModifyColumnCommentClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitAddFieldClause(AddFieldClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitDropFieldClause(DropFieldClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
     }
 
     // ------------------------------------------- Additional Warehouse Statement ----------------------------------------------------
@@ -513,7 +780,6 @@ public interface AstVisitor<R, C> {
     default R visitDropDbStatement(DropDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
 
     // ------------------------------------------- User Statement ----------------------------------------------------
 
@@ -711,7 +977,205 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    // ------------------------------------------- Expression ----------------------------------------
+
     default R visitExpression(Expr node, C context) {
+        return visitNode(node, context);
+    }
+
+    default R visitArrayExpr(ArrayExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitArraySliceExpr(ArraySliceExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitMapExpr(MapExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Predicates ---------------------------------------
+
+    default R visitPredicate(Predicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitBetweenPredicate(BetweenPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitBinaryPredicate(BinaryPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitInPredicate(InPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitLargeInPredicate(LargeInPredicate node, C context) {
+        return visitInPredicate(node, context);
+    }
+
+    default R visitMultiInPredicate(MultiInPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitIsNullPredicate(IsNullPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitLikePredicate(LikePredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    default R visitCompoundPredicate(CompoundPredicate node, C context) {
+        return visitPredicate(node, context);
+    }
+
+    // ------------------------------------------- Case/Collection ----------------------------------
+
+    default R visitCaseWhenExpr(CaseExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitCollectionElementExpr(CollectionElementExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitSubfieldExpr(SubfieldExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    // ------------------------------------------- Other Expressions --------------------------------
+
+    default R visitArithmeticExpr(ArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitArrowExpr(ArrowExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitCloneExpr(CloneExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitCastExpr(CastExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDictionaryGetExpr(DictionaryGetExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitFieldReference(FieldReference node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitLimitElement(LimitElement node, C context) {
+        return visitNode(node, context);
+    }
+
+    default R visitLambdaFunctionExpr(LambdaFunctionExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitSetVarHint(SetVarHint node, C context) {
+        return visitNode(node, context);
+    }
+
+    default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitDictMappingExpr(DictMappingExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitInformationFunction(InformationFunction node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitMatchExpr(MatchExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitNamedArgument(NamedArgument node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitParameterExpr(Parameter node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitVariableExpr(VariableExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitPlaceHolderExpr(PlaceHolderExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitUserVariableExpr(UserVariableExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitLiteral(LiteralExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    default R visitBoolLiteral(BoolLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitDateLiteral(DateLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitFloatLiteral(FloatLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitIntLiteral(IntLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitIntervalLiteral(IntervalLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitLargeIntLiteral(LargeIntLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitLargeStringLiteral(LargeStringLiteral node, C context) {
+        return visitStringLiteral(node, context);
+    }
+
+    default R visitMaxLiteral(MaxLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitNullLiteral(NullLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitStringLiteral(StringLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    default R visitVarBinaryLiteral(VarBinaryLiteral node, C context) {
+        return visitLiteral(node, context);
+    }
+
+    // ------------------------------------------- AST Helpers --------------------------------------
+
+    default R visitOrderByElement(OrderByElement node, C context) {
         return visitNode(node, context);
     }
 }

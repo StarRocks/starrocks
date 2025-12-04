@@ -32,7 +32,7 @@ public class CollectionTypeColumnStats extends BaseColumnStats {
     public String getFullDataSize() {
         long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                 ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
-        return "COUNT(*) * " + elementTypeSize + " * " + getCollectionSize();
+        return "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + getCollectionSize().trim() + ") ";
     }
 
     @Override
@@ -53,7 +53,7 @@ public class CollectionTypeColumnStats extends BaseColumnStats {
     @Override
     public String getCollectionSize() {
         String collectionSizeFunction = columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE";
-        return "AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")) ";
+        return "IFNULL(AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")), -1) ";
     }
 
     @Override

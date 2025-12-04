@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
@@ -57,7 +57,6 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -70,7 +69,6 @@ import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
-import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.MultiDeleteInfo;
@@ -114,7 +112,6 @@ import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
 import com.starrocks.warehouse.Warehouse;
@@ -125,7 +122,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
@@ -672,9 +668,19 @@ public class EditLog {
                     globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
+                case OperationType.OP_ALTER_RESOURCE: {
+                    final AlterResourceInfo alterResourceInfo = (AlterResourceInfo) journal.data();
+                    globalStateMgr.getResourceMgr().replayAlterResource(alterResourceInfo);
+                    break;
+                }
                 case OperationType.OP_RESOURCE_GROUP: {
                     final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.data();
                     globalStateMgr.getResourceGroupMgr().replayResourceGroupOp(entry);
+                    break;
+                }
+                case OperationType.OP_ALTER_RESOURCE_GROUP: {
+                    final AlterResourceGroupLog entry = (AlterResourceGroupLog) journal.data();
+                    globalStateMgr.getResourceGroupMgr().replayAlterResourceGroup(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK: {
@@ -720,8 +726,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_SMALL_FILE_V2: {
-                    SmallFile smallFile = (SmallFile) journal.data();
-                    globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
+                    RemoveSmallFileLog log = (RemoveSmallFileLog) journal.data();
+                    globalStateMgr.getSmallFileMgr().replayRemoveFile(log);
                     break;
                 }
                 case OperationType.OP_ALTER_JOB_V2: {
@@ -783,21 +789,12 @@ public class EditLog {
                 }
                 case OperationType.OP_INSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.data();
-                    try {
-                        globalStateMgr.getPluginMgr().replayLoadDynamicPlugin(pluginInfo);
-                    } catch (Exception e) {
-                        LOG.warn("replay install plugin failed.", e);
-                    }
-
+                    globalStateMgr.getPluginMgr().replayLoadDynamicPlugin(pluginInfo);
                     break;
                 }
                 case OperationType.OP_UNINSTALL_PLUGIN: {
-                    PluginInfo pluginInfo = (PluginInfo) journal.data();
-                    try {
-                        globalStateMgr.getPluginMgr().uninstallPlugin(pluginInfo.getName());
-                    } catch (Exception e) {
-                        LOG.warn("replay uninstall plugin failed.", e);
-                    }
+                    UninstallPluginLog log = (UninstallPluginLog) journal.data();
+                    globalStateMgr.getPluginMgr().replayUninstallPlugin(log);
                     break;
                 }
                 case OperationType.OP_SET_REPLICA_STATUS: {
@@ -1138,6 +1135,11 @@ public class EditLog {
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
+                case OperationType.OP_ALTER_PIPE: {
+                    AlterPipeLog alterPipeLog = (AlterPipeLog) journal.data();
+                    globalStateMgr.getPipeManager().getRepo().replayAlterPipe(alterPipeLog);
+                    break;
+                }
                 case OperationType.OP_CREATE_DICTIONARY: {
                     Dictionary dictionary = (Dictionary) journal.data();
                     globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
@@ -1278,14 +1280,14 @@ public class EditLog {
                     globalStateMgr.getSqlPlanStorage().replayUpdateBaselinePlan(bp, false);
                     break;
                 }
-                case OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG: {
-                    DynamicTabletJob log = (DynamicTabletJob) journal.data();
-                    globalStateMgr.getDynamicTabletJobMgr().replayUpdateDynamicTabletJob(log);
+                case OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG: {
+                    TabletReshardJob log = (TabletReshardJob) journal.data();
+                    globalStateMgr.getTabletReshardJobMgr().replayUpdateTabletReshardJob(log);
                     break;
                 }
-                case OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG: {
-                    RemoveDynamicTabletJobLog log = (RemoveDynamicTabletJobLog) journal.data();
-                    globalStateMgr.getDynamicTabletJobMgr().replayRemoveDynamicTabletJob(log.getJobId());
+                case OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG: {
+                    RemoveTabletReshardJobLog log = (RemoveTabletReshardJobLog) journal.data();
+                    globalStateMgr.getTabletReshardJobMgr().replayRemoveTabletReshardJob(log.getJobId());
                     break;
                 }
                 default: {
@@ -1466,8 +1468,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
     }
 
-    public void logResourceGroupOp(ResourceGroupOpEntry op) {
-        logJsonObject(OperationType.OP_RESOURCE_GROUP, op);
+    public void logResourceGroupOp(ResourceGroupOpEntry op, WALApplier applier) {
+        logJsonObject(OperationType.OP_RESOURCE_GROUP, op, applier);
+    }
+
+    public void logAlterResourceGroup(AlterResourceGroupLog log, WALApplier applier) {
+        logJsonObject(OperationType.OP_ALTER_RESOURCE_GROUP, log, applier);
     }
 
     public void logCreateTask(Task info, WALApplier applier) {
@@ -1671,16 +1677,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_ALL_BROKER_V2, new DropBrokerLog(brokerName), applier);
     }
 
-    public void logExportCreate(ExportJob job) {
-        logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
+    public void logExportCreate(ExportJob job, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job, walApplier);
     }
 
-    public void logExportUpdateState(long jobId, ExportJob.JobState newState, long stateChangeTime,
-                                     List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
-                                     Set<String> exportedFiles, ExportFailMsg failMsg) {
-        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
-                snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
+    public void logExportUpdateState(ExportJob.ExportUpdateInfo updateInfo, WALApplier applier) {
+        logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo, applier);
     }
 
     // for TransactionState
@@ -1736,12 +1738,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_HEARTBEAT_V2, hbPackage);
     }
 
-    public void logAddFunction(Function function) {
-        logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
+    public void logAddFunction(Function function, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function, walApplier);
     }
 
-    public void logDropFunction(FunctionSearchDesc function) {
-        logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function);
+    public void logDropFunction(FunctionSearchDesc function, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function, walApplier);
     }
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
@@ -1784,20 +1786,24 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_LOAD_JOB, info);
     }
 
-    public void logCreateResource(Resource resource) {
-        logJsonObject(OperationType.OP_CREATE_RESOURCE, resource);
+    public void logCreateResource(Resource resource, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_RESOURCE, resource, walApplier);
     }
 
-    public void logDropResource(DropResourceOperationLog operationLog) {
-        logJsonObject(OperationType.OP_DROP_RESOURCE, operationLog);
+    public void logAlterResource(AlterResourceInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_RESOURCE, info, walApplier);
     }
 
-    public void logCreateSmallFile(SmallFile info) {
-        logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
+    public void logDropResource(DropResourceOperationLog operationLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_RESOURCE, operationLog, walApplier);
     }
 
-    public void logDropSmallFile(SmallFile info) {
-        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
+    public void logCreateSmallFile(SmallFile info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info, walApplier);
+    }
+
+    public void logDropSmallFile(RemoveSmallFileLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, log, walApplier);
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {
@@ -1877,12 +1883,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }
 
-    public void logInstallPlugin(PluginInfo plugin) {
-        logJsonObject(OperationType.OP_INSTALL_PLUGIN, plugin);
+    public void logInstallPlugin(PluginInfo plugin, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_INSTALL_PLUGIN, plugin, walApplier);
     }
 
-    public void logUninstallPlugin(PluginInfo plugin) {
-        logJsonObject(OperationType.OP_UNINSTALL_PLUGIN, plugin);
+    public void logUninstallPlugin(UninstallPluginLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UNINSTALL_PLUGIN, log, walApplier);
     }
 
     public void logSetReplicaStatus(SetReplicaStatusOperationLog log) {
@@ -2140,8 +2146,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
 
-    public void logPipeOp(PipeOpEntry opEntry) {
-        logJsonObject(OperationType.OP_PIPE, opEntry);
+    public void logPipeOp(PipeOpEntry opEntry, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_PIPE, opEntry, walApplier);
+    }
+
+    public void logAlterPipe(AlterPipeLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_PIPE, log, walApplier);
     }
 
     public void logModifyTableAddOrDrop(TableAddOrDropColumnsInfo info) {
@@ -2234,12 +2244,12 @@ public class EditLog {
         }
     }
 
-    public void logUpdateDynamicTabletJob(DynamicTabletJob job) {
-        logJsonObject(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, job);
+    public void logUpdateTabletReshardJob(TabletReshardJob job) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
-    public void logRemoveDynamicTabletJob(long jobId) {
-        logJsonObject(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, new RemoveDynamicTabletJobLog(jobId));
+    public void logRemoveTabletReshardJob(long jobId) {
+        logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId));
     }
 
     public void logCreateGroupProvider(GroupProviderLog provider, WALApplier walApplier) {

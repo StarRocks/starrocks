@@ -644,14 +644,14 @@ public class ConnectProcessor {
                     exprs.add(new NullLiteral());
                     continue;
                 }
-                LiteralExpr l = LiteralExpr.parseLiteral(prepareCtx.getStmt().getMysqlTypeCodes().get(i));
-                l.parseMysqlParam(packetBuf);
-                exprs.add(l);
+                LiteralExpr literal = MysqlParamParser.createLiteral(
+                        prepareCtx.getStmt().getMysqlTypeCodes().get(i), packetBuf);
+                exprs.add(literal);
             }
             ExecuteStmt executeStmt = new ExecuteStmt(String.valueOf(stmtId), exprs);
             // audit will affect performance
             boolean enableAudit = ctx.getSessionVariable().isAuditExecuteStmt();
-            String originStmt = executeStmt.toSql();
+            String originStmt = AstToSQLBuilder.toSQL(executeStmt);
             executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
 
             boolean isQuery = ctx.isQueryStmt(executeStmt);
@@ -1018,6 +1018,9 @@ public class ConnectProcessor {
                 executor = new StmtExecutor(ctx, statement);
             }
             ctx.setExecutor(executor);
+            if (ctx.getIsLastStmt()) {
+                executor.addRunningQueryDetail(statement);
+            }
             executor.setProxy();
             executor.execute();
         } catch (IOException e) {
@@ -1030,6 +1033,9 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError(e.getMessage());
         } finally {
+            if (executor != null) {
+                executor.addFinishedQueryDetail();
+            }
             ctx.setExecutor(null);
         }
 

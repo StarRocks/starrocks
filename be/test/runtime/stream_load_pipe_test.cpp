@@ -271,7 +271,7 @@ PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
     auto producer = std::thread([&pipe]() {
         // append data with size larger than max_buffered_bytes
         auto buf = readFileAsBytes("./be/test/runtime/test_data/compressed_file/foo.json.lz4");
-        auto byte_buffer = ByteBuffer::allocate_with_tracker(buf.size(), ByteBufferMetaType::KAFKA).value();
+        auto byte_buffer = ByteBuffer::allocate_with_tracker(buf.size(), 0, ByteBufferMetaType::KAFKA).value();
         byte_buffer->put_bytes(buf.data(), buf.size());
         byte_buffer->flip_to_read();
         KafkaByteBufferMeta* meta = dynamic_cast<KafkaByteBufferMeta*>(byte_buffer->meta());

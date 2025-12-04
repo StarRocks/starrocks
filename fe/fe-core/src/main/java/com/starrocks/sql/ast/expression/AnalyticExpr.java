@@ -38,16 +38,12 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
@@ -250,104 +246,6 @@ public class AnalyticExpr extends Expr {
                 .toString();
     }
 
-
-    public static boolean isAnalyticFn(Function fn) {
-        return fn instanceof AggregateFunction
-                && ((AggregateFunction) fn).isAnalyticFn();
-    }
-
-    public static boolean isOffsetFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(LEAD) || fn.functionName().equalsIgnoreCase(LAG);
-    }
-
-    public static boolean isNtileFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(NTILE);
-    }
-
-    public static boolean isCumeFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(CUMEDIST) || fn.functionName().equalsIgnoreCase(PERCENTRANK);
-    }
-
-    public static boolean isRowNumberFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(ROWNUMBER);
-    }
-
-    public static boolean isApproxTopKFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(APPROX_TOP_K);
-    }
-
-    /**
-     * check the value out of range in lag/lead() function
-     */
-    public static void checkDefaultValue(FunctionCallExpr call) throws AnalysisException {
-        Expr val = call.getChild(2);
-
-        if (!(val instanceof LiteralExpr)) {
-            return;
-        }
-
-        if (!call.getChild(0).getType().getPrimitiveType().isNumericType()) {
-            return;
-        }
-
-        double value = ExprUtils.getConstFromExpr(val);
-        PrimitiveType type = call.getChild(0).getType().getPrimitiveType();
-        boolean out = false;
-
-        if (type == PrimitiveType.TINYINT) {
-            if (value > Byte.MAX_VALUE) {
-                out = true;
-            }
-        } else if (type == PrimitiveType.SMALLINT) {
-            if (value > Short.MAX_VALUE) {
-                out = true;
-            }
-        } else if (type == PrimitiveType.INT) {
-            if (value > Integer.MAX_VALUE) {
-                out = true;
-            }
-        } else if (type == PrimitiveType.BIGINT) {
-            if (value > Long.MAX_VALUE) {
-                out = true;
-            }
-        } else if (type == PrimitiveType.FLOAT) {
-            if (value > Float.MAX_VALUE) {
-                out = true;
-            }
-        } else if (type == PrimitiveType.DOUBLE) {
-            if (value > Double.MAX_VALUE) {
-                out = true;
-            }
-        } else {
-            return;
-        }
-
-        if (out) {
-            throw new AnalysisException("Column type="
-                    + call.getChildren().get(0).getType() + ", value is out of range ");
-        }
-    }
-
     /**
      * Keep fnCall_, partitionExprs_ and orderByElements_ in sync with children_.
      */
@@ -432,16 +330,16 @@ public class AnalyticExpr extends Expr {
     // Q2: with cte as (select a,b, count(distinct c) cdc from t group by a,b)
     //     select t.a,t.b,cte.cdc from t inner join cte on t.a <=> cte.a and t.b <= cte.b
     public boolean isUnboundedWindowWithoutSlidingFrame() {
-        if (window != null &&
-                !(window.getLeftBoundary().getType().isAbsolutePos() &&
-                        window.getRightBoundary().getType().isAbsolutePos())) {
+        if (window != null && !window.getType().equals(AnalyticWindow.Type.RANGE)) {
             return false;
         }
 
-        if (!orderByElements.isEmpty()) {
-            return false;
-        }
-        final Set<String> supportFunctions = ImmutableSet.of(FunctionSet.SUM, FunctionSet.AVG, FunctionSet.COUNT);
+        final Set<String> supportFunctions = ImmutableSet.of(
+                FunctionSet.SUM,
+                FunctionSet.AVG,
+                FunctionSet.COUNT,
+                FunctionSet.ARRAY_AGG,
+                FunctionSet.ARRAY_AGG_DISTINCT);
         return supportFunctions.contains(fnCall.getFnName().getFunction());
     }
 }

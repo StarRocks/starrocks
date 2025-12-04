@@ -39,9 +39,10 @@ import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -317,7 +318,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         THdfsPartition tPartition = new THdfsPartition();
         tPartition.setPartition_key_exprs(referencedPartitionInfo.getKey().getKeys().stream()
-                .map(ExprToThriftVisitor::treeToThrift)
+                .map(ExprToThrift::treeToThrift)
                 .collect(Collectors.toList()));
 
         hdfsScanRange.setPartition_value(tPartition);
@@ -331,12 +332,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER) || name.equalsIgnoreCase(SPEC_ID)) {
                 LiteralExpr value;
                 if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
-                    value = LiteralExpr.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
+                    value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
                 } else {
-                    value = LiteralExpr.create(String.valueOf(file.specId()), IntegerType.INT);
+                    value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 }
 
-                extendedColumns.put(slot.getId().asInt(), ExprToThriftVisitor.treeToThrift(value));
+                extendedColumns.put(slot.getId().asInt(), ExprToThrift.treeToThrift(value));
                 if (!extendedColumnSlotIds.contains(slot.getId().asInt())) {
                     extendedColumnSlotIds.add(slot.getId().asInt());
                 }

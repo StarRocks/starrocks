@@ -16,12 +16,11 @@
 
 #include <bthread/bthread.h>
 
-#include <chrono>
 #include <mutex>
 #include <string_view>
 
-#include "exec/pipeline/schedule/utils.h"
 #include "fmt/core.h"
+#include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -34,6 +33,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
+          _buffered_mem_usage(std::make_unique<MemTracker>()),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
           _sent_audit_stats_frequency_upper_limit(
                   std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->total_dop() * 4))) {
@@ -85,6 +85,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     if (_is_finishing) {
         return Status::OK();
     }
+    _buffered_mem_usage->consume(request.request_byte_size);
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
@@ -123,7 +124,11 @@ bool SinkBuffer::is_full() const {
     for (auto& [_, context] : _sink_ctxs) {
         buffer_size += context->buffer.size();
     }
-    const bool is_full = buffer_size > max_buffer_size;
+    bool is_full = buffer_size > max_buffer_size;
+
+    if (!is_full) {
+        is_full = _buffered_mem_usage->consumption() > config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
+    }
 
     int64_t last_full_timestamp = _last_full_timestamp;
     int64_t full_time = _full_time;
@@ -263,6 +268,11 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
     DeferOp decrease_defer([this]() { --_num_sending_rpc; });
     ++_num_sending_rpc;
 
+    // When the driver worker thread sends request and creates the protobuf request,
+    // also use process_mem_tracker to record the memory of the protobuf request.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    // must in the same scope following the above
+
     for (;;) {
         if (_is_finishing) {
             return Status::OK();
@@ -285,6 +295,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         TransmitChunkInfo& request = buffer.front();
+        size_t request_byte_size = request.request_byte_size;
+
         bool need_wait = false;
         DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
             if (need_wait) {
@@ -322,6 +334,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (context.num_sinker > 1) {
                 if (request.params->chunks_size() == 0) {
+                    _buffered_mem_usage->release(request_byte_size);
                     continue;
                 } else {
                     request.params->set_eos(false);
@@ -363,7 +376,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
+        auto failed_function = [this, request_byte_size](const ClosureContext& ctx,
+                                                         std::string_view rpc_error_msg) noexcept {
             auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
             auto query_ctx_guard = query_ctx->shared_from_this();
             auto notify = this->defer_notify();
@@ -373,6 +387,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             auto& context = sink_ctx(ctx.instance_id.lo);
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
+            _buffered_mem_usage->release(request_byte_size);
 
             const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
@@ -381,8 +396,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
             _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
-        });
-        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+        };
+
+        auto success_function = [this, request_byte_size](const ClosureContext& ctx,
+                                                          const PTransmitChunkResult& result) noexcept {
             auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
             auto query_ctx_guard = query_ctx->shared_from_this();
             auto notify = this->defer_notify();
@@ -392,6 +409,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             auto& context = sink_ctx(ctx.instance_id.lo);
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
+            _buffered_mem_usage->release(request_byte_size);
 
             if (!status.ok()) {
                 _is_finishing = true;
@@ -407,31 +425,23 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     _process_send_window(ctx.instance_id, ctx.sequence);
                 }));
             }
-        });
+        };
+
+        closure->addFailureHandler(failed_function);
+        closure->addSuccessHandler(success_function);
 
         ++_total_in_flight_rpc;
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        _mem_tracker->release(request.attachment_physical_bytes);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        _mem_tracker->release_without_root(request.attachment.size());
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         SET_IGNORE_OVERCROWDED(closure->cntl, query);
 
-        Status st;
-        if (bthread_self()) {
-            st = _send_rpc(closure, request);
-        } else {
-            // When the driver worker thread sends request and creates the protobuf request,
-            // also use process_mem_tracker to record the memory of the protobuf request.
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            // must in the same scope following the above
-            st = _send_rpc(closure, request);
-        }
-        return st;
+        return _send_rpc(closure, request);
     }
     return Status::OK();
 }

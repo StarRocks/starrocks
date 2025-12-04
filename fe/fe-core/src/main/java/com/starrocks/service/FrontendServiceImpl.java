@@ -62,12 +62,14 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
+import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -137,6 +139,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -164,7 +167,6 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
@@ -201,8 +203,6 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
-import com.starrocks.thrift.TDynamicTabletJobsRequest;
-import com.starrocks.thrift.TDynamicTabletJobsResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
@@ -224,6 +224,8 @@ import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
+import com.starrocks.thrift.TGetFeThreadsRequest;
+import com.starrocks.thrift.TGetFeThreadsResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetKeysRequest;
@@ -315,6 +317,8 @@ import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TQueryStatisticsInfo;
+import com.starrocks.thrift.TRefreshConnectionsRequest;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -348,6 +352,8 @@ import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTabletReshardJobsRequest;
+import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
@@ -451,14 +457,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
-            try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
-            } catch (AccessDeniedException e) {
+            final String db = ClusterNamespace.getNameFromFullName(fullName);
+            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
                 continue;
             }
 
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
+            try {
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+            } catch (AccessDeniedException e) {
                 continue;
             }
 
@@ -942,7 +948,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (ctx == null) {
             return result;
         }
-        SetType setType = SetType.fromThrift(params.getVarType());
+        SetType setType = ExprToThrift.setTypeFromThrift(params.getVarType());
         List<List<String>> rows = GlobalStateMgr.getCurrentState().getVariableMgr().dump(setType,
                 ctx.getSessionVariable(), null);
         if (setType != SetType.VERBOSE) {
@@ -1621,6 +1627,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
+    @Override
+    public TRefreshConnectionsResponse refreshConnections(TRefreshConnectionsRequest request) throws TException {
+        try {
+            boolean force = request.isForce();
+            GlobalStateMgr.getCurrentState().getVariableMgr().refreshConnectionsInternal(force);
+            LOG.info("Finished refresh connections, force: {}", force);
+            TRefreshConnectionsResponse res = new TRefreshConnectionsResponse();
+            res.setStatus(new TStatus(OK));
+            return res;
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh connections", e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            TRefreshConnectionsResponse res = new TRefreshConnectionsResponse();
+            res.setStatus(status);
+            return res;
+        }
+    }
+
     public TNetworkAddress getClientAddr() {
         ThriftServerContext connectionContext = ThriftServerEventProcessor.getConnectionContext();
         // For NonBlockingServer, we can not get client ip.
@@ -1932,7 +1957,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -1940,7 +1965,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -1953,7 +1978,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value -> ExprToThrift
                                         .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -1964,7 +1989,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value1 -> ExprToThrift
                                         .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2223,16 +2248,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        // update partition info snapshot for txn should be synchronized
-        synchronized (txnState) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+        // update partition info snapshot for txn should be protected by txn lock
+        // NOTE: lock order must be: db/table lock first, then txnState lock
+        // to avoid deadlock with other transaction operations
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+        try {
+            txnState.writeLock();
             try {
                 return buildCreatePartitionResponse(
                         olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                txnState.writeUnlock();
             }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         }
     }
 
@@ -2341,7 +2371,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
         return values.stream()
-                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                .map(value -> ExprToThrift
                         .treeToThrift(value).getNodes().get(0))
                 .collect(Collectors.toList());
     }
@@ -2357,7 +2387,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToStart_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.lowerEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -2365,7 +2395,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
                 for (int i = 0; i < partColNum; i++) {
                     tPartition.addToEnd_keys(
-                            com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                            ExprToThrift
                                     .treeToThrift(range.upperEndpoint().getKeys().get(i)).getNodes().get(0));
                 }
             }
@@ -2377,7 +2407,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (multiValues != null && !multiValues.isEmpty()) {
                 inKeysExprNodes = multiValues.stream()
                         .map(values -> values.stream()
-                                .map(value -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value -> ExprToThrift
                                         .treeToThrift(value).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2388,7 +2418,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (values != null && !values.isEmpty()) {
                 inKeysExprNodes = values.stream()
                         .map(value -> Lists.newArrayList(value).stream()
-                                .map(value1 -> com.starrocks.sql.ast.expression.ExprToThriftVisitor
+                                .map(value1 -> ExprToThrift
                                         .treeToThrift(value1).getNodes().get(0))
                                 .collect(Collectors.toList()))
                         .collect(Collectors.toList());
@@ -2698,6 +2728,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
         LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
         return response;
+    }
+
+    @Override
+    public TGetFeThreadsResponse getFeThreads(TGetFeThreadsRequest request) throws TException {
+        return FeThreadsSystemTable.generateFeThreadsResponse(request);
     }
 
     @Override
@@ -3115,8 +3150,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TDynamicTabletJobsResponse getDynamicTabletJobsInfo(TDynamicTabletJobsRequest params) {
-        return GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr().getAllJobsInfo();
+    public TTabletReshardJobsResponse getTabletReshardJobsInfo(TTabletReshardJobsRequest params) {
+        return GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getAllJobsInfo();
     }
 
     @NotNull

@@ -1,4 +1,4 @@
--- name: test_mv_rewrite_with_iceberg_bugs1
+-- name: test_mv_rewrite_with_iceberg_bugs1 @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -45,6 +45,9 @@ SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_icebe
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+-- result:
+019ab3b1-0f26-7cf1-b83c-2773dc158c96
+-- !result
 SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;
 -- result:
 2020-06-01	24
@@ -66,13 +69,13 @@ SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_icebe
 2020-06-01	27
 2020-07-01	48
 -- !result
-drop database default_catalog.db_${uuid0} ;
+drop database default_catalog.db_${uuid0} force;
 -- result:
 -- !result
 DROP TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 FORCE;
 -- result:
 -- !result
-drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0};
+drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} FORCE;
 -- result:
 -- !result
 DROP CATALOG mv_iceberg_${uuid0};

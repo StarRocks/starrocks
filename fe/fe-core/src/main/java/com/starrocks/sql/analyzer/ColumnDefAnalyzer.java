@@ -18,22 +18,19 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.expression.BoolLiteral;
-import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
@@ -108,7 +105,7 @@ public class ColumnDefAnalyzer {
             typeDef.setType(extendedPrecision(typeDef.getType(), Config.enable_legacy_compatibility_for_replication));
         }
 
-        typeDef.analyze();
+        TypeDefAnalyzer.analyze(typeDef);
 
         Type type = typeDef.getType();
 
@@ -241,32 +238,25 @@ public class ColumnDefAnalyzer {
                 case TINYINT:
                 case SMALLINT:
                 case INT:
-                case BIGINT:
-                    IntLiteral intLiteral = new IntLiteral(defaultValue, type);
-                    break;
-                case LARGEINT:
-                    LargeIntLiteral largeIntLiteral = new LargeIntLiteral(defaultValue);
+                case BIGINT, LARGEINT, DATE, DATETIME, BOOLEAN:
+                    LiteralExprFactory.create(defaultValue, scalarType);
                     break;
                 case FLOAT:
-                    FloatLiteral floatLiteral = new FloatLiteral(defaultValue);
+                    FloatLiteral floatLiteral = (FloatLiteral) LiteralExprFactory.create(defaultValue, scalarType);
                     if (floatLiteral.getType().isDouble()) {
                         throw new AnalysisException("Default value will loose precision: " + defaultValue);
                     }
                 case DOUBLE:
-                    FloatLiteral doubleLiteral = new FloatLiteral(defaultValue);
+                    LiteralExprFactory.create(defaultValue, scalarType);
                     break;
                 case DECIMALV2:
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
                 case DECIMAL256:
-                    DecimalLiteral decimalLiteral = new DecimalLiteral(defaultValue);
+                    DecimalLiteral decimalLiteral = (DecimalLiteral) LiteralExprFactory.create(defaultValue, scalarType);
                     decimalLiteral.checkPrecisionAndScale(scalarType,
                             scalarType.getScalarPrecision(), scalarType.getScalarScale());
-                    break;
-                case DATE:
-                case DATETIME:
-                    DateLiteral dateLiteral = new DateLiteral(defaultValue, type);
                     break;
                 case CHAR:
                 case VARCHAR:
@@ -276,9 +266,6 @@ public class ColumnDefAnalyzer {
                     }
                     break;
                 case BITMAP:
-                    break;
-                case BOOLEAN:
-                    BoolLiteral boolLiteral = new BoolLiteral(defaultValue);
                     break;
                 default:
                     throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));

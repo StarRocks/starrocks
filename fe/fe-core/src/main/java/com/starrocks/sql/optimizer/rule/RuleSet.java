@@ -147,6 +147,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNToPreAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
@@ -444,6 +445,7 @@ public class RuleSet {
         transformRules.add(SplitTwoPhaseAggRule.getInstance());
         transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
+        transformRules.add(PushDownTopNToPreAggRule.getInstance());
     }
 
     public void addJoinTransformationRules() {

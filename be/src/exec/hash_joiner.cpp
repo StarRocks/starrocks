@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"

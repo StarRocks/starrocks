@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -41,7 +42,6 @@ import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
@@ -226,7 +226,7 @@ public class SelectAnalyzer {
                     fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
                             : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()));
                 }
-                
+
                 fields = fields.stream().filter(Field::isVisible)
                         .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
                         .collect(Collectors.toList());
@@ -261,9 +261,9 @@ public class SelectAnalyzer {
                             .collect(Collectors.toList());
 
                     if (!missingColumns.isEmpty()) {
-                        String tableDesc = item.getTblName() != null ? 
+                        String tableDesc = item.getTblName() != null ?
                                 "table '" + item.getTblName() + "'" : "current scope";
-                        throw new SemanticException("Column(s) %s do not exist in %s", 
+                        throw new SemanticException("Column(s) %s do not exist in %s",
                                 missingColumns, tableDesc);
                     }
 
@@ -271,7 +271,7 @@ public class SelectAnalyzer {
                             .filter(field -> !excludedLower.contains(field.getName().toLowerCase()))
                             .collect(Collectors.toList());
                     if (fields.isEmpty()) {
-                        String tableDesc = item.getTblName() != null ? 
+                        String tableDesc = item.getTblName() != null ?
                                 "table '" + item.getTblName() + "'" : "query scope";
                         throw new SemanticException("EXCLUDE clause removes all columns from %s", tableDesc);
                     }
@@ -284,7 +284,8 @@ public class SelectAnalyzer {
                      * Because the real expression cannot be obtained in star
                      * eg: "select * from (select count(*) from table) t"
                      */
-                    FieldReference fieldReference = new FieldReference(fieldIndex, item.getTblName());
+                    FieldReference fieldReference =
+                            new FieldReference(fieldIndex, item.getTblName() == null ? null : item.getTblName().toString());
                     analyzeExpression(fieldReference, analyzeState, scope);
                     outputExpressionBuilder.add(fieldReference);
                 }
@@ -484,7 +485,7 @@ public class SelectAnalyzer {
     }
 
     private List<FunctionCallExpr> analyzeAggregations(AnalyzeState analyzeState, Scope sourceScope,
-                                                          List<Expr> outputAndOrderByExpressions) {
+                                                       List<Expr> outputAndOrderByExpressions) {
         List<FunctionCallExpr> aggregations = Lists.newArrayList();
         TreeNode.collect(outputAndOrderByExpressions, ExprUtils.isAggregatePredicate()::apply, aggregations);
         aggregations.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
@@ -899,35 +900,35 @@ public class SelectAnalyzer {
 
     /**
      * Constructs field list for SELECT * in JOIN USING context per SQL standard.
-     * 
+     * <p>
      * SQL standard specifies that JOIN USING columns should appear only once in SELECT *,
      * unlike JOIN ON where both L.col and R.col would appear.
-     * 
+     * <p>
      * SQL Standard column order for all JOIN types:
      * - [USING columns (in declaration order), left non-USING, right non-USING]
-     * 
+     * <p>
      * This method performs deduplication and reordering to ensure correctness:
      * 1. Extract USING columns in declaration order (take first occurrence of each)
      * 2. Append non-USING columns in their original order (left table first, then right table)
-     * 
+     * <p>
      * USING column selection by JOIN type (handled by QueryAnalyzer):
      * - FULL OUTER JOIN: Unqualified field with common type (will be converted to COALESCE in optimizer)
      * - RIGHT OUTER JOIN: Field from right table (right table is preserved)
      * - LEFT OUTER/INNER JOIN: Field from left table (left table is preserved)
-     * 
+     * <p>
      * Examples:
      * - SELECT * FROM t1(a,b,c) JOIN t2(a,d) USING(a)
-     *   Result: [a, b, c, d]  (a is from t1)
-     * 
+     * Result: [a, b, c, d]  (a is from t1)
+     * <p>
      * - SELECT * FROM t1(a,b,c) RIGHT JOIN t2(a,d) USING(a)
-     *   Result: [a, b, c, d]  (a is from t2, same order but different source)
-     * 
+     * Result: [a, b, c, d]  (a is from t2, same order but different source)
+     * <p>
      * - SELECT * FROM t1(a INT, b, c) FULL OUTER JOIN t2(a BIGINT, d) USING(a)
-     *   Result: [a BIGINT, b, c, d]  (a is unqualified with common type BIGINT)
-     * 
+     * Result: [a BIGINT, b, c, d]  (a is unqualified with common type BIGINT)
+     *
      * @param fromRelation The JOIN relation containing USING clause
-     * @param scope Current scope with fields from QueryAnalyzer (may have duplicates or wrong order)
-     * @param tblName Optional table qualifier (e.g., t1.* vs *), if specified returns only that table's fields
+     * @param scope        Current scope with fields from QueryAnalyzer (may have duplicates or wrong order)
+     * @param tblName      Optional table qualifier (e.g., t1.* vs *), if specified returns only that table's fields
      * @return Field list with USING columns deduplicated and in SQL standard order
      */
     private List<Field> getFieldsForJoinUsingStar(Relation fromRelation, Scope scope, TableName tblName) {

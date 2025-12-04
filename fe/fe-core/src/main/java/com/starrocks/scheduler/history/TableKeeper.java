@@ -197,7 +197,7 @@ public class TableKeeper {
         private final List<TableKeeper> keeperList = Lists.newArrayList();
 
         TableKeeperDaemon() {
-            super("TableKeeper", Config.table_keeper_interval_second * 1000L);
+            super("table-keeper", Config.table_keeper_interval_second * 1000L);
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());

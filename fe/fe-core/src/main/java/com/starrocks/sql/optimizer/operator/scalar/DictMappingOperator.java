@@ -84,6 +84,11 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
+    public boolean isVariable() {
+        return true;
+    }
+
+    @Override
     public String toString() {
         String stringOperator = stringProvideOperator == null ? "" : ", " + stringProvideOperator;
         return "DictMapping(" + dictColumn + ", " + originScalaOperator + stringOperator + ")";

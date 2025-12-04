@@ -21,7 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;

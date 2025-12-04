@@ -19,7 +19,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -38,6 +37,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
@@ -115,7 +116,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -137,7 +137,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
     private final Table table;
@@ -460,6 +460,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                         "update for a primary key table. ");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+            PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, false);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -752,7 +754,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(ColumnBuilder.buildGeneratedColumn(table, columnDef));
             return null;
         }
 
@@ -770,10 +771,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
         }
 
@@ -789,8 +788,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
             throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()), columnDef.getPos());
         }
-
-        clause.setColumn(column);
         return null;
     }
 
@@ -881,19 +878,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        if (hasGeneratedColumn) {
-            columnDefs.forEach(columnDef -> clause.addColumn(ColumnBuilder.buildGeneratedColumn(table, columnDef)));
-        } else {
+        if (!hasGeneratedColumn) {
             columnDefs.forEach(columnDef -> {
                 Column column = ColumnBuilder.buildColumn(columnDef);
                 if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
                     throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()),
                             columnDef.getPos());
                 }
-                clause.addColumn(column);
             });
         }
-
         return null;
     }
 
@@ -932,11 +925,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
-        try {
-            fieldDesc.analyze(baseColumn, false);
-        } catch (AnalysisException e) {
-            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
-        }
+        StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
     }
 
@@ -953,11 +942,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
-        try {
-            fieldDesc.analyze(baseColumn, true);
-        } catch (AnalysisException e) {
-            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
-        }
+        StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;
     }
 
@@ -1026,16 +1011,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(ColumnBuilder.buildGeneratedColumn(table, columnDef));
             return null;
         }
 
         ColumnPosition colPos = clause.getColPos();
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
@@ -1046,8 +1028,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
-
-        clause.setColumn(ColumnBuilder.buildColumn(columnDef));
         return null;
     }
 
@@ -1288,8 +1268,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
-            clause.setDynamicTabletSplitSize(dynamicTabletSplitSize);
+            long tabletReshardSplitSize = PropertyAnalyzer.analyzeTabletReshardSplitSize(copiedProperties, true);
+            clause.setTabletReshardSplitSize(tabletReshardSplitSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }
@@ -1475,7 +1455,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         List<String> sortKeys = new ArrayList<>();
         for (OrderByElement orderByElement : orderByElements) {
-            String column = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             if (column == null) {
                 throw new SemanticException("Unknown column '%s' in order by clause", ExprToSql.toSql(orderByElement.getExpr()));
             }

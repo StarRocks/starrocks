@@ -320,8 +320,25 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
-    @ConfField
-    public static boolean enable_profile_log_compress = false;
+    @ConfField(mutable = true, comment = "Enable automatic log cleaning based on disk usage. " +
+            "When enabled, logs will be cleaned when disk usage exceeds the threshold.")
+    public static boolean log_cleaner_disk_util_based_enable = false;
+
+    @ConfField(mutable = true, comment = "Disk usage threshold (percentage) to trigger log cleaning. " +
+            "When disk usage exceeds this threshold, log cleaning will start. Default is 80, meaning 80%.")
+    public static int log_cleaner_disk_usage_threshold = 80;
+
+    @ConfField(mutable = true, comment = "Target disk usage (percentage) after log cleaning. " +
+            "Log cleaning will continue until disk usage drops below this threshold. Default is 60, meaning 60%.")
+    public static int log_cleaner_disk_usage_target = 60;
+
+    @ConfField(mutable = true, comment = "Minimum retention days for audit log files. " +
+            "Audit log files newer than this will not be deleted even if disk usage is high. Default is 3 days.")
+    public static int log_cleaner_audit_log_min_retention_days = 3;
+
+    @ConfField(mutable = true, comment = "Interval in seconds to check disk usage and clean logs. " +
+            "Default is 300 seconds (5 minutes).")
+    public static int log_cleaner_check_interval_second = 300;
 
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
@@ -1647,7 +1664,7 @@ public class Config extends ConfigBase {
      * One master daemon thread will update database used data quota for db txn manager
      * every db_used_data_quota_update_interval_secs
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval to update the database used data quota in seconds")
     public static int db_used_data_quota_update_interval_secs = 300;
 
     /**
@@ -3982,34 +3999,34 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = false;
 
     /**
-     * The default scheduler interval for dynamic tablet jobs.
+     * The default scheduler interval for tablet reshard jobs.
      */
-    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
-    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+    @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs.")
+    public static long tablet_reshard_job_scheduler_interval_ms = 10;
 
     /**
-     * The max keep time of dynamic tablet history jobs.
+     * The max keep time of tablet reshard history jobs.
      */
-    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
-    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+    @ConfField(mutable = true, comment = "The max keep time of tablet reshard history jobs.")
+    public static long tablet_reshard_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
 
     /**
      * The max number of tablets can do tablet splitting and merging in parallel.
      */
     @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
-    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
+    public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
      * Tablets with size larger than this value will be considered to split.
      */
     @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4L * 1024L * 1024L * 1024L;
+    public static long tablet_reshard_split_size = 4L * 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 8;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

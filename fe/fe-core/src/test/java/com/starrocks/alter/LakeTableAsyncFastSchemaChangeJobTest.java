@@ -15,6 +15,7 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
+import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -23,13 +24,19 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -40,6 +47,7 @@ import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -59,6 +67,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
     private static ConnectContext connectContext;
@@ -72,6 +81,8 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
+        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+        UtFrameUtils.setUpForPersistTest();
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
@@ -643,5 +654,136 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
             thriftClients.forEach(client -> client.setCaptureAgentTask(false));
             thriftClients.forEach(MockBeThriftClient::clearCapturedAgentTasks);
         }
+    }
+
+    @Test
+    public void testHistorySchema() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createTable(connectContext, "CREATE TABLE t_history_schema(c0 INT) DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1");
+
+        TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
+                TransactionState.TxnSourceType.BE, "127.0.0.1");
+
+        long baseIndexId = table.getBaseIndexId();
+        MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        long runningTxn1 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+        LakeTableAsyncFastSchemaChangeJob job1 = (LakeTableAsyncFastSchemaChangeJob) executeAlterAndWaitFinish(
+                table, "ALTER TABLE t_history_schema ADD COLUMN c1 BIGINT", true);
+        Assertions.assertTrue(isSchemaMatch(db, table, Lists.newArrayList("c0", "c1")));
+        OlapTableHistorySchema historySchema1 = job1.getHistorySchema().orElse(null);
+        Assertions.assertNotNull(historySchema1);
+        Assertions.assertTrue(historySchema1.getHistoryTxnIdThreshold() > runningTxn1);
+        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta1, historySchema1);
+
+        MaterializedIndexMeta preAlterIndexMeta2 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        long runningTxn2 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+        LakeTableAsyncFastSchemaChangeJob job2 = (LakeTableAsyncFastSchemaChangeJob) executeAlterAndWaitFinish(
+                table, "ALTER TABLE t_history_schema ADD COLUMN c2 BIGINT", true);
+        Assertions.assertTrue(isSchemaMatch(db, table, Lists.newArrayList("c0", "c1", "c2")));
+        OlapTableHistorySchema historySchema2 = job2.getHistorySchema().orElse(null);
+        Assertions.assertNotNull(historySchema2);
+        Assertions.assertTrue(historySchema2.getHistoryTxnIdThreshold() > runningTxn2);
+        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta2, historySchema2);
+
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        job1.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
+        schemaChangeHandler.runAfterCatalogReady();
+        Assertions.assertSame(job1, schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
+        Assertions.assertFalse(job1.getHistorySchema().orElse(null).isExpired());
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn1, "fail1");
+        schemaChangeHandler.runAfterCatalogReady();
+        Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
+
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn2, "fail2");
+        schemaChangeHandler.runAfterCatalogReady();
+        Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
+        Assertions.assertTrue(job2.getHistorySchema().orElse(null).isExpired());
+        Assertions.assertNull(job2.getHistorySchema().orElse(null).getSchemaByIndexId(baseIndexId).orElse(null));
+        Assertions.assertNull(job2.getHistorySchema().orElse(null)
+                .getSchemaBySchemaId(preAlterIndexMeta2.getSchemaId()).orElse(null));
+        job2.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
+        schemaChangeHandler.runAfterCatalogReady();
+        Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
+
+    }
+
+    @Test
+    public void testReplayHistorySchema() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createTable(connectContext, "CREATE TABLE t_history_schema_replay(c0 INT) DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1");
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        ImageWriter imageWriter = initialImage.getImageWriter();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(imageWriter);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().save(imageWriter);
+
+        long baseIndexId = table.getBaseIndexId();
+        MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob) executeAlterAndWaitFinish(
+                table, "ALTER TABLE t_history_schema_replay ADD COLUMN c1 BIGINT", true);
+        Assertions.assertTrue(isSchemaMatch(db, table, Lists.newArrayList("c0", "c1")));
+        OlapTableHistorySchema historySchema = job.getHistorySchema().orElse(null);
+        Assertions.assertNotNull(historySchema);
+        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta, historySchema);
+
+        LocalMetastore restoredMetastore =
+                new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        AlterJobMgr restoredAlterJobMgr =
+                new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
+        JsonReader jsonReader = initialImage.getJsonReader();
+        SRMetaBlockReader blockReader = new SRMetaBlockReaderV2(jsonReader);
+        restoredMetastore.load(blockReader);
+        blockReader.close();
+        blockReader = new SRMetaBlockReaderV2(jsonReader);
+        restoredAlterJobMgr.load(blockReader);
+        blockReader.close();
+        Database restoredDb = restoredMetastore.getDb(DB_NAME);
+        Assertions.assertNotNull(restoredDb, "Restored database not found");
+        LakeTable restoredTable = (LakeTable) restoredMetastore.getTable(DB_NAME, table.getName());
+        Assertions.assertNotNull(restoredTable, "Restored table not found");
+        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexId, preAlterIndexMeta),
+                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexId, restoredTable.getIndexMetaByIndexId(baseIndexId)));
+
+        SchemaChangeHandler restoredHandler = restoredAlterJobMgr.getSchemaChangeHandler();
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        try {
+            // restoredHandler can restore state to restoredMetastore
+            GlobalStateMgr.getCurrentState().setLocalMetastore(restoredMetastore);
+            // there is expected 4 edit log in the lifecycle of LakeTableAsyncFastSchemaChangeJob
+            for (int i = 0; i < 4; i++) {
+                AlterJobV2 alterJob = (AlterJobV2)
+                        UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+                Assertions.assertInstanceOf(LakeTableAsyncFastSchemaChangeJob.class, alterJob);
+                Assertions.assertEquals(job.getJobId(), alterJob.getJobId());
+                restoredHandler.replayAlterJobV2(alterJob);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+        Assertions.assertTrue(isSchemaMatch(restoredDb, restoredTable, Lists.newArrayList("c0", "c1")));
+        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexId, table.getIndexMetaByIndexId(baseIndexId)),
+                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexId, restoredTable.getIndexMetaByIndexId(baseIndexId)));
+        AlterJobV2 restoredJob = restoredHandler.getAlterJobsV2().get(job.getJobId());
+        Assertions.assertInstanceOf(LakeTableAsyncFastSchemaChangeJob.class, restoredJob);
+        LakeTableAsyncFastSchemaChangeJob fseJob = (LakeTableAsyncFastSchemaChangeJob) restoredJob;
+        OlapTableHistorySchema restoredHistorySchema = fseJob.getHistorySchema().orElse(null);
+        Assertions.assertNotNull(restoredHistorySchema);
+        Assertions.assertEquals(historySchema.getHistoryTxnIdThreshold(), restoredHistorySchema.getHistoryTxnIdThreshold());
+        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta, restoredHistorySchema);
+    }
+
+    private void assertHistorySchemaMatches(LakeTable table, long indexId, MaterializedIndexMeta originMeta,
+                                      OlapTableHistorySchema historySchema) {
+        SchemaInfo originSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, originMeta);
+        Assertions.assertNotNull(historySchema);
+        Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaByIndexId(indexId).orElse(null));
+        Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaBySchemaId(originMeta.getSchemaId()).orElse(null));
     }
 }

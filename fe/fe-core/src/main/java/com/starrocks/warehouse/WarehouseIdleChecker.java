@@ -37,7 +37,7 @@ public class WarehouseIdleChecker extends FrontendDaemon {
     private final Map<Long, Long> warehouseIdleTime = new ConcurrentHashMap<>();
 
     public WarehouseIdleChecker() {
-        super("WarehouseIdleChecker", Config.warehouse_idle_check_interval_seconds * 1000);
+        super("warehouse-idle-checker", Config.warehouse_idle_check_interval_seconds * 1000);
     }
 
     @Override

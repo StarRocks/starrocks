@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -24,6 +23,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
@@ -610,7 +610,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                         decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
                     }
                     res = ConstantOperator.createDecimal(decimal, desc);
-                } catch (AnalysisException ignored) {
+                } catch (ParsingException ignored) {
                     res = ConstantOperator.createNull(desc);
                 }
 

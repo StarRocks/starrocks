@@ -14,21 +14,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW TABLE STATUS
-public class ShowTableStatusStmt extends EnhancedShowStmt {
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
-
+public class ShowTableStatusStmt extends ShowStmt {
     private String db;
     private final String wild;
     private Expr where;
@@ -39,7 +31,7 @@ public class ShowTableStatusStmt extends EnhancedShowStmt {
 
     public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
         super(pos);
-        this.db = normalizeName(db);
+        this.db = db;
         this.wild = wild;
         this.where = where;
     }
@@ -56,91 +48,8 @@ public class ShowTableStatusStmt extends EnhancedShowStmt {
         return wild;
     }
 
-    @Override
-    public QueryStatement toSelectStmt() throws AnalysisException {
-        if (where == null) {
-            return null;
-        }
-
-        // Columns
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
-        // Name
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"), "Name");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Name"), item.getExpr().clone());
-        // Engine
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "ENGINE"), "Engine");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Engine"), item.getExpr().clone());
-        // Version
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "VERSION"), "Version");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Version"), item.getExpr().clone());
-        // Version
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "ROW_FORMAT"), "Row_format");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Row_format"), item.getExpr().clone());
-        // Rows
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_ROWS"), "Rows");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Rows"), item.getExpr().clone());
-        // Avg_row_length
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "AVG_ROW_LENGTH"), "Avg_row_length");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Avg_row_length"), item.getExpr().clone());
-        // Data_length
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "DATA_LENGTH"), "Data_length");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Data_length"), item.getExpr().clone());
-        // Max_data_length
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "MAX_DATA_LENGTH"), "Max_data_length");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Max_data_length"), item.getExpr().clone());
-        // Index_length
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "INDEX_LENGTH"), "Index_length");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Index_length"), item.getExpr().clone());
-        // Data_free
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "DATA_FREE"), "Data_free");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Data_free"), item.getExpr().clone());
-        // Data_free
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "AUTO_INCREMENT"), "Auto_increment");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Auto_increment"), item.getExpr().clone());
-        // Create_time
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "CREATE_TIME"), "Create_time");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Create_time"), item.getExpr().clone());
-        // Update_time
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "UPDATE_TIME"), "Update_time");
-        selectList.addItem(item);
-        // Check_time
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "CHECK_TIME"), "Check_time");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Check_time"), item.getExpr().clone());
-        // Collation
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_COLLATION"), "Collation");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Collation"), item.getExpr().clone());
-        // Checksum
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "CHECKSUM"), "Checksum");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Checksum"), item.getExpr().clone());
-        // Create_options
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "CREATE_OPTIONS"), "Create_options");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Create_options"), item.getExpr().clone());
-        // Comment
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_COMMENT"), "Comment");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Comment"), item.getExpr().clone());
-
-        where = ExprSubstitutionVisitor.rewrite(where, aliasMap);
-
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null), this.origStmt);
+    public Expr getWhereClause() {
+        return where;
     }
 
     @Override

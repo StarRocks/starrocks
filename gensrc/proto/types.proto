@@ -107,7 +107,7 @@ enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
      TXN_EMPTY = 2;
-     TXN_DYNAMIC_TABLET = 3;
+     TXN_TABLET_RESHARD = 3;
 }
 
 enum ReplicationTxnStatePB {
@@ -230,4 +230,21 @@ message TransactionStatePB {
     optional int64 txn_id = 1;
     optional TransactionStatusPB status = 2;
     optional string reason = 3;
+}
+
+message VariantPB {
+    optional PTypeDesc type = 1;
+    optional int64 int_value = 2;
+    optional string string_value = 3;
+}
+
+message TuplePB {
+    repeated VariantPB values = 1;
+}
+
+message TabletRangePB {
+    optional TuplePB lower_bound = 1;
+    optional TuplePB upper_bound = 2;
+    optional bool lower_bound_included = 3;
+    optional bool upper_bound_included = 4;
 }

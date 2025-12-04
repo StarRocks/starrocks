@@ -1,0 +1,71 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast.expression;
+
+import com.starrocks.sql.ast.AstVisitor;
+
+import java.util.Objects;
+
+/**
+ * The special "SlotRef" does not store the column name.
+ * Only store the offset. Used in the analysis of star
+ * eg. "select * from (select count(*) from table) t"
+ * will store field reference 0 in inner queryblock
+ */
+public class FieldReference extends Expr {
+    private final int fieldIndex;
+    private final String tblName;
+
+    public FieldReference(int fieldIndex, String tableName) {
+        this.fieldIndex = fieldIndex;
+        this.tblName = tableName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitFieldReference(this, context);
+    }
+
+    public int getFieldIndex() {
+        return fieldIndex;
+    }
+
+    public String getTblName() {
+        return tblName;
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        FieldReference that = (FieldReference) o;
+        return fieldIndex == that.fieldIndex && Objects.equals(tblName, that.tblName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), fieldIndex, tblName);
+    }
+
+    @Override
+    public Expr clone() {
+        return new FieldReference(fieldIndex, tblName);
+    }
+
+}

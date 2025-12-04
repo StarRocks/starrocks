@@ -320,7 +320,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             ASSIGN_OR_RETURN(ctx->buffer,
-                             ByteBuffer::allocate_with_tracker(ctx->body_bytes + simdjson::SIMDJSON_PADDING));
+                             ByteBuffer::allocate_with_tracker(ctx->body_bytes, simdjson::SIMDJSON_PADDING));
         } else if (ctx->enable_batch_write) {
             // batch write does not support parsing data in stream mode
             ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(ctx->body_bytes));

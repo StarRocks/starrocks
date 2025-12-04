@@ -147,7 +147,6 @@ INSERT INTO u6 (id,dt) VALUES
 	 (4,'2024-03-12');
 -- result:
 -- !result
-	 
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv1`
 PARTITION BY date_trunc('week', `dt`)
 DISTRIBUTED BY HASH(`dt`)
@@ -281,29 +280,29 @@ select count(1) from test_mv13;
 -- result:
 29
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 -- result:
-None
+True
 -- !result
 select dt, s1 from test_mv1 order by 1;
 -- result:
@@ -565,29 +564,29 @@ select count(1) from test_mv13;
 -- result:
 29
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 -- result:
-None
+False
 -- !result
 select dt, s1 from test_mv1 order by 1;
 -- result:

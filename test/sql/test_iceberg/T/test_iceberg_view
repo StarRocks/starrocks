@@ -1,4 +1,4 @@
--- name: test_iceberg_view
+-- name: test_iceberg_view @sequential
 
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 
@@ -7,6 +7,32 @@ create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_v
 select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 
 drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
+
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+
+show create table iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex", "comment"="this is a test view") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+
+show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+
+create database default_catalog.test_internal_db_${uuid0};
+
+create view if not exists default_catalog.test_internal_db_${uuid0}.test_internal_view_${uuid0} properties ("key"="value") as select 1 from dual;
+
+drop database default_catalog.test_internal_db_${uuid0};
 
 create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
 

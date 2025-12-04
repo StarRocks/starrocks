@@ -3169,6 +3169,12 @@ public class AggregateTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  group by: 4: expr\n" +
                 "  |  limit: 10");
+        assertNotContains(plan, "  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: expr\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10");
         FeConstants.runningUnitTest = false;
     }
 

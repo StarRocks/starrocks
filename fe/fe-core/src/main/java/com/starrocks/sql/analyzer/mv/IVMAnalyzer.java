@@ -25,6 +25,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -44,8 +45,7 @@ import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
-import com.starrocks.sql.ast.expression.JoinOperator;
-import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import org.apache.commons.collections4.CollectionUtils;
@@ -386,7 +386,7 @@ public class IVMAnalyzer {
         // case when <aggStateMergeFunc> is null then <default_value> else <aggStateMergeFunc> end
         if (FunctionSet.isAlwaysReturnNonNullableFunction(aggFuncName)) {
             Expr isNullPredicate = new IsNullPredicate(aggStateMergeFunc, false);
-            Expr defaultValue = LiteralExpr.createDefault(aggFunctionInfo.aggFunc.getType());
+            Expr defaultValue = LiteralExprFactory.createDefault(aggFunctionInfo.aggFunc.getType());
             CaseWhenClause caseWhenClause = new CaseWhenClause(isNullPredicate, defaultValue);
             CaseExpr caseExpr = new CaseExpr(null, Lists.newArrayList(caseWhenClause), aggStateMergeFunc);
             return caseExpr;

@@ -1,0 +1,24 @@
+-- name: test_multi_distinct_count_using_two_level_hashset
+CREATE TABLE `t0` (
+  `c0` bigint NOT NULL COMMENT "",
+  `c1` datetime NOT NULL COMMENT "",
+  `c2` bigint NOT NULL,
+  `c3` string NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`c0`, `c1`)
+COMMENT "OLAP"
+PARTITION BY date_trunc('DAY', c1)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1 
+ORDER BY(`c2`, `c1`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 select 
+	i as c0, 
+	milliseconds_add('2025-01-01 00:00:00', i%8640000) as c1 ,
+	4000000000 - i as c2,
+	right(concat(repeat('x',512), i),512) as c3
+from table(generate_series(1,69632)) t(i);
+
+select assert_true(count(distinct c3) = count(1)) from t0;

@@ -15,20 +15,20 @@
 package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -40,16 +40,13 @@ public class ShowPipeStmt extends ShowStmt {
     private String dbName;
     private final String like;
     private final Expr where;
-    private final List<OrderByElement> orderBy;
-    private final LimitElement limit;
-    private List<OrderByPair> orderByPairs;
     private String pattern;
     private PatternMatcher matcher;
 
     public ShowPipeStmt(String dbName, String like, Expr where, List<OrderByElement> orderBy, LimitElement limit,
             NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.like = like;
         this.where = where;
         if (where != null) {
@@ -60,8 +57,8 @@ public class ShowPipeStmt extends ShowStmt {
             }
         }
 
-        this.orderBy = orderBy;
-        this.limit = limit;
+        this.orderByElements = orderBy;
+        this.limitElement = limit;
     }
 
     /**
@@ -109,27 +106,24 @@ public class ShowPipeStmt extends ShowStmt {
     }
 
     public List<OrderByElement> getOrderBy() {
-        return orderBy;
+        return orderByElements;
     }
 
     public long getLimit() {
-        if (limit == null) {
+        if (limitElement == null) {
             return -1;
         }
-        return limit.getLimit();
+        return limitElement.getLimit();
     }
 
     public long getOffset() {
-        if (limit == null) {
+        if (limitElement == null) {
             return -1;
         }
-        return limit.getOffset();
+        return limitElement.getOffset();
     }
 
-    public List<OrderByPair> getOrderByPairs() {
-        return orderByPairs;
-    }
-
+    @Override
     public void setOrderByPairs(List<OrderByPair> orderByPairs) {
         this.orderByPairs = orderByPairs;
     }

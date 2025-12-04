@@ -47,9 +47,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -93,9 +94,9 @@ public class RangePartitionPruner implements PartitionPruner {
         Column keyColumn = partitionColumns.get(columnIdx);
         PartitionColumnFilter filter = partitionColumnFilters.get(keyColumn.getName());
         if (null == filter) {
-            minKey.pushColumn(LiteralExpr.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), false),
+            minKey.pushColumn(LiteralExprFactory.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), false),
                     keyColumn.getPrimitiveType());
-            maxKey.pushColumn(LiteralExpr.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
+            maxKey.pushColumn(LiteralExprFactory.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
                     keyColumn.getPrimitiveType());
             List<Long> result;
             try {
@@ -126,7 +127,7 @@ public class RangePartitionPruner implements PartitionPruner {
                 // eg: [10, 10], [null, null]
                 if (lowerBound instanceof NullLiteral && upperBound instanceof NullLiteral) {
                     // replace Null with min value
-                    LiteralExpr minKeyValue = LiteralExpr.createInfinity(
+                    LiteralExpr minKeyValue = LiteralExprFactory.createInfinity(
                             TypeFactory.createType(keyColumn.getPrimitiveType()), false);
                     minKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
@@ -154,12 +155,12 @@ public class RangePartitionPruner implements PartitionPruner {
                 if (filter.lowerBoundInclusive && columnIdx != lastColumnId) {
                     Column column = partitionColumns.get(columnIdx + 1);
                     Type type = TypeFactory.createType(column.getPrimitiveType());
-                    minKey.pushColumn(LiteralExpr.createInfinity(type, false), column.getPrimitiveType());
+                    minKey.pushColumn(LiteralExprFactory.createInfinity(type, false), column.getPrimitiveType());
                     pushMinCount++;
                 }
             } else {
                 Type type = TypeFactory.createType(keyColumn.getPrimitiveType());
-                minKey.pushColumn(LiteralExpr.createInfinity(type, false), keyColumn.getPrimitiveType());
+                minKey.pushColumn(LiteralExprFactory.createInfinity(type, false), keyColumn.getPrimitiveType());
                 pushMinCount++;
             }
             if (upperBound != null) {
@@ -168,13 +169,13 @@ public class RangePartitionPruner implements PartitionPruner {
                 if (filter.upperBoundInclusive && columnIdx != lastColumnId) {
                     Column column = partitionColumns.get(columnIdx + 1);
                     maxKey.pushColumn(
-                            LiteralExpr.createInfinity(TypeFactory.createType(column.getPrimitiveType()), true),
+                            LiteralExprFactory.createInfinity(TypeFactory.createType(column.getPrimitiveType()), true),
                             column.getPrimitiveType());
                     pushMaxCount++;
                 }
             } else {
                 maxKey.pushColumn(
-                        LiteralExpr.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
+                        LiteralExprFactory.createInfinity(TypeFactory.createType(keyColumn.getPrimitiveType()), true),
                         keyColumn.getPrimitiveType());
                 pushMaxCount++;
             }

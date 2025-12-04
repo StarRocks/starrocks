@@ -47,6 +47,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -94,7 +95,6 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -726,20 +726,28 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public synchronized boolean updateState(JobState newState) {
-        return this.updateState(newState, false, System.currentTimeMillis());
+        return this.updateState(newState, System.currentTimeMillis());
     }
 
     public ComputeResource getComputeResource() {
         return computeResource;
     }
 
-    public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
+    public synchronized boolean updateState(JobState newState, long stateChangeTime) {
         if (isExportDone()) {
             LOG.warn("export job state is finished or cancelled");
             return false;
         }
 
-        state = newState;
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(id, newState, stateChangeTime,
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logExportUpdateState(updateInfo, wal -> changeState(newState, stateChangeTime));
+        return true;
+    }
+
+    protected void changeState(JobState newState, long stateChangeTime) {
+        this.state = newState;
         switch (newState) {
             case PENDING:
                 progress = 0;
@@ -752,15 +760,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 finishTimeMs = stateChangeTime;
                 progress = 100;
                 break;
-            default:
-                Preconditions.checkState(false, "wrong job state: " + newState.name());
-                break;
         }
-        if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        }
-        return true;
     }
 
     public Status releaseSnapshots() {

@@ -89,6 +89,8 @@ import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TRefreshConnectionsRequest;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -1737,5 +1739,42 @@ public class FrontendServiceImplTest {
             Assertions.assertEquals(physicalPartition.getNextVersion(), meta.getNext_version());
             Assertions.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
         }
+    }
+
+    @Test
+    public void testRefreshConnectionsSuccess() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsSuccessWithForce() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(true);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsWithException() throws TException {
+        new MockUp<com.starrocks.qe.VariableMgr>() {
+            @Mock
+            public void refreshConnectionsInternal(boolean force) {
+                throw new RuntimeException("Test exception");
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, response.getStatus().getStatus_code());
+        Assertions.assertNotNull(response.getStatus().getError_msgs());
+        Assertions.assertFalse(response.getStatus().getError_msgs().isEmpty());
     }
 }

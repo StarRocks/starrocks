@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -25,13 +24,14 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;

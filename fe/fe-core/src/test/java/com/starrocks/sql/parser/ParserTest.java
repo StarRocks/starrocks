@@ -25,6 +25,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -35,7 +36,6 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -610,7 +610,7 @@ class ParserTest {
             String sql = "ALTER TABLE test_db.test_table\n" + //
                     "SPLIT TABLET\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_split_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -627,7 +627,7 @@ class ParserTest {
                 SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
                 Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
                 Assertions.assertEquals(null, splitTabletClause.getTabletList());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_split_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -639,7 +639,7 @@ class ParserTest {
                     "SPLIT TABLET\n" + //
                     "    PARTITION (partiton_name1, partition_name2)\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_split_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -657,7 +657,7 @@ class ParserTest {
                 Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
                         splitTabletClause.getPartitionNames().getPartitionNames());
                 Assertions.assertEquals(null, splitTabletClause.getTabletList());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_split_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -668,7 +668,7 @@ class ParserTest {
             String sql = "ALTER TABLE test_db.test_table\n" + //
                     "SPLIT TABLET (1, 2, 3)\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_split_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -686,7 +686,7 @@ class ParserTest {
                 Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
                 Assertions.assertEquals(Lists.newArrayList(1L, 2L, 3L),
                         splitTabletClause.getTabletList().getTabletIds());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_split_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());

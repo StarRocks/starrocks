@@ -18,7 +18,6 @@ from unittest.mock import Mock, PropertyMock
 from alembic.autogenerate.api import AutogenContext
 from alembic.operations.ops import UpgradeOps
 import pytest
-from sqlalchemy.exc import NotSupportedError
 
 from starrocks.alembic.compare import compare_starrocks_table, extract_starrocks_dialect_attributes
 from starrocks.common.defaults import ReflectionTableDefaults
@@ -66,8 +65,8 @@ class TestRealTableObjects:
             'users', metadata_old,
             Column('id', Integer),
             Column('name', String(50)),
-            starrocks_DISTRIBUTED_BY='HASH(id) BUCKETS 8',
-            starrocks_PROPERTIES={'replication_num': '2'},
+            starrocks_distributed_by='HASH(id) BUCKETS 8',
+            starrocks_properties={'replication_num': '2'},
             schema='test_db'
         )
 
@@ -142,8 +141,8 @@ class TestRealTableObjects:
         )
 
         meta_table_kwargs = {
-            'starrocks_KEY': ReflectionTableDefaults.key(),
-            'starrocks_DISTRIBUTED_BY': 'HASH(`id`)  BUCKETS   8',
+            'starrocks_key': ReflectionTableDefaults.key(),
+            'starrocks_distributed_by': 'HASH(`id`)  BUCKETS   8',
             'schema': 'test_db'
         }
 
@@ -161,6 +160,7 @@ class TestRealTableObjects:
         result = upgrade_ops.ops
 
         # No changes should be detected
+        logger.info(f"result: {result[0] if result else 'no operations'}")
         assert result == []
 
     def test_real_table_with_table_args(self):
@@ -182,9 +182,9 @@ class TestRealTableObjects:
             'products', metadata_old,
             Column('id', Integer),
             Column('name', String(50)),
-            starrocks_ENGINE='OLAP',
-            starrocks_DISTRIBUTED_BY='HASH(id) BUCKETS 8',
-            starrocks_PROPERTIES={'replication_num': '3', 'compression': 'ZSTD'},
+            starrocks_engine='OLAP',
+            starrocks_distributed_by='HASH(id) BUCKETS 8',
+            starrocks_properties={'replication_num': '3', 'compression': 'ZSTD'},
             schema='test_db'
         )
 
@@ -195,9 +195,9 @@ class TestRealTableObjects:
             'products', metadata_new,
             Column('id', Integer),
             Column('name', String(50)),
-            starrocks_ENGINE='OLAP',
-            starrocks_DISTRIBUTED_BY='HASH(id) BUCKETS 8',
-            starrocks_PROPERTIES={'replication_num': '3', 'compression': 'LZ4'}, # Changed property
+            starrocks_engine='OLAP',
+            starrocks_distributed_by='HASH(id) BUCKETS 8',
+            starrocks_properties={'replication_num': '3', 'compression': 'LZ4'}, # Changed property
             schema='test_db'
         )
 
@@ -265,17 +265,17 @@ class TestRealTableObjects:
         conn_table = Table(
             'users', metadata_old,
             Column('id', Integer),
-            starrocks_DUPLICATE_KEY='id',
+            starrocks_duplicate_key='id',
             schema='test_db'
         )
 
         meta_table = Table(
             'users', metadata_new,
             Column('id', Integer),
-            starrocks_PRIMARY_KEY='id',
+            starrocks_primary_key='id',
             schema='test_db'
         )
-        with pytest.raises(NotSupportedError) as exc_info:
+        with pytest.raises(NotImplementedError) as exc_info:
             upgrade_ops = UpgradeOps([])
             compare_starrocks_table(
                 autogen_context, upgrade_ops, conn_table.schema, conn_table.name, conn_table, meta_table
@@ -574,7 +574,7 @@ class TestKeyChanges:
         )
         meta_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(meta_table.kwargs)}
 
-        with pytest.raises(NotSupportedError) as exc_info:
+        with pytest.raises(NotImplementedError) as exc_info:
             upgrade_ops = UpgradeOps([])
             compare_starrocks_table(
                 autogen_context, upgrade_ops, conn_table.schema, conn_table.name, conn_table, meta_table
@@ -662,7 +662,7 @@ class TestKeyChanges:
         )
         meta_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(meta_table.kwargs)}
 
-        with pytest.raises(NotSupportedError) as exc_info:
+        with pytest.raises(NotImplementedError) as exc_info:
             upgrade_ops = UpgradeOps([])
             compare_starrocks_table(
                 autogen_context, upgrade_ops, conn_table.schema, conn_table.name, conn_table, meta_table
@@ -1504,10 +1504,10 @@ class TestORMTableObjects:
             'orm_test_table', MetaData(),
             Column('id', Integer),
             Column('name', String(50)),
-            starrocks_ENGINE='OLAP',
-            starrocks_DISTRIBUTED_BY='HASH(id, name) BUCKETS 16', # Changed
-            starrocks_ORDER_BY='id', # Changed
-            starrocks_PROPERTIES={'replication_num': '2', 'compression': 'ZSTD'}, # Changed
+            starrocks_engine='OLAP',
+            starrocks_distributed_by='HASH(id, name) BUCKETS 16', # Changed
+            starrocks_order_by='id', # Changed
+            starrocks_properties={'replication_num': '2', 'compression': 'ZSTD'}, # Changed
             schema='test_db'
         )
 

@@ -143,7 +143,7 @@ TEST_F(VariantValueTest, FloatToJson) {
         VariantValue variant{std::string_view(float_metadata), std::string_view(float_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1234567936.000000", *json);
+        EXPECT_EQ("1.23456794e+09", *json);
     }
 
     // Test double
@@ -152,7 +152,7 @@ TEST_F(VariantValueTest, FloatToJson) {
         VariantValue variant{std::string_view(double_metadata), std::string_view(double_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("1234567890.123400", *json);
+        EXPECT_EQ("1234567890.1234", *json);
     }
 }
 
@@ -164,8 +164,9 @@ TEST_F(VariantValueTest, StringToJson) {
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
         EXPECT_EQ(
-                "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes "
-                "several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!",
+                "\"This string is longer than 64 bytes and therefore does not fit in a short_string and it also "
+                "includes "
+                "several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!\"",
                 *json);
     }
 
@@ -176,7 +177,7 @@ TEST_F(VariantValueTest, StringToJson) {
         VariantValue variant{std::string_view(short_string_metadata), std::string_view(short_string_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("Less than 64 bytes (❤️ with utf8)", *json);
+        EXPECT_EQ("\"Less than 64 bytes (❤️ with utf8)\"", *json);
     }
 }
 
@@ -206,7 +207,7 @@ TEST_F(VariantValueTest, DecimalToJson) {
         VariantValue variant{std::string_view(decimal8_metadata), std::string_view(decimal8_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("12345678.90", *json);
+        EXPECT_EQ("12345678.9", *json);
     }
 
     // Test decimal16
@@ -216,7 +217,7 @@ TEST_F(VariantValueTest, DecimalToJson) {
         VariantValue variant{std::string_view(decimal16_metadata), std::string_view(decimal16_value)};
         auto json = variant.to_json();
         ASSERT_TRUE(json.ok());
-        EXPECT_EQ("12345678912345678.90", *json);
+        EXPECT_EQ("12345678912345678.9", *json);
     }
 }
 
@@ -293,8 +294,9 @@ TEST_F(VariantValueTest, ObjectToJson) {
         EXPECT_TRUE(json->front() == '{');
         EXPECT_TRUE(json->back() == '}');
         EXPECT_EQ(
-                "{boolean_false_field:false,boolean_true_field:true,double_field:1.23456789,int_field:1,null_field:"
-                "null,string_field:Apache Parquet,timestamp_field:2025-04-16T12:34:56.78}",
+                "{\"boolean_false_field\":false,\"boolean_true_field\":true,\"double_field\":1.23456789,\"int_field\":"
+                "1,\"null_field\":null,\"string_field\":\"Apache "
+                "Parquet\",\"timestamp_field\":\"2025-04-16T12:34:56.78\"}",
                 *json);
     }
 
@@ -320,9 +322,9 @@ TEST_F(VariantValueTest, ObjectToJson) {
         EXPECT_TRUE(json->front() == '{');
         EXPECT_TRUE(json->back() == '}');
         EXPECT_EQ(
-                "{id:1,observation:{location:In the "
-                "Volcano,time:12:34:56,value:{humidity:456,temperature:123}},species:{name:lava "
-                "monster,population:6789}}",
+                "{\"id\":1,\"observation\":{\"location\":\"In the "
+                "Volcano\",\"time\":\"12:34:56\",\"value\":{\"humidity\":456,\"temperature\":123}},\"species\":{"
+                "\"name\":\"lava monster\",\"population\":6789}}",
                 *json);
     }
 }
@@ -361,7 +363,10 @@ TEST_F(VariantValueTest, ArrayToJson) {
         // Should be a valid JSON array
         EXPECT_TRUE(json->front() == '[');
         EXPECT_TRUE(json->back() == ']');
-        EXPECT_EQ("[{id:1,thing:{names:[Contrarian,Spider]}},null,{id:2,names:[Apple,Ray,null],type:if}]", *json);
+        EXPECT_EQ(
+                "[{\"id\":1,\"thing\":{\"names\":[\"Contrarian\",\"Spider\"]}},null,{\"id\":2,\"names\":[\"Apple\","
+                "\"Ray\",null],\"type\":\"if\"}]",
+                *json);
     }
 }
 

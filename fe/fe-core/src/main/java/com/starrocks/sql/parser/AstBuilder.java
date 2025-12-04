@@ -23,16 +23,16 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -187,6 +189,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
@@ -228,6 +231,7 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeyPartitionRef;
 import com.starrocks.sql.ast.KeysDesc;
@@ -278,6 +282,7 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -291,6 +296,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -422,6 +428,7 @@ import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
+import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
 import com.starrocks.sql.ast.expression.ArrowExpr;
@@ -445,7 +452,6 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
@@ -453,7 +459,6 @@ import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
@@ -469,13 +474,11 @@ import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.OdbcScalarFunctionCall;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.Predicate;
-import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
@@ -594,7 +597,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 
@@ -639,7 +642,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             for (HintNode hint : entry.getValue()) {
                 if (hint instanceof SetVarHint) {
                     SetVarHint setVarHint = (SetVarHint) hint;
-                    hintSqlMode = setVarHint.getSqlModeHintValue();
+                    long mode = 0L;
+                    if (setVarHint.getValue().containsKey("sql_mode")) {
+                        try {
+                            mode = SqlModeHelper.encode(setVarHint.getValue().get("sql_mode"));
+                        } catch (Exception e) {
+                            // do nothing
+                        }
+                    }
+                    hintSqlMode = mode;
                 }
             }
         }
@@ -737,7 +748,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         if (context.catalog != null) {
             QualifiedName dbName = getQualifiedName(context.catalog);
-            catalog = dbName.toString();
+            catalog = normalizeName(dbName.toString());
         }
 
         if (context.pattern != null) {
@@ -752,7 +763,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitAlterDbQuotaStatement(com.starrocks.sql.parser.StarRocksParser.AlterDbQuotaStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        String dbName = normalizeName(((Identifier) visit(context.identifier(0))).getValue());
         NodePosition pos = createPos(context);
         if (context.DATA() != null) {
             String quotaValue = ((Identifier) visit(context.identifier(1))).getValue();
@@ -776,13 +787,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         QualifiedName dbName = getQualifiedName(context.database);
 
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         return new CreateDbStmt(context.IF() != null, normalizeName(catalogName), normalizeName(dbName.toString()), properties,
                 createPos(context));
     }
@@ -809,8 +814,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitAlterDatabaseRenameStatement(
             com.starrocks.sql.parser.StarRocksParser.AlterDatabaseRenameStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
-        String newName = ((Identifier) visit(context.identifier(1))).getValue();
+        String dbName = normalizeName(((Identifier) visit(context.identifier(0))).getValue());
+        String newName = normalizeName(((Identifier) visit(context.identifier(1))).getValue());
         return new AlterDatabaseRenameStatement(dbName, newName, createPos(context));
     }
 
@@ -854,22 +859,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitCreateTableStatement(com.starrocks.sql.parser.StarRocksParser.CreateTableStatementContext context) {
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        Map<String, String> extProperties = null;
-        if (context.extProperties() != null) {
-            extProperties = new HashMap<>();
-            List<Property> propertyList = visit(context.extProperties().properties().property(), Property.class);
-            for (Property property : propertyList) {
-                extProperties.put(property.getKey(), property.getValue());
-            }
-        }
+        // properties must be null if not specified
+        Map<String, String> properties = context.properties() == null ? null : getCaseSensitiveProperties(context.properties());
+        Map<String, String> extProperties = context.extProperties() == null ?
+                null : getCaseSensitiveProperties(context.extProperties().properties());
+
         TableName tableName = qualifiedNameToTableName(getQualifiedName(context.qualifiedName()));
 
         List<ColumnDef> columnDefs = null;
@@ -996,7 +990,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 String functionName = functionCallExpr.getFnName().getFunction();
                 if (FunctionSet.FROM_UNIXTIME.equals(functionName)
                         || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
-                    primaryExpression = new CastExpr(TypeDef.create(PrimitiveType.DATETIME), primaryExpression);
+                    primaryExpression = new CastExpr(new TypeDef(DateType.DATETIME), primaryExpression);
                 }
             }
             return new ExpressionPartitionDesc(rangePartitionDesc, primaryExpression);
@@ -1089,14 +1083,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         String baseRollupName = rollupItemContext.fromRollup() != null ?
                 ((Identifier) visit(rollupItemContext.fromRollup().identifier())).getValue() : null;
-        Map<String, String> properties = null;
-        if (rollupItemContext.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(rollupItemContext.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = rollupItemContext.properties() == null ?
+                null : getCaseSensitiveProperties(rollupItemContext.properties());
         return new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
                 dupKeys, baseRollupName,
                 properties, createPos(rollupItemContext));
@@ -1128,7 +1116,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
             final IndexDef indexDef =
                     new IndexDef(indexName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                            getIndexType(context.indexType()), comment, getPropertyList(context.propertyList()),
+                            getIndexType(context.indexType()), comment, getCaseInsensitivePropertyList(context.propertyList()),
                             createPos(context));
             indexDefList.add(indexDef);
         }
@@ -1250,13 +1238,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitCreateTableAsSelectStatement(
             com.starrocks.sql.parser.StarRocksParser.CreateTableAsSelectStatementContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         PartitionDesc partitionDesc = null;
         if (context.partitionDesc() != null) {
@@ -1334,7 +1316,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 (PartitionDesc) visit(context.partitionDesc());
         DistributionDesc distributionDesc = context.distributionDesc() == null ? null :
                 (DistributionDesc) visit(context.distributionDesc());
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         if (context.TEMPORARY() != null) {
             if (!Config.enable_experimental_temporary_table) {
@@ -1434,12 +1416,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             List<String> parts = qualifiedName.getParts();
             if (parts.size() == 2) {
-                catalog = qualifiedName.getParts().get(0);
-                database = qualifiedName.getParts().get(1);
+                catalog = normalizeName(qualifiedName.getParts().get(0));
+                database = normalizeName(qualifiedName.getParts().get(1));
             } else if (parts.size() == 1) {
-                database = qualifiedName.getParts().get(0);
+                database = normalizeName(qualifiedName.getParts().get(0));
             }
         }
+        catalog = normalizeName(catalog);
+        database = normalizeName(database);
 
         NodePosition pos = createPos(context);
 
@@ -1463,10 +1447,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             List<String> parts = qualifiedName.getParts();
             if (parts.size() == 2) {
-                catalog = qualifiedName.getParts().get(0);
-                database = qualifiedName.getParts().get(1);
+                catalog = normalizeName(qualifiedName.getParts().get(0));
+                database = normalizeName(qualifiedName.getParts().get(1));
             } else if (parts.size() == 1) {
-                database = qualifiedName.getParts().get(0);
+                database = normalizeName(qualifiedName.getParts().get(0));
             }
         }
 
@@ -1490,7 +1474,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new DescribeStmt(targetTableName, context.ALL() != null, createPos(context));
         }
 
-        Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
+        Map<String, String> tableFunctionProperties = getCaseInsensitivePropertyList(context.propertyList());
         return new DescribeStmt(tableFunctionProperties, createPos(context));
     }
 
@@ -1513,8 +1497,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             where = (Expr) visit(context.expression());
         }
 
-        return new ShowTableStatusStmt(dbName == null ? null : dbName.toString(), pattern, where,
-                createPos(context));
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
+        return new ShowTableStatusStmt(normalizedDb, pattern, where, createPos(context));
     }
 
     @Override
@@ -1537,8 +1521,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             where = (Expr) visit(context.expression());
         }
 
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
         return new ShowColumnStmt(qualifiedNameToTableName(tableName),
-                dbName == null ? null : dbName.toString(),
+                normalizedDb,
                 pattern,
                 context.FULL() != null,
                 where, createPos(context));
@@ -1795,8 +1780,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowAlterStmt(alterType, dbName == null ? null : dbName.toString(), where, orderByElements,
-                limitElement, createPos(context));
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
+        return new ShowAlterStmt(alterType, normalizedDb, where, orderByElements, limitElement, createPos(context));
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -1831,7 +1816,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 isSecurity,
-                (QueryStatement) visit(context.queryStatement()), createPos(context));
+                (QueryStatement) visit(context.queryStatement()),
+                createPos(context),
+                getCaseInsensitiveProperties(context.properties())
+                );
     }
 
     @Override
@@ -1856,10 +1844,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
                     null, createPos(context));
         } else if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
+            properties.putAll(getCaseSensitiveProperties(context.properties()));
             return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
                     null, createPos(context));
         } else {
@@ -1963,7 +1948,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
                 getIndexType(context.indexType()),
-                comment, getPropertyList(context.propertyList()), idxPos);
+                comment, getCaseInsensitivePropertyList(context.propertyList()), idxPos);
 
         CreateIndexClause createIndexClause = new CreateIndexClause(indexDef, idxPos);
 
@@ -1991,22 +1976,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             dbName = getQualifiedName(context.db);
         }
 
-        return new ShowIndexStmt(dbName == null ? null : dbName.toString(),
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
+        return new ShowIndexStmt(normalizedDb,
                 qualifiedNameToTableName(tableName), createPos(context));
     }
 
     // ------------------------------------------- Task Statement ------------------------------------------------------
-
-    private Map<String, String> buildProperties(com.starrocks.sql.parser.StarRocksParser.PropertiesContext properties) {
-        Map<String, String> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        if (properties != null) {
-            List<Property> propertyList = visit(properties.property(), Property.class);
-            for (Property property : ListUtils.emptyIfNull(propertyList)) {
-                result.put(property.getKey(), property.getValue());
-            }
-        }
-        return result;
-    }
 
     private TaskSchedule parseTaskSchedule(com.starrocks.sql.parser.StarRocksParser.TaskScheduleDescContext desc) {
         TaskSchedule schedule = new TaskSchedule();
@@ -2054,7 +2029,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     private void parseTaskClause(List<com.starrocks.sql.parser.StarRocksParser.TaskClauseContext> clauses, SubmitTaskStmt stmt) {
         for (var clause : clauses) {
             if (clause.properties() != null) {
-                stmt.getProperties().putAll(buildProperties(clause.properties()));
+                stmt.getProperties().putAll(getCaseInsensitiveProperties(clause.properties()));
             } else if (clause.taskScheduleDesc() != null) {
                 stmt.setSchedule(parseTaskSchedule(clause.taskScheduleDesc()));
             }
@@ -2173,10 +2148,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     throw new ParsingException(PARSER_ERROR_MSG.duplicatedClause("PROPERTY", "building materialized view"),
                             clausePos);
                 }
-                List<Property> propertyList = visit(desc.properties().property(), Property.class);
-                for (Property property : propertyList) {
-                    properties.put(property.getKey(), property.getValue());
-                }
+                properties.putAll(getCaseSensitiveProperties(desc.properties()));
             }
             // process refresh
             if (desc.refreshSchemeDesc() != null) {
@@ -2277,12 +2249,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             List<String> parts = qualifiedName.getParts();
             if (parts.size() == 2) {
-                catalog = qualifiedName.getParts().get(0);
-                database = qualifiedName.getParts().get(1);
+                catalog = normalizeName(qualifiedName.getParts().get(0));
+                database = normalizeName(qualifiedName.getParts().get(1));
             } else if (parts.size() == 1) {
-                database = qualifiedName.getParts().get(0);
+                database = normalizeName(qualifiedName.getParts().get(0));
             }
         }
+        catalog = normalizeName(catalog);
+        database = normalizeName(database);
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowMaterializedViewsStmt(catalog, database, stringLiteral.getValue(), null, pos);
@@ -2406,13 +2380,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.comment() != null) {
             comment = ((StringLiteral) visit(context.comment())).getStringValue();
         }
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         return new CreateCatalogStmt(catalogName, comment, properties, ifNotExists, createPos(context));
     }
@@ -2525,7 +2493,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
 
             InsertStmt stmt = new InsertStmt(targetTableName, partitionNames, label, columnAliases, queryStatement,
-                    context.OVERWRITE() != null, getProperties(context.properties()), createPos(context));
+                    context.OVERWRITE() != null, getCaseSensitiveProperties(context.properties()), createPos(context));
             stmt.setHintNodes(hintMap.get(context));
             stmt.setTargetBranch(targetBranch);
             stmt.setColumnMatchPolicy(columnMatchPolicy);
@@ -2537,7 +2505,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         // INSERT INTO FILES(...)
-        Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
+        Map<String, String> tableFunctionProperties = getCaseInsensitivePropertyList(context.propertyList());
         InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
         res.setHintNodes(hintMap.get(context));
         return res;
@@ -2617,8 +2585,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
         Map<String, String> dataSourceProperties = getDataSourceProperties(context.dataSourceProperties());
 
+        String normalizedTable = tableName == null ? null : normalizeName(tableName.toString());
         return new CreateRoutineLoadStmt(createLabelName(context.db, context.name),
-                tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName,
+                normalizedTable, loadPropertyList, jobProperties, typeName,
                 dataSourceProperties, createPos(context));
     }
 
@@ -2710,7 +2679,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.expression() != null) {
             where = (Expr) visit(context.expression());
         }
-        return new ShowRoutineLoadTaskStmt(dbName == null ? null : dbName.toString(), where, createPos(context));
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
+        return new ShowRoutineLoadTaskStmt(normalizedDb, where, createPos(context));
     }
 
     @Override
@@ -2748,7 +2718,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitAdminSetReplicaStatusStatement(
             com.starrocks.sql.parser.StarRocksParser.AdminSetReplicaStatusStatementContext context) {
-        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        List<Property> propertyList = visit(context.properties().propertyList().property(), Property.class);
         return new AdminSetReplicaStatusStmt(new PropertySet(propertyList, createPos(context.properties())),
                 createPos(context));
     }
@@ -2985,17 +2955,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         TableName tableName = qualifiedNameToTableName(getQualifiedName(context.tableName().qualifiedName()));
-
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         boolean isSample = context.SAMPLE() != null;
-
         Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
         AnalyzeTypeDesc analyzeTypeDesc = new AnalyzeBasicDesc();
         if (context.analyzeColumnClause() instanceof com.starrocks.sql.parser.StarRocksParser.MultiColumnSetContext) {
@@ -3024,14 +2985,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitCreateAnalyzeStatement(com.starrocks.sql.parser.StarRocksParser.CreateAnalyzeStatementContext context) {
         NodePosition pos = createPos(context);
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         StatsConstants.AnalyzeType analyzeType = StatsConstants.AnalyzeType.FULL;
         if (context.FULL() != null) {
             analyzeType = StatsConstants.AnalyzeType.FULL;
@@ -3142,16 +3096,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private AnalyzeStmt histogramStatement(com.starrocks.sql.parser.StarRocksParser.HistogramStatementContext context) {
         TableName tableName = getTableName(context.tableName().qualifiedName());
-
         Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
-
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         long bucket;
         if (context.bucket != null) {
@@ -3220,12 +3166,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             predicatesList.add(p);
         }
 
-        Map<String, String> properties = new HashMap<>();
-        List<Property> propertyList = visit(context.property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
-
+        Map<String, String> properties = getProperties(context.property(), false);
         return new CreateResourceGroupStmt(name,
                 context.EXISTS() != null,
                 context.REPLACE() != null,
@@ -3264,12 +3205,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                                 .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())), pos);
             }
         } else {
-            Map<String, String> properties = new HashMap<>();
-            List<Property> propertyList = visit(context.property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-
+            Map<String, String> properties = getProperties(context.property(), false);
             return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AlterProperties(properties), pos);
         }
     }
@@ -3291,13 +3227,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitCreateResourceStatement(
             com.starrocks.sql.parser.StarRocksParser.CreateResourceStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         return new CreateResourceStmt(context.EXTERNAL() != null, identifier.getValue(), properties,
                 createPos(context));
     }
@@ -3309,13 +3239,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     public ParseNode visitAlterResourceStatement(com.starrocks.sql.parser.StarRocksParser.AlterResourceStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         return new AlterResourceStmt(identifier.getValue(), properties, createPos(context));
     }
 
@@ -3368,7 +3292,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private DataDescription getDataDescription(com.starrocks.sql.parser.StarRocksParser.DataDescContext context) {
         NodePosition pos = createPos(context);
-        String dstTableName = ((Identifier) visit(context.dstTableName)).getValue();
+        String dstTableName = normalizeName(((Identifier) visit(context.dstTableName)).getValue());
         PartitionNames partitionNames = (PartitionNames) visitIfPresent(context.partitions);
         Expr whereExpr = (Expr) visitIfPresent(context.where);
         List<Expr> colMappingList = null;
@@ -3376,7 +3300,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             colMappingList = visit(context.colMappingList.expressionList().expression(), Expr.class);
         }
         if (context.srcTableName != null) {
-            String srcTableName = ((Identifier) visit(context.srcTableName)).getValue();
+            String srcTableName = normalizeName(((Identifier) visit(context.srcTableName)).getValue());
             return new DataDescription(dstTableName, partitionNames, srcTableName,
                     context.NEGATIVE() != null, colMappingList, whereExpr, pos);
         }
@@ -3498,6 +3422,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.identifier() != null) {
             db = ((Identifier) visit(context.identifier())).getValue();
         }
+        db = normalizeName(db);
         Expr labelExpr = null;
         if (context.expression() != null) {
             labelExpr = (Expr) visit(context.expression());
@@ -3528,6 +3453,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.identifier() != null) {
             db = ((Identifier) visit(context.identifier())).getValue();
         }
+        db = normalizeName(db);
         Expr labelExpr = null;
         if (context.expression() != null) {
             labelExpr = (Expr) visit(context.expression());
@@ -3549,7 +3475,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.expression() != null) {
             labelExpr = (Expr) visit(context.expression());
         }
-        return new CancelLoadStmt(db, labelExpr, createPos(context));
+        return new CancelLoadStmt(normalizeName(db), labelExpr, createPos(context));
     }
 
     // ------------------------------------------- Compaction Statement ------------------------------------------------------
@@ -3619,7 +3545,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.db);
         }
-        return new ShowDeleteStmt(dbName == null ? null : dbName.toString(), createPos(context));
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
+        return new ShowDeleteStmt(normalizedDb, createPos(context));
     }
 
     @Override
@@ -3631,7 +3558,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             dbName = getQualifiedName(context.db);
         }
 
-        return new ShowDynamicPartitionStmt(dbName == null ? null : dbName.toString(), createPos(context));
+        String normalizedDb = dbName == null ? null : normalizeName(dbName.toString());
+        return new ShowDynamicPartitionStmt(normalizedDb, createPos(context));
     }
 
     @Override
@@ -3734,7 +3662,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             where = (Expr) visit(context.expression());
         }
 
-        return new ShowTransactionStmt(database, where, createPos(context));
+        return new ShowTransactionStmt(normalizeName(database), where, createPos(context));
     }
 
     @Override
@@ -3991,16 +3919,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         mixTblRefs.addAll(viewRefs);
         mixTblRefs.addAll(tblRefs);
 
-        Map<String, String> properties = null;
-        com.starrocks.sql.parser.StarRocksParser.PropertyListContext contextProperties =
-                (backupContext != null) ? backupContext.propertyList() : restoreContext.propertyList();
-        if (contextProperties != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(contextProperties.property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        com.starrocks.sql.parser.StarRocksParser.PropertiesContext contextProperties =
+                (backupContext != null) ? backupContext.properties() : restoreContext.properties();
+        Map<String, String> properties = contextProperties == null ? null : getCaseSensitiveProperties(contextProperties);
 
         AbstractBackupStmt stmt = null;
         if (backupContext != null) {
@@ -4024,7 +3945,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
-        return new CancelBackupStmt(context.CATALOG() != null ? "" : ((Identifier) visit(context.identifier())).getValue(),
+        return new CancelBackupStmt(context.CATALOG() != null ? "" :
+                normalizeName(((Identifier) visit(context.identifier())).getValue()),
                 false, context.CATALOG() != null, createPos(context));
     }
 
@@ -4034,7 +3956,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.identifier() == null) {
             return new ShowBackupStmt(null, pos);
         }
-        return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue(), pos);
+        return new ShowBackupStmt(normalizeName(((Identifier) visit(context.identifier())).getValue()), pos);
     }
 
     @Override
@@ -4047,7 +3969,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.CATALOG() == null && context.identifier() == null) {
             throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
         }
-        return new CancelBackupStmt(context.CATALOG() != null ? "" : ((Identifier) visit(context.identifier())).getValue(),
+        return new CancelBackupStmt(context.CATALOG() != null ? "" :
+                normalizeName(((Identifier) visit(context.identifier())).getValue()),
                 true, context.CATALOG() != null, createPos(context));
     }
 
@@ -4058,10 +3981,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new ShowRestoreStmt(null, null, pos);
         }
         if (context.expression() != null) {
-            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(),
+            return new ShowRestoreStmt(normalizeName(((Identifier) visit(context.identifier())).getValue()),
                     (Expr) visit(context.expression()), pos);
         } else {
-            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(), null, pos);
+            return new ShowRestoreStmt(normalizeName(((Identifier) visit(context.identifier())).getValue()), null, pos);
         }
     }
 
@@ -4085,13 +4008,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.CreateRepositoryStatementContext context) {
         boolean isReadOnly = context.READ() != null && context.ONLY() != null;
 
-        Map<String, String> properties = new HashMap<>();
-        if (context.propertyList() != null) {
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         String location = ((StringLiteral) visit(context.location)).getValue();
         String repoName = ((Identifier) visit(context.repoName)).getValue();
         String brokerName = null;
@@ -4209,15 +4126,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             predicates = (Expr) visit(ctx.expression());
         }
 
-        Map<String, String> properties = null;
-        if (ctx.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(ctx.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
+        // properties must be null if not specified
+        Map<String, String> properties = ctx.properties() == null ? null : getCaseSensitiveProperties(ctx.properties());
         return new CreateDataCacheRuleStmt(qualifiedName, predicates, priority, properties, createPos(ctx));
     }
 
@@ -4273,7 +4183,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // properties
         Map<String, String> properties = new HashMap<>();
         if (ctx.properties() != null) {
-            List<Property> propertyList = visit(ctx.properties().property(), Property.class);
+            List<Property> propertyList = visit(ctx.properties().propertyList().property(), Property.class);
             for (Property property : propertyList) {
                 // ignore case sensitive
                 properties.put(property.getKey().toLowerCase(), property.getValue().toLowerCase());
@@ -4300,14 +4210,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         // properties
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = context.properties() == null ? null : getCaseSensitiveProperties(context.properties());
         // brokers
         BrokerDesc brokerDesc = getBrokerDesc(context.brokerDesc());
         boolean sync = context.SYNC() != null;
@@ -4320,7 +4223,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String catalog = null;
         if (context.catalog != null) {
             QualifiedName dbName = getQualifiedName(context.catalog);
-            catalog = dbName.toString();
+            catalog = normalizeName(dbName.toString());
         }
 
         Expr where = null;
@@ -4335,7 +4238,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String catalog = null;
         if (context.catalog != null) {
             QualifiedName dbName = getQualifiedName(context.catalog);
-            catalog = dbName.toString();
+            catalog = normalizeName(dbName.toString());
         }
 
         LimitElement le = null;
@@ -4359,7 +4262,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitInstallPluginStatement(com.starrocks.sql.parser.StarRocksParser.InstallPluginStatementContext context) {
         String pluginPath = ((Identifier) visit(context.identifierOrString())).getValue();
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         return new InstallPluginStmt(pluginPath, properties, createPos(context));
     }
 
@@ -4379,9 +4282,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String catalog = null;
         if (context.catalog != null) {
             QualifiedName dbName = getQualifiedName(context.catalog);
-            catalog = dbName.toString();
+            catalog = normalizeName(dbName.toString());
         }
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         return new CreateFileStmt(fileName, catalog, properties, createPos(context));
     }
@@ -4393,9 +4296,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String catalog = null;
         if (context.catalog != null) {
             QualifiedName dbName = getQualifiedName(context.catalog);
-            catalog = dbName.toString();
+            catalog = normalizeName(dbName.toString());
         }
-        Map<String, String> properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         return new DropFileStmt(fileName, catalog, properties, createPos(context));
     }
@@ -4407,7 +4310,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String catalog = null;
         if (context.catalog != null) {
             QualifiedName dbName = getQualifiedName(context.catalog);
-            catalog = dbName.toString();
+            catalog = normalizeName(dbName.toString());
         }
 
         return new ShowSmallFilesStmt(catalog, createPos(context));
@@ -4418,6 +4321,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitSetStatement(com.starrocks.sql.parser.StarRocksParser.SetStatementContext context) {
         List<SetListItem> propertyList = visit(context.setVar(), SetListItem.class);
         return new SetStmt(propertyList, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitRefreshConnectionsStatement(
+            com.starrocks.sql.parser.StarRocksParser.RefreshConnectionsStatementContext context) {
+        boolean force = context.FORCE() != null;
+        return new RefreshConnectionsStmt(force, createPos(context));
     }
 
     @Override
@@ -4556,7 +4466,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         return new CreateStorageVolumeStmt(context.IF() != null,
-                svName, storageType, getProperties(context.properties()), locations,
+                svName, storageType, getCaseSensitiveProperties(context.properties()), locations,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 createPos(context));
     }
@@ -4630,12 +4540,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitModifyStorageVolumePropertiesClause(
             com.starrocks.sql.parser.StarRocksParser.ModifyStorageVolumePropertiesClauseContext context) {
-        Map<String, String> properties = new HashMap<>();
-        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
-        return new ModifyStorageVolumePropertiesClause(properties, createPos(context));
+        return new ModifyStorageVolumePropertiesClause(getCaseSensitivePropertyList(context.propertyList()), createPos(context));
     }
 
     // ----------------------------------------------- FailPoint Statement -----------------------------------------------------
@@ -4712,15 +4617,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
 
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-
+        Map<String, String> properties = context.properties() == null ? null : getCaseSensitiveProperties(context.properties());
         return new CreateDictionaryStmt(dictionaryName, queryableObject, dictionaryKeys, dictionaryValues,
                 properties, createPos(context));
     }
@@ -4854,11 +4751,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new ModifyBackendClause(strings.get(0), strings.get(1), createPos(context));
         } else {
             String backendHostPort = strings.get(0);
-            Map<String, String> properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
+            Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
             return new ModifyBackendClause(backendHostPort, properties, createPos(context));
         }
     }
@@ -4942,7 +4835,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
                 getIndexType(context.indexType()),
-                comment, getPropertyList(context.propertyList()),
+                comment, getCaseInsensitivePropertyList(context.propertyList()),
                 createPos(start, stop));
 
         return new CreateIndexClause(indexDef, createPos(context));
@@ -4980,7 +4873,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitTableRenameClause(com.starrocks.sql.parser.StarRocksParser.TableRenameClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        return new TableRenameClause(identifier.getValue(), createPos(context));
+        return new TableRenameClause(normalizeName(identifier.getValue()), createPos(context));
     }
 
     @Override
@@ -4992,7 +4885,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitSwapTableClause(com.starrocks.sql.parser.StarRocksParser.SwapTableClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        return new SwapTableClause(identifier.getValue(), createPos(context));
+        return new SwapTableClause(normalizeName(identifier.getValue()), createPos(context));
     }
 
     @Override
@@ -5004,12 +4897,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitModifyPropertiesClause(com.starrocks.sql.parser.StarRocksParser.ModifyPropertiesClauseContext context) {
-        Map<String, String> properties = new HashMap<>();
-        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
-        return new ModifyTablePropertiesClause(properties, createPos(context));
+        return new ModifyTablePropertiesClause(getCaseSensitivePropertyList(context.propertyList()), createPos(context));
     }
 
     @Override
@@ -5062,9 +4950,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        Map<String, String> properties = new HashMap<>();
-        ;
-        properties = getProperties(context.properties());
+
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         if (columnDef.isGeneratedColumn()) {
             if (rollupName != null) {
@@ -5090,10 +4977,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitAddPartitionColumnClause(
+            com.starrocks.sql.parser.StarRocksParser.AddPartitionColumnClauseContext context) {
+        List<Expr> partitionExprList = visit(context.expressionList().expression(), Expr.class);
+        return new AddPartitionColumnClause(partitionExprList, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropPartitionColumnClause(
+            com.starrocks.sql.parser.StarRocksParser.DropPartitionColumnClauseContext context) {
+        List<Expr> partitionExprList = visit(context.expressionList().expression(), Expr.class);
+        return new DropPartitionColumnClause(partitionExprList, createPos(context));
+    }
+
+
+    @Override
     public ParseNode visitAddColumnsClause(com.starrocks.sql.parser.StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
-        Map<String, String> properties = new HashMap<>();
-        properties = getProperties(context.properties());
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         String rollupName = null;
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
@@ -5117,7 +5018,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 }
             }
         }
-        return new AddColumnsClause(columnDefs, rollupName, getProperties(context.properties()), createPos(context));
+        return new AddColumnsClause(columnDefs, rollupName, getCaseSensitiveProperties(context.properties()), createPos(context));
     }
 
     @Override
@@ -5127,7 +5028,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        return new DropColumnClause(columnName, rollupName, getProperties(context.properties()), createPos(context));
+        return new DropColumnClause(columnName, rollupName, getCaseSensitiveProperties(context.properties()), createPos(context));
     }
 
     @Override
@@ -5156,7 +5057,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             throw new ParsingException("add field clause name is null");
         }
         StructFieldDesc fieldDesc = new StructFieldDesc(fieldName, parts, typeDef, fieldPosition);
-        return new AddFieldClause(columnName, fieldDesc, getProperties(context.properties()));
+        return new AddFieldClause(columnName, fieldDesc, getCaseSensitiveProperties(context.properties()));
     }
 
     @Override
@@ -5171,7 +5072,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (fieldName == null) {
             throw new ParsingException("drop field clause name is null");
         }
-        return new DropFieldClause(columnName, fieldName, parts, getProperties(context.properties()));
+        return new DropFieldClause(columnName, fieldName, parts, getCaseSensitiveProperties(context.properties()));
     }
 
     @Override
@@ -5204,7 +5105,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                         "MODIFY GENERATED COLUMN"), columnDef.getPos());
             }
         }
-        return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
+        return new ModifyColumnClause(columnDef, columnPosition, rollupName, getCaseSensitiveProperties(context.properties()),
                 createPos(context));
     }
 
@@ -5231,7 +5132,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        return new ReorderColumnsClause(cols, rollupName, getProperties(context.properties()), createPos(context));
+        return new ReorderColumnsClause(cols, rollupName, getCaseSensitiveProperties(context.properties()), createPos(context));
     }
 
     @Override
@@ -5263,7 +5164,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new SplitTabletClause(
                 context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
                 context.tabletList() == null ? null : (TabletList) visit(context.tabletList()),
-                getProperties(context.properties()),
+                getCaseSensitiveProperties(context.properties()),
                 createPos(context));
     }
 
@@ -5286,13 +5187,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.distributionDesc() != null) {
             distributionDesc = (DistributionDesc) visitDistributionDesc(context.distributionDesc());
         }
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
         return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary, createPos(context));
     }
 
@@ -5345,15 +5240,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitModifyPartitionClause(com.starrocks.sql.parser.StarRocksParser.ModifyPartitionClauseContext context) {
-        Map<String, String> properties = null;
+        Map<String, String> properties = context.propertyList() == null ?
+                null : getCaseSensitivePropertyList(context.propertyList());
         NodePosition pos = createPos(context);
-        if (context.propertyList() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+
         if (context.identifier() != null) {
             final String partitionName = ((Identifier) visit(context.identifier())).getValue();
             return new ModifyPartitionClause(Collections.singletonList(partitionName), properties, pos);
@@ -5372,7 +5262,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PartitionNames newPartitionNames = (PartitionNames) visit(context.tempParName);
 
         return new ReplacePartitionClause(partitionNames, newPartitionNames,
-                getProperties(context.properties()), createPos(context));
+                getCaseSensitiveProperties(context.properties()), createPos(context));
     }
 
     @Override
@@ -5390,7 +5280,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String pipeName = null;
         QualifiedName qualifiedName = getQualifiedName(context);
         if (qualifiedName.getParts().size() == 2) {
-            dbName = qualifiedName.getParts().get(0);
+            dbName = normalizeName(qualifiedName.getParts().get(0));
             pipeName = qualifiedName.getParts().get(1);
         } else if (qualifiedName.getParts().size() == 1) {
             pipeName = qualifiedName.getParts().get(0);
@@ -5422,13 +5312,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(sql),
                     context.insertStatement());
         }
-        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
         InsertStmt insertStmt = (InsertStmt) insertNode;
         int insertSqlIndex = context.insertStatement().start.getStartIndex();
 
@@ -5449,6 +5333,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.qualifiedName()).toString();
         }
+        dbName = normalizeName(dbName);
         List<OrderByElement> orderBy = null;
         if (context.ORDER() != null) {
             orderBy = new ArrayList<>();
@@ -5489,7 +5374,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 return new AlterPipeClauseRetry(createPos(context), false, fileName);
             }
         } else if (context.SET() != null) {
-            Map<String, String> properties = getPropertyList(context.propertyList());
+            Map<String, String> properties = getCaseInsensitivePropertyList(context.propertyList());
             if (MapUtils.isEmpty(properties)) {
                 throw new ParsingException("empty property");
             }
@@ -5544,14 +5429,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.CreateWarehouseStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String whName = identifier.getValue();
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = context.properties() == null ? null : getCaseSensitiveProperties(context.properties());
         String comment = null;
         if (context.comment() != null) {
             comment = ((StringLiteral) visit(context.comment())).getStringValue();
@@ -5647,14 +5525,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         identifier = (Identifier) visit(context.identifierOrString(1));
         String cnGroupName = identifier.getValue();
 
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        // properties must be null if not specified
+        Map<String, String> properties = context.properties() == null ? null : getCaseSensitiveProperties(context.properties());
         return new CreateCnGroupStmt(ifNotExists, warehouseName, cnGroupName, comment, properties);
     }
 
@@ -5811,7 +5683,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // Regenerate cteID when generating plan
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
-                ((Identifier) visit(context.name)).getValue(),
+                normalizeName(((Identifier) visit(context.name)).getValue()),
                 getColumnNames(context.columnAliases()),
                 new QueryStatement(queryRelation),
                 queryRelation.getPos());
@@ -6064,13 +5936,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.end != null) {
             return new AnalyticWindow(
                     getFrameType(context.frameType),
-                    (AnalyticWindow.Boundary) visit(context.start),
-                    (AnalyticWindow.Boundary) visit(context.end),
+                    (AnalyticWindowBoundary) visit(context.start),
+                    (AnalyticWindowBoundary) visit(context.end),
                     pos);
         } else {
             return new AnalyticWindow(
                     getFrameType(context.frameType),
-                    (AnalyticWindow.Boundary) visit(context.start),
+                    (AnalyticWindowBoundary) visit(context.start),
                     pos);
         }
     }
@@ -6085,33 +5957,33 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitUnboundedFrame(com.starrocks.sql.parser.StarRocksParser.UnboundedFrameContext context) {
-        return new AnalyticWindow.Boundary(getUnboundedFrameBoundType(context.boundType), null);
+        return new AnalyticWindowBoundary(getUnboundedFrameBoundType(context.boundType), null);
     }
 
     @Override
     public ParseNode visitBoundedFrame(com.starrocks.sql.parser.StarRocksParser.BoundedFrameContext context) {
-        return new AnalyticWindow.Boundary(getBoundedFrameBoundType(context.boundType),
+        return new AnalyticWindowBoundary(getBoundedFrameBoundType(context.boundType),
                 (Expr) visit(context.expression()));
     }
 
     @Override
     public ParseNode visitCurrentRowBound(com.starrocks.sql.parser.StarRocksParser.CurrentRowBoundContext context) {
-        return new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null);
+        return new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null);
     }
 
-    private static AnalyticWindow.BoundaryType getBoundedFrameBoundType(Token token) {
+    private static AnalyticWindowBoundary.BoundaryType getBoundedFrameBoundType(Token token) {
         if (token.getType() == com.starrocks.sql.parser.StarRocksLexer.PRECEDING) {
-            return AnalyticWindow.BoundaryType.PRECEDING;
+            return AnalyticWindowBoundary.BoundaryType.PRECEDING;
         } else {
-            return AnalyticWindow.BoundaryType.FOLLOWING;
+            return AnalyticWindowBoundary.BoundaryType.FOLLOWING;
         }
     }
 
-    private static AnalyticWindow.BoundaryType getUnboundedFrameBoundType(Token token) {
+    private static AnalyticWindowBoundary.BoundaryType getUnboundedFrameBoundType(Token token) {
         if (token.getType() == com.starrocks.sql.parser.StarRocksLexer.PRECEDING) {
-            return AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+            return AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING;
         } else {
-            return AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
+            return AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING;
         }
     }
 
@@ -6264,8 +6136,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public TableSampleClause visitSampleClause(com.starrocks.sql.parser.StarRocksParser.SampleClauseContext context) {
         TableSampleClause result = new TableSampleClause(createPos(context));
-        if (context.propertyList() != null) {
-            Map<String, String> properties = getPropertyList(context.propertyList());
+        Map<String, String> properties = getCaseInsensitivePropertyList(context.propertyList());
+        if (!properties.isEmpty()) {
             try {
                 result.analyzeProperties(properties);
             } catch (AnalysisException e) {
@@ -6466,8 +6338,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitFileTableFunction(com.starrocks.sql.parser.StarRocksParser.FileTableFunctionContext context) {
-        Map<String, String> properties = getPropertyList(context.propertyList());
-        return new FileTableFunctionRelation(properties, NodePosition.ZERO);
+        return new FileTableFunctionRelation(getCaseInsensitivePropertyList(context.propertyList()), NodePosition.ZERO);
     }
 
     @Override
@@ -6586,6 +6457,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.db != null) {
             dbName = getQualifiedName(context.db).toString();
         }
+        dbName = normalizeName(dbName);
 
         String pattern = null;
         if (context.pattern != null) {
@@ -6608,18 +6480,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitDropFunctionStatement(com.starrocks.sql.parser.StarRocksParser.DropFunctionStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString();
         boolean isGlobal = context.GLOBAL() != null;
         boolean dropIfExist = context.IF() != null && context.EXISTS() != null;
-        FunctionName fnName = FunctionName.createFnName(functionName);
-        if (isGlobal) {
-            if (!Strings.isNullOrEmpty(fnName.getDb())) {
-                throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(functionName), qualifiedName.getPos());
-            }
-            fnName.setAsGlobalFunction();
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, createPos(context), isGlobal);
+        if (isGlobal && !Strings.isNullOrEmpty(functionRef.getDbName())) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
         }
 
-        return new DropFunctionStmt(fnName, getFunctionArgsDef(context.typeList()), createPos(context), dropIfExist);
+        return new DropFunctionStmt(functionRef, getFunctionArgsDef(context.typeList()),
+                createPos(context), dropIfExist);
     }
 
     @Override
@@ -6638,14 +6507,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
 
-        Map<String, String> properties = null;
-        if (context.properties() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = context.properties() == null ? null : getCaseSensitiveProperties(context.properties());
         if (context.inlineProperties() != null) {
             properties = new HashMap<>();
             List<Property> propertyList = visit(context.inlineProperties().inlineProperty(), Property.class);
@@ -6659,17 +6521,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             inlineContent = context.inlineFunction().ATTACHMENT().getText().substring(2, content.length() - 2);
         }
 
-        FunctionName fnName = FunctionName.createFnName(functionName);
-        if (isGlobal) {
-            if (!Strings.isNullOrEmpty(fnName.getDb())) {
-                throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(functionName), qualifiedName.getPos());
-            }
-            fnName.setAsGlobalFunction();
+        if (isGlobal && qualifiedName.getParts().size() > 1) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
         }
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
 
-        return new CreateFunctionStmt(functionType, fnName,
-                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent, replaceIfExists,
-                createIfNotExists);
+        return new CreateFunctionStmt(functionType, functionRef,
+                getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent,
+                replaceIfExists, createIfNotExists);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------
@@ -6686,13 +6545,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     s -> ((Identifier) s).getValue()).collect(toList()));
         }
 
-        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
         return new CreateUserStmt(user, ifNotExists, authOption, roles, properties, createPos(context));
     }
 
@@ -6727,19 +6580,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         if (context.authOption() != null) {
             UserAuthOption authOption = (UserAuthOption) visitIfPresent(context.authOption());
-            Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            if (context.properties() != null) {
-                List<Property> propertyList = visit(context.properties().property(), Property.class);
-                for (Property property : propertyList) {
-                    properties.put(property.getKey(), property.getValue());
-                }
-            }
+            Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
             return new AlterUserStmt(user, context.EXISTS() != null, authOption, properties, createPos(context));
         }
 
         // handle alter user xxx set properties
         List<SetUserPropertyVar> list = new ArrayList<>();
-        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        List<Property> propertyList = visit(context.properties().propertyList().property(), Property.class);
         for (Property property : propertyList) {
             list.add(new SetUserPropertyVar(property.getKey(), property.getValue()));
         }
@@ -7083,31 +6930,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private GrantRevokePrivilegeObjects buildGrantRevokePrivWithFunction(
             com.starrocks.sql.parser.StarRocksParser.PrivFunctionObjectNameListContext context, boolean isGlobal) {
-        List<Pair<FunctionName, FunctionArgsDef>> functions = new ArrayList<>();
+        List<FunctionRef> functionRefs = new ArrayList<>();
+        List<FunctionArgsDef> functionArgsDefs = new ArrayList<>();
         int functionSize = context.qualifiedName().size();
         List<com.starrocks.sql.parser.StarRocksParser.TypeListContext> typeListContexts = context.typeList();
         for (int i = 0; i < functionSize; ++i) {
             com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext qualifiedNameContext = context.qualifiedName(i);
             QualifiedName qualifiedName = getQualifiedName(qualifiedNameContext);
-            FunctionName functionName;
-            if (qualifiedName.getParts().size() == 1) {
-                functionName = new FunctionName(qualifiedName.getParts().get(0));
-            } else if (qualifiedName.getParts().size() == 2) {
-                functionName = new FunctionName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-            } else {
-                throw new SemanticException("Error function format " + qualifiedName);
-            }
-
-            if (isGlobal) {
-                functionName.setAsGlobalFunction();
-            }
-
+            FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
             FunctionArgsDef argsDef = getFunctionArgsDef(typeListContexts.get(i));
-            functions.add(Pair.create(functionName, argsDef));
+            functionRefs.add(functionRef);
+            functionArgsDefs.add(argsDef);
         }
 
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        objects.setFunctions(functions);
+        objects.setFunctionRefs(functionRefs);
+        objects.setFunctionArgsDefs(functionArgsDefs);
 
         return objects;
     }
@@ -7223,13 +7061,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitCreateSecurityIntegrationStatement(
             com.starrocks.sql.parser.StarRocksParser.CreateSecurityIntegrationStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> propertyMap = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                propertyMap.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> propertyMap = getCaseSensitiveProperties(context.properties());
         return new CreateSecurityIntegrationStatement(name, propertyMap, createPos(context));
     }
 
@@ -7237,11 +7069,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitAlterSecurityIntegrationStatement(
             com.starrocks.sql.parser.StarRocksParser.AlterSecurityIntegrationStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> properties = new HashMap<>();
-        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
+        Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
         return new AlterSecurityIntegrationStatement(name, properties, createPos(context));
     }
 
@@ -7271,13 +7099,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitCreateGroupProviderStatement(
             com.starrocks.sql.parser.StarRocksParser.CreateGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
-        Map<String, String> propertyMap = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                propertyMap.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> propertyMap = getCaseSensitiveProperties(context.properties());
         return new CreateGroupProviderStmt(name, propertyMap, context.IF() != null, createPos(context));
     }
 
@@ -7531,7 +7353,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(intText), pos);
             }
-        } catch (NumberFormatException | AnalysisException e) {
+        } catch (NumberFormatException | ParsingException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(intText), pos);
         }
     }
@@ -7613,7 +7435,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 if (ExprUtils.isLiteral(child) && child.getType().isNumericType()) {
                     try {
                         ((LiteralExpr) child).swapSign();
-                    } catch (NotImplementedException e) {
+                    } catch (UnsupportedOperationException e) {
                         throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(ExprToSql.toSql(child)), child.getPos());
                     }
                     return child;
@@ -8229,7 +8051,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.numOverflow(context.getText()), pos);
             }
-        } catch (NumberFormatException | AnalysisException e) {
+        } catch (NumberFormatException | ParsingException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), pos);
         }
     }
@@ -8251,7 +8073,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 return new DecimalLiteral(decimal, pos);
             }
 
-        } catch (AnalysisException | NumberFormatException e) {
+        } catch (ParsingException | NumberFormatException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), pos);
         }
     }
@@ -8265,7 +8087,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             } else {
                 return new DecimalLiteral(context.getText(), pos);
             }
-        } catch (AnalysisException e) {
+        } catch (ParsingException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidNumFormat(context.getText()), pos);
         }
     }
@@ -8275,12 +8097,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         String value = ((StringLiteral) visit(context.string())).getValue();
         try {
+            LocalDateTime dateTime = DateUtils.parseStrictDateTime(value);
             if (context.DATE() != null) {
-                return new DateLiteral(value, DateType.DATE);
+                return new DateLiteral(dateTime, DateType.DATE);
             } else {
-                return new DateLiteral(value, DateType.DATETIME);
+                return new DateLiteral(dateTime, DateType.DATETIME);
             }
-        } catch (AnalysisException e) {
+        } catch (RuntimeException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(value), pos);
         }
     }
@@ -8686,7 +8509,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private static StatementBase.ExplainLevel getExplainType(
             com.starrocks.sql.parser.StarRocksParser.ExplainDescContext context) {
-        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
         if (context.LOGICAL() != null) {
             explainLevel = StatementBase.ExplainLevel.LOGICAL;
         } else if (context.ANALYZE() != null) {
@@ -8779,14 +8602,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitSingleRangePartition(com.starrocks.sql.parser.StarRocksParser.SingleRangePartitionContext context) {
         PartitionKeyDesc partitionKeyDesc = (PartitionKeyDesc) visit(context.partitionKeyDesc());
         boolean ifNotExists = context.IF() != null;
-        Map<String, String> properties = null;
-        if (context.propertyList() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = context.propertyList() == null ?
+                null : getCaseSensitivePropertyList(context.propertyList());
         return new SingleRangePartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
                 partitionKeyDesc, properties, createPos(context));
     }
@@ -8844,14 +8661,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.SingleItemListPartitionDescContext context) {
         List<String> values = parseSingleListPartitionValues(context.singleListPartitionValues());
         boolean ifNotExists = context.IF() != null;
-        Map<String, String> properties = null;
-        if (context.propertyList() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = context.propertyList() == null ?
+                null : getCaseSensitivePropertyList(context.propertyList());
         return new SingleItemListPartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
                 values, properties, createPos(context));
     }
@@ -8868,14 +8679,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.MultiItemListPartitionDescContext context) {
         boolean ifNotExists = context.IF() != null;
         List<List<String>> multiValues = parseMultiListPartitionValues(context.multiListPartitionValues());
-        Map<String, String> properties = null;
-        if (context.propertyList() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = context.propertyList() == null ?
+                null : getCaseSensitivePropertyList(context.propertyList());
         return new MultiItemListPartitionDesc(ifNotExists, ((Identifier) visit(context.identifier())).getValue(),
                 multiValues, properties, createPos(context));
     }
@@ -9009,13 +8814,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitOutfile(com.starrocks.sql.parser.StarRocksParser.OutfileContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
 
         String format = null;
         if (context.fileFormat() != null) {
@@ -9576,7 +9375,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 return TypeFactory.createUnifiedDecimalType(precision);
             }
             return TypeFactory.createUnifiedDecimalType(10, 0);
-        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null || context.DECIMAL128() != null) {
+        } else if (context.DECIMAL32() != null || context.DECIMAL64() != null ||
+                context.DECIMAL128() != null || context.DECIMAL256() != null) {
             if (!Config.enable_decimal_v3) {
                 throw new SemanticException("Config field enable_decimal_v3 is false now, " +
                         "turn it on before decimal32/64/128/256 are used, " +
@@ -9645,21 +9445,47 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
     }
 
-    private Map<String, String> getProperties(com.starrocks.sql.parser.StarRocksParser.PropertiesContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context != null && context.property() != null) {
-            List<Property> propertyList = visit(context.property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
+    // from properties("key" = "value")
+    private Map<String, String> getCaseSensitiveProperties(com.starrocks.sql.parser.StarRocksParser.PropertiesContext context) {
+        List<com.starrocks.sql.parser.StarRocksParser.PropertyContext> propertyContextList = null;
+        if (context != null) {
+            com.starrocks.sql.parser.StarRocksParser.PropertyListContext propertyListContext = context.propertyList();
+            if (propertyListContext != null) {
+                propertyContextList = propertyListContext.property();
             }
         }
-        return properties;
+        return getProperties(propertyContextList, false);
     }
 
-    private Map<String, String> getPropertyList(com.starrocks.sql.parser.StarRocksParser.PropertyListContext context) {
-        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        if (context != null && context.property() != null) {
-            List<Property> propertyList = visit(context.property(), Property.class);
+    // from properties("key" = "value")
+    private Map<String, String> getCaseInsensitiveProperties(com.starrocks.sql.parser.StarRocksParser.PropertiesContext context) {
+        List<com.starrocks.sql.parser.StarRocksParser.PropertyContext> propertyContextList = null;
+        if (context != null) {
+            com.starrocks.sql.parser.StarRocksParser.PropertyListContext propertyListContext = context.propertyList();
+            if (propertyListContext != null) {
+                propertyContextList = propertyListContext.property();
+            }
+        }
+        return getProperties(propertyContextList, true);
+    }
+
+    // from ("key" = "value")
+    private Map<String, String> getCaseSensitivePropertyList(
+            com.starrocks.sql.parser.StarRocksParser.PropertyListContext context) {
+        return getProperties(context == null ? null : context.property(), false);
+    }
+
+    // from ("key" = "value")
+    private Map<String, String> getCaseInsensitivePropertyList(
+            com.starrocks.sql.parser.StarRocksParser.PropertyListContext context) {
+        return getProperties(context == null ? null : context.property(), true);
+    }
+
+    private Map<String, String> getProperties(List<com.starrocks.sql.parser.StarRocksParser.PropertyContext> contexts,
+                                              boolean caseInsensitive) {
+        Map<String, String> properties = caseInsensitive ? new TreeMap<>(String.CASE_INSENSITIVE_ORDER) : new HashMap<>();
+        if (contexts != null) {
+            List<Property> propertyList = visit(contexts, Property.class);
             for (Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
@@ -9721,26 +9547,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     private Map<String, String> getJobProperties(
             com.starrocks.sql.parser.StarRocksParser.JobPropertiesContext jobPropertiesContext) {
-        Map<String, String> jobProperties = new HashMap<>();
-        if (jobPropertiesContext != null) {
-            List<Property> propertyList = visit(jobPropertiesContext.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                jobProperties.put(property.getKey(), property.getValue());
-            }
+        if (jobPropertiesContext == null) {
+            return new HashMap<>();
         }
-        return jobProperties;
+        return getCaseSensitiveProperties(jobPropertiesContext.properties());
     }
 
     private Map<String, String> getDataSourceProperties(
             com.starrocks.sql.parser.StarRocksParser.DataSourcePropertiesContext dataSourcePropertiesContext) {
-        Map<String, String> dataSourceProperties = new HashMap<>();
-        if (dataSourcePropertiesContext != null) {
-            List<Property> propertyList = visit(dataSourcePropertiesContext.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                dataSourceProperties.put(property.getKey(), property.getValue());
-            }
+        if (dataSourcePropertiesContext == null) {
+            return new HashMap<>();
         }
-        return dataSourceProperties;
+        return getCaseSensitivePropertyList(dataSourcePropertiesContext.propertyList());
     }
 
     public List<String> getColumnNames(com.starrocks.sql.parser.StarRocksParser.ColumnAliasesContext context) {

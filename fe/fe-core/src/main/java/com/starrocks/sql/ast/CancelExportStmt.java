@@ -58,7 +58,7 @@ public class CancelExportStmt extends DdlStmt {
 
     public CancelExportStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.whereClause = whereClause;
     }
 
@@ -67,4 +67,3 @@ public class CancelExportStmt extends DdlStmt {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelExportStatement(this, context);
     }
 }
-

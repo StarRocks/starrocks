@@ -17,59 +17,28 @@ package com.starrocks.sql.ast;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.ArrayExpr;
-import com.starrocks.sql.ast.expression.ArraySliceExpr;
-import com.starrocks.sql.ast.expression.ArrowExpr;
-import com.starrocks.sql.ast.expression.BetweenPredicate;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BoolLiteral;
-import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.CloneExpr;
-import com.starrocks.sql.ast.expression.CollectionElementExpr;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
-import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
-import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
-import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
-import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.InformationFunction;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.IntervalLiteral;
-import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
-import com.starrocks.sql.ast.expression.LargeInPredicate;
-import com.starrocks.sql.ast.expression.LargeIntLiteral;
-import com.starrocks.sql.ast.expression.LargeStringLiteral;
-import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
-import com.starrocks.sql.ast.expression.MatchExpr;
-import com.starrocks.sql.ast.expression.MaxLiteral;
-import com.starrocks.sql.ast.expression.MultiInPredicate;
-import com.starrocks.sql.ast.expression.NamedArgument;
-import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
-import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.UserVariableHint;
-import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -91,19 +60,9 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    default R visitPrepareStatement(PrepareStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitExecuteStatement(ExecuteStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
-    default R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -266,27 +225,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitAlterLoadStatement(AlterLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
     default R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -303,12 +242,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
-
-    default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
 
     default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -354,17 +287,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
 
-    default R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
-    default R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     // ---------------------------------------- External Resource Statement---------------------------------------------
 
@@ -373,14 +295,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     // ---------------------------------------- UDF Statement-----------------------------------------------------------
-
-    default R visitShowFunctionsStatement(ShowFunctionsStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitCreateFunctionStatement(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -404,9 +318,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitCancelCompactionStatement(CancelCompactionStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
@@ -419,14 +330,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitShowTransactionStatement(ShowTransactionStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowVariablesStatement(ShowVariablesStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -462,26 +365,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowCollationStatement(ShowCollationStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowCharsetStatement(ShowCharsetStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowFailPointStatement(ShowFailPointStatement statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowProcedureStatement(ShowProcedureStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowStatusStatement(ShowStatusStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Authz Statement ----------------------------------------------------
 
     default R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
@@ -490,30 +373,12 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 
-    default R visitShowBackupStatement(ShowBackupStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowRestoreStatement(ShowRestoreStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     default R visitCancelBackupStatement(CancelBackupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
     // ------------------------------- DataCache Management Statement -------------------------------------------------
-    default R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
     default R visitDataCacheSelectStatement(DataCacheSelectStatement statement, C context) {
         return visitDDLStatement(statement, context);
@@ -565,21 +430,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    default R visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     default R visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
-    default R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
 
-    default R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     // -------------------------------------------- Pipe Statement -----------------------------------------------------
     default R visitPipeName(PipeName statement, C context) {
@@ -616,31 +471,8 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     // ------------------------------------------- Dictionary Statement ---------------------------------------------------------
-    default R visitCreateDictionaryStatement(CreateDictionaryStmt clause, C context) {
-        return visitDDLStatement(clause, context);
-    }
-
-    default R visitRefreshDictionaryStatement(RefreshDictionaryStmt clause, C context) {
-        return visitDDLStatement(clause, context);
-    }
 
     //Alter table clause
-
-    default R visitTableRenameClause(TableRenameClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitAlterTableCommentClause(AlterTableCommentClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitSwapTableClause(SwapTableClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitOptimizeClause(OptimizeClause clause, C context) {
         return visitNode(clause, context);
@@ -666,21 +498,11 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitColumnRenameClause(ColumnRenameClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
         return visitNode(clause, context);
     }
 
-    default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitCompactionClause(CompactionClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, C context) {
         return visitNode(clause, context);
@@ -700,9 +522,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     //Alter partition clause
 
-    default R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     default R visitAddPartitionClause(AddPartitionClause clause, C context) {
         return visitNode(clause, context);
@@ -720,9 +539,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     // Alter View
     default R visitAlterViewClause(AlterViewClause clause, C context) {
@@ -734,18 +550,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    default R visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
     // ------------------------------------------- Branch/Tag ----------------------------------==------------------------
-    default R visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, C context) {
-        return visitNode(clause, context);
-    }
 
     // ------------------------------------------- Table Operation ----------------------------------==-----------------
     default R visitAlterTableOperationClause(AlterTableOperationClause clause, C context) {
@@ -848,10 +653,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitNamedArgument(NamedArgument node, C context) {
-        return visitExpression(node, context);
-    }
-
     // ------------------------------------------- Functions ----------------------------------------
     default R visitFunctionCall(FunctionCallExpr node, C context) {
         return visitExpression(node, context);
@@ -861,28 +662,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitFunctionCall(node, context);
     }
 
-    default R visitInformationFunction(InformationFunction node, C context) {
-        return visitExpression(node, context);
-    }
-
     // ------------------------------------------- Collections --------------------------------------
-    default R visitArrayExpr(ArrayExpr node, C context) {
-        return visitExpression(node, context);
-    }
+
 
     default R visitMapExpr(MapExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitCollectionElementExpr(CollectionElementExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitArraySliceExpr(ArraySliceExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitArrowExpr(ArrowExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -890,101 +673,17 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    // ------------------------------------------- Predicates ---------------------------------------
-    default R visitPredicate(Expr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitBetweenPredicate(BetweenPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitBinaryPredicate(BinaryPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitCompoundPredicate(CompoundPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
     default R visitExistsPredicate(ExistsPredicate node, C context) {
         return visitPredicate(node, context);
     }
 
-    default R visitInPredicate(InPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitLargeInPredicate(LargeInPredicate node, C context) {
-        return visitInPredicate(node, context);
-    }
-
-    default R visitMultiInPredicate(MultiInPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitIsNullPredicate(IsNullPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitLikePredicate(LikePredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
     // ------------------------------------------- Literal ------------------------------------------
-    default R visitLiteral(LiteralExpr node, C context) {
-        return visitExpression(node, context);
-    }
 
     default R visitDefaultValueExpr(DefaultValueExpr node, C context) {
         return visitExpression(node, context);
     }
 
-    default R visitBoolLiteral(BoolLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitDateLiteral(DateLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitIntLiteral(IntLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
     default R visitDecimalLiteral(DecimalLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitVarBinaryLiteral(VarBinaryLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitLargeIntLiteral(LargeIntLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitNullLiteral(NullLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitFloatLiteral(FloatLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitStringLiteral(StringLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitLargeStringLiteral(LargeStringLiteral node, C context) {
-        return visitStringLiteral(node, context);
-    }
-
-    default R visitMaxLiteral(MaxLiteral node, C context) {
-        return visitLiteral(node, context);
-    }
-
-    default R visitIntervalLiteral(IntervalLiteral node, C context) {
         return visitLiteral(node, context);
     }
 
@@ -1006,10 +705,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitDictMappingExpr(DictMappingExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
     // ------------------------------------------- Others -------------------------------------------
     default R visitArithmeticExpr(ArithmeticExpr node, C context) {
         return visitExpression(node, context);
@@ -1019,15 +714,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitCaseWhenExpr(CaseExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
     default R visitCastExpr(CastExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitMatchExpr(MatchExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1044,10 +731,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
-        return visitExpression(node, context);
-    }
-
-    default R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1072,10 +755,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitHintNode(HintNode node, C context) {
-        return visitNode(node, context);
-    }
-
-    default R visitSetVarHint(SetVarHint node, C context) {
         return visitNode(node, context);
     }
 

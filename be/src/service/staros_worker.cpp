@@ -221,9 +221,15 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             return build_filesystem_on_demand(id, conf);
         }
 
-        auto fs = lookup_fs_cache(it->second.fs_cache_key);
-        if (fs != nullptr) {
-            return fs;
+        // Cache miss: reset the fs_cache_key to ensure a new shared_ptr will be created
+        {
+            std::lock_guard<std::mutex> reset_lock(_fs_cache_key_reset_mtx);
+            auto fs = lookup_fs_cache(it->second.fs_cache_key);
+            if (fs != nullptr) {
+                return fs;
+            }
+
+            it->second.fs_cache_key.reset();
         }
         shard_info = it->second.shard_info;
     }
