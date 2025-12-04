@@ -1905,6 +1905,8 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
         Set<String> modifyFieldColumns = new HashSet<>();
+        // NOTE: be very careful with the order of processing alter clauses and early return!!!
+        // It is in a for-loop!
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof AlterTableColumnClause) {
                 if (!propertyMap.isEmpty()) {
@@ -1956,6 +1958,10 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify column
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ModifyColumnCommentClause) {
+                // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                if (alterClauses.size() > 1) {
+                    throw new DdlException("MODIFY COLUMN COMMENT can not be combined with other alter operations");
+                }
                 processModifyColumnComment((ModifyColumnCommentClause) alterClause, db, olapTable, indexSchemaMap);
                 return null;
             } else if (alterClause instanceof AddFieldClause) {
@@ -1989,12 +1995,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 // reorder column
                 fastSchemaEvolution = false;
                 if (changeSortKeyColumn((ReorderColumnsClause) alterClause, olapTable)) {
+                    // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                    if (alterClauses.size() > 1) {
+                        // This must be checked because it will do early return later.
+                        throw new DdlException("MODIFY SORT KEY COLUMNS can not be combined with other alter operations");
+                    }
                     // do modify sort key column
                     List<Integer> sortKeyIdxes = new ArrayList<>();
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
                             sortKeyUniqueIds);
-
                     // If optimized olap table contains related mvs, set those mv state to inactive.
                     AlterMVJobExecutor.inactiveRelatedMaterializedView(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
@@ -2017,6 +2027,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution = false;
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
             } else if (alterClause instanceof OptimizeClause) {
+                // AlterTableStatementAnalyzer.checkAlterOpConflict() ensures the OPTIMIZE clause is alone.
+                Preconditions.checkState(alterClauses.size() == 1);
                 return createOptimizeTableJob((OptimizeClause) alterClause, db, olapTable, propertyMap);
             } else {
                 Preconditions.checkState(false);

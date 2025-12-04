@@ -49,6 +49,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.TestWithFeService;
 import org.apache.logging.log4j.LogManager;
@@ -521,4 +522,206 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
         Config.allow_system_reserved_names = false;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testUpdateFlatJsonConfigMeta() throws Exception {
+        // Create a test table
+        String createTableStmt = "CREATE TABLE test.flat_json_test (\n" +
+                "id INT NOT NULL,\n" +
+                "data JSON\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("flat_json_test");
+        Assertions.assertNotNull(table);
+
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+
+        // Test case 1: Enable flat JSON with all properties
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result1 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties1,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result1);
+
+        // Verify the configuration was applied
+        Assertions.assertTrue(table.containsFlatJsonConfig());
+        FlatJsonConfig config1 = table.getFlatJsonConfig();
+        Assertions.assertTrue(config1.getFlatJsonEnable());
+        Assertions.assertEquals(0.1, config1.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, config1.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config1.getFlatJsonColumnMax());
+
+        // Test case 2: Try to set flat JSON properties when flat_json.enable is false - should throw exception
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+
+        try {
+            handler.updateFlatJsonConfigMeta(db, table.getId(), properties2,
+                    TTabletMetaType.FLAT_JSON_CONFIG);
+            Assertions.fail("Should throw exception when setting flat JSON properties with flat_json.enable=false");
+        } catch (RuntimeException e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("flat JSON configuration must be set after enabling flat JSON"));
+        }
+
+        // Test case 3: Update existing flat JSON configuration
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.3");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.9");
+
+        boolean result3 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties3,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result3);
+
+        // Verify the configuration was updated
+        FlatJsonConfig config3 = table.getFlatJsonConfig();
+        Assertions.assertTrue(config3.getFlatJsonEnable());
+        Assertions.assertEquals(0.3, config3.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.9, config3.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config3.getFlatJsonColumnMax()); // Should remain unchanged
+
+        // Test case 4: Disable flat JSON
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+
+        boolean result4 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties4,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result4);
+
+        // Verify flat JSON is disabled
+        FlatJsonConfig config4 = table.getFlatJsonConfig();
+        Assertions.assertFalse(config4.getFlatJsonEnable());
+
+        // Test case 5: Try to set properties when flat JSON is disabled - should throw exception
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "100");
+
+        try {
+            handler.updateFlatJsonConfigMeta(db, table.getId(), properties5,
+                    TTabletMetaType.FLAT_JSON_CONFIG);
+            Assertions.fail("Should throw exception when setting flat JSON properties with flat_json.enable=false");
+        } catch (RuntimeException e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("flat JSON configuration must be set after enabling flat JSON"));
+        }
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMetaWithNoChange() throws Exception {
+        // Create a test table
+        String createTableStmt = "CREATE TABLE test.flat_json_no_change (\n" +
+                "id INT NOT NULL,\n" +
+                "data JSON\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("flat_json_no_change");
+        Assertions.assertNotNull(table);
+
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+
+        // First, set up flat JSON configuration
+        Map<String, String> initialProperties = new HashMap<>();
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result1 = handler.updateFlatJsonConfigMeta(db, table.getId(), initialProperties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result1);
+
+        // Now try to set the same values again - should return true but no actual change
+        Map<String, String> sameProperties = new HashMap<>();
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result2 = handler.updateFlatJsonConfigMeta(db, table.getId(), sameProperties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result2);
+
+        // Verify the configuration remains the same
+        FlatJsonConfig config = table.getFlatJsonConfig();
+        Assertions.assertTrue(config.getFlatJsonEnable());
+        Assertions.assertEquals(0.1, config.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, config.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config.getFlatJsonColumnMax());
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMetaWithInvalidTable() throws Exception {
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // Test with non-existent table ID
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+
+        boolean result = handler.updateFlatJsonConfigMeta(db, 99999L, properties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertFalse(result);
+    }
+
+    @Test
+    public void testAlterTableConflictClauses() throws Exception {
+        String createTableStmt =
+                "create table test.test_crash2(c1 varchar(255),c2 datetime, c3 bigint, c4 varchar(255)," +
+                        " c5 varchar(255)) " +
+                        " primary key(c1,c2) partition by date_trunc('day',c2) distributed by hash(c1) buckets 2" +
+                        " order by (c1,c3,c4,c5) PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+        { // reorder conflict
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c6 VARCHAR(255) " +
+                    "NULL COMMENT 'ccc', ORDER BY(c1, c3,c4,c6);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterTableSql);
+            Assertions.assertEquals(2L, alterTableStmt.getAlterClauseList().size());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable("test_crash2");
+            SchemaChangeHandler handler = new SchemaChangeHandler();
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    handler.process(alterTableStmt.getAlterClauseList(), db, table));
+            Assertions.assertTrue(exception.getMessage()
+                            .contains("MODIFY SORT KEY COLUMNS can not be combined with other alter operations"),
+                    exception.getMessage());
+        }
+        {
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c7 VARCHAR(255) " +
+                    "NULL COMMENT 'ccc', MODIFY COLUMN c1 COMMENT 'c1c1' ;";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterTableSql);
+            Assertions.assertEquals(2L, alterTableStmt.getAlterClauseList().size());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable("test_crash2");
+            SchemaChangeHandler handler = new SchemaChangeHandler();
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    handler.process(alterTableStmt.getAlterClauseList(), db, table));
+            Assertions.assertTrue(exception.getMessage()
+                            .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
+                    exception.getMessage());
+        }
+        {
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c8 VARCHAR(255) " +
+                    "NULL COMMENT 'c8c8', DISTRIBUTED BY HASH(c2) BUCKETS 2;";
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () ->
+                    parseAndAnalyzeStmt(alterTableSql));
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Alter operation OPTIMIZE conflicts with operation SCHEMA_CHANGE"),
+                    exception.getMessage());
+        }
+    }
+>>>>>>> 4ea568e0b8 ([BugFix] Reject conflicting schema-change clauses before side effects (#66208))
 }
