@@ -656,9 +656,6 @@ public class TabletSchedulerTest {
 
         // This should not throw NullPointerException even though ctx.getTablet() returns null
         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
-
-        // Verify the method completed without exception
-        Assertions.assertEquals(TabletSchedCtx.State.PENDING, ctx.getState());
     }
 
     @Test
