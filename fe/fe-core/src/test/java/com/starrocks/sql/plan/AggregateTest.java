@@ -2426,7 +2426,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1)\n" +
-                "  |  group by: 1: v1, 5: case, 4: uuid, 6: expr");
+                "  |  group by: 1: v1, 5: case, 4: UUID, 6: expr");
     }
 
     @Test

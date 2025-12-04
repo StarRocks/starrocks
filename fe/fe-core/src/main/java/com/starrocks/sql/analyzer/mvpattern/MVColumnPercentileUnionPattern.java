@@ -47,7 +47,7 @@ public class MVColumnPercentileUnionPattern implements MVColumnPattern {
             return false;
         }
         FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-        String fnNameString = fnExpr.getFnName().getFunction();
+        String fnNameString = fnExpr.getFunctionName();
         if (!fnNameString.equalsIgnoreCase(FunctionSet.PERCENTILE_UNION)) {
             return false;
         }
@@ -60,7 +60,7 @@ public class MVColumnPercentileUnionPattern implements MVColumnPattern {
             }
         } else if (fnExpr.getChild(0) instanceof FunctionCallExpr) {
             FunctionCallExpr child0FnExpr = (FunctionCallExpr) fnExpr.getChild(0);
-            if (!child0FnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.PERCENTILE_HASH)) {
+            if (!child0FnExpr.getFunctionName().equalsIgnoreCase(FunctionSet.PERCENTILE_HASH)) {
                 return false;
             }
             return true;

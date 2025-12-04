@@ -1400,7 +1400,7 @@ public class OlapScanNode extends ScanNode {
             return false;
         }
         FunctionCallExpr fcall = (FunctionCallExpr) expr;
-        String fname = fcall.getFnName().getFunction();
+        String fname = fcall.getFunctionName();
         if (fname.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             return true;
         } else if (fname.equalsIgnoreCase(FunctionSet.STR2DATE)) {

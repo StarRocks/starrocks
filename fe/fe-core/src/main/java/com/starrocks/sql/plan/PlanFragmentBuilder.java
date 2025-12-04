@@ -2481,7 +2481,7 @@ public class PlanFragmentBuilder {
             }
             if (singleDistinctCount == 1) {
                 FunctionCallExpr replaceExpr = null;
-                final String functionName = functionCallExpr.getFnName().getFunction();
+                final String functionName = functionCallExpr.getFunctionName();
                 if (functionName.equalsIgnoreCase(FunctionSet.COUNT)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_COUNT, functionCallExpr.getParams());
                     replaceExpr.setFn(ExprUtils.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT,

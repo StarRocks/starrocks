@@ -1525,7 +1525,7 @@ public class MvUtils {
             return false;
         }
         return expr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+                && ((FunctionCallExpr) expr).getFunctionName().equalsIgnoreCase(expectFuncName);
     }
 
     public static boolean isStr2Date(Expr expr) {

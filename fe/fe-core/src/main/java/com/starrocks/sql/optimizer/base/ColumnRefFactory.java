@@ -60,7 +60,7 @@ public class ColumnRefFactory {
         if (expression instanceof SlotRef) {
             nameHint = ((SlotRef) expression).getColumnName();
         } else if (expression instanceof FunctionCallExpr) {
-            nameHint = ((FunctionCallExpr) expression).getFnName().toString();
+            nameHint = ((FunctionCallExpr) expression).getFnRef().getFnName().toString();
         } else if (expression instanceof CaseExpr) {
             nameHint = "case";
         } else if (expression instanceof CastExpr) {

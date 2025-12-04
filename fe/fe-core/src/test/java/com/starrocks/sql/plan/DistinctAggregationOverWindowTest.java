@@ -458,7 +458,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
         execPlan.getTopFragment().getPlanRoot().collect(AggregationNode.class, aggNodes);
         Optional<Type> optReturnType = aggNodes.stream()
                 .flatMap(agg -> agg.getAggInfo().getAggregateExprs().stream())
-                .filter(fcall -> names.contains(fcall.getFnName().getFunction()))
+                .filter(fcall -> names.contains(fcall.getFunctionName()))
                 .findFirst()
                 .map(fcall -> ((AggregateFunction) fcall.getFn()).getReturnType());
 
@@ -470,7 +470,7 @@ public class DistinctAggregationOverWindowTest extends PlanTestBase {
         execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, windowNodes);
         optReturnType = windowNodes.stream()
                 .flatMap(win -> win.getAnalyticFnCalls().stream().map(e -> (FunctionCallExpr) e))
-                .filter(fcall -> names.contains(fcall.getFnName().getFunction()))
+                .filter(fcall -> names.contains(fcall.getFunctionName()))
                 .findFirst()
                 .map(fcall -> ((AggregateFunction) fcall.getFn()).getReturnType());
 

@@ -51,7 +51,7 @@ public class MVColumnOneChildPattern implements MVColumnPattern {
             return false;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        String exprFnName = functionCallExpr.getFnName().getFunction();
+        String exprFnName = functionCallExpr.getFunctionName();
         if (!exprFnName.equalsIgnoreCase(functionName)) {
             return false;
         }

@@ -24,7 +24,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.TableName;
@@ -944,7 +943,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // for automatic partition
         if (context.functionCall() != null) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             // except date_trunc, time_slice use generated column as partition column
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)
                     && !FunctionSet.STR2DATE.equals(functionName)) {
@@ -996,7 +995,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             if (primaryExpression instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) primaryExpression;
-                String functionName = functionCallExpr.getFnName().getFunction();
+                String functionName = functionCallExpr.getFunctionName();
                 if (FunctionSet.FROM_UNIXTIME.equals(functionName)
                         || FunctionSet.FROM_UNIXTIME_MS.equals(functionName)) {
                     primaryExpression = new CastExpr(new TypeDef(DateType.DATETIME), primaryExpression);
@@ -1057,7 +1056,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         List<String> columnList = new ArrayList<>();
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-            String functionName = functionCallExpr.getFnName().getFunction().toLowerCase();
+            String functionName = functionCallExpr.getFunctionName().toLowerCase();
             List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
             if (PARTITION_FUNCTIONS.contains(functionName)) {
                 Expr firstExpr = paramsExpr.get(0);
@@ -6360,7 +6359,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
         List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters);
+                new FunctionCallExpr(functionName.toString(), parameters);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
@@ -6386,7 +6385,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
         }
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters,
+                new FunctionCallExpr(functionName.toString(), parameters,
                         createPos(context));
         TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
@@ -7652,8 +7651,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
         NodePosition pos = createPos(context);
 
-        FunctionName fnName = FunctionName.createFnName(fullFunctionName);
-        String functionName = fnName.getFunction();
+        // Extract function name from qualified name (remove db prefix if present)
+        String functionName = fullFunctionName;
+        if (fullFunctionName.contains(".")) {
+            String[] parts = fullFunctionName.split("\\.", 2);
+            functionName = parts[1].toLowerCase();
+        } else {
+            functionName = fullFunctionName.toLowerCase();
+        }
         if (functionName.equals(FunctionSet.ARRAY_GENERATE)) {
             if (context.expression().size() == 3) {
                 Expr e3 = (Expr) visit(context.expression(2));
@@ -7666,7 +7671,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     IntervalLiteral intervalLiteral = (IntervalLiteral) e3;
                     addArgumentUseTypeInt(intervalLiteral.getValue(), exprs);
                     exprs.add(new StringLiteral(intervalLiteral.getUnitIdentifier().getDescription().toLowerCase()));
-                    FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, exprs, pos);
+                    FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName, exprs, pos);
                     return functionCallExpr;
                 }
             }
@@ -7679,7 +7684,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
                 }
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
-                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
                         "floor"), pos);
 
@@ -7697,7 +7702,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
                 }
                 UnitBoundary unitBoundary = (UnitBoundary) e3;
-                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
                         unitBoundary.getDescription().toLowerCase()), pos);
 
@@ -7716,7 +7721,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e4.getPos());
                 }
                 String boundary = ((StringLiteral) e4).getValue();
-                return new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1, e2, ident, boundary));
+                return new FunctionCallExpr(fullFunctionName, getArgumentsForTimeSlice(e1, e2, ident, boundary));
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
@@ -7762,14 +7767,14 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new IsNullPredicate(params.get(0), true, pos);
         }
 
-        if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
+        if (ArithmeticExpr.isArithmeticExpr(functionName)) {
             if (context.expression().size() < 1) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
 
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
-            return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
+            return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(functionName), e1, e2, pos);
         }
 
         // add default delimiters and rewrite str_to_map(str, del1, del2) to str_to_map(split(str, del1),del2)
@@ -7797,15 +7802,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new FunctionCallExpr(functionName, ImmutableList.of(e0, e1, e2), pos);
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+        if (functionName.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
             return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_USER)) {
+        if (functionName.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
             return new InformationFunction(FunctionSet.SESSION_USER.toUpperCase());
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+        if (functionName.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
             return new InformationFunction(FunctionSet.SESSION_ID.toUpperCase());
         }
 
@@ -7839,7 +7844,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 addArgumentUseTypeInt(e2, exprs);
                 addArgumentUseTypeInt(e3, exprs);
             }
-            return new FunctionCallExpr(fnName, exprs, pos);
+            return new FunctionCallExpr(fullFunctionName, exprs, pos);
         }
 
         if (functionName.equals(FunctionSet.LPAD) || functionName.equals(FunctionSet.RPAD)) {
@@ -7847,7 +7852,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 Expr e1 = (Expr) visit(context.expression(0));
                 Expr e2 = (Expr) visit(context.expression(1));
                 FunctionCallExpr functionCallExpr = new FunctionCallExpr(
-                        fnName, Lists.newArrayList(e1, e2, new StringLiteral(" ")), pos);
+                        fullFunctionName, Lists.newArrayList(e1, e2, new StringLiteral(" ")), pos);
                 return functionCallExpr;
             }
         }
@@ -7857,7 +7862,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new DictQueryExpr(params);
         }
 
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
@@ -7870,8 +7875,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         String fullFunctionName = context.TRANSLATE().getText();
         NodePosition pos = createPos(context);
 
-        FunctionName fnName = FunctionName.createFnName(fullFunctionName);
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
         return SyntaxSugars.parse(functionCallExpr);
     }
@@ -8661,7 +8665,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         com.starrocks.sql.parser.StarRocksParser.IdentifierListContext identifierListContext = context.identifierList();
         if (context.functionCall() != null) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             // except date_trunc, time_slice, str_to_date use generated column as partition column
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)
                     && !FunctionSet.STR2DATE.equals(functionName)) {

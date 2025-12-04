@@ -240,7 +240,7 @@ public class MVPartitionExprResolver {
             }
 
             FunctionCallExpr funcExpr = (FunctionCallExpr) expr;
-            String fnName = funcExpr.getFnName().getFunction();
+            String fnName = funcExpr.getFunctionName();
             int slotRefIdx = FN_NAMES_WITH_FIRST_SLOT.contains(fnName) ? 0 : 1;
             Exprs eqs = visitExpr(context.withExpr(expr.getChild(slotRefIdx)));
             if (eqs == null) {

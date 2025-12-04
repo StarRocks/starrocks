@@ -386,7 +386,7 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql57() throws Exception {
-        String sql = "select column_name, UPPER(DATA_TYPE) from information_schema.columns;";
+        String sql = "select column_name, upper(DATA_TYPE) from information_schema.columns;";
         testView(sql);
     }
 

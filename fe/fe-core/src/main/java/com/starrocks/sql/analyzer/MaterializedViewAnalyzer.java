@@ -804,7 +804,7 @@ public class MaterializedViewAnalyzer {
         private boolean isValidPartitionExpr(Expr partitionExpr) {
             if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr partitionColumnExpr = (FunctionCallExpr) partitionExpr;
-                String fnName = partitionColumnExpr.getFnName().getFunction();
+                String fnName = partitionColumnExpr.getFunctionName();
                 if (fnName.equalsIgnoreCase(FunctionSet.TIME_SLICE) || fnName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
                     return partitionColumnExpr.getChild(0) instanceof SlotRef;
                 }
@@ -855,16 +855,16 @@ public class MaterializedViewAnalyzer {
                 if (mvPartitionByExpr instanceof FunctionCallExpr) {
                     // e.g. partition by date_trunc('month', dt)
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionByExpr;
-                    String functionName = functionCallExpr.getFnName().getFunction();
+                    String functionName = functionCallExpr.getFunctionName();
                     if (!PartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
                         throw new SemanticException("Materialized view partition function " +
-                                functionCallExpr.getFnName().getFunction() +
+                                functionCallExpr.getFunctionName() +
                                 " is not supported yet.", functionCallExpr.getPos());
                     }
 
                     if (!isValidPartitionExpr(partitionColumnExpr)) {
                         throw new SemanticException("Materialized view partition function " +
-                                functionCallExpr.getFnName().getFunction() +
+                                functionCallExpr.getFunctionName() +
                                 " must related with column", functionCallExpr.getPos());
                     }
                     // copy function and set it into partitionRefTableExpr
@@ -950,7 +950,7 @@ public class MaterializedViewAnalyzer {
             for (Expr expr : exprs) {
                 if (expr instanceof FunctionCallExpr) {
                     FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
-                    String functionName = functionCallExpr.getFnName().getFunction();
+                    String functionName = functionCallExpr.getFunctionName();
                     PartitionFunctionChecker.CheckPartitionFunction checkPartitionFunction =
                             PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                     if (checkPartitionFunction == null) {
@@ -1335,7 +1335,7 @@ public class MaterializedViewAnalyzer {
                 // do nothing
             } else if (partitionByExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionByExpr;
-                String functionName = functionCallExpr.getFnName().getFunction();
+                String functionName = functionCallExpr.getFunctionName();
                 if (!PartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
                     throw new SemanticException(String.format("Materialized view partition function derived from " +
                             functionName + " of base table %s is not supported yet", table.getName()),

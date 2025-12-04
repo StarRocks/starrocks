@@ -943,7 +943,7 @@ public class MaterializedViewRule extends Rule {
                 if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
                         queryFnChild0 instanceof CallOperator) {
                     CallOperator queryCall = (CallOperator) queryFnChild0;
-                    String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFnName().getFunction();
+                    String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFunctionName();
                     String queryName = queryCall.getFnName();
 
                     if (!mvName.equalsIgnoreCase(queryName)) {

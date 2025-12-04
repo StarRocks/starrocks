@@ -36,13 +36,13 @@ public class PartitionExprAnalyzer {
      * Recursive analyze the date_trunc function
      */
     public static void analyzeDateTruncFunction(FunctionCallExpr funcCall, SlotRef partitionSlotRef) {
-        String functionName = funcCall.getFnName().getFunction();
+        String functionName = funcCall.getFunctionName();
         if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             Expr arg1 = funcCall.getParams().exprs().get(1);
             if (arg1 instanceof SlotRef) {
                 Type targetColType = partitionSlotRef.getType();
                 Type[] dateTruncType = {VarcharType.VARCHAR, targetColType};
-                Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFnName().getFunction(),
+                Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFunctionName(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
 
                 funcCall.setFn(builtinFunction);
@@ -52,7 +52,7 @@ public class PartitionExprAnalyzer {
 
                 Type targetColType = arg1.getType();
                 Type[] dateTruncType = {VarcharType.VARCHAR, targetColType};
-                Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFnName().getFunction(),
+                Function builtinFunction = ExprUtils.getBuiltinFunction(funcCall.getFunctionName(),
                         dateTruncType, Function.CompareMode.IS_IDENTICAL);
 
                 funcCall.setFn(builtinFunction);
@@ -69,14 +69,14 @@ public class PartitionExprAnalyzer {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
             Function builtinFunction = null;
             Type targetColType = partitionSlotRef.getType();
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 analyzeDateTruncFunction(functionCallExpr, partitionSlotRef);
                 builtinFunction = functionCallExpr.getFn();
                 targetColType = functionCallExpr.getType();
             } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
                 Type[] timeSliceType = {DateType.DATETIME, IntegerType.INT, VarcharType.VARCHAR, VarcharType.VARCHAR};
-                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFunctionName(),
                         timeSliceType, Function.CompareMode.IS_IDENTICAL);
             } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTR) ||
                     functionName.equalsIgnoreCase(FunctionSet.SUBSTRING)) {
@@ -113,12 +113,12 @@ public class PartitionExprAnalyzer {
                     }
 
                 }
-                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFunctionName(),
                         subStrType, Function.CompareMode.IS_IDENTICAL);
                 targetColType = VarcharType.VARCHAR;
             } else if (functionName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 Type[] str2DateType = {partitionSlotRef.getType(), VarcharType.VARCHAR};
-                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFunctionName(),
                         str2DateType, Function.CompareMode.IS_IDENTICAL);
                 if (builtinFunction == null) {
                     String msg = String.format("Unsupported partition expression %s for column %s type %s",
@@ -129,7 +129,7 @@ public class PartitionExprAnalyzer {
             } else if (functionName.equalsIgnoreCase(FunctionSet.FROM_UNIXTIME) || functionName.equalsIgnoreCase(
                     FunctionSet.FROM_UNIXTIME_MS)) {
                 Type[] fromUnixTimeStampType = {partitionSlotRef.getType()};
-                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFunctionName(),
                         fromUnixTimeStampType, Function.CompareMode.IS_IDENTICAL);
                 if (builtinFunction == null) {
                     String msg = String.format("Unsupported partition expression %s for column %s type %s",

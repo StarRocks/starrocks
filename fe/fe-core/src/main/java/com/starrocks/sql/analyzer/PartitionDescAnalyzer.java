@@ -203,7 +203,7 @@ public class PartitionDescAnalyzer {
             ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
 
             String partitionGranularity;
             long partitionStep;
@@ -244,7 +244,7 @@ public class PartitionDescAnalyzer {
 
         Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
 
         String partitionGranularity;
         long partitionStep;
@@ -460,7 +460,7 @@ public class PartitionDescAnalyzer {
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                     List<String> autoPartitionSupportFunctions = Lists.newArrayList(FunctionSet.TIME_SLICE,
                             FunctionSet.DATE_TRUNC);
-                    if (!autoPartitionSupportFunctions.contains(functionCallExpr.getFnName().getFunction())) {
+                    if (!autoPartitionSupportFunctions.contains(functionCallExpr.getFunctionName())) {
                         throw new SemanticException("Only support date_trunc and time_slice as partition expression");
                     }
                 }
@@ -483,7 +483,7 @@ public class PartitionDescAnalyzer {
                     Preconditions.checkState(columnDef.isPresent());
                     slotRef.setType(columnDef.get().getType());
 
-                    String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
+                    String functionName = ((FunctionCallExpr) expr).getFunctionName().toLowerCase();
                     if (functionName.equals(FunctionSet.STR2DATE)) {
                         desc.setPartitionType(DateType.DATE);
                         if (!PartitionFunctionChecker.checkStr2date(expr)) {
