@@ -55,6 +55,7 @@ import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
@@ -73,6 +74,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
@@ -1611,6 +1613,20 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
 
             info.setType(getStringByType());
+
+            // warehouse
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    info.setWarehouse(warehouse.getName());
+                } catch (Exception e) {
+                    LOG.warn("Failed to get warehouse for stream load task {}, error: {}", id, e.getMessage());
+                    info.setWarehouse("");
+                }
+            } else {
+                info.setWarehouse("");
+            }
+
             return info;
         } finally {
             readUnlock();
