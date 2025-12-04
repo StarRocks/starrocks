@@ -93,7 +93,7 @@ public class RecursiveCTEExecutor {
         for (String cteName : recursiveCTEGroups.keySet()) {
             RecursiveCTEGroup group = recursiveCTEGroups.get(cteName);
             sb.append("Recursive CTE Name: ").append(cteName).append("\n");
-            sb.append("Temporary Table Statement: ").append(AstToSQLBuilder.toSQL(group.tempTableStmt)).append("\n");
+            sb.append("Temporary Table: ").append(group.tempTableStmt.getTableName()).append("\n");
             sb.append("Start Statement: ").append(AstToSQLBuilder.toSQL(group.startStmt)).append("\n");
             sb.append("Recursive Statement: ").append(AstToSQLBuilder.toSQL(group.recursiveStmt)).append("\n");
             sb.append("--------------------------------------------------\n");
