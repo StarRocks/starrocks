@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <poll.h>
+#include <spawn.h>
 #include <sys/poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -52,36 +53,6 @@ void PyWorker::wait() {
     }
 }
 
-static Status close_all_fd_except(const std::unordered_set<int>& fds) {
-    DIR* dir = opendir("/proc/self/fd");
-    auto defer = DeferOp([&dir]() {
-        if (dir != nullptr) {
-            closedir(dir);
-        }
-    });
-
-    if (dir == nullptr) {
-        return Status::InternalError(fmt::format("open /proc/self/fd error {}", std::strerror(errno)));
-    }
-
-    int dir_fd = dirfd(dir);
-    if (dir_fd < 0) {
-        return Status::InternalError(fmt::format("syscall dirfd error {}", std::strerror(errno)));
-    }
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (entry->d_type == DT_LNK) {
-            int fd = atoi(entry->d_name);
-            if (fd >= 0 && fd != dir_fd && fds.count(fd) == 0) {
-                close(fd);
-            }
-        }
-    }
-
-    return Status::OK();
-}
-
 void PyWorker::remove_unix_socket() {
     unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
 }
@@ -95,90 +66,104 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     if (pipe(pipefd) == -1) {
         return Status::InternalError(fmt::format("create pipe error:{}", std::strerror(errno)));
     }
+    butil::fd_guard guard(pipefd[0]);
     butil::make_non_blocking(pipefd[0]);
 
-    pid_t cpid = fork();
-    if (cpid == -1) {
-        return Status::InternalError(fmt::format("fork worker error:{}", std::strerror(errno)));
-    } else if (cpid == 0) {
-        dup2(pipefd[1], STDOUT_FILENO);
-        if (config::report_python_worker_error) {
-            dup2(pipefd[1], STDERR_FILENO);
-        }
-        // change dir
-        if (chdir(config::local_library_dir.c_str()) != 0) {
-            std::cout << "change dir failed:" << std::strerror(errno) << std::endl;
-            exit(-1);
-        }
-        // run child process
-        // close all resource
-        std::unordered_set<int> reserved_fd{0, 1, 2, pipefd[0]};
-        auto status = close_all_fd_except(reserved_fd);
-        if (!status.ok()) {
-            std::cout << "close fd failed:" << status.to_string() << std::endl;
-            exit(-1);
-        }
+    pid_t pid;
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    auto cleanup_action = DeferOp([&actions]() { posix_spawn_file_actions_destroy(&actions); });
 
-        pid_t self_pid = getpid();
-        std::string str_pid = std::to_string(self_pid);
-        char command[] = "python3";
-        std::string script = PyWorkerManager::bootstrap();
-        std::string unix_socket = PyWorkerManager::unix_socket(self_pid);
-        std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
-        char* const args[] = {command, script.data(), unix_socket.data(), nullptr};
-        char* const envs[] = {python_home_env.data(), nullptr};
-        // exec flight server
-        if (execvpe(python_path.c_str(), args, envs)) {
-            std::cout << "execvp failed:" << std::strerror(errno) << std::endl;
-            exit(-1);
-        }
-
-    } else {
-        close(pipefd[1]);
-        butil::fd_guard guard(pipefd[0]);
-        *child_process = std::make_unique<PyWorker>(cpid);
-
-        pollfd fds[1];
-        fds[0].fd = pipefd[0];
-        fds[0].events = POLLIN;
-
-        // wait util worker start
-        int32_t poll_timeout = config::create_child_worker_timeout_ms;
-        int ret = poll(fds, 1, poll_timeout);
-        if (ret == -1) {
-            return Status::InternalError(fmt::format("poll error:{}", std::strerror(errno)));
-        } else if (ret == 0) {
-            (*child_process)->terminate_and_wait();
-            return Status::InternalError(fmt::format("create worker timeout, cost {}ms", poll_timeout));
-        }
-
-        const char* success_message = "Pywork start success";
-        char buffer[4096];
-        size_t buffer_size = sizeof(buffer);
-        char* cursor = buffer;
-        do {
-            ssize_t n = read(pipefd[0], cursor, buffer_size);
-            if (n == 0) {
-                break;
-            } else if (n == -1) {
-                if (poll(fds, 1, 100) == -1) break;
-            } else {
-                buffer_size -= n;
-                cursor += n;
-                if (Slice(buffer, cursor - buffer).starts_with(success_message)) {
-                    break;
-                }
-            }
-
-        } while (buffer_size > 0);
-
-        Slice result(buffer, sizeof(buffer) - buffer_size);
-        if (!result.starts_with(success_message)) {
-            (*child_process)->terminate_and_wait();
-            return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
-        }
-        (*child_process)->set_url(PyWorkerManager::unix_socket(cpid));
+    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
+    if (config::report_python_worker_error) {
+        posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDERR_FILENO);
     }
+    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
+
+    DIR* dir = opendir("/proc/self/fd");
+    auto defer = DeferOp([&dir]() {
+        if (dir != nullptr) {
+            closedir(dir);
+        }
+    });
+
+    if (dir == nullptr) {
+        return Status::InternalError(fmt::format("open /proc/self/fd error {}", std::strerror(errno)));
+    }
+
+    int dir_fd = dirfd(dir);
+    butil::fd_guard dir_fd_guard(dir_fd);
+    if (dir_fd < 0) {
+        return Status::InternalError(fmt::format("syscall dirfd error {}", std::strerror(errno)));
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_type == DT_LNK) {
+            int fd = atoi(entry->d_name);
+            if (fd > 3 && fd != pipefd[0] && fd != pipefd[1]) {
+                posix_spawn_file_actions_addclose(&actions, fd);
+            }
+        }
+    }
+
+    std::string script = PyWorkerManager::bootstrap();
+    std::string unix_socket = PyWorkerManager::unix_socket_prefix();
+    std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
+
+    const char* args[] = {"python3", script.c_str(), unix_socket.c_str(), nullptr};
+    const char* envs[] = {python_home_env.c_str(), nullptr};
+
+    int rc = posix_spawnp(&pid, python_path.c_str(), &actions, nullptr, const_cast<char* const*>(args),
+                          const_cast<char* const*>(envs));
+    close(pipefd[1]);
+
+    if (rc != 0) {
+        return Status::InternalError(fmt::format("posix_spawnp failed: {}", std::strerror(rc)));
+    }
+
+    *child_process = std::make_unique<PyWorker>(pid);
+
+    pollfd fds[1];
+    fds[0].fd = pipefd[0];
+    fds[0].events = POLLIN;
+
+    // wait util worker start
+    int32_t poll_timeout = config::create_child_worker_timeout_ms;
+    int ret = poll(fds, 1, poll_timeout);
+    if (ret == -1) {
+        return Status::InternalError(fmt::format("poll error:{}", std::strerror(errno)));
+    } else if (ret == 0) {
+        (*child_process)->terminate_and_wait();
+        return Status::InternalError(fmt::format("create worker timeout, cost {}ms", poll_timeout));
+    }
+
+    const char* success_message = "Pywork start success";
+    char buffer[4096];
+    size_t buffer_size = sizeof(buffer);
+    char* cursor = buffer;
+    do {
+        ssize_t n = read(pipefd[0], cursor, buffer_size);
+        if (n == 0) {
+            break;
+        } else if (n == -1) {
+            if (poll(fds, 1, 100) == -1) break;
+        } else {
+            buffer_size -= n;
+            cursor += n;
+            if (Slice(buffer, cursor - buffer).starts_with(success_message)) {
+                break;
+            }
+        }
+    } while (buffer_size > 0);
+
+    Slice result(buffer, sizeof(buffer) - buffer_size);
+    if (!result.starts_with(success_message)) {
+        (*child_process)->terminate_and_wait();
+        return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
+    }
+    (*child_process)->set_url(PyWorkerManager::unix_socket(pid));
+
     return Status::OK();
 }
 
@@ -201,6 +186,9 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
     }
     if (worker && worker->is_dead()) {
         worker->terminate_and_wait();
+        std::lock_guard guard(_mutex);
+        auto& workers = _processes[driver_id];
+        workers.erase(std::remove(workers.begin(), workers.end(), worker), workers.end());
     }
     if (worker != nullptr && !worker->is_dead()) {
         *url = worker->url();
@@ -224,20 +212,26 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
 }
 
 void PyWorkerManager::cleanup_expired_worker() {
+    std::vector<std::shared_ptr<PyWorker>> to_destroy;
     {
-        // iterate all workers and remove expired worker
         std::lock_guard guard(_mutex);
+        // iterate all workers and remove expired worker
         for (auto& pair : _processes) {
             auto& workers = pair.second;
-            workers.erase(std::remove_if(workers.begin(), workers.end(),
-                                         [](const std::shared_ptr<PyWorker>& worker) {
-                                             if (worker->expired() || worker->is_dead()) {
-                                                 return true;
-                                             }
-                                             return false;
-                                         }),
-                          workers.end());
+
+            auto partition_it = std::partition(
+                    workers.begin(), workers.end(),
+                    [](const std::shared_ptr<PyWorker>& worker) { return !(worker->expired() || worker->is_dead()); });
+
+            to_destroy.insert(to_destroy.end(), std::make_move_iterator(partition_it),
+                              std::make_move_iterator(workers.end()));
+
+            workers.erase(partition_it, workers.end());
         }
+    }
+
+    for (auto& worker : to_destroy) {
+        worker->terminate_and_wait();
     }
 }
 
