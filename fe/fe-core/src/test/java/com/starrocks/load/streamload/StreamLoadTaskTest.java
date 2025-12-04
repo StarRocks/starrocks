@@ -28,13 +28,9 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
-<<<<<<< HEAD
-=======
-import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
->>>>>>> fb77782623 ([BugFix] Fix warehouse field NULL in loads table for stream loads (#66202))
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -243,7 +239,7 @@ public class StreamLoadTaskTest {
                                                             @Mocked WarehouseManager warehouseManager,
                                                             @Mocked Warehouse warehouse) {
         StreamLoadTask task = new StreamLoadTask(1017, new Database(), new OlapTable(), "t_label18", "u", "127.0.0.1",
-                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new MockUp<RunMode>() {
             @Mock
@@ -275,15 +271,15 @@ public class StreamLoadTaskTest {
             }
         };
 
-        TLoadInfo loadInfo = task.toThrift().get(0);
-        Assertions.assertTrue(loadInfo.isSetWarehouse());
-        Assertions.assertEquals("test_warehouse", loadInfo.getWarehouse());
+        TLoadInfo loadInfo = task.toThrift();
+        Assert.assertTrue(loadInfo.isSetWarehouse());
+        Assert.assertEquals("test_warehouse", loadInfo.getWarehouse());
     }
 
     @Test
     public void testToThriftWarehouseFieldInNonSharedDataMode() {
         StreamLoadTask task = new StreamLoadTask(1018, new Database(), new OlapTable(), "t_label19", "u", "127.0.0.1",
-                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new MockUp<RunMode>() {
             @Mock
@@ -292,16 +288,16 @@ public class StreamLoadTaskTest {
             }
         };
 
-        TLoadInfo loadInfo = task.toThrift().get(0);
-        Assertions.assertTrue(loadInfo.isSetWarehouse());
-        Assertions.assertEquals("", loadInfo.getWarehouse());
+        TLoadInfo loadInfo = task.toThrift();
+        Assert.assertTrue(loadInfo.isSetWarehouse());
+        Assert.assertEquals("", loadInfo.getWarehouse());
     }
 
     @Test
     public void testToThriftWarehouseFieldWhenWarehouseNotFound(@Mocked GlobalStateMgr globalStateMgr,
                                                                  @Mocked WarehouseManager warehouseManager) {
         StreamLoadTask task = new StreamLoadTask(1019, new Database(), new OlapTable(), "t_label20", "u", "127.0.0.1",
-                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new MockUp<RunMode>() {
             @Mock
@@ -330,8 +326,8 @@ public class StreamLoadTaskTest {
             }
         };
 
-        TLoadInfo loadInfo = task.toThrift().get(0);
-        Assertions.assertTrue(loadInfo.isSetWarehouse());
-        Assertions.assertEquals("", loadInfo.getWarehouse());
+        TLoadInfo loadInfo = task.toThrift();
+        Assert.assertTrue(loadInfo.isSetWarehouse());
+        Assert.assertEquals("", loadInfo.getWarehouse());
     }
 }
