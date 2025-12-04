@@ -257,9 +257,8 @@ public class RecursiveCTEExecutor {
         }
 
         private Relation rewriteCTERelation(Relation relation, Void context) {
-            if (relation instanceof CTERelation cteRelation &&
-                    cteRelation.isRecursive() &&
-                    recursiveCTEGroups.containsKey(cteRelation.getName())) {
+            if (relation instanceof CTERelation cteRelation && cteRelation.isRecursive()
+                    && recursiveCTEGroups.containsKey(cteRelation.getName())) {
                 CreateTemporaryTableStmt tempTableStmt = recursiveCTEGroups.get(cteRelation.getName()).tempTableStmt;
                 TableName name = tempTableStmt.getDbTbl();
 
@@ -271,7 +270,11 @@ public class RecursiveCTEExecutor {
                         new SelectList(selectItems, false),
                         new TableRelation(name, null, Lists.newArrayList(), Lists.newArrayList()), null, null, null);
                 SubqueryRelation subquery = new SubqueryRelation(new QueryStatement(selectRelation));
-                subquery.setAlias(new TableName(null, cteRelation.getName()));
+                if (relation.getAlias() != null) {
+                    subquery.setAlias(relation.getAlias());
+                } else {
+                    subquery.setAlias(new TableName(null, cteRelation.getName()));
+                }
                 return subquery;
             } else {
                 visit(relation, context);
