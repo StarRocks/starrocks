@@ -5127,7 +5127,6 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         RETURN_IF_ERROR(modify_l2_versions(l2_versions, new_l2_version, index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
-        RETURN_IF_ERROR(_reload(index_meta));
         auto st = _reload(index_meta);
         if (!st.ok()) {
             _set_need_rebuild(true);

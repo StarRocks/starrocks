@@ -1071,11 +1071,8 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
-bool PrimaryIndex::need_rebuild() {
-    if (_persistent_index != nullptr) {
-        return _persistent_index->need_rebuild();
-    }
-    return false;
+bool PrimaryIndex::need_rebuild() const {
+    return _persistent_index != nullptr && _persistent_index->need_rebuild();
 }
 
 Status PrimaryIndex::load(Tablet* tablet) {
@@ -1085,7 +1082,7 @@ Status PrimaryIndex::load(Tablet* tablet) {
         return _status;
     }
     if (need_rebuild()) {
-        unload();
+        _unload_without_lock();
     }
     _status = _do_load(tablet);
     _loaded = true;
@@ -1102,6 +1099,10 @@ Status PrimaryIndex::load(Tablet* tablet) {
 
 void PrimaryIndex::unload() {
     std::lock_guard<std::mutex> lg(_lock);
+    _unload_without_lock();
+}
+
+void PrimaryIndex::_unload_without_lock() {
     if (!_loaded) {
         return;
     }

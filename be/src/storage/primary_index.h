@@ -169,7 +169,7 @@ public:
     static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
                                               std::vector<Slice>* key_slices);
 
-    bool need_rebuild();
+    bool need_rebuild() const;
 
 protected:
     void _set_schema(const Schema& pk_schema);
@@ -202,6 +202,8 @@ private:
                                                 const std::vector<uint32_t>& replace_indexes, const Column& pks);
 
     void _calc_memory_usage();
+
+    void _unload_without_lock();
 
 protected:
     std::mutex _lock;
