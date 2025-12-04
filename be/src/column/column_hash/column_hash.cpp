@@ -242,7 +242,10 @@ public:
         _selector.for_each([&](uint32_t idx) {
             uint32_t* slot_ptr = slot(idx);
             auto len = offsets[idx + 1] - offsets[idx];
-            *slot_ptr = HashFunction::hash(bytes.data() + offsets[idx], static_cast<int32_t>(len), *slot_ptr);
+            // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)
+            if (len > 0) {
+                *slot_ptr = HashFunction::hash(bytes.data() + offsets[idx], static_cast<int32_t>(len), *slot_ptr);
+            }
         });
         return Status::OK();
     }
@@ -261,6 +264,9 @@ public:
                 // Old behavior: treat NULL as 0 for CRC32
                 constexpr uint32_t INT_VALUE = 0;
                 *slot_ptr = HashUtil::zlib_crc_hash(&INT_VALUE, 4, *slot_ptr);
+            } else if constexpr (std::is_same_v<HashFunction, MurmurHash3Hash>) {
+                // For MurmurHash3, NULL should hash to 0
+                *slot_ptr = 0;
             } else {
                 *slot_ptr = *slot_ptr ^ (value + (*slot_ptr << 6) + (*slot_ptr >> 2));
             }
@@ -309,24 +315,28 @@ public:
         DCHECK(column.size() > 0);
         const ColumnPtr& data = column.data_column();
         _selector.for_each([&](uint32_t idx) {
-            ColumnHashVisitor<HashFunction, SelectorSingle> visitor(slot(0), SelectorSingle(0));
+            uint32_t* slot_ptr = slot(idx);
+            ColumnHashVisitor<HashFunction, SelectorSingle> visitor(slot_ptr, SelectorSingle(0));
             (void)data->accept(&visitor);
         });
         return Status::OK();
     }
 
     Status do_visit(const ArrayColumn& column) {
-        // TODO: optimize performance
         const auto& offsets = column.offsets_column()->immutable_data();
         const ColumnPtr& elements = column.elements_column();
         _selector.for_each([&](uint32_t idx) {
-            uint32_t array_size = offsets[idx + 1] - offsets[idx];
+            size_t array_size = offsets[idx + 1] - offsets[idx];
             uint32_t* slot_ptr = slot(idx);
             *slot_ptr = HashFunction::hash(&array_size, sizeof(array_size), *slot_ptr);
             if (array_size > 0) {
-                ColumnHashVisitor<HashFunction, SelectorRange> visitor(slot_ptr,
-                                                                       SelectorRange(offsets[idx], offsets[idx + 1]));
-                (void)elements->accept(&visitor);
+                // TODO: optimize performance, don't hash each element one by one, but hash the array as a whole
+                // Hash each element with the same seed (the array's hash value)
+                // This matches the pattern: elements->crc32_hash(&hash_value - i, i, i + 1)
+                for (uint32_t i = offsets[idx]; i < offsets[idx + 1]; ++i) {
+                    ColumnHashVisitor<HashFunction, SelectorSingle> visitor(slot_ptr, SelectorSingle(i));
+                    (void)elements->accept(&visitor);
+                }
             }
         });
         return Status::OK();
