@@ -124,3 +124,16 @@ PROPERTIES(
     "aws.s3.endpoint" = "http://minio:9000"
 );
 ```
+
+Example 5: Create a repository named `kerberos_repo` in an Apache™ Hadoop® cluster with Kerberos enabled.
+
+```SQL
+CREATE REPOSITORY kerberos_repo
+WITH BROKER 
+ON LOCATION "hdfs://nameservices1/user/hive/backup"
+PROPERTIES(
+ "hadoop.security.authentication" = "kerberos",
+ "kerberos_principal" = "sr/cs01.starrocks.com@STARROCKS.COM",
+ "kerberos_keytab" = "/home/disk1/user1/sr.keytab"
+);
+```
