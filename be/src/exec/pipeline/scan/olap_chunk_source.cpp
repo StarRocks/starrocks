@@ -663,12 +663,14 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
         return Status::Cancelled("canceled state");
     }
 
-    // always update counter
-    DeferOp op([&] { _update_realtime_counter(chunk); });
-
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
+        Status status = _prj_iter->get_next(chunk);
+        // update counter when eof or error
+        if (UNLIKELY(!status.ok())) {
+            _update_realtime_counter(chunk);
+            return status;
+        }
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
@@ -697,6 +699,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
         TRY_CATCH_ALLOC_SCOPE_END()
 
     } while (chunk->num_rows() == 0);
+    _update_realtime_counter(chunk);
     // Improve for select * from table limit x, x is small
     if (_limit != -1 && _num_rows_read >= _limit) {
         return Status::EndOfFile("limit reach");
