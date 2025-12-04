@@ -1166,6 +1166,7 @@ public:
 };
 
 DEFINE_FAIL_POINT(phmap_try_consume_mem_failed);
+DEFINE_FAIL_POINT(persistent_index_major_compaction_reload_fail);
 class SliceMutableIndex : public MutableIndex {
 public:
     using KeyType = std::string;
@@ -5128,6 +5129,8 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
         auto st = _reload(index_meta);
+        FAIL_POINT_TRIGGER_EXECUTE(persistent_index_major_compaction_reload_fail,
+                                   { st = Status::InternalError("injected major compaction reload failure"); });
         if (!st.ok()) {
             _set_need_rebuild(true);
             return st;
