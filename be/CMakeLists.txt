@@ -1050,43 +1050,8 @@ else()
     message(FATAL_ERROR "Unknown build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-<<<<<<< HEAD
 if (NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
     # In other words, turn to dynamic link when MAKE_TEST and BUILD_TYPE == *SAN
-=======
-set(WRAP_LINKER_FLAGS "-Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf")
-
-FUNCTION(ADD_BE_LIB LIB_NAME)
-    IF(ENABLE_MULTI_DYNAMIC_LIBS)
-        # support build and install component 
-        # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
-        ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
-        install(TARGETS ${LIB_NAME}
-            LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
-            ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
-        )
-    ELSE()
-        ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
-    ENDIF()
-    set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
-ENDFUNCTION()
-
-# Check if libsframe exists (needed for binutils 2.40+ on newer distros like Ubuntu 24.04)
-find_library(SFRAME_LIB sframe)
-
-if(SFRAME_LIB)
-    message(STATUS "Found libsframe: ${SFRAME_LIB}, linking it explicitly.")
-    set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd -lsframe)
-else()
-    message(STATUS "libsframe not found, skipping explicit linkage.")
-    set (STARROCKS_STATIC_LINK_LIBS ${WL_LINK_STATIC} -lgomp -lbfd)
-endif()
-
-if (NOT ${ENABLE_MULTI_DYNAMIC_LIBS} AND NOT ("${MAKE_TEST}" STREQUAL "ON" AND "${BUILD_FOR_SANITIZE}" STREQUAL "ON"))
-    # In other words, turn to dynamic link when ENABLE_MULTI_DYNAMIC_LIBS or MAKE_TEST and BUILD_TYPE == *SAN
->>>>>>> 6b5abef714 ([Enhancement] Rapid memory release on AGG/SORT (#66157))
     # otherwise do static link gcc's lib
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libstdc++ -static-libgcc)
 endif()
