@@ -487,25 +487,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             // Start streaming to client
             listener.start(root);
-
-            int batchCount = 0;
-            int notReadyCount = 0;
-
             while (beStream.next()) {
-                if (!listener.isReady()) {
-                    notReadyCount++;
-                    LOG.warn("[ARROW] Backpressure detected - client not ready (batch {}, query {})",
-                            batchCount, queryId);
-                }
                 listener.putNext();
-                batchCount++;
             }
-
-            if (notReadyCount > 0) {
-                LOG.info("[ARROW] Query {} experienced backpressure in {}/{} batches ({:.1f}%)",
-                        queryId, notReadyCount, batchCount, 100.0 * notReadyCount / batchCount);
-            }
-
             listener.completed();
         } catch (Exception e) {
             LOG.error("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
