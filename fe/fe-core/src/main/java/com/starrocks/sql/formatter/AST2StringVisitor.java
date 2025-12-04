@@ -1176,10 +1176,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     public String visitFunctionCall(FunctionCallExpr node, Void context) {
         FunctionParams fnParams = node.getParams();
         StringBuilder sb = new StringBuilder();
-        if (options.isAddFunctionDbName() && node.getFnName().getDb() != null) {
-            sb.append("`" + node.getFnName().getDb() + "`.");
+        if (options.isAddFunctionDbName() && node.getDbName() != null) {
+            sb.append("`" + node.getDbName() + "`.");
         }
-        String functionName = node.getFnName().getFunction();
+        String functionName = node.getFunctionName();
         sb.append(functionName);
 
         sb.append("(");

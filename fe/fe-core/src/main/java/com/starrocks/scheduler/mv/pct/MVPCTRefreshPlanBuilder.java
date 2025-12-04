@@ -421,7 +421,7 @@ public class MVPCTRefreshPlanBuilder {
                 return expr;
             } else if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)
+                if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)
                         && functionCallExpr.getChild(0) instanceof SlotRef) {
                     SlotRef slot = functionCallExpr.getChild(0).cast();
                     if (slot.getColumnName().equalsIgnoreCase(mvPartitionInfoRefColName)) {

@@ -208,7 +208,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             }
             FunctionCallExpr functionCallExpr = functionCallExprOpt.get();
             Preconditions.checkState(
-                    functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
+                    functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE));
             String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
             List<Range<PartitionKey>> converted = Lists.newArrayList();
             for (Range<PartitionKey> range : sourceTablePartitionRange) {

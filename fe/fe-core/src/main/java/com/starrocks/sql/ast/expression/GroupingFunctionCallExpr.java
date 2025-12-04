@@ -34,7 +34,6 @@
 
 package com.starrocks.sql.ast.expression;
 
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.parser.NodePosition;
@@ -59,7 +58,7 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
         childrenReseted = false;
     }
 
-    public GroupingFunctionCallExpr(FunctionName functionName, FunctionParams params) {
+    public GroupingFunctionCallExpr(String functionName, FunctionParams params) {
         super(functionName, params);
         childrenReseted = false;
     }
