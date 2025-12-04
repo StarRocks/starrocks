@@ -46,7 +46,7 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
         return _status;
     }
     if (need_rebuild()) {
-        unload();
+        unload_without_lock();
     }
     _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);

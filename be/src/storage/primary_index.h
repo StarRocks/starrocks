@@ -53,6 +53,7 @@ public:
     //
     // [thread-safe]
     void unload();
+    void unload_without_lock();
 
     // Whether index is normally loaded
     bool is_loaded();
@@ -202,8 +203,6 @@ private:
                                                 const std::vector<uint32_t>& replace_indexes, const Column& pks);
 
     void _calc_memory_usage();
-
-    void _unload_without_lock();
 
 protected:
     std::mutex _lock;

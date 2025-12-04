@@ -1082,7 +1082,7 @@ Status PrimaryIndex::load(Tablet* tablet) {
         return _status;
     }
     if (need_rebuild()) {
-        _unload_without_lock();
+        unload_without_lock();
     }
     _status = _do_load(tablet);
     _loaded = true;
@@ -1099,10 +1099,10 @@ Status PrimaryIndex::load(Tablet* tablet) {
 
 void PrimaryIndex::unload() {
     std::lock_guard<std::mutex> lg(_lock);
-    _unload_without_lock();
+    unload_without_lock();
 }
 
-void PrimaryIndex::_unload_without_lock() {
+void PrimaryIndex::unload_without_lock() {
     if (!_loaded) {
         return;
     }
