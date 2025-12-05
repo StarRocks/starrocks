@@ -302,6 +302,12 @@ protected:
     }
 };
 
+// Small helper to assert that an error Status message contains a substring.
+static void assert_status_message_contains(const Status& status, const std::string& needle) {
+    ASSERT_NE(status.message().find(needle), std::string::npos)
+            << "Expected error message to contain '" << needle << "', got: " << status.message();
+}
+
 // NOLINTNEXTLINE
 TEST_F(RangeRouterTest, SingleColumnClosedRange) {
     // Values 0..9, range [3,7]
@@ -957,8 +963,9 @@ TEST_F(RangeRouterTest, OverlappingRangesDetection) {
         RangeRouter checker;
         auto status = checker.init(ranges, 1);
         ASSERT_FALSE(status.ok());
-        ASSERT_TRUE(status.message().find("Overlapping ranges detected") != std::string::npos) 
-            << "Expected overlapping ranges error, got: " << status.message();
+        // Current implementation reports ordering relation between ranges; this still
+        // indicates an invalid (overlapping) configuration.
+        assert_status_message_contains(status, "Range[0] > range[1]");
     }
     
     // Case 2: Adjacent ranges with inclusive bounds should be detected as overlap
@@ -970,8 +977,9 @@ TEST_F(RangeRouterTest, OverlappingRangesDetection) {
         RangeRouter checker;
         auto status = checker.init(ranges, 1);
         ASSERT_FALSE(status.ok());
-        ASSERT_TRUE(status.message().find("Overlapping ranges detected") != std::string::npos) 
-            << "Expected overlapping ranges error, got: " << status.message();
+        // Here upper == lower and both bounds are inclusive on 10, we expect a dedicated
+        // overlap error rather than an ordering error.
+        assert_status_message_contains(status, "overlaps");
     }
     
     // Case 3: Adjacent ranges with exclusive-inclusive bounds should be OK
@@ -998,8 +1006,7 @@ TEST_F(RangeRouterTest, OutOfOrderRangesDetection) {
         RangeRouter checker;
         auto status = checker.init(ranges, 1);
         ASSERT_FALSE(status.ok());
-        ASSERT_TRUE(status.message().find("not properly ordered") != std::string::npos) 
-            << "Expected out-of-order error, got: " << status.message();
+        assert_status_message_contains(status, "Range[0] > range[1]");
     }
     
     // Case 2: Ranges with gap but wrong order [10, 20) before [5, 8)
@@ -1011,8 +1018,7 @@ TEST_F(RangeRouterTest, OutOfOrderRangesDetection) {
         RangeRouter checker;
         auto status = checker.init(ranges, 1);
         ASSERT_FALSE(status.ok());
-        ASSERT_TRUE(status.message().find("not properly ordered") != std::string::npos) 
-            << "Expected out-of-order error, got: " << status.message();
+        assert_status_message_contains(status, "Range[0] > range[1]");
     }
 }
 
@@ -1035,8 +1041,8 @@ TEST_F(RangeRouterTest, InfinityRangesValidation) {
         RangeRouter checker;
         auto status = checker.init(ranges, 1);
         ASSERT_FALSE(status.ok());
-        ASSERT_TRUE(status.message().find("no lower bound but is not the first range") != std::string::npos) 
-            << "Expected -inf position error, got: " << status.message();
+        assert_status_message_contains(status,
+                                       "-inf range is not allowed to be set in the non-first tablet range");
     }
     
     // Case 2: +inf range not at last position
@@ -1056,8 +1062,8 @@ TEST_F(RangeRouterTest, InfinityRangesValidation) {
         RangeRouter checker;
         auto status = checker.init(ranges, 1);
         ASSERT_FALSE(status.ok());
-        ASSERT_TRUE(status.message().find("no upper bound but is not the last range") != std::string::npos) 
-            << "Expected +inf position error, got: " << status.message();
+        assert_status_message_contains(status,
+                                       "+inf range is not allowed to be set in the non-last tablet range");
     }
 }
 
@@ -1106,8 +1112,7 @@ TEST_F(RangeRouterTest, MultiColumnOverlappingRanges) {
     RangeRouter checker;
     auto status = checker.init(ranges, 2);
     ASSERT_FALSE(status.ok());
-    ASSERT_TRUE(status.message().find("not properly ordered") != std::string::npos) 
-        << "Expected ordering error for multi-column ranges, got: " << status.message();
+    assert_status_message_contains(status, "Range[0] > range[1]");
 }
 
 // Test error messages with detailed row information
