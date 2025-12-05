@@ -158,10 +158,6 @@ public class Dictionary implements Writable {
         }
     }
 
-    public void setNextSchedulableTime(long nextSchedulableTime) {
-        this.nextSchedulableTime.set(nextSchedulableTime);
-    }
-
     public boolean getReadLatest() {
         return readLatest;
     }
@@ -326,6 +322,7 @@ public class Dictionary implements Writable {
         this.stateBeforeRefresh = this.state;
         this.state = DictionaryState.REFRESHING;
         this.lastSuccessRefreshTime = ts;
+        this.nextSchedulableTime.set(ts + refreshInterval);
         this.setErrorMsg("");
     }
 
