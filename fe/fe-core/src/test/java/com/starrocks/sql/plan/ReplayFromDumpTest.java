@@ -1090,8 +1090,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testSingleNodePlanWithMultiAggStage1() throws Exception {
@@ -1116,5 +1114,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "MultiCastDataSinks");
     }
->>>>>>> 0401f8a4e2 ([BugFix] Fix nest cte reuse bug (#65800))
 }
