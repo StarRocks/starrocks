@@ -170,18 +170,15 @@ public:
                     // but consider that use date type column as bucket transform is rare, we can do it later.
                     int64_t long_value = value.julian() - date::UNIX_EPOCH_JULIAN;
                     hash_value = HashFunction::hash(&long_value, sizeof(int64_t), 0);
-                } else if constexpr (std::is_same_v<T, int32_t>) {
+                } else if constexpr (std::is_integral_v<T>) {
                     // Integer and long hash results must be identical for all integer values.
                     // This ensures that schema evolution does not change bucket partition values if integer types are promoted.
                     int64_t long_value = value;
                     hash_value = HashFunction::hash(&long_value, sizeof(int64_t), 0);
-                } else if constexpr (std::is_same_v<T, int64_t>) {
-                    hash_value = HashFunction::hash(&value, sizeof(T), 0);
                 } else {
                     // for decimal/timestamp type, the storage is very different from iceberg,
                     // and consider they are merely used, these types are forbidden by fe
-                    DCHECK(false) << "Unsupported type for MurmurHash3";
-                    return;
+                    return Status::NotSupported("Unsupported type for MurmurHash3");
                 }
                 *hash = hash_value;
             } else {
