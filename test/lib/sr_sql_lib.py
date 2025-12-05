@@ -1796,16 +1796,36 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_table_state(self, db_name, table_name):
+        """
+        Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name
+        Returns the state of the specified table, or None if table not found
+        """
+        sql = f"show proc '/dbs/{db_name}'"
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], f"Failed to execute show proc '/dbs/{db_name}'")
+        
+        # Find the row with matching table_name
+        # Column order: TableId, TableName, IndexNum, PartitionColumnName, PartitionNum, State, ...
+        # TableName is at index 1, State is at index 5
+        for row in res["result"]:
+            if len(row) > 1 and row[1] == table_name:
+                if len(row) > 5:
+                    return row[5]  # Return State
+                else:
+                    log.warning(f"Row for table {table_name} has insufficient columns")
+                    return None
+        
+        log.warning(f"Table {table_name} not found in database {db_name}")
+        return None
+
     def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
         """
         wait table state to normal
         """
         times = 0
         while times < timeout_sec:
-            sql = f"show proc '/dbs/{db_name}/{table_name}'"
-            res = self.execute_sql(sql, True)
-            tools.assert_true(res["status"])
-            state = res["result"][0][5]
+            state = self.get_table_state(db_name, table_name)
             if state == "NORMAL":
                 break
             time.sleep(1)

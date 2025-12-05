@@ -4140,4 +4140,54 @@ TEST_F(TabletUpdatesTest, test_on_rowset_finished_lock_timeout) {
     }
 }
 
+TEST_F(TabletUpdatesTest, test_compaction_commit_fail_release_rowset_id) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(false);
+
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+
+    // Commit multiple rowsets to enable compaction
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    auto rs2 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    // Add more rowsets to trigger compaction
+    auto rs3 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(5, rs3).ok());
+    auto rs4 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(6, rs4).ok());
+
+    ASSERT_EQ(6, _tablet->updates()->max_version());
+
+    // Enable fail point to make compaction commit fail at meta persistence stage
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
+            "tablet_meta_manager_rowset_commit_internal_error");
+    fp->setMode(trigger_mode);
+
+    // Try to run compaction, which should fail at commit stage
+    auto compaction_st = _tablet->updates()->compaction(_compaction_mem_tracker.get());
+    ASSERT_FALSE(compaction_st.ok());
+
+    // Disable fail point
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+
+    // Verify the tablet state remains unchanged after failed compaction
+    ASSERT_EQ(6, _tablet->updates()->max_version());
+    ASSERT_EQ(N, read_tablet(_tablet, 6));
+}
+
 } // namespace starrocks

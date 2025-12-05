@@ -390,6 +390,16 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testSchemaScanWithLikePattern() throws Exception {
+        String sql = "select column_name from information_schema.columns " +
+                "where table_schema like 'test_%' and table_name like 'my_table%'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("test_%", scanNode.getSchemaDb());
+        Assertions.assertEquals("my_table%", scanNode.getSchemaTable());
+    }
+
+    @Test
     public void testSchemaScanWithWhereConstantFunction() throws Exception {
         String sql = "SELECT TABLE_SCHEMA TABLE_CAT, NULL TABLE_SCHEM, TABLE_NAME, " +
                 "IF(TABLE_TYPE='BASE TABLE' or TABLE_TYPE='SYSTEM VERSIONED', 'TABLE', TABLE_TYPE) as TABLE_TYPE, " +

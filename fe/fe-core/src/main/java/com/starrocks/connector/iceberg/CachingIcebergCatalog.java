@@ -213,12 +213,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         
         try {
             return tables.get(icebergTableName);
+        } catch (NoSuchTableException e) {
+            throw e;
         } catch (Exception e) {
-            Throwable c = e.getCause();
-            if (c instanceof NoSuchTableException) {
-                throw (NoSuchTableException) c;
-            }
-            throw new StarRocksConnectorException("Load table failed: " + dbName + "." + tableName, c);
+            throw new StarRocksConnectorException("Load table failed: " + dbName + "." + tableName, e);
         }
     }
 

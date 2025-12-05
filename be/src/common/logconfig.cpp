@@ -27,6 +27,7 @@
 #include <mutex>
 
 #include "common/config.h"
+#include "common/process_exit.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
@@ -160,6 +161,8 @@ static void dontdump_unused_pages() {
 static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        set_process_is_crashing();
+
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
         CacheEnv::GetInstance()->try_release_resource_before_core_dump();
         dontdump_unused_pages();
