@@ -22,6 +22,7 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
+#include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 
 namespace starrocks {
@@ -508,17 +509,13 @@ TEST_F(TabletUpdatesTest, test_pk_index_major_compaction_reload_fail) {
     ASSERT_TRUE(_tablet->updates()->get_pk_index_write_amp_score() > 0);
 
     // inject reload failure after major compaction writes new meta
-    PFailPointTriggerMode trigger_mode;
-    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
-            "persistent_index_major_compaction_reload_fail");
-    fp->setMode(trigger_mode);
-
+    TEST_ENABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail",
+                            Status::InternalError("injected major compaction reload failure"));
+    SyncPoint::GetInstance()->EnableProcessing();
     auto st = _tablet->updates()->pk_index_major_compaction();
     ASSERT_FALSE(st.ok());
-
-    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
-    fp->setMode(trigger_mode);
+    TEST_DISABLE_ERROR_POINT("persistent_index_major_compaction_reload_fail");
+    SyncPoint::GetInstance()->DisableProcessing();
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 
     // verify primary index is marked need_rebuild

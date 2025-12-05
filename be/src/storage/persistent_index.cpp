@@ -34,6 +34,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "testutil/sync_point.h"
 #include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
@@ -5129,8 +5130,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
         auto st = _reload(index_meta);
-        FAIL_POINT_TRIGGER_EXECUTE(persistent_index_major_compaction_reload_fail,
-                                   { st = Status::InternalError("injected major compaction reload failure"); });
+        TEST_SYNC_POINT_CALLBACK("persistent_index_major_compaction_reload_fail", &st);
         if (!st.ok()) {
             _set_need_rebuild(true);
             return st;
