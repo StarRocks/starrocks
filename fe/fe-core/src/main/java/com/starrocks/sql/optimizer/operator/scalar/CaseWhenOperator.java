@@ -67,6 +67,22 @@ public class CaseWhenOperator extends CallOperator {
             this.hasElse = true;
             this.arguments.add(elseClause);
         }
+<<<<<<< HEAD
+=======
+        checkMaxFlatChildren();
+        incrDepth(arguments);
+    }
+
+    @Override
+    public void checkMaxFlatChildren(boolean useCache) {
+        if (Config.max_scalar_operator_flat_children > 0 &&
+                getNumFlatChildren() > Config.max_scalar_operator_flat_children) {
+            throw new SemanticException(
+                    String.format("Expression CaseWhen too complex, limit: %d. " +
+                                    "Please simplify your expression or increase Config.max_scalar_operator_flat_children.",
+                            Config.max_scalar_operator_flat_children));
+        }
+>>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
     }
 
     public boolean hasCase() {

@@ -14,7 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.View;
+=======
+import com.starrocks.common.Config;
+>>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
@@ -1060,6 +1064,75 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testExpressionReuseTimeout() throws Exception {
+        Config.max_scalar_operator_flat_children = 300000;
+        String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
+        Tracers.register(connectContext);
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        String ss = Tracers.printScopeTimer();
+        int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();
+        int end = ss.indexOf("]", start);
+        long count = Long.parseLong(ss.substring(start, end));
+        Assertions.assertTrue(count < 1000, ss);
+    }
+
+    @Test
+    public void testForceReuseCTEWithHugeCTE() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        Assertions.assertTrue(replayPair.second.contains("MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1607\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1612\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1627\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1644\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1650\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1664\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1691\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1697\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 1711\n" +
+                "    RANDOM"), replayPair.second);
+    }
+
+    @Test
+    public void testPruneUnionEmpty() throws Exception {
+        try {
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String dumpString = getDumpInfoFromFile("query_dump/prune_union_empty");
+            QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+            Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                    TExplainLevel.NORMAL);
+            Assertions.assertTrue(replayPair.second.contains("EMPTYSET"), replayPair.second);
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
+    }
+
+    @Test
+>>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
     public void testUnnestLowCardinalityOptimization() throws Exception {
         try {
             FeConstants.USE_MOCK_DICT_MANAGER = true;
