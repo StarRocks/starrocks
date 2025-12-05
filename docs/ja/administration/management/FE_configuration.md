@@ -418,12 +418,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### http_max_initial_line_length
 
-- デフォルト: `4096`
+- デフォルト: 4096
 - タイプ: Int
 - 単位: Bytes
 - 変更可能: No
 - 説明: HttpServer で使用される Netty の `HttpServerCodec` が受け付ける HTTP 初期リクエスト行（メソッド + request-target + HTTP バージョン）の最大許容長（バイト単位）を設定します。この値は Netty のデコーダに渡され、初期行がこの長さを超えるリクエストは拒否されます（TooLongFrameException）。非常に長いリクエスト URI をサポートする必要がある場合にのみ増やしてください。値を大きくするとメモリ使用量が増え、誤った形式やリクエスト悪用に対する露出が増える可能性があります。`http_max_header_size`、`http_max_chunk_size` と合わせて調整してください。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### http_port
 
@@ -583,12 +583,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### thrift_rpc_max_body_size
 
-- デフォルト: `-1`
+- デフォルト: -1
 - タイプ: Int
 - 単位: Bytes
 - 変更可能: No
 - 説明: サーバの Thrift プロトコルを構築する際（`ThriftServer` の TBinaryProtocol.Factory に渡される）に使用される、許可される Thrift RPC メッセージ本文の最大サイズ（バイト単位）を制御します。値 `-1` は制限を無効にします（無制限）。正の値を設定すると上限が強制され、それより大きいメッセージは Thrift 層で拒否されます。これによりメモリ使用量を制限し、過大なリクエストや DoS のリスクを緩和するのに役立ちます。正当なリクエスト（大きな struct やバッチ化されたデータなど）が拒否されないように、期待されるペイロードに十分な大きさに設定してください。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### thrift_server_max_worker_threads
 
@@ -612,12 +612,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### alter_max_worker_queue_size
 
-- デフォルト: `4096`
+- デフォルト: 4096
 - タイプ: Int
 - 単位: Tasks
 - 変更可能: No
 - 説明: alter サブシステムで使用される内部ワーカースレッドプールのキューの容量を制御します。`AlterHandler` 内で `alter_max_worker_threads` とともに `ThreadPoolManager.newDaemonCacheThreadPool` に渡されます。保留中の alter タスク数が `alter_max_worker_queue_size` を超えると、新しい送信は拒否され、`RejectedExecutionException` がスローされる可能性があります（`AlterHandler.handleFinishAlterTask` を参照）。この値を調整して、メモリ使用量と同時実行される alter タスクのバックログ許容量のバランスを取ってください。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### automated_cluster_snapshot_interval_seconds
 
@@ -675,12 +675,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### bdbje_reserved_disk_size
 
-- デフォルト: `512L * 1024 * 1024` (536870912)
+- デフォルト: 512L * 1024 * 1024 (536870912)
 - タイプ: Long
 - 単位: Bytes
 - 変更可能: いいえ
 - 説明: Berkeley DB JE が「保護されていない」（削除可能な）ログ/データファイルとして予約するバイト数の上限を制限します。StarRocks はこの値を BDBEnvironment の `EnvironmentConfig.RESERVED_DISK` を介して JE に渡します。JE の組み込みデフォルトは 0（無制限）です。StarRocks のデフォルト（512 MiB）は、JE が保護されていないファイルに過剰なディスク領域を予約するのを防ぎつつ、不要ファイルの安全なクリーンアップを可能にします。ディスク制約のあるシステムではこの値を調整してください：値を小さくすると JE はより早くファイルを解放でき、値を大きくすると JE はより多くの予約領域を保持します。変更はプロセスの再起動が必要です。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### bdbje_reset_election_group
 
@@ -711,12 +711,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### brpc_connection_pool_size
 
-- デフォルト: `16`
+- デフォルト: 16
 - タイプ: Int
 - 単位: Connections
 - 変更可能: No
 - 説明: FE の BrpcProxy がエンドポイントごとにプールする BRPC 接続の最大数です。この値は `RpcClientOptions` に対して `setMaxTotoal` と `setMaxIdleSize` を通じて適用されるため、各リクエストがプールから接続を借用する必要があるため、同時発生する送信 BRPC リクエスト数を直接制限します。高同時実行のシナリオではリクエストの待ち行列を避けるためにこの値を増やしてください。ただし増やすとソケットやメモリ使用量が増え、リモートサーバの負荷も高まる可能性があります。チューニング時は `brpc_idle_wait_max_time`, `brpc_short_connection`, `brpc_inner_reuse_pool`, `brpc_reuse_addr`, `brpc_min_evictable_idle_time_ms` などの関連設定も考慮してください。この値の変更はホットリロード不可で、プロセスの再起動が必要です。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### catalog_try_lock_timeout_ms
 
@@ -729,12 +729,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### checkpoint_timeout_seconds
 
-- デフォルト: `24 * 3600`
+- デフォルト: 24 * 3600
 - タイプ: Long
 - 単位: Seconds
 - 変更可能: はい
 - 説明: リーダーの CheckpointController がチェックポイントワーカーのチェックポイント完了を待つ最大時間（秒）です。コントローラはこの値をナノ秒に変換してワーカーの結果キューをポーリングします；このタイムアウト内に成功完了が受信されない場合、チェックポイントは失敗とみなされ、createImage は失敗を返します。値を増やすと長時間実行されるチェックポイントに対応できますが、失敗検出とその後のイメージ伝播が遅れます。値を減らすとフェイルオーバー/再試行は速くなりますが、遅いワーカーに対して誤ったタイムアウトが発生する可能性があります。この設定はチェックポイント作成中の `CheckpointController` における待機期間のみを制御し、ワーカー内部のチェックポイント動作を変更するものではありません。
-- 導入バージョン: `v3.4.0, v3.5.0`
+- 導入バージョン: v3.4.0, v3.5.0
 
 ##### db_used_data_quota_update_interval_secs
 
@@ -840,7 +840,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_task_history_archive
 
-- デフォルト: `true`
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: Yes
@@ -1481,7 +1481,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### query_queue_v2_cpu_costs_per_slot
 
-- デフォルト: `1000000000`
+- デフォルト: 1000000000
 - タイプ: Long
 - 単位: planner CPU cost units
 - 変更可能: Yes
@@ -2139,12 +2139,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_online_optimize_table
 
-- デフォルト: `true`
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: Yes
 - 説明: StarRocks が optimize ジョブを作成する際に、書き込みをブロックしないオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、対象テーブルが互換性チェックを満たす場合（パーティション/キー/ソート指定がなく、distribution が `RandomDistributionDesc` でない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートされたストレージが有効で、テーブルがクラウドネイティブテーブルやマテリアライズドビューでない）、プランナーは書き込みをブロックせずに最適化を行うために `OnlineOptimizeJobV2` を作成します。false の場合、またはいずれかの互換性条件を満たさない場合、最適化中に書き込みをブロックする可能性のある `OptimizeJobV2` にフォールバックします。
-- 導入バージョン: `v3.3.3, v3.4.0, v3.5.0`
+- 導入バージョン: v3.3.3, v3.4.0, v3.5.0
 
 ##### enable_strict_storage_medium_check
 
@@ -2891,7 +2891,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_batch_publish_min_version_num
 
-- デフォルト: `1`
+- デフォルト: 1
 - タイプ: Int
 - 単位: -
 - 変更可能: Yes
@@ -2900,12 +2900,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_use_combined_txn_log
 
-- デフォルト: `false`
+- デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: Yes
 - 説明: 有効にすると、Lake テーブルは関連するトランザクションで combined transaction log パスを使用することを許可します。このフラグはクラスタが shared-data モード（RunMode.isSharedDataMode()）で動作している場合にのみ考慮されます。`lake_use_combined_txn_log = true` のとき、BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING、BATCH_LOAD_JOB タイプのロードトランザクションは combined txn log を使用する対象になります（詳細は LakeTableHelper.supportCombinedTxnLog を参照）。compaction を含むコードパスは isTransactionSupportCombinedTxnLog を通じて combined-log のサポートを確認します。無効化されているか shared-data モードでない場合は、combined transaction log の動作は使用されません。
-- 導入バージョン: `v3.3.7, v3.4.0, v3.5.0`
+- 導入バージョン: v3.3.7, v3.4.0, v3.5.0
 
 ### その他
 
