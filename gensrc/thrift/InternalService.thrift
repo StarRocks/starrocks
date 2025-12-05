@@ -355,8 +355,9 @@ struct TQueryOptions {
 
   // http_request function SSRF protection settings
   202: optional i32 http_request_security_level = 3;
-  203: optional string http_request_host_allowlist = "";
+  203: optional string http_request_ip_allowlist = "";
   204: optional string http_request_host_allowlist_regexp = "";
+  205: optional bool http_request_allow_private_in_allowlist = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

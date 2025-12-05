@@ -4052,16 +4052,21 @@ public class Config extends ConfigBase {
     /**
      * http_request function SSRF protection settings
      * Security level: 1=TRUSTED (allow all), 2=PUBLIC (block private IPs),
-     * 3=RESTRICTED (require allowlist, default), 4=PARANOID (always block private IPs even in allowlist)
+     * 3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)
      */
     @ConfField(mutable = true, comment = "HTTP request security level for SSRF protection: " +
             "1=TRUSTED (allow all), 2=PUBLIC (block private IPs), " +
-            "3=RESTRICTED (require allowlist, default), 4=PARANOID (always block private IPs)")
+            "3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)")
     public static int http_request_security_level = 3;
 
-    @ConfField(mutable = true, comment = "Comma-separated list of allowed hostnames for http_request function (exact match)")
-    public static String http_request_host_allowlist = "";
+    @ConfField(mutable = true, comment = "Comma-separated list of allowed IPv4 addresses for http_request function. " +
+            "Example: '192.168.1.1' or '10.0.0.1,172.16.0.1'")
+    public static String http_request_ip_allowlist = "";
 
     @ConfField(mutable = true, comment = "Comma-separated list of regex patterns for allowed hostnames in http_request function")
     public static String http_request_host_allowlist_regexp = "";
+
+    @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
+            "Default false for security. Set true to allow internal service calls.")
+    public static boolean http_request_allow_private_in_allowlist = false;
 }

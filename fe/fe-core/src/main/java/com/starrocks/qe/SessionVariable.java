@@ -5789,8 +5789,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         // http_request function SSRF protection settings (admin-enforced from Config)
         tResult.setHttp_request_security_level(Config.http_request_security_level);
-        tResult.setHttp_request_host_allowlist(Config.http_request_host_allowlist);
+        tResult.setHttp_request_ip_allowlist(Config.http_request_ip_allowlist);
         tResult.setHttp_request_host_allowlist_regexp(Config.http_request_host_allowlist_regexp);
+        tResult.setHttp_request_allow_private_in_allowlist(Config.http_request_allow_private_in_allowlist);
 
         return tResult;
     }

@@ -179,3 +179,65 @@ SELECT json_query(http_request(
     username => 'wrong',
     password => 'wrong'
 ), '$.status') as status;
+
+-- ============================================================
+-- HEAD and OPTIONS Method Tests
+-- ============================================================
+
+-- Test 27: HEAD request - returns headers only (no body)
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'HEAD'
+), '$.status') as status;
+
+-- Test 28: OPTIONS request - returns allowed methods
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'OPTIONS'
+), '$.status') as status;
+
+-- Test 29: HEAD request - body should be empty or null
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'HEAD'
+), '$.body') as body;
+
+-- ============================================================
+-- Invalid HTTP Method Tests
+-- ============================================================
+
+-- Test 30: Invalid method 'INVALID' - should return error
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'INVALID'
+), '$.status') as status;
+
+-- Test 31: Invalid method error message should contain 'Invalid HTTP method'
+SELECT CAST(json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'INVALID'
+), '$.error') AS STRING) LIKE '%Invalid HTTP method%' as has_error_message;
+
+-- Test 32: Invalid method 'PATCH' - not in allowed list
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'PATCH'
+), '$.status') as status;
+
+-- Test 33: Empty method string - should return error
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => ''
+), '$.status') as status;
+
+-- Test 34: Case insensitive method (lowercase 'get')
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'get'
+), '$.status') as status;
+
+-- Test 35: Case insensitive method (mixed case 'GeT')
+SELECT json_query(http_request(
+    url => 'https://httpbin.org/get',
+    method => 'GeT'
+), '$.status') as status;

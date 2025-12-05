@@ -30,8 +30,8 @@ namespace starrocks {
 enum class HttpSecurityLevel : int {
     TRUSTED = 1,    // Allow all requests including private IPs
     PUBLIC = 2,     // Block private IPs, allow all public hosts
-    RESTRICTED = 3, // Block private IPs, require allowlist (default)
-    PARANOID = 4    // Same as RESTRICTED, but private IPs blocked even if in allowlist
+    RESTRICTED = 3, // Require allowlist (default)
+    PARANOID = 4    // Block all requests
 };
 
 // State structure for HTTP request function
@@ -42,9 +42,30 @@ struct HttpRequestFunctionState {
 
     // SSRF protection settings (from FE Config)
     int security_level = 3; // Default: RESTRICTED
-    std::vector<std::string> host_allowlist;
+    std::vector<std::string> ip_allowlist;
     std::vector<std::regex> host_allowlist_patterns;
+    bool allow_private_in_allowlist = false; // Allow private IPs if in allowlist
 };
+
+// Helper functions for SSRF protection (exposed for testing)
+// Split string by delimiter and trim whitespace from each element
+std::vector<std::string> parse_comma_separated_list(const std::string& s);
+
+// Compile regex patterns from comma-separated string, skipping invalid patterns
+std::vector<std::regex> compile_regex_patterns(const std::string& pattern_list);
+
+// Check if IP is in allowlist (exact match)
+bool check_ip_allowlist(const std::string& ip, const HttpRequestFunctionState& state);
+
+// Check if host matches regex patterns
+bool check_host_regex(const std::string& host, const HttpRequestFunctionState& state);
+
+// Validate URL against security settings (level, private IP check, allowlist)
+Status validate_host_security(const std::string& url, const HttpRequestFunctionState& state);
+
+// Validate HTTP method string (exposed for testing)
+// Returns StatusOr<bool> - OK with true if valid, error status if invalid
+StatusOr<bool> validate_http_method(const std::string& method);
 
 class HttpRequestFunctions {
 public:

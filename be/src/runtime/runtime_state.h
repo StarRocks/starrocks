@@ -377,9 +377,9 @@ public:
                                                                   : 3; // default: RESTRICTED
     }
 
-    const std::string& http_request_host_allowlist() const {
+    const std::string& http_request_ip_allowlist() const {
         static const std::string empty;
-        return _query_options.__isset.http_request_host_allowlist ? _query_options.http_request_host_allowlist : empty;
+        return _query_options.__isset.http_request_ip_allowlist ? _query_options.http_request_ip_allowlist : empty;
     }
 
     const std::string& http_request_host_allowlist_regexp() const {
@@ -387,6 +387,11 @@ public:
         return _query_options.__isset.http_request_host_allowlist_regexp
                        ? _query_options.http_request_host_allowlist_regexp
                        : empty;
+    }
+
+    bool http_request_allow_private_in_allowlist() const {
+        return _query_options.__isset.http_request_allow_private_in_allowlist &&
+               _query_options.http_request_allow_private_in_allowlist;
     }
 
     int32_t spill_mem_table_size() const {

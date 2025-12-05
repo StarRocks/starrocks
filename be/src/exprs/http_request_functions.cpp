@@ -63,7 +63,8 @@ struct HttpRequestConfig {
 const int64_t DEFAULT_MAX_RESPONSE_SIZE = 1048576;  // 1MB
 
 // Helper function: Parse HTTP method from string
-static HttpMethod parse_http_method(const Slice& method_str) {
+// Returns error for invalid methods instead of silently defaulting to GET
+static StatusOr<HttpMethod> parse_http_method(const Slice& method_str) {
     std::string method_upper = method_str.to_string();
     std::transform(method_upper.begin(), method_upper.end(), method_upper.begin(),
                    [](unsigned char c) { return std::toupper(c); });
@@ -82,7 +83,18 @@ static HttpMethod parse_http_method(const Slice& method_str) {
         return HttpMethod::OPTIONS;
     }
 
-    return HttpMethod::GET; // Default to GET
+    return Status::InvalidArgument(fmt::format(
+            "Invalid HTTP method '{}'. Allowed: GET, POST, PUT, DELETE, HEAD, OPTIONS",
+            method_str.to_string()));
+}
+
+// Public helper: Validate HTTP method string (exposed for testing)
+StatusOr<bool> validate_http_method(const std::string& method) {
+    auto result = parse_http_method(Slice(method));
+    if (!result.ok()) {
+        return result.status();
+    }
+    return true;
 }
 
 // Helper function: Validate UTF-8 string
@@ -227,7 +239,7 @@ static std::string trim_string(const std::string& s) {
     return s.substr(start, end - start + 1);
 }
 
-// Helper function: Split string by delimiter
+// Helper function: Split string by delimiter (internal)
 static std::vector<std::string> split_string(const std::string& s, char delimiter) {
     std::vector<std::string> tokens;
     std::string token;
@@ -241,18 +253,39 @@ static std::vector<std::string> split_string(const std::string& s, char delimite
     return tokens;
 }
 
+// Public helper: Parse comma-separated list with whitespace trimming
+std::vector<std::string> parse_comma_separated_list(const std::string& s) {
+    return split_string(s, ',');
+}
+
+// Public helper: Compile regex patterns from comma-separated string
+std::vector<std::regex> compile_regex_patterns(const std::string& pattern_list) {
+    std::vector<std::regex> patterns;
+    auto pattern_strings = split_string(pattern_list, ',');
+    for (const auto& pattern : pattern_strings) {
+        try {
+            patterns.emplace_back(pattern, std::regex::optimize);
+        } catch (const std::regex_error& e) {
+            LOG(WARNING) << "Invalid regex pattern: " << pattern << " - " << e.what();
+        }
+    }
+    return patterns;
+}
+
 // Helper function: Initialize security state from RuntimeState
 static void init_security_state(HttpRequestFunctionState* state, RuntimeState* runtime_state) {
     if (runtime_state == nullptr) {
         state->security_level = 3; // Default: RESTRICTED
+        state->allow_private_in_allowlist = false;
         return;
     }
 
     state->security_level = runtime_state->http_request_security_level();
+    state->allow_private_in_allowlist = runtime_state->http_request_allow_private_in_allowlist();
 
-    // Parse host allowlist
-    const std::string& allowlist = runtime_state->http_request_host_allowlist();
-    state->host_allowlist = split_string(allowlist, ',');
+    // Parse IP allowlist
+    const std::string& ip_allowlist = runtime_state->http_request_ip_allowlist();
+    state->ip_allowlist = split_string(ip_allowlist, ',');
 
     // Parse regex patterns
     state->host_allowlist_patterns.clear();
@@ -268,101 +301,120 @@ static void init_security_state(HttpRequestFunctionState* state, RuntimeState* r
     }
 }
 
-// Helper function: Check if host is in allowlist
-static bool check_host_allowlist(const std::string& host, const HttpRequestFunctionState& state) {
-    // Check exact match allowlist
-    for (const auto& allowed : state.host_allowlist) {
-        if (host == allowed) {
+// Public helper: Check if IP is in allowlist (exact match)
+bool check_ip_allowlist(const std::string& ip, const HttpRequestFunctionState& state) {
+    for (const auto& allowed : state.ip_allowlist) {
+        if (ip == allowed) {
             return true;
         }
     }
+    return false;
+}
 
-    // Check regex patterns
+// Public helper: Check if host matches regex patterns
+bool check_host_regex(const std::string& host, const HttpRequestFunctionState& state) {
     for (const auto& pattern : state.host_allowlist_patterns) {
         if (std::regex_match(host, pattern)) {
             return true;
         }
     }
-
     return false;
 }
 
-// Helper function: Validate host security based on security level
+// Check if host/IP is in any allowlist (IP exact match or host regex)
+static bool check_allowlist(const std::string& host, const std::vector<std::string>& resolved_ips,
+                            const HttpRequestFunctionState& state) {
+    // Check if any resolved IP is in IP allowlist
+    for (const auto& ip : resolved_ips) {
+        if (check_ip_allowlist(ip, state)) {
+            return true;
+        }
+    }
+    // Check if host matches regex patterns
+    return check_host_regex(host, state);
+}
+
+// Public helper: Validate host security based on security level
+// Security Levels:
+//   1 = TRUSTED: Allow all requests including private IPs
+//   2 = PUBLIC: Block private IPs (unless allow_private_in_allowlist + in allowlist), allow public hosts
+//   3 = RESTRICTED: Require allowlist for all hosts (default)
+//   4 = PARANOID: Block all requests
 // Returns Status::OK() if allowed, error Status if blocked
-static Status validate_host_security(const std::string& url, const HttpRequestFunctionState& state) {
+Status validate_host_security(const std::string& url, const HttpRequestFunctionState& state) {
     int level = state.security_level;
 
-    // Security level names for error messages
-    static const char* level_names[] = {"", "TRUSTED", "PUBLIC", "RESTRICTED", "PARANOID"};
-    const char* level_name = (level >= 1 && level <= 4) ? level_names[level] : "UNKNOWN";
-
-    // Level 1 (TRUSTED): Allow everything
-    if (level == 1) {
+    // Level 1 (TRUSTED): Allow everything including private IPs
+    if (level == static_cast<int>(HttpSecurityLevel::TRUSTED)) {
         return Status::OK();
     }
 
-    // Extract host from URL
+    // Level 2 (PUBLIC) and Level 3 (RESTRICTED) require host extraction and private IP check
+    // Level 4 (PARANOID): Block all requests
+    if (level == static_cast<int>(HttpSecurityLevel::PARANOID)) {
+        return Status::InvalidArgument("SSRF Protection: All requests blocked at security level 4 (PARANOID).");
+    }
+
+    // Unknown security level - block by default
+    if (level != static_cast<int>(HttpSecurityLevel::PUBLIC) &&
+        level != static_cast<int>(HttpSecurityLevel::RESTRICTED)) {
+        return Status::InvalidArgument(fmt::format(
+                "SSRF Protection: Unknown security level {}. Request blocked.", level));
+    }
+
+    // Level 2 and 3: Extract host from URL
     std::string host = extract_host_from_url(url);
     if (host.empty()) {
-        return Status::InvalidArgument(fmt::format("Invalid URL format: could not extract host from '{}'", url));
+        return Status::InvalidArgument(fmt::format("Invalid URL: cannot extract host from '{}'", url));
     }
 
-    // Level 2+: Resolve DNS and check for private IPs
-    if (level >= 2) {
-        auto resolved_result = resolve_hostname_all_ips(host);
-        if (!resolved_result.ok()) {
-            return Status::InvalidArgument(fmt::format("DNS resolution failed for host '{}': {}", host,
-                                                       resolved_result.status().message()));
-        }
+    // Level 2 (PUBLIC) and Level 3 (RESTRICTED): Resolve DNS first
+    auto resolved_result = resolve_hostname_all_ips(host);
+    if (!resolved_result.ok()) {
+        return Status::InvalidArgument(
+                fmt::format("DNS resolution failed for '{}': {}", host, resolved_result.status().message()));
+    }
+    const auto& resolved_ips = resolved_result.value();
 
-        const auto& resolved_ips = resolved_result.value();
-        for (const auto& ip : resolved_ips) {
-            if (is_private_ip(ip)) {
-                if (level == 4) {
-                    // Level 4 (PARANOID): Always block private IPs even if in allowlist
-                    return Status::InvalidArgument(fmt::format(
-                            "SSRF Protection: Private IP '{}' is blocked in {} mode (level {}). "
-                            "Host '{}' resolved to a private network address. "
-                            "At security level 4 (PARANOID), private IPs are always blocked even if in allowlist. "
-                            "To allow this request, lower the security level using "
-                            "ADMIN SET FRONTEND CONFIG (\"http_request_security_level\" = \"1\").",
-                            ip, level_name, level, host));
-                } else {
-                    return Status::InvalidArgument(fmt::format(
-                            "SSRF Protection: Private IP '{}' is blocked in {} mode (level {}). "
-                            "Host '{}' resolved to a private network address. "
-                            "Private network ranges (127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.) "
-                            "are not allowed at this security level. "
-                            "Use security level 1 (TRUSTED) to allow private IPs: "
-                            "ADMIN SET FRONTEND CONFIG (\"http_request_security_level\" = \"1\").",
-                            ip, level_name, level, host));
-                }
-            }
+    // Level 2 (PUBLIC): Allow all public hosts, block private IPs only
+    // (No allowlist check required, skip to private IP check below)
+
+    // Level 3 (RESTRICTED): Require allowlist for all hosts
+    if (level == static_cast<int>(HttpSecurityLevel::RESTRICTED)) {
+        if (state.ip_allowlist.empty() && state.host_allowlist_patterns.empty()) {
+            return Status::InvalidArgument(fmt::format(
+                    "SSRF Protection: '{}' blocked. Configure: "
+                    "(\"http_request_ip_allowlist\" = \"<ip>\") or "
+                    "(\"http_request_host_allowlist_regexp\" = \"{}\")",
+                    host, host));
+        }
+        if (!check_allowlist(host, resolved_ips, state)) {
+            return Status::InvalidArgument(
+                    fmt::format("SSRF Protection: '{}' not in allowlist.", host));
         }
     }
 
-    // Level 3+: Check allowlist
-    if (level >= 3) {
-        // If both allowlists are empty, block all requests
-        if (state.host_allowlist.empty() && state.host_allowlist_patterns.empty()) {
-            return Status::InvalidArgument(fmt::format(
-                    "SSRF Protection: Host '{}' is blocked in {} mode (level {}). "
-                    "Allowlist is empty - no hosts are permitted. "
-                    "Configure allowlist using ADMIN SET FRONTEND CONFIG: "
-                    "(\"http_request_host_allowlist\" = \"api.example.com,other.com\") or "
-                    "(\"http_request_host_allowlist_regexp\" = \".*\\\\.example\\\\.com\"), "
-                    "or use security level 2 (PUBLIC) to allow all public hosts.",
-                    host, level_name, level));
+    // Level 2 (PUBLIC) and Level 3 (RESTRICTED): Check private IP
+    bool is_private = false;
+    std::string private_ip;
+    for (const auto& ip : resolved_ips) {
+        if (is_private_ip(ip)) {
+            is_private = true;
+            private_ip = ip;
+            break;
         }
+    }
 
-        if (!check_host_allowlist(host, state)) {
-            return Status::InvalidArgument(fmt::format(
-                    "SSRF Protection: Host '{}' is blocked in {} mode (level {}). "
-                    "Host is not in the configured allowlist. "
-                    "Add '{}' to allowlist using ADMIN SET FRONTEND CONFIG: "
-                    "(\"http_request_host_allowlist\" = \"{}\") or update http_request_host_allowlist_regexp.",
-                    host, level_name, level, host, host));
+    // Block private IPs unless allow_private_in_allowlist is enabled and in allowlist
+    if (is_private) {
+        if (state.allow_private_in_allowlist && check_allowlist(host, resolved_ips, state)) {
+            // Private IP allowed because it's in allowlist and setting is enabled
+            return Status::OK();
         }
+        return Status::InvalidArgument(fmt::format(
+                "SSRF Protection: Private IP '{}' blocked. "
+                "Set (\"http_request_allow_private_in_allowlist\" = \"true\") and add to allowlist.",
+                private_ip));
     }
 
     return Status::OK();
@@ -390,7 +442,11 @@ static StatusOr<std::string> execute_http_request_with_config(HttpClient& client
     client.set_fail_on_error(false);
 
     // Set HTTP method
-    HttpMethod method = parse_http_method(Slice(config.method));
+    auto method_result = parse_http_method(Slice(config.method));
+    if (!method_result.ok()) {
+        return build_json_error_response(std::string(method_result.status().message()));
+    }
+    HttpMethod method = method_result.value();
     client.set_method(method);
 
     // Apply headers from config
