@@ -52,6 +52,7 @@ namespace starrocks {
 
 class MemPool;
 class TabletColumn;
+class TypeDescriptor;
 class TypeInfo;
 class ScalarTypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
@@ -105,6 +106,8 @@ TypeInfoPtr get_type_info(LogicalType field_type);
 TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb);
 
 TypeInfoPtr get_type_info(const TabletColumn& col);
+
+TypeInfoPtr get_type_info(const TypeDescriptor& type_desc);
 
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale);
 

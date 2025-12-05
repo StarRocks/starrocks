@@ -369,10 +369,9 @@ void SpillPartitionChunkWriter::_handle_err(const Status& st) {
 
 SchemaPtr SpillPartitionChunkWriter::_make_schema() {
     Fields fields;
+    fields.reserve(_tuple_desc->slots().size());
     for (auto& slot : _tuple_desc->slots()) {
-        TypeDescriptor type_desc = slot->type();
-        TypeInfoPtr type_info = get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
-        auto field = std::make_shared<Field>(slot->id(), slot->col_name(), type_info, slot->is_nullable());
+        auto field = Field::convert_from_slot_desc(*slot);
         fields.push_back(field);
     }
 

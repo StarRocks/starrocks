@@ -19,8 +19,10 @@
 #include <gtest/gtest.h>
 
 #include <future>
-#include <thread>
 
+#include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
@@ -30,8 +32,6 @@
 #include "formats/utils.h"
 #include "testutil/assert.h"
 #include "util/await.h"
-#include "util/defer_op.h"
-#include "util/integer_util.h"
 
 namespace starrocks::connector {
 namespace {
@@ -334,6 +334,179 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         EXPECT_EQ(partition_writer->is_finished(), true);
         EXPECT_EQ(writer_helper->written_rows(), 0);
         EXPECT_EQ(writer_helper->result_rows(), 3);
+    }
+
+    std::filesystem::remove_all(fs_base_path);
+}
+
+TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
+    std::string fs_base_path = "base_path";
+    std::filesystem::create_directories(fs_base_path + "/c1");
+
+    auto writer_helper = WriterHelper::instance();
+    bool commited = false;
+    Status status;
+
+    parquet::Utils::SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY)};
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    parquet::Utils::SlotDesc c2{"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP)};
+    c2.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    c2.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+
+    parquet::Utils::SlotDesc c3{"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
+    c3.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    c3.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    c3.type.field_names.emplace_back("c3_name");
+    c3.type.field_names.emplace_back("c3_age");
+
+    parquet::Utils::SlotDesc slot_descs[] = {c1, c2, c3, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    // Create partition writer
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, nullptr});
+    auto partition_chunk_writer_factory =
+            std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<SpillPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    EXPECT_OK(partition_writer->init());
+
+    // Write and spill
+    {
+        // Reset states
+        writer_helper->reset();
+        commited = false;
+        status = Status::OK();
+
+        for (size_t i = 0; i < 3; ++i) {
+            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4);
+
+            // Fill ARRAY<INT>
+            {
+                auto* nullable_column = down_cast<NullableColumn*>(chunk->get_column_by_index(0).get());
+                auto* col = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
+                auto& elements = col->elements_column();
+                auto& offsets = col->offsets_column();
+
+                // row 0: [1,2]
+                elements->append_datum(Datum(int32_t(1)));
+                elements->append_datum(Datum(int32_t(2)));
+
+                // row 1: [3]
+                offsets->append(2);
+                elements->append_datum(Datum(int32_t(3)));
+
+                // row 2: []
+                offsets->append(3);
+
+                // row 3: [4,5,6]
+                offsets->append(3);
+                elements->append_datum(Datum(int32_t(4)));
+                elements->append_datum(Datum(int32_t(5)));
+                elements->append_datum(Datum(int32_t(6)));
+                offsets->append(elements->size());
+                nullable_column->resize(4);
+            }
+
+            // Fill MAP<VARCHAR, INT>
+            {
+                auto* nullable_column = down_cast<NullableColumn*>(chunk->get_column_by_index(1).get());
+                auto* col = down_cast<MapColumn*>(nullable_column->mutable_data_column());
+                auto& keys = col->keys_column();
+                auto& values = col->values_column();
+                auto& offsets = col->offsets_column();
+
+                // row 0: {"k1":1,"k2":2}
+                keys->append_datum(Datum(Slice("k1")));
+                values->append_datum(Datum(int32_t(1)));
+                keys->append_datum(Datum(Slice("k2")));
+                values->append_datum(Datum(int32_t(2)));
+
+                // row 1: {"k3":3}
+                offsets->append(2);
+                keys->append_datum(Datum(Slice("k3")));
+                values->append_datum(Datum(int32_t(3)));
+
+                // row 2: {}
+                offsets->append(3);
+
+                // row 3: {"k4":4}
+                offsets->append(3);
+                keys->append_datum(Datum(Slice("k4")));
+                values->append_datum(Datum(int32_t(4)));
+                offsets->append(keys->size());
+                nullable_column->resize(4);
+            }
+
+            // Fill STRUCT\<c1:VARCHAR,c2:INT\>
+            {
+                auto* nullable_column = down_cast<NullableColumn*>(chunk->get_column_by_index(2).get());
+                auto* col = down_cast<StructColumn*>(nullable_column->mutable_data_column());
+                auto& sub_cols = col->fields_column();
+
+                auto* f0 = sub_cols[0].get(); // VARCHAR
+                auto* f1 = sub_cols[1].get(); // INT
+
+                f0->append_datum(Datum(Slice("s1")));
+                f1->append_datum(Datum(int32_t(10)));
+                f0->append_datum(Datum(Slice("s2")));
+                f1->append_datum(Datum(int32_t(20)));
+                f0->append_datum(Datum(Slice("s3")));
+                f1->append_datum(Datum(int32_t(30)));
+                f0->append_datum(Datum(Slice("s4")));
+                f1->append_datum(Datum(int32_t(40)));
+                nullable_column->resize(4);
+            }
+
+            auto st = partition_writer->write(chunk);
+            EXPECT_TRUE(st.ok());
+            EXPECT_GT(partition_writer->get_written_bytes(), 0);
+
+            st = partition_writer->flush();
+            EXPECT_TRUE(st.ok());
+            st = partition_writer->wait_flush();
+            EXPECT_TRUE(st.ok());
+            Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([partition_writer]() {
+                return partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed) == 0;
+            });
+
+            EXPECT_EQ(partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed), 0);
+            EXPECT_TRUE(status.ok());
+        }
+
+        // Merge spill blocks
+        auto ret = partition_writer->finish();
+        EXPECT_EQ(ret.ok(), true);
+        Awaitility()
+                .timeout(3 * 1000 * 1000) // 3s
+                .interval(300 * 1000)     // 300ms
+                .until([&commited]() { return commited; });
+
+        EXPECT_EQ(commited, true);
+        EXPECT_EQ(status.ok(), true);
+        EXPECT_EQ(partition_writer->is_finished(), true);
+        EXPECT_EQ(writer_helper->written_rows(), 0);
+        // Each chunk has 4 rows, 3 chunks in total
+        EXPECT_EQ(writer_helper->result_rows(), 12);
     }
 
     std::filesystem::remove_all(fs_base_path);
