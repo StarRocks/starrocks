@@ -1377,7 +1377,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Threads
 - Is mutable: Yes
-- Description: Maximum number of threads for the load-channel async RPC thread pool. When set to <= 0 (default `-1`) the pool size is auto-set to the number of CPU cores (CpuInfo::num_cores()). The configured value is used as ThreadPoolBuilder's max threads and the pool's min threads is set to min(5, max_threads). The pool queue size is controlled separately by `load_channel_rpc_thread_pool_queue_size`. This setting was introduced to align the async RPC pool size with brpc workers' default (`brpc_num_threads`) so behavior remains compatible after switching load RPC handling from synchronous to asynchronous. Changing this config at runtime triggers ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(...).
+- Description: Maximum number of threads for the load-channel async RPC thread pool. When set to less than or equal to 0 (default `-1`) the pool size is auto-set to the number of CPU cores (`CpuInfo::num_cores()`). The configured value is used as ThreadPoolBuilder's max threads and the pool's min threads is set to min(5, max_threads). The pool queue size is controlled separately by `load_channel_rpc_thread_pool_queue_size`. This setting was introduced to align the async RPC pool size with brpc workers' default (`brpc_num_threads`) so behavior remains compatible after switching load RPC handling from synchronous to asynchronous. Changing this config at runtime triggers `ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(...)`.
 - Introduced in: v3.5.0
 
 ##### load_channel_rpc_thread_pool_queue_size
