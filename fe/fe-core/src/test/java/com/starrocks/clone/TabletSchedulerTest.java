@@ -477,4 +477,59 @@ public class TabletSchedulerTest {
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
         Assert.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
     }
+
+    @Test
+    public void testResetDecommStatForSingleReplicaTabletWithNullTablet() {
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        long beId = 10001L;
+
+        // Create a replica with DECOMMISSION state
+        Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
+        List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
+
+        // Create a TabletSchedCtx but don't set the tablet (getTablet() will return null)
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
+                10002L, 10003L, 10004L, 10005L, tabletId, System.currentTimeMillis());
+        ctx.setDecommissionedReplica(decommissionedReplica);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return tabletScheduler;
+            }
+        };
+
+        // Add the context to scheduler so getTabletSchedCtx can find it
+        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+
+        // This should not throw NullPointerException even though ctx.getTablet() returns null
+        TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+    }
+
+    @Test
+    public void testResetDecommStatForSingleReplicaTabletWithNullTabletScheduler() {
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        long beId = 10001L;
+
+        // Create a replica with DECOMMISSION state
+        Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
+        List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return null;
+            }
+        };
+
+        // This should not throw NullPointerException even though getTabletScheduler() returns null
+        TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+
+        // If we reach here without exception, the test passes
+        Assertions.assertTrue(true);
+    }
 }
