@@ -559,7 +559,7 @@ public class ListPartitionPruner implements PartitionPruner {
             LiteralExpr key = entry.getKey();
             if (castOperator.getType().isNumericType() && key instanceof StringLiteral &&
                     !NumberUtils.isNumber(key.getStringValue())) {
-                //partition value (p='1','2','a'), select * from tb where p=1, cast(p as decimal),An error occurs when the value is 'a'.
+                // Partition values (p='1','2','a'), select * from tb where p=1, cast(p as decimal). An error occurs when the value is 'a'.
                 continue;
             }
             LiteralExpr literalExpr = castLiteralExpr(key, castOperator.getType());
