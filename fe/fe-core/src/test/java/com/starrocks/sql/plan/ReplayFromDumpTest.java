@@ -1128,4 +1128,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 + "  |  output: sum(106: sum), avg(108: avg), multi_distinct_count(109: count)\n"
                 + "  |  group by: 10: RegionID, 107: count");
     }
+
+    @Test
+    public void testNestCTERewrite() throws Exception {
+        String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks");
+    }
 }
