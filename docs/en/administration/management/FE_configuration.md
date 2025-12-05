@@ -113,6 +113,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 - Introduced in: -
 
+##### bdbje_log_level
+
+- Default: INFO
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Controls the logging level used by Berkeley DB Java Edition (BDB JE) in StarRocks. During BDB environment initialization BDBEnvironment.initConfigs() applies this value to the Java logger for the `com.sleepycat.je` package and to the BDB JE environment file logging level (EnvironmentConfig.FILE_LOGGING_LEVEL). Accepts standard java.util.logging.Level names such as SEVERE, WARNING, INFO, CONFIG, FINE, FINER, FINEST, ALL, OFF. Setting to ALL enables all log messages. Increasing verbosity will raise log volume and may impact disk I/O and performance; the value is read when the BDB environment is initialized, so it takes effect only after environment (re)initialization.
+- Introduced in: v3.2.0
+
 ##### big_query_log_delete_age
 
 - Default: 7d
@@ -205,6 +214,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of dump log files that can be retained within each retention period specified by the `dump_log_roll_interval` parameter.
 - Introduced in: -
 
+##### edit_log_write_slow_log_threshold_ms
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in ms) used by JournalWriter to detect and log slow edit-log batch writes. After a batch commit, if the batch duration exceeds this value, JournalWriter emits a WARN with batch size, duration and current journal queue size (rate-limited to once every ~2s). This setting only controls logging/alerts for potential IO or replication latency on the FE leader; it does not change commit or roll behavior (see `edit_log_roll_num` and commit-related settings). Metric updates still occur regardless of this threshold.
+- Introduced in: v3.2.3
+
 ##### enable_audit_sql
 
 - Default: true
@@ -222,15 +240,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: Whether to enable profile logging. When this feature is enabled, the FE writes per-query profile logs (the serialized `queryDetail` JSON produced by `ProfileManager`) to the profile log sink. This logging is performed only if `enable_collect_query_detail_info` is also enabled; when `enable_profile_log_compress` is enabled, the JSON may be gzipped before logging. Profile log files are managed by `profile_log_dir`, `profile_log_roll_num`, `profile_log_roll_interval` and rotated/deleted according to `profile_log_delete_age` (supports formats like `7d`, `10h`, `60m`, `120s`). Disabling this feature stops writing profile logs (reducing disk I/O, compression CPU and storage usage).
 - Introduced in: v3.2.5
-
-##### enable_profile_log_compress
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable compression for profile logging. When this feature is enabled, the JSON query profile produced by ProfileManager is GZIP-compressed via `CompressionUtils.gzipCompressString` before being written to profile logs. This compression only takes effect when both `enable_collect_query_detail_info` and `enable_profile_log` are set to `true`. Compression reduces log volume and I/O at the cost of CPU; consumers of profile logs must decompress the GZIP payload to read query details. If compression fails, a warning is logged and the compressed profile is not written.
-- Introduced in: v3.2.7
 
 ##### enable_qe_slow_log
 
@@ -569,6 +578,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum length of time for which bRPC clients wait as in the idle state.
 - Introduced in: -
 
+##### brpc_inner_reuse_pool
+
+- Default: true
+- Type: boolean
+- Unit: -
+- Is mutable: No
+- Description: Controls whether the underlying BRPC client uses an internal shared reuse pool for connections/channels. StarRocks reads `brpc_inner_reuse_pool` in BrpcProxy when constructing RpcClientOptions (via `rpcOptions.setInnerResuePool(...)`). When enabled (true) the RPC client reuses internal pools to reduce per-call connection creation, lowering connection churn, memory and file-descriptor usage for FE-to-BE / LakeService RPCs. When disabled (false) the client may create more isolated pools (increasing concurrency isolation at the cost of higher resource usage). Changing this value requires restarting the process to take effect.
+- Introduced in: v3.3.11, v3.4.1, v3.5.0
+
+##### brpc_min_evictable_idle_time_ms
+
+- Default: 120000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Time in milliseconds that an idle BRPC connection must remain in the connection pool before it becomes eligible for eviction. Applied to the RpcClientOptions used by `BrpcProxy` (via RpcClientOptions.setMinEvictableIdleTime). Raise this value to keep idle connections longer (reducing reconnect churn); lower it to free unused sockets faster (reducing resource usage). Tune together with `brpc_connection_pool_size` and `brpc_idle_wait_max_time` to balance connection reuse, pool growth, and eviction behavior.
+- Introduced in: v3.3.11, v3.4.1, v3.5.0
+
+##### brpc_reuse_addr
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: When true, StarRocks sets the socket option to allow local address reuse for client sockets created by the brpc RpcClient (via RpcClientOptions.setReuseAddress). Enabling this reduces bind failures and allows faster rebinding of local ports after sockets are closed, which is helpful for high-rate connection churn or rapid restarts. When false, address/port reuse is disabled, which can reduce the chance of unintended port sharing but may increase transient bind errors. This option interacts with connection behavior configured by `brpc_connection_pool_size` and `brpc_short_connection` because it affects how rapidly client sockets can be rebound and reused.
+- Introduced in: v3.3.11, v3.4.1, v3.5.0
+
 ##### cluster_name
 
 - Default: StarRocks Cluster
@@ -586,6 +622,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to allow the system to process HTTP requests asynchronously. If this feature is enabled, an HTTP request received by Netty worker threads will then be submitted to a separate thread pool for service logic handling to avoid blocking the HTTP server. If disabled, Netty workers will handle the service logic.
 - Introduced in: 4.0.0
+
+##### enable_http_validate_headers
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Controls whether Netty's HttpServerCodec performs strict HTTP header validation. The value is passed to HttpServerCodec when the HTTP pipeline is initialized in `HttpServer` (see UseLocations). Default is false for backward compatibility because newer netty versions enforce stricter header rules (https://github.com/netty/netty/pull/12760). Set to true to enforce RFC-compliant header checks; doing so may cause malformed or nonconforming requests from legacy clients or proxies to be rejected. Change requires a restart of the HTTP server to take effect.
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### enable_https
 
@@ -623,6 +668,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of the backlog queue held by the HTTP server in the FE node.
 - Introduced in: -
 
+##### http_max_chunk_size
+
+- Default: 8192
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the maximum allowed size (in bytes) of a single HTTP chunk handled by Netty's HttpServerCodec in the FE HTTP server. It is passed as the third argument to HttpServerCodec and limits the length of chunks during chunked transfer or streaming requests/responses. If an incoming chunk exceeds this value, Netty will raise a frame-too-large error (e.g., TooLongFrameException) and the request may be rejected. Increase this for legitimate large chunked uploads; keep it small to reduce memory pressure and surface area for DoS attacks. This setting is used alongside `http_max_initial_line_length`, `http_max_header_size`, and `enable_http_validate_headers`.
+- Introduced in: v3.2.0
+
+##### http_max_header_size
+
+- Default: 32768
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum allowed size in bytes for the HTTP request header block parsed by Netty's `HttpServerCodec`. StarRocks passes this value to `HttpServerCodec` (as `Config.http_max_header_size`); if an incoming request's headers (names and values combined) exceed this limit, the codec will reject the request (decoder exception) and the connection/request will fail. Increase only when clients legitimately send very large headers (large cookies or many custom headers); larger values increase per-connection memory use. Tune in conjunction with `http_max_initial_line_length` and `http_max_chunk_size`. Changes require FE restart.
+- Introduced in: v3.2.0
+
+##### http_max_initial_line_length
+
+- Default: 4096
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Sets the maximum allowed length (in bytes) of the HTTP initial request line (method + request-target + HTTP version) accepted by the Netty `HttpServerCodec` used in HttpServer. The value is passed to Netty's decoder and requests with an initial line longer than this will be rejected (TooLongFrameException). Increase this only when you must support very long request URIs; larger values increase memory use and may raise exposure to malformed/request-abuse. Tune together with `http_max_header_size` and `http_max_chunk_size`.
+- Introduced in: v3.2.0
+
 ##### http_port
 
 - Default: 8030
@@ -631,6 +703,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The port on which the HTTP server in the FE node listens.
 - Introduced in: -
+
+##### http_web_page_display_hardware
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When true, the HTTP index page (/index) will include a hardware information section populated via the oshi library (CPU, memory, processes, disks, filesystems, network, etc.). oshi may invoke system utilities or read system files indirectly (for example, it can execute commands such as `getent passwd`), which can surface sensitive system data. If you require stricter security or want to avoid executing those indirect commands on the host, set this configuration to false to disable collection and display of hardware details on the web UI.
+- Introduced in: v3.2.0
 
 ##### http_worker_threads_num
 
@@ -788,6 +869,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of time after which idle client connections time out.
 - Introduced in: -
 
+##### thrift_rpc_max_body_size
+
+- Default: -1
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Controls the maximum allowed Thrift RPC message body size (in bytes) used when constructing the server's Thrift protocol (passed to TBinaryProtocol.Factory in `ThriftServer`). A value of `-1` disables the limit (unbounded). Setting a positive value enforces an upper bound so that messages larger than this are rejected by the Thrift layer, which helps limit memory usage and mitigate oversized-request or DoS risks. Set this to a size large enough for expected payloads (large structs or batched data) to avoid rejecting legitimate requests.
+- Introduced in: v3.2.0
+
 ##### thrift_server_max_worker_threads
 
 - Default: 4096
@@ -807,6 +897,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: -
 
 ### Metadata and cluster management
+
+##### alter_max_worker_queue_size
+
+- Default: 4096
+- Type: Int
+- Unit: Tasks
+- Is mutable: No
+- Description: Controls the capacity of the internal worker thread pool queue used by the alter subsystem. It is passed to `ThreadPoolManager.newDaemonCacheThreadPool` in `AlterHandler` together with `alter_max_worker_threads`. When the number of pending alter tasks exceeds `alter_max_worker_queue_size`, new submissions will be rejected and a `RejectedExecutionException` can be thrown (see `AlterHandler.handleFinishAlterTask`). Tune this value to balance memory usage and the amount of backlog you permit for concurrent alter tasks.
+- Introduced in: v3.2.0
+
+##### alter_max_worker_threads
+
+- Default: 4
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Sets the maximum number of worker threads in the AlterHandler's thread pool. The AlterHandler constructs the executor with this value to run and finalize alter-related tasks (e.g., submitting `AlterReplicaTask` via handleFinishAlterTask). This value bounds concurrent execution of alter operations; raising it increases parallelism and resource usage, lowering it limits concurrent alters and may become a bottleneck. The executor is created together with `alter_max_worker_queue_size`, and the handler scheduling uses `alter_scheduler_interval_millisecond`.
+- Introduced in: v3.2.0
 
 ##### automated_cluster_snapshot_interval_seconds
 
@@ -835,6 +943,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata.
 - Introduced in: v2.5.5
 
+##### bdbje_cleaner_threads
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of background cleaner threads for the Berkeley DB Java Edition (JE) environment used by StarRocks journal. This value is read during environment initialization in `BDBEnvironment.initConfigs` and applied to `EnvironmentConfig.CLEANER_THREADS` using `Config.bdbje_cleaner_threads`. It controls parallelism for JE log cleaning and space reclamation; increasing it can speed up cleaning at the cost of additional CPU and I/O interference with foreground operations. Changes take effect only when the BDB environment is (re)initialized, so a frontend restart is required to apply a new value.
+- Introduced in: v3.2.0
+
 ##### bdbje_heartbeat_timeout_second
 
 - Default: 30
@@ -853,6 +970,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The amount of time after which a lock in the BDB JE-based FE times out.
 - Introduced in: -
 
+##### bdbje_replay_cost_percent
+
+- Default: 150
+- Type: Int
+- Unit: Percent
+- Is mutable: No
+- Description: Sets the relative cost (as a percentage) of replaying transactions from a BDB JE log versus obtaining the same data via a network restore. The value is supplied to the underlying JE replication parameter REPLAY_COST_PERCENT and is typically >100 to indicate that replay is usually more expensive than a network restore. When deciding whether to retain cleaned log files for potential replay, the system compares replay cost multiplied by log size against the cost of a network restore; files will be removed if network restore is judged more efficient. A value of 0 disables retention based on this cost comparison. Log files required for replicas within `REP_STREAM_TIMEOUT` or for any active replication are always retained.
+- Introduced in: v3.2.0
+
 ##### bdbje_replica_ack_timeout_second
 
 - Default: 10
@@ -861,6 +987,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The maximum amount of time for which the leader FE can wait for ACK messages from a specified number of follower FEs when metadata is written from the leader FE to the follower FEs. Unit: second. If a large amount of metadata is being written, the follower FEs require a long time before they can return ACK messages to the leader FE, causing ACK timeout. In this situation, metadata writes fail, and the FE process exits. We recommend that you increase the value of this parameter to prevent this situation.
 - Introduced in: -
+
+##### bdbje_reserved_disk_size
+
+- Default: 512 * 1024 * 1024 (536870912)
+- Type: Long
+- Unit: Bytes
+- Is mutable: No
+- Description: Limits the number of bytes Berkeley DB JE will reserve as "unprotected" (deletable) log/data files. StarRocks passes this value to JE via `EnvironmentConfig.RESERVED_DISK` in BDBEnvironment; JE's built-in default is 0 (unlimited). The StarRocks default (512 MiB) prevents JE from reserving excessive disk space for unprotected files while allowing safe cleanup of obsolete files. Tune this value on disk-constrained systems: decreasing it lets JE free more files sooner, increasing it lets JE retain more reserved space. Changes require restarting the process to take effect.
+- Introduced in: v3.2.0
 
 ##### bdbje_reset_election_group
 
@@ -889,6 +1024,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
 - Introduced in: v3.3.0
 
+##### brpc_connection_pool_size
+
+- Default: 16
+- Type: Int
+- Unit: Connections
+- Is mutable: No
+- Description: The maximum number of pooled BRPC connections per endpoint used by the FE's BrpcProxy. This value is applied to RpcClientOptions via `setMaxTotoal` and `setMaxIdleSize`, so it directly limits concurrent outgoing BRPC requests because each request must borrow a connection from the pool. In high-concurrency scenarios increase this to avoid request queuing; increasing it raises socket and memory usage and may increase remote server load. When tuning, consider related settings such as `brpc_idle_wait_max_time`, `brpc_short_connection`, `brpc_inner_reuse_pool`, `brpc_reuse_addr`, and `brpc_min_evictable_idle_time_ms`. Changing this value is not hot-reloadable and requires a restart.
+- Introduced in: v3.2.0
+
+##### brpc_short_connection
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: No
+- Description: Controls whether the underlying brpc RpcClient uses short-lived connections. When enabled (`true`), RpcClientOptions.setShortConnection is set and connections are closed after a request completes, reducing the number of long-lived sockets at the cost of higher connection setup overhead and increased latency. When disabled (`false`, the default) persistent connections and connection pooling are used. Enabling this option affects connection-pool behavior and should be considered together with `brpc_connection_pool_size`, `brpc_idle_wait_max_time`, `brpc_min_evictable_idle_time_ms`, `brpc_reuse_addr`, and `brpc_inner_reuse_pool`. Keep it disabled for typical high-throughput deployments; enable only to limit socket lifetime or when short connections are required by network policy.
+- Introduced in: v3.3.11, v3.4.1, v3.5.0
+
 ##### catalog_try_lock_timeout_ms
 
 - Default: 5000
@@ -897,6 +1050,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: The timeout duration to obtain the global lock.
 - Introduced in: -
+
+##### checkpoint_only_on_leader
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When `true`, the CheckpointController will only select the leader FE as the checkpoint worker; when `false`, the controller may pick any frontend and prefers nodes with lower heap usage. With `false`, workers are sorted by recent failure time and `heapUsedPercent` (the leader is treated as having infinite usage to avoid selecting it). For operations that require cluster snapshot metadata, the controller already forces leader selection regardless of this flag. Enabling `true` centralizes checkpoint work on the leader (simpler but increases leader CPU/memory and network load); keeping it `false` distributes checkpoint load to less-loaded FEs. This setting affects worker selection and interaction with timeouts such as `checkpoint_timeout_seconds` and RPC settings like `thrift_rpc_timeout_ms`.
+- Introduced in: v3.4.0, v3.5.0
+
+##### checkpoint_timeout_seconds
+
+- Default: 24 * 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Maximum time (in seconds) the leader's CheckpointController will wait for a checkpoint worker to complete a checkpoint. The controller converts this value to nanoseconds and polls the worker result queue; if no successful completion is received within this timeout the checkpoint is treated as failed and createImage returns failure. Increasing this value accommodates longer-running checkpoints but delays failure detection and subsequent image propagation; decreasing it causes faster failover/retries but can produce false timeouts for slow workers. This setting only controls the waiting period in `CheckpointController` during checkpoint creation and does not change the worker's internal checkpointing behavior.
+- Introduced in: v3.4.0, v3.5.0
 
 ##### db_used_data_quota_update_interval_secs
 
@@ -1000,6 +1171,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
 - Introduced in: v4.0
 
+##### enable_task_history_archive
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, finished task-run records are archived to the persistent task-run history table and recorded to the edit log so lookups (e.g., `lookupHistory`, `lookupHistoryByTaskNames`, `lookupLastJobOfTasks`) include archived results. Archiving is performed by the FE leader and is skipped during unit tests (`FeConstants.runningUnitTest`). When enabled, in-memory expiration and forced-GC paths are bypassed (the code returns early from `removeExpiredRuns` and `forceGC`), so retention/eviction is handled by the persistent archive instead of `task_runs_ttl_second` and `task_runs_max_history_number`. When disabled, history stays in memory and is pruned by those configurations.
+- Introduced in: v3.3.1, v3.4.0, v3.5.0
+
+##### enable_task_run_fe_evaluation
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, the FE will perform local evaluation for the system table `task_runs` in `TaskRunsSystemTable.supportFeEvaluation`. FE-side evaluation is only allowed for conjunctive equality predicates comparing a column to a constant and is limited to the columns `QUERY_ID` and `TASK_NAME`. Enabling this improves performance for targeted lookups by avoiding broader scans or additional remote processing; disabling it forces the planner to skip FE evaluation for `task_runs`, which may reduce predicate pruning and affect query latency for those filters.
+- Introduced in: v3.3.13, v3.4.3, v3.5.0
+
 ##### heartbeat_mgr_blocking_queue_size
 
 - Default: 1024
@@ -1035,6 +1224,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether non-Leader FEs ignore the metadata gap from the Leader FE. If the value is TRUE, non-Leader FEs ignore the metadata gap from the Leader FE and continue providing data reading services. This parameter ensures continuous data reading services even when you stop the Leader FE for a long period of time. If the value is FALSE, non-Leader FEs do not ignore the metadata gap from the Leader FE and stop providing data reading services.
 - Introduced in: -
+
+##### lock_checker_interval_second
+
+- Default: 30
+- Type: long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval, in seconds, between executions of the LockChecker frontend daemon (named "deadlock-checker"). The daemon performs deadlock detection and slow-lock scanning; the configured value is multiplied by 1000 to set the timer in milliseconds. Decreasing this value reduces detection latency but increases scheduling and CPU overhead; increasing it reduces overhead but delays detection and slow-lock reporting. Changes take effect at runtime because the daemon resets its interval each run. This setting interacts with `lock_checker_enable_deadlock_check` (enables deadlock checks) and `slow_lock_threshold_ms` (defines what constitutes a slow lock).
+- Introduced in: v3.2.0
 
 ##### master_sync_policy
 
@@ -1117,6 +1315,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - `WRITE_NO_SYNC`: When a transaction is committed, a log entry is generated simultaneously but is not flushed to disk.
 - Introduced in: -
 
+##### start_with_incomplete_meta
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: No
+- Description: When true, the FE will allow startup when image data exists but Berkeley DB JE (BDB) log files are missing or corrupted. `MetaHelper.checkMetaDir()` uses this flag to bypass the safety check that otherwise prevents starting from an image without corresponding BDB logs; starting this way can produce stale or inconsistent metadata and should only be used for emergency recovery. `RestoreClusterSnapshotMgr` temporarily sets this flag to true while restoring a cluster snapshot and then rolls it back; that component also toggles `bdbje_reset_election_group` during restore. Do not enable in normal operation — enable only when recovering from corrupted BDB data or when explicitly restoring an image-based snapshot.
+- Introduced in: v3.2.0
+
+##### table_keeper_interval_second
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval, in seconds, between executions of the TableKeeper daemon. The TableKeeperDaemon uses this value (multiplied by 1000) to set its internal timer and periodically runs keeper tasks that ensure history tables exist, correct table properties (replication number) and update partition TTLs. The daemon only performs work on the leader node and updates its runtime interval via setInterval when `table_keeper_interval_second` changes. Increase to reduce scheduling frequency and load; decrease for faster reaction to missing or stale history tables.
+- Introduced in: v3.3.1, v3.4.0, v3.5.0
+
 ##### task_runs_ttl_second
 
 - Default: 7 * 24 * 3600
@@ -1133,6 +1349,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Time-to-live (TTL) for tasks. For manual tasks (when no schedule is set), TaskBuilder uses this value to compute the task's `expireTime` (`expireTime = now + task_ttl_second * 1000L`). TaskRun also uses this value as an upper bound when computing a run's execute timeout — the effective execute timeout is `min(task_runs_timeout_second, task_runs_ttl_second, task_ttl_second)`. Adjusting this value changes how long manually created tasks remain valid and can indirectly limit the maximum allowed execution time of task runs.
+- Introduced in: v3.2.0
+
+##### thrift_rpc_retry_times
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
+- Introduced in: v3.2.0
+
+##### thrift_rpc_strict_mode
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Controls the TBinaryProtocol "strict read" mode used by the Thrift server. This value is passed as the first argument to org.apache.thrift.protocol.TBinaryProtocol.Factory in the Thrift server stack and affects how incoming Thrift messages are parsed and validated. When `true` (default), the server enforces strict Thrift encoding/version checks and honors the configured `thrift_rpc_max_body_size` limit; when `false`, the server accepts non-strict (legacy/lenient) message formats, which can improve compatibility with older clients but may bypass some protocol validations. Use caution changing this on a running cluster because it is not mutable and affects interoperability and parsing safety.
+- Introduced in: v3.2.0
+
+##### thrift_rpc_timeout_ms
+
+- Default: 10000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout (in milliseconds) used as the default network/socket timeout for Thrift RPC calls. It is passed to TSocket when creating Thrift clients in `ThriftConnectionPool` (used by the frontend and backend pools) and is also added to an operation's execution timeout (e.g., ExecTimeout*1000 + `thrift_rpc_timeout_ms`) when computing RPC call timeouts in places such as `ConfigBase`, `LeaderOpExecutor`, `GlobalStateMgr`, `NodeMgr`, `VariableMgr`, and `CheckpointWorker`. Increasing this value makes RPC calls tolerate longer network or remote processing delays; decreasing it causes faster failover on slow networks. Changing this value affects connection creation and request deadlines across the FE code paths that perform Thrift RPCs.
 - Introduced in: v3.2.0
 
 ##### txn_latency_metric_report_groups
@@ -1155,6 +1398,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### User, role, and privilege
 
+##### enable_task_info_mask_credential
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in information_schema.tasks and information_schema.task_runs by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or task_runs is large; disable only if you need unredacted definitions and accept the security risk.
+- Introduced in: v3.5.6
+
 ##### privilege_max_role_depth
 
 - Default: 16
@@ -1174,6 +1426,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: v3.0.0
 
 ### Query engine
+
+##### brpc_send_plan_fragment_timeout_ms
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout in milliseconds applied to the BRPC TalkTimeoutController before sending a plan fragment. `BackendServiceClient.sendPlanFragmentAsync` sets this value prior to calling the backend `execPlanFragmentAsync`. It governs how long BRPC will wait when borrowing an idle connection from the connection pool and while performing the send; if exceeded, the RPC will fail and may trigger the method's retry logic. Set this lower to fail fast under contention, or raise it to tolerate transient pool exhaustion or slow networks. Be cautious: very large values can delay failure detection and block request threads.
+- Introduced in: v3.3.11, v3.4.1, v3.5.0
 
 ##### connector_table_query_trigger_analyze_large_table_interval
 
@@ -1410,6 +1671,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 
+##### enable_query_queue_v2
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: No
+- Description: When true, switches the FE slot-based query scheduler to Query Queue V2. The flag is read by the slot manager and trackers (for example, `BaseSlotManager.isEnableQueryQueueV2` and `SlotTracker#createSlotSelectionStrategy`) to choose `SlotSelectionStrategyV2` instead of the legacy strategy. `query_queue_v2_xxx` configuration options and `QueryQueueOptions` take effect only when this flag is enabled. Because the value is static at runtime, enablement requires restarting the leader FE to take effect and may change query scheduling, concurrency limits, and queueing behavior cluster-wide.
+- Introduced in: v3.3.4, v3.4.0, v3.5.0
+
 ##### enable_sql_blacklist
 
 - Default: false
@@ -1525,6 +1795,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
 - Introduced in: v2.5.15, v3.1.5
 
+##### lock_checker_enable_deadlock_check
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, the LockChecker thread performs JVM-level deadlock detection using ThreadMXBean.findDeadlockedThreads() and logs the offending threads' stack traces. The check runs inside the LockChecker daemon (whose frequency is controlled by `lock_checker_interval_second`) and writes detailed stack information to the log, which may be CPU- and I/O-intensive. Enable this option only for troubleshooting live or reproducible deadlock issues; leaving it enabled in normal operation can increase overhead and log volume.
+- Introduced in: v3.2.0
+
 ##### low_cardinality_threshold
 
 - Default: 255
@@ -1579,6 +1858,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of times that the optimizer can rewrite a scalar operator.
 - Introduced in: -
 
+##### max_query_queue_history_slots_number
+
+- Default: 0
+- Type: Int
+- Unit: Slots
+- Is mutable: Yes
+- Description: Controls how many recently released (history) allocated slots are retained per query queue for monitoring and observability. When `max_query_queue_history_slots_number` is set to a value &gt; 0, BaseSlotTracker keeps up to that many most-recently released LogicalSlot entries in an in-memory queue, evicting the oldest when the limit is exceeded. Enabling this causes getSlots() to include these history entries (newest first), allows BaseSlotTracker to attempt registering slots with the ConnectContext for richer ExtraMessage data, and lets LogicalSlot.ConnectContextListener attach query finish metadata to history slots. When `max_query_queue_history_slots_number` &lt;= 0 the history mechanism is disabled (no extra memory used). Use a reasonable value to balance observability and memory overhead.
+- Introduced in: v3.5.0
+
 ##### max_query_retry_time
 
 - Default: 2
@@ -1632,6 +1920,51 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The time interval at which release validation tasks are issued.
 - Introduced in: -
+
+##### query_queue_slots_estimator_strategy
+
+- Default: MAX
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Selects the slot estimation strategy used for queue-based queries when `enable_query_queue_v2` is true. Valid values: MBE (memory-based), PBE (parallelism-based), MAX (take max of MBE and PBE) and MIN (take min of MBE and PBE). MBE estimates slots from predicted memory or plan costs divided by the per-slot memory target and is capped by `totalSlots`. PBE derives slots from fragment parallelism (scan range counts or cardinality / rows-per-slot) and a CPU-cost based calculation (using CPU costs per slot), then bounds the result within [numSlots/2, numSlots]. MAX and MIN combine MBE and PBE by taking their maximum or minimum respectively. If the configured value is invalid, the default (`MAX`) is used.
+- Introduced in: v3.5.0
+
+##### query_queue_v2_concurrency_level
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how many logical concurrency "layers" are used when computing the system's total query slots. In shared-nothing mode the total slots = `query_queue_v2_concurrency_level` * number_of_BEs * cores_per_BE (derived from BackendResourceStat). In multi-warehouse mode the effective concurrency is scaled down to max(1, `query_queue_v2_concurrency_level` / 4). If the configured value is non-positive it is treated as `4`. Changing this value increases or decreases totalSlots (and therefore concurrent query capacity) and affects per-slot resources: memBytesPerSlot is derived by dividing per-worker memory by (cores_per_worker * concurrency), and CPU accounting uses `query_queue_v2_cpu_costs_per_slot`. Set it proportional to cluster size; very large values may reduce per-slot memory and cause resource fragmentation. 
+- Introduced in: v3.3.4, v3.4.0, v3.5.0
+
+##### query_queue_v2_cpu_costs_per_slot
+
+- Default: 1000000000
+- Type: Long
+- Unit: planner CPU cost units
+- Is mutable: Yes
+- Description: Per-slot CPU cost threshold used to estimate how many slots a query needs from its planner CPU cost. The scheduler computes slots as integer(plan_cpu_costs / `query_queue_v2_cpu_costs_per_slot`) and then clamps the result to the range [1, totalSlots] (totalSlots is derived from the query queue V2 `V2` parameters). The V2 code normalizes non-positive settings to 1 (Math.max(1, value)), so a non-positive value effectively becomes `1`. Increasing this value reduces slots allocated per query (favoring fewer, larger-slot queries); decreasing it increases slots per query. Tune together with `query_queue_v2_num_rows_per_slot` and concurrency settings to control parallelism vs. resource granularity.
+- Introduced in: v3.3.4, v3.4.0, v3.5.0
+
+##### query_queue_v2_num_rows_per_slot
+
+- Default: 4096
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: The target number of source-row records assigned to a single scheduling slot when estimating per-query slot count. StarRocks computes estimated_slots = (cardinality of the Source Node) / `query_queue_v2_num_rows_per_slot`, then clamps the result to the range [1, totalSlots] and enforces a minimum of 1 if the computed value is non-positive. totalSlots is derived from available resources (roughly DOP * `query_queue_v2_concurrency_level` * number_of_workers/BE) and therefore depends on cluster/core counts. Increase this value to reduce slot count (each slot handles more rows) and lower scheduling overhead; decrease it to increase parallelism (more, smaller slots), up to the resource limit.
+- Introduced in: v3.3.4, v3.4.0, v3.5.0
+
+##### query_queue_v2_schedule_strategy
+
+- Default: SWRR
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Selects the scheduling policy used by Query Queue V2 to order pending queries. Supported values (case-insensitive) are `SWRR` (Smooth Weighted Round Robin) — the default, suitable for mixed/hybrid workloads that need fair weighted sharing — and `SJF` (Short Job First + Aging) — prioritizes short jobs while using aging to avoid starvation. The value is parsed with case-insensitive enum lookup; an unrecognized value is logged as an error and the default policy is used. This configuration only affects behavior when Query Queue V2 is enabled and interacts with V2 sizing settings such as `query_queue_v2_concurrency_level`.
+- Introduced in: v3.3.12, v3.4.2, v3.5.0
 
 ##### semi_sync_collect_statistic_await_seconds
 
@@ -1758,6 +2091,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Interval between executions of task background jobs. GlobalStateMgr uses this value to schedule the TaskCleaner FrontendDaemon which invokes `doTaskBackgroundJob()`; the value is multiplied by 1000 to set the daemon interval in milliseconds. Decreasing the value makes background maintenance (task cleanup, checks) run more frequently and react faster but increases CPU/IO overhead; increasing it reduces overhead but delays cleanup and detection of stale tasks. Tune this value to balance maintenance responsiveness and resource usage.
 - Introduced in: v3.2.0
+
+##### task_min_schedule_interval_s
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum allowed schedule interval (in seconds) for task schedules checked by the SQL layer. When a task is submitted, TaskAnalyzer converts the schedule period to seconds and rejects the submission with ERR_INVALID_PARAMETER if the period is smaller than `task_min_schedule_interval_s`. This prevents creating tasks that run too frequently and protects the scheduler from high-frequency tasks. If a schedule has no explicit start time, TaskAnalyzer sets the start time to the current epoch seconds.
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ### Loading and unloading
 
@@ -1944,6 +2286,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The time interval at which load jobs are processed on a rolling basis.
 - Introduced in: -
+
+##### load_parallel_instance_num
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the number of parallel load fragment instances created on a single host for broker and stream loads. LoadPlanner uses this value as the per-host degree of parallelism unless the session enables adaptive sink DOP; if the session variable `enable_adaptive_sink_dop` is true, the session`s `sink_degree_of_parallelism` overrides this configuration. When shuffle is required, this value is applied to fragment parallel execution (scan fragment and sink fragment parallel exec instances). When no shuffle is needed, it is used as the sink pipeline DOP. Note: loads from local files are forced to a single instance (pipeline DOP = 1, parallel exec = 1) to avoid local disk contention. Increasing this number raises per-host concurrency and throughput but may increase CPU, memory and I/O contention.
+- Introduced in: v3.2.0
 
 ##### load_straggler_wait_second
 
@@ -2153,6 +2504,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The timeout duration for each Spark Load job.
 - Introduced in: -
 
+##### spark_load_submit_timeout_second
+
+- Default: 300
+- Type: long
+- Unit: Seconds
+- Is mutable: No
+- Description: Maximum time in seconds to wait for a YARN response after submitting a Spark application. `SparkLauncherMonitor.LogMonitor` converts this value to milliseconds and will stop monitoring and forcibly kill the spark launcher process if the job remains in UNKNOWN/CONNECTED/SUBMITTED longer than this timeout. `SparkLoadJob` reads this configuration as the default and allows a per-load override via the `LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT` property. Set it high enough to accommodate YARN queueing delays; setting it too low may abort legitimately queued jobs, while setting it too high may delay failure handling and resource cleanup.
+- Introduced in: v3.2.0
+
 ##### spark_resource_path
 
 - Default: Empty string
@@ -2170,6 +2530,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The default timeout duration for each Stream Load job.
 - Introduced in: -
+
+##### stream_load_max_txn_num_per_be
+
+- Default: -1
+- Type: Int
+- Unit: Transactions
+- Is mutable: Yes
+- Description: Limits the number of concurrent stream-load transactions accepted from a single BE (backend) host. When set to a non-negative integer, FrontendServiceImpl checks the current transaction count for the BE (by client IP) and rejects new stream-load begin requests if the count >= this limit. A value of &lt; 0 disables the limit (unlimited). This check occurs during stream load begin and may cause a `streamload txn num per be exceeds limit` error when exceeded. Related runtime behavior uses `stream_load_default_timeout_second` for request timeout fallback.
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### stream_load_task_keep_max_num
 
@@ -2234,6 +2603,17 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The directory that stores the Yarn configuration file.
 - Introduced in: -
 
+### Statistic report
+
+##### enable_http_detail_metrics
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When true, the HTTP server computes and exposes detailed HTTP worker metrics (notably the `HTTP_WORKER_PENDING_TASKS_NUM` gauge). Enabling this causes the server to iterate over Netty worker executors and call `pendingTasks()` on each `NioEventLoop` to sum pending task counts; when disabled the gauge returns 0 to avoid that cost. This extra collection can be CPU- and latency-sensitive — enable only for debugging or detailed investigation.
+- Introduced in: v3.2.3
+
 ### Storage
 
 ##### alter_table_timeout_second
@@ -2244,6 +2624,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
+
+##### capacity_used_percent_high_water
+
+- Default: 0.75
+- Type: double
+- Unit: Fraction (0.0–1.0)
+- Is mutable: Yes
+- Description: The high-water threshold of disk capacity used percent (fraction of total capacity) used when computing backend load scores. `BackendLoadStatistic.calcSore` uses `capacity_used_percent_high_water` to set `LoadScore.capacityCoefficient`: if a backend's used percent less than 0.5 the coefficient equal to 0.5; if used percent > `capacity_used_percent_high_water` the coefficient = 1.0; otherwise the coefficient transitions linearly with used percent via (2 * usedPercent - 0.5). When the coefficient is 1.0, the load score is driven entirely by capacity proportion; lower values increase the weight of replica count. Adjusting this value changes how aggressively the balancer penalizes backends with high disk utilization.
+- Introduced in: v3.2.0
 
 ##### catalog_trash_expire_second
 
@@ -2305,6 +2694,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
 > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+
+##### enable_online_optimize_table
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether StarRocks will use the non-blocking online optimization path when creating an optimize job. When `enable_online_optimize_table` is true and the target table meets compatibility checks (no partition/keys/sort specification, distribution is not `RandomDistributionDesc`, storage type is not `COLUMN_WITH_ROW`, replicated storage enabled, and the table is not a cloud-native table or materialized view), the planner creates an `OnlineOptimizeJobV2` to perform optimization without blocking writes. If false or any compatibility condition fails, StarRocks falls back to `OptimizeJobV2`, which may block write operations during optimization.
+- Introduced in: v3.3.3, v3.4.0, v3.5.0
 
 ##### enable_strict_storage_medium_check
 
@@ -2868,6 +3266,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
 
+##### hdfs_file_system_expire_seconds
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Time-to-live in seconds for an unused cached HDFS/ObjectStore FileSystem managed by HdfsFsManager. The FileSystemExpirationChecker (runs every 60s) calls each HdfsFs.isExpired(...) using this value; when expired the manager closes the underlying FileSystem and removes it from the cache. Accessor methods (for example `HdfsFs.getDFSFileSystem`, `getUserName`, `getConfiguration`) update the last-access timestamp, so expiry is based on inactivity. Lower values reduce idle resource holding but increase reopen overhead; higher values keep handles longer and may consume more resources.
+- Introduced in: v3.2.0
+
 ##### lake_autovacuum_grace_period_minutes
 
 - Default: 30
@@ -3055,6 +3462,80 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description:
 - Introduced in: -
+
+### Data Lake
+
+##### files_enable_insert_push_down_schema
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, the analyzer will attempt to push the target table schema into the `files()` table function for INSERT ... FROM files() operations. This only applies when the source is a FileTableFunctionRelation, the target is a native table, and the SELECT list contains corresponding slot-ref columns (or *). The analyzer will match select columns to target columns (counts must match), lock the target table briefly, and replace file-column types with deep-copied target column types for non-complex types (complex types such as parquet json -> array&lt;varchar&gt; are skipped). Column names from the original files table are preserved. This reduces type-mismatch and looseness from file-based type inference during ingestion.
+- Introduced in: v3.4.0, v3.5.0
+
+##### hdfs_read_buffer_size_kb
+
+- Default: 8192
+- Type: Int
+- Unit: Kilobytes
+- Is mutable: Yes
+- Description: Size of the HDFS read buffer in kilobytes. StarRocks converts this value to bytes (`<< 10`) and uses it to initialize HDFS read buffers in `HdfsFsManager` and to populate the thrift field `hdfs_read_buffer_size_kb` sent to BE tasks (e.g., `TBrokerScanRangeParams`, `TDownloadReq`) when broker access is not used. Increasing `hdfs_read_buffer_size_kb` can improve sequential read throughput and reduce syscall overhead at the cost of higher per-stream memory usage; decreasing it reduces memory footprint but may lower IO efficiency. Consider workload (many small streams vs. few large sequential reads) when tuning.
+- Introduced in: v3.2.0
+
+##### hdfs_write_buffer_size_kb
+
+- Default: 1024
+- Type: Int
+- Unit: Kilobytes
+- Is mutable: Yes
+- Description: Sets the HDFS write buffer size (in KB) used for direct writes to HDFS or object stores when not using a broker. The FE converts this value to bytes (`<< 10`) and initializes the local write buffer in HdfsFsManager, and it is propagated in Thrift requests (e.g., TUploadReq, TExportSink, sink options) so backends/agents use the same buffer size. Increasing this value can improve throughput for large sequential writes at the cost of more memory per writer; decreasing it reduces per-stream memory usage and may lower latency for small writes. Tune alongside `hdfs_read_buffer_size_kb` and consider available memory and concurrent writers.
+- Introduced in: v3.2.0
+
+##### lake_batch_publish_max_version_num
+
+- Default: 10
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and works together with `lake_batch_publish_min_version_num` to determine the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
+- Introduced in: v3.2.0
+
+##### lake_batch_publish_min_version_num
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Sets the minimum number of consecutive transaction versions required to form a publish batch for lake tables. DatabaseTransactionMgr.getReadyToPublishTxnListBatch passes this value to transactionGraph.getTxnsWithTxnDependencyBatch together with `lake_batch_publish_max_version_num` to select dependent transactions. A value of `1` allows single-transaction publishes (no batching). Values &gt;1 require at least that many consecutively-versioned, single-table, non-replication transactions to be available; batching is aborted if versions are non-consecutive, a replication transaction appears, or a schema change consumes a version. Increasing this value can improve publish throughput by grouping commits but may delay publishing while waiting for enough consecutive transactions.
+- Introduced in: v3.2.0
+
+##### lake_enable_batch_publish_version
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, PublishVersionDaemon batches ready transactions for the same Lake (shared-data) table/partition and publishes their versions together instead of issuing per-transaction publishes. In RunMode shared-data, the daemon calls getReadyPublishTransactionsBatch() and uses publishVersionForLakeTableBatch(...) to perform grouped publish operations (reducing RPCs and improving throughput). When disabled, the daemon falls back to per-transaction publishing via publishVersionForLakeTable(...). The implementation coordinates in-flight work using internal sets to avoid duplicate publishes when the switch is toggled and is affected by the thread pool sizing via `lake_publish_version_max_threads`.
+- Introduced in: v3.2.0
+
+##### lake_enable_tablet_creation_optimization
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
+- Introduced in: v3.3.1, v3.4.0, v3.5.0
+
+##### lake_use_combined_txn_log
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
+- Introduced in: v3.3.7, v3.4.0, v3.5.0
 
 ### Other
 
