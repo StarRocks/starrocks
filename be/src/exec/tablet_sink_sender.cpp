@@ -78,7 +78,7 @@ Status TabletSinkSender::send_chunk_by_range(const OlapTableSchemaParam* schema,
             // Get or create range router for this partition and index.
             // Use try_emplace to avoid double lookup
             auto [checker_iter, inserted] = _range_checkers[index_schema->index_id].try_emplace(part_id);
-            
+
             RangeRouter* checker_ptr = nullptr;
             if (inserted) {
                 // New entry, need to initialize router
@@ -90,7 +90,8 @@ Status TabletSinkSender::send_chunk_by_range(const OlapTableSchemaParam* schema,
                     tablet_ranges.emplace_back(tablet.range);
                 }
                 auto checker = std::make_unique<RangeRouter>();
-                RETURN_IF_ERROR(checker->init(tablet_ranges, _partition_params->range_distribution_slot_descs().size()));
+                RETURN_IF_ERROR(
+                        checker->init(tablet_ranges, _partition_params->range_distribution_slot_descs().size()));
                 checker_ptr = checker.get();
                 checker_iter->second = std::move(checker);
             } else {
@@ -101,7 +102,8 @@ Status TabletSinkSender::send_chunk_by_range(const OlapTableSchemaParam* schema,
             DCHECK(checker_ptr != nullptr);
             const auto& slot_descs = _partition_params->range_distribution_slot_descs();
             const auto& candidate_tablet_ids = part->indexes[i].tablet_ids;
-            RETURN_IF_ERROR(checker_ptr->route_chunk_rows(chunk, slot_descs, row_indices, candidate_tablet_ids, &_tablet_ids));
+            RETURN_IF_ERROR(
+                    checker_ptr->route_chunk_rows(chunk, slot_descs, row_indices, candidate_tablet_ids, &_tablet_ids));
             index_id_partition_id[index_schema->index_id].emplace(part_id);
         }
 

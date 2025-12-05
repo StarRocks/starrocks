@@ -41,14 +41,14 @@ public:
     Status init(const std::vector<TTabletRange>& tablet_ranges, size_t num_columns);
 
     Status route_chunk_rows(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
-                            const std::vector<uint16_t>& row_indices,
-                            const std::vector<int64_t>& candidate_dest, std::vector<int64_t>* target_dest);
+                            const std::vector<uint16_t>& row_indices, const std::vector<int64_t>& candidate_dest,
+                            std::vector<int64_t>* target_dest);
 
 private:
     Status _validate_range(const std::vector<TTabletRange>& tablet_ranges, size_t num_columns) const;
 
-    bool _check_row_in_bound(const std::vector<ColumnPtr>& columns, uint16_t row_idx,
-                             size_t range_idx, bool is_lower_bound) const;
+    bool _check_row_in_bound(const std::vector<ColumnPtr>& columns, uint16_t row_idx, size_t range_idx,
+                             bool is_lower_bound) const;
 
     StatusOr<size_t> _find_tablet_index_for_row(const std::vector<ColumnPtr>& columns, uint16_t row_idx) const;
 

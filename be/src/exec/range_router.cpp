@@ -134,9 +134,8 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
 }
 
 Status RangeRouter::route_chunk_rows(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
-                                              const std::vector<uint16_t>& row_indices,
-                                              const std::vector<int64_t>& candidate_dest,
-                                              std::vector<int64_t>* target_dest) {
+                                     const std::vector<uint16_t>& row_indices,
+                                     const std::vector<int64_t>& candidate_dest, std::vector<int64_t>* target_dest) {
     DCHECK(target_dest != nullptr);
     if (_lower_boundary.empty() || _upper_boundary.empty()) {
         return Status::InternalError("RangeRouter::init() must be called before route_chunk_rows()");
@@ -166,9 +165,8 @@ Status RangeRouter::route_chunk_rows(Chunk* chunk, const std::vector<SlotDescrip
     for (uint16_t row_idx : row_indices) {
         ASSIGN_OR_RETURN(size_t t_idx, _find_tablet_index_for_row(columns, row_idx));
         if (t_idx >= candidate_dest.size()) {
-            return Status::InternalError(
-                    fmt::format("tablet index {} out of range for candidate destinations size {}", t_idx,
-                                candidate_dest.size()));
+            return Status::InternalError(fmt::format("tablet index {} out of range for candidate destinations size {}",
+                                                     t_idx, candidate_dest.size()));
         }
         (*target_dest)[row_idx] = candidate_dest[t_idx];
     }
@@ -202,7 +200,8 @@ Status RangeRouter::_validate_range(const std::vector<TTabletRange>& tablet_rang
               Status::InternalError("lower_inf_count and upper_inf_count must be less than or equal to 1"));
     RETURN_IF(lower_inf_count == 1 && !tablet_ranges.empty() && tablet_ranges[0].__isset.lower_bound,
               Status::InternalError("-inf range is not allowed to be set in the non-first tablet range"));
-    RETURN_IF(upper_inf_count == 1 && !tablet_ranges.empty() && tablet_ranges[tablet_ranges.size() - 1].__isset.upper_bound,
+    RETURN_IF(upper_inf_count == 1 && !tablet_ranges.empty() &&
+                      tablet_ranges[tablet_ranges.size() - 1].__isset.upper_bound,
               Status::InternalError("+inf range is not allowed to be set in the non-last tablet range"));
     // If both lower and upper bounds are inf, and there is only one tablet range,
     // Means the range is [-inf, +inf]
@@ -218,22 +217,22 @@ Status RangeRouter::_validate_range(const std::vector<TTabletRange>& tablet_rang
         if (a.__isset.string_value && b.__isset.string_value) {
             return a.string_value.compare(b.string_value);
         }
-        return std::nullopt;  // Type mismatch
+        return std::nullopt; // Type mismatch
     };
 
     for (size_t i = 1; i < tablet_ranges.size(); ++i) {
         const auto& prev = tablet_ranges[i - 1];
         const auto& curr = tablet_ranges[i];
-        
+
         // Compare bounds lexicographically
         for (size_t col = 0; col < num_columns; ++col) {
             auto cmp = compare_variant(prev.upper_bound.values[col], curr.lower_bound.values[col]);
             RETURN_IF(!cmp.has_value(),
-                      Status::InternalError(fmt::format("Type mismatch at column {} between range[{}] and range[{}]", 
-                                                       col, i - 1, i)));
-            
+                      Status::InternalError(fmt::format("Type mismatch at column {} between range[{}] and range[{}]",
+                                                        col, i - 1, i)));
+
             if (cmp.value() < 0) {
-                break;  // Valid ordering
+                break; // Valid ordering
             }
             if (cmp.value() > 0) {
                 return Status::InternalError(fmt::format("Range[{}] > range[{}] at column {}", i - 1, i, col));
@@ -248,8 +247,8 @@ Status RangeRouter::_validate_range(const std::vector<TTabletRange>& tablet_rang
     return Status::OK();
 }
 
-bool RangeRouter::_check_row_in_bound(const std::vector<ColumnPtr>& columns, uint16_t row_idx,
-                                      size_t range_idx, bool is_lower_bound) const {
+bool RangeRouter::_check_row_in_bound(const std::vector<ColumnPtr>& columns, uint16_t row_idx, size_t range_idx,
+                                      bool is_lower_bound) const {
     auto compare_row = [&](const std::vector<ColumnPtr>& columns, uint16_t row_idx,
                            const std::vector<ColumnPtr>& targets, size_t target_idx) -> int {
         DCHECK_EQ(targets.size(), columns.size());
@@ -264,7 +263,8 @@ bool RangeRouter::_check_row_in_bound(const std::vector<ColumnPtr>& columns, uin
         return 0;
     };
 
-    const auto& bound_inclusive = is_lower_bound ? _lower_bound_inclusive[range_idx] : _upper_bound_inclusive[range_idx];
+    const auto& bound_inclusive =
+            is_lower_bound ? _lower_bound_inclusive[range_idx] : _upper_bound_inclusive[range_idx];
     const auto& boundary = is_lower_bound ? _lower_boundary : _upper_boundary;
     // Check if bound is -inf or not
     if (bound_inclusive.has_value()) {
@@ -279,7 +279,8 @@ bool RangeRouter::_check_row_in_bound(const std::vector<ColumnPtr>& columns, uin
     return true;
 }
 
-StatusOr<size_t> RangeRouter::_find_tablet_index_for_row(const std::vector<ColumnPtr>& columns, uint16_t row_idx) const {
+StatusOr<size_t> RangeRouter::_find_tablet_index_for_row(const std::vector<ColumnPtr>& columns,
+                                                         uint16_t row_idx) const {
     DCHECK(!_lower_boundary.empty());
     DCHECK(_lower_boundary[0] != nullptr);
     size_t num_ranges = _lower_boundary[0]->size();
@@ -304,7 +305,7 @@ StatusOr<size_t> RangeRouter::_find_tablet_index_for_row(const std::vector<Colum
     // 2. Search by upper bound. (left - 1) means the last lower bound the fits the row.
     if (left == 0 || !_check_row_in_bound(columns, row_idx, left - 1, false)) {
         return Status::DataQualityError(
-            fmt::format("Failed to match range: row {} does not match any tablet range", row_idx));
+                fmt::format("Failed to match range: row {} does not match any tablet range", row_idx));
     }
     return left - 1;
 }

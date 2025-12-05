@@ -51,7 +51,7 @@ public:
     // otherwise close_wait() will block
     virtual Status try_close(RuntimeState* state);
     virtual Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
-                              bool write_txn_log); 
+                              bool write_txn_log);
 
     virtual bool is_open_done();
     virtual bool is_full();
