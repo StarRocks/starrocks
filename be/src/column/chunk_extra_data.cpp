@@ -44,6 +44,16 @@ ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
     return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
 }
 
+ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone() const {
+    Columns columns(_columns.size());
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto mutable_col = _columns[i]->clone();
+        columns[i] = std::move(mutable_col);
+    }
+    auto extra_data_metas = _data_metas;
+    return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
+}
+
 void ChunkExtraColumnsData::append(const ChunkExtraColumnsData& src, size_t offset, size_t count) {
     auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());

@@ -281,7 +281,7 @@ ChunkUniquePtr Chunk::clone_unique() const {
         chunk->_columns[idx] = _columns[idx]->clone();
     }
     chunk->_owner_info = _owner_info;
-    chunk->_extra_data = std::move(_extra_data);
+    chunk->_extra_data = _extra_data->clone();
     chunk->check_or_die();
     return chunk;
 }
