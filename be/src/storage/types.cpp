@@ -39,6 +39,7 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
+#include "runtime/types.h"
 #include "storage/collection.h"
 #include "storage/convert_helper.h"
 #include "storage/decimal12.h"
@@ -332,6 +333,29 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
         return get_struct_type_info(std::move(field_types));
     } else {
         return get_type_info(col.type(), col.precision(), col.scale());
+    }
+}
+
+TypeInfoPtr get_type_info(const TypeDescriptor& type_desc) {
+    if (type_desc.is_array_type()) {
+        const TypeDescriptor& child = type_desc.children[0];
+        TypeInfoPtr child_type_info = get_type_info(child);
+        return get_array_type_info(child_type_info);
+    } else if (type_desc.is_map_type()) {
+        const TypeDescriptor& key_desc = type_desc.children[0];
+        const TypeDescriptor& value_desc = type_desc.children[1];
+        TypeInfoPtr key_type_info = get_type_info(key_desc);
+        TypeInfoPtr value_type_info = get_type_info(value_desc);
+        return get_map_type_info(std::move(key_type_info), std::move(value_type_info));
+    } else if (type_desc.is_struct_type()) {
+        std::vector<TypeInfoPtr> field_types;
+        field_types.reserve(type_desc.children.size());
+        for (const auto& child_desc : type_desc.children) {
+            field_types.emplace_back(get_type_info(child_desc));
+        }
+        return get_struct_type_info(std::move(field_types));
+    } else {
+        return get_type_info(type_desc.type, type_desc.precision, type_desc.scale);
     }
 }
 
