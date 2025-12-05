@@ -43,7 +43,7 @@ public final class ArrowUtils {
 
             PrimitiveType primitiveType = type.getPrimitiveType();
             if (primitiveType == PrimitiveType.HLL || primitiveType == PrimitiveType.BITMAP ||
-                    primitiveType == PrimitiveType.PERCENTILE || primitiveType == PrimitiveType.VARIANT) {
+                    primitiveType == PrimitiveType.PERCENTILE) {
                 nullable = true;
             }
             return new Field(colName, new FieldType(nullable, arrowType, null), Collections.emptyList());
