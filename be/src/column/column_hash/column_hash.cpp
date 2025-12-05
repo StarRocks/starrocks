@@ -148,8 +148,6 @@ public:
               _hashes(hashes),
               _selector(selector) {}
 
-    ~ColumnHashVisitor() override = default;
-
     template <typename T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         auto hash_value = [](const T& value, uint32_t* hash) {
