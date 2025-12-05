@@ -91,10 +91,11 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
         return Status::InternalError(fmt::format("open /proc/self/fd error {}", std::strerror(errno)));
     }
 
-    int dir_fd = dirfd(dir);
-    butil::fd_guard dir_fd_guard(dir_fd);
-    if (dir_fd < 0) {
-        return Status::InternalError(fmt::format("syscall dirfd error {}", std::strerror(errno)));
+    {
+        int dir_fd = dirfd(dir);
+        if (dir_fd < 0) {
+            return Status::InternalError(fmt::format("syscall dirfd error {}", std::strerror(errno)));
+        }
     }
 
     struct dirent* entry;

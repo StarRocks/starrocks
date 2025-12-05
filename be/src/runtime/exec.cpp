@@ -1,4 +1,3 @@
-
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -100,7 +99,7 @@ std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms) 
             timed_out = true;
             break;
         } else {
-            size_t n = read(pipefd[0], buf, sizeof(buf));
+            ssize_t n = read(pipefd[0], buf, sizeof(buf));
             if (n > 0) {
                 output.append(buf, n);
             } else if (n == 0) {
