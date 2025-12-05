@@ -14,16 +14,22 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
+=======
+>>>>>>> dd89a27ef4 ([BugFix] Fix automatic partition creation failure on duplicate partition values (#66167))
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+=======
+>>>>>>> dd89a27ef4 ([BugFix] Fix automatic partition creation failure on duplicate partition values (#66167))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -35,7 +41,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -339,6 +344,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         // Clean up
         starRocksAssert.dropTable("test_catalog_utils4.tbl_list4");
     }
+<<<<<<< HEAD
 
     @Test
     public void testCheckPartitionValuesExistForAddListPartition_DirectMethodCall() throws Exception {
@@ -386,4 +392,6 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         // Clean up
         starRocksAssert.dropTable("test_catalog_utils5.tbl_list5");
     }
+=======
+>>>>>>> dd89a27ef4 ([BugFix] Fix automatic partition creation failure on duplicate partition values (#66167))
 }
