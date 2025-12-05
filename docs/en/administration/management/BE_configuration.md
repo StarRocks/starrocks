@@ -1431,7 +1431,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: When enabled (set to a positive milliseconds value) this fail-point configuration makes TabletsChannel::add_chunk sleep for the specified time during load processing. It is used to simulate BRPC timeout errors (e.g., "[E1008]Reached timeout") and to emulate an expensive add_chunk operation that increases load latency. A value <= 0 (default `-1`) disables the injection. Intended for testing fault handling, timeouts, and replica synchronization behavior — do not enable in normal production workloads as it delays write completion and can trigger upstream timeouts or replica aborts.
+- Description: When enabled (set to a positive milliseconds value) this fail-point configuration makes TabletsChannel::add_chunk sleep for the specified time during load processing. It is used to simulate BRPC timeout errors (e.g., "[E1008]Reached timeout") and to emulate an expensive add_chunk operation that increases load latency. A value less than or equal to 0 (default `-1`) disables the injection. Intended for testing fault handling, timeouts, and replica synchronization behavior — do not enable in normal production workloads as it delays write completion and can trigger upstream timeouts or replica aborts.
 - Introduced in: v3.5.0
 
 ##### load_segment_thread_pool_num_max
