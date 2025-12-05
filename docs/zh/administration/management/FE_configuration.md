@@ -143,6 +143,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。
 - 引入版本：-
 
+##### internal_log_dir
+
+- 默认值: `Config.STARROCKS_HOME_DIR + "/log"`
+- 类型: String
+- 単位: -
+- 是否可变: No
+- 描述: FE 日志子系统用于存放内部日志（`fe.internal.log`）的目录。此配置会被替换到 Log4j 配置中，用于决定 InternalFile appender 将内部/物化视图/统计日志写入何处，以及 `internal.<module>` 下的各模块 logger 将其文件放置到哪里。请确保该目录存在、可写且有足够的磁盘空间。该目录中文件的日志轮转与保留由 `log_roll_size_mb`、`internal_log_roll_num`、`internal_log_delete_age` 和 `internal_log_roll_interval` 控制。如果启用了 `sys_log_to_console`，内部日志可能会写到控制台而不是该目录。
+- 引入版本: v3.2.4
+
 ##### internal_log_modules
 
 - 默认值: `{"base", "statistic"}`
@@ -161,6 +170,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 控制 FE 内部日志 appender 的基于时间的滚动间隔。接受（不区分大小写）的值为 `HOUR` 和 `DAY`。`HOUR` 生成每小时的文件模式 (`"%d{yyyyMMddHH}"`)，`DAY` 生成每日的文件模式 (`"%d{yyyyMMdd}"`)，这些模式由 RollingFile TimeBasedTriggeringPolicy 用于命名旋转后的 `fe.internal.log` 文件。无效的值会导致初始化失败（在构建活动 Log4j 配置时会抛出 IOException）。滚动行为还取决于相关设置，例如 `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num` 和 `internal_log_delete_age`。
 - 引入版本: v3.2.4
 
+##### internal_log_roll_num
+
+- 默认值: 90
+- 类型: Int
+- 単位: -
+- 是否可变: No
+- 描述: 内部 appender（`fe.internal.log`）保留的最大已滚动内部 FE 日志文件数。该值作为 Log4j DefaultRolloverStrategy 的 `max` 属性使用；在发生滚动时，StarRocks 会保留最多 `internal_log_roll_num` 个归档文件并删除更旧的文件（也受 `internal_log_delete_age` 控制）。较低的值可减少磁盘使用但缩短日志历史；较高的值可保留更多历史内部日志。该项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 配合工作。
+- 引入版本: v3.2.4
+
 ##### log_roll_size_mb
 
 - 默认值：1024
@@ -169,6 +187,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：单个系统日志或审计日志文件的大小上限。
 - 引入版本：-
+
+##### profile_log_delete_age
+
+- 默认值: 1d
+- 类型: String
+- 単位: -
+- 是否可变: 否
+- 描述: 控制 FE profile 日志文件在可删除之前保留的时长。该值被注入到 Log4j 的 `&lt;IfLastModified age="..."/&gt;` 策略（通过 `Log4jConfig`）中，并与诸如 `profile_log_roll_interval` 和 `profile_log_roll_num` 的轮转设置一起生效。支持的后缀：`d`（天）、`h`（小时）、`m`（分钟）、`s`（秒）。例如：`7d`（7 天）、`10h`（10 小时）、`60m`（60 分钟）、`120s`（120 秒）。
+- 引入版本: v3.2.5
 
 ##### profile_log_dir
 
@@ -186,6 +213,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: Number of files
 - 是否可变: No
 - 描述: 指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 `${profile_log_roll_num}` 注入到日志 XML 中（例如 `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
+- 引入版本: v3.2.5
+
+##### profile_log_roll_size_mb
+
+- 默认值: 1024
+- 类型: Int
+- 単位: MB
+- 是否可变: 否
+- 描述: 设置触发基于大小的 FE profile 日志文件滚动的阈值（以兆字节为单位）。该值被 Log4j 的 RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时会发生轮转。达到 `profile_log_roll_interval` 时也会按时间发生轮转 —— 任一条件满足都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age` 使用，该项控制保留多少历史 profile 文件以及何时删除旧文件。轮转文件的压缩由 `enable_profile_log_compress` 控制。
 - 引入版本: v3.2.5
 
 ##### qe_slow_log_ms
@@ -242,6 +278,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统会在轮转的系统日志文件名后追加 ".gz" 后缀，从而使 Log4j 在轮转时生成 gzip 压缩的 FE 系统日志（例如，`fe.log.*`）。此值在生成 Log4j 配置时读取（Log4jConfig.initLogging / generateActiveLog4jXmlConfig），并控制用于 RollingFile filePattern 的 `sys_file_postfix` 属性。启用此功能可减少保留日志的磁盘占用，但会在轮转期间增加 CPU 和 I/O 开销，并改变日志文件名，因此读取日志的工具或脚本必须能够处理 .gz 文件。注意，审计日志使用单独的压缩配置，即 `audit_log_enable_compress`。
 - 引入版本: v3.2.12
 
+##### sys_log_format
+
+- 默认值: "plaintext"
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 选择用于 FE 日志的 Log4j layout。有效值：`"plaintext"`（默认）和 `"json"`。值不区分大小写。`"plaintext"` 配置 PatternLayout，包含可读的时间戳、级别、线程、class.method:line 以及 WARN/ERROR 的堆栈跟踪。`"json"` 配置 JsonTemplateLayout，输出结构化 JSON 事件（UTC 时间戳、级别、线程 id/name、源文件/方法/行、消息、异常 stackTrace），适合日志聚合器（ELK、Splunk）。JSON 输出遵守 `sys_log_json_max_string_length` 和 `sys_log_json_profile_max_string_length` 关于最大字符串长度的限制。
+- 引入版本: v3.2.10
+
 ##### sys_log_json_max_string_length
 
 - 默认值: 1048576
@@ -288,6 +333,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：每个 `sys_log_roll_interval` 时间段内，允许保留的系统日志文件的最大数目。
 - 引入版本：-
+
+##### sys_log_to_console
+
+- 默认值: false (除非环境变量 `SYS_LOG_TO_CONSOLE` 被设置为 "1")
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 当此项设置为 `true` 时，系统会配置 Log4j 将所有日志发送到控制台（ConsoleErr appender），而不是基于文件的 appender。该值在生成活动的 Log4j XML 配置时读取（影响 root logger 和按模块的 logger appender 选择）。其值在进程启动时从环境变量 `SYS_LOG_TO_CONSOLE` 捕获。运行时更改不会生效。该配置常用于容器化或 CI 环境，在这些环境中更偏向于通过 stdout/stderr 收集日志而不是写入日志文件。
+- 引入版本: v3.2.0
 
 ##### sys_log_verbose_modules
 
@@ -416,6 +470,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：HTTP 服务器支持的 Backlog 队列长度。
 - 引入版本：-
+
+##### http_max_initial_line_length
+
+- 默认值: `4096`
+- 类型: Int
+- 単位: Bytes
+- 是否可变: 否
+- 描述: 设置由 HttpServer 中使用的 Netty `HttpServerCodec` 接受的 HTTP 初始请求行（method + request-target + HTTP version）的最大允许长度（字节）。该值会传递给 Netty 的解码器，初始行长度超过此值的请求将被拒绝（TooLongFrameException）。仅在必须支持非常长的请求 URI 时才增大此值；更大的值会增加内存使用并可能提高对畸形请求或滥用请求的暴露面。应与 `http_max_header_size` 和 `http_max_chunk_size` 一起调整。
+- 引入版本: `v3.2.0`
 
 ##### http_port
 
@@ -573,6 +636,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Thrift 客户端链接的空闲超时时间，即链接超过该时间无新请求后则将链接断开。
 - 引入版本：-
 
+##### thrift_rpc_max_body_size
+
+- 默认值: `-1`
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: 控制在构造服务器的 Thrift 协议（传递给 `ThriftServer` 中的 TBinaryProtocol.Factory）时允许的最大 Thrift RPC 消息体大小（以字节为单位）。值为 `-1` 表示禁用限制（无界）。设置为正值会强制上限，使得超过该大小的消息会被 Thrift 层拒绝，这有助于限制内存使用并降低超大请求或 DoS 风险。请将此值设置为足够大的大小以容纳预期的有效载荷（大型 struct 或批量数据），以避免拒绝合法请求。
+- 引入版本: `v3.2.0`
+
 ##### thrift_server_max_worker_threads
 
 - 默认值：4096
@@ -592,6 +664,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 
 ### 元数据与集群管理
+
+##### alter_max_worker_queue_size
+
+- 默认值: `4096`
+- 类型: Int
+- 单位: Tasks
+- 是否可变: No
+- 描述: 控制 alter 子系统使用的内部工作线程池队列的容量。该值与 `alter_max_worker_threads` 一起在 `AlterHandler` 中传递给 `ThreadPoolManager.newDaemonCacheThreadPool`。当待处理的 alter 任务数量超过 `alter_max_worker_queue_size` 时，新提交的任务将被拒绝，可能会抛出 `RejectedExecutionException`（参见 `AlterHandler.handleFinishAlterTask`）。调整此值以在内存使用与允许的并发 alter 任务积压量之间取得平衡。
+- 引入版本: `v3.2.0`
 
 ##### automated_cluster_snapshot_interval_seconds
 
@@ -647,6 +728,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 引入版本：-
 
+##### bdbje_reserved_disk_size
+
+- 默认值: `512L * 1024 * 1024` (536870912)
+- 类型: Long
+- 単位: Bytes
+- 是否可变: No
+- 描述: 限制 Berkeley DB JE 将被保留为“未保护”（可删除）的日志/数据文件的字节数。StarRocks 通过 BDBEnvironment 中的 `EnvironmentConfig.RESERVED_DISK` 将此值传递给 JE；JE 的内置默认值为 0（无限制）。StarRocks 的默认值（512 MiB）可防止 JE 为未保护文件保留过多磁盘空间，同时允许安全清理过期文件。在磁盘受限的系统上调整此值：减小它可以让 JE 更早释放文件，增大它可以让 JE 保留更多保留空间。更改需要重启进程才能生效。
+- 引入版本: `v3.2.0`
+
 ##### bdbje_reset_election_group
 
 - 默认值：false
@@ -674,6 +764,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
 - 引入版本：v3.3.0
 
+##### brpc_connection_pool_size
+
+- 默认值: `16`
+- 类型: Int
+- 单位: Connections
+- 是否可变: No
+- 描述: FE 的 BrpcProxy 为每个端点使用的最大池化 BRPC 连接数。此值通过 `setMaxTotoal` 和 `setMaxIdleSize` 应用到 RpcClientOptions，因此它直接限制了并发的出站 BRPC 请求数，因为每个请求都必须从连接池借用一个连接。在高并发场景下增加此值以避免请求排队；增加会提高 socket 和内存使用，并可能增加远端服务器负载。调优时需考虑相关设置，例如 `brpc_idle_wait_max_time`、`brpc_short_connection`、`brpc_inner_reuse_pool`、`brpc_reuse_addr` 和 `brpc_min_evictable_idle_time_ms`。更改此值不会热重载，需要重启生效。
+- 引入版本: `v3.2.0`
+
 ##### catalog_try_lock_timeout_ms
 
 - 默认值：5000
@@ -682,6 +781,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：全局锁（Global Lock）获取的超时时长。
 - 引入版本：-
+
+##### checkpoint_timeout_seconds
+
+- 默认值: `24 * 3600`
+- 类型: Long
+- 単位: Seconds
+- 是否可变: Yes
+- 描述: leader 的 CheckpointController 在等待某个 checkpoint worker 完成 checkpoint 时的最长等待时间（单位：秒）。控制器会将该值转换为纳秒并轮询 worker 的结果队列；如果在此超时时间内未收到成功完成，则将该 checkpoint 视为失败，createImage 返回失败。增大此值可以容纳运行时间更长的 checkpoint，但会延迟失败检测及随后镜像传播；减小此值可以更快触发故障转移/重试，但可能对较慢的 worker 产生误超时。此设置仅控制 CheckpointController 在创建 checkpoint 时的等待时长，不会改变 worker 的内部 checkpoint 行为。
+- 引入版本: `v3.4.0, v3.5.0`
 
 ##### db_used_data_quota_update_interval_secs
 
@@ -775,6 +883,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 您只能在创建集群时启用此功能。**集群启动后，此配置项的值无法通过任何方式修改**。任何修改尝试均会导致错误。当 FE 检测到此配置项的值与集群首次启动时不一致时，FE 将无法启动。  
   - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
 - 引入版本：v4.0
+
+##### enable_task_history_archive
+
+- 默认值: `true`
+- 类型: Boolean
+- 単位: -
+- 是否可变: Yes
+- 描述: 启用后，已完成的 task-run 记录会归档到持久化的 task-run history 表，并记录到 edit log，这样查找（例如 `lookupHistory`、`lookupHistoryByTaskNames`、`lookupLastJobOfTasks`）会包含归档结果。归档由 FE leader 执行，在单元测试期间会跳过（`FeConstants.runningUnitTest`）。启用时，会绕过内存过期和强制 GC 路径（代码会在 `removeExpiredRuns` 和 `forceGC` 中提前返回），因此保留/驱逐由持久化归档处理，而不是由 `task_runs_ttl_second` 和 `task_runs_max_history_number` 控制。禁用时，历史保留在内存中并由这些配置进行裁剪。
+- 引入版本: v3.3.1, v3.4.0, v3.5.0
+
+##### enable_task_run_fe_evaluation
+
+- 默认值: true
+- 类型: Boolean
+- 単位: -
+- 是否可变: Yes
+- 描述: 启用后，FE 将在 `TaskRunsSystemTable.supportFeEvaluation` 中对系统表 `task_runs` 执行本地评估。FE 端评估仅允许对列与常量进行的合取等值谓词，并且仅限于列 `QUERY_ID` 和 `TASK_NAME`。启用此项可通过避免更广泛的扫描或额外的远程处理来提高针对性查找的性能；禁用会强制 planner 跳过对 `task_runs` 的 FE 评估，可能降低谓词裁剪效果并影响这些过滤条件的查询延迟。
+- 引入版本: v3.3.13, v3.4.3, v3.5.0
 
 ##### heartbeat_mgr_blocking_queue_size
 
@@ -1391,6 +1517,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：两个版本发布操作之间的时间间隔。
 - 引入版本：-
 
+##### query_queue_v2_cpu_costs_per_slot
+
+- 默认值: `1000000000`
+- 类型: Long
+- 単位: planner CPU cost units
+- 是否可变: 是
+- 描述: 每个 slot 的 CPU 成本阈值，用于根据查询的 planner CPU cost 估算该查询需要多少 slot。调度器将以 integer(plan_cpu_costs / `query_queue_v2_cpu_costs_per_slot`) 的方式计算 slot 数量，然后将结果限定在 [1, totalSlots] 范围内（totalSlots 来源于查询队列 V2 的 `V2` 参数）。V2 代码会将非正值规范化为 1（Math.max(1, value)），因此非正值实际上等同于 `1`。增大此值会减少每个查询分配的 slot（偏向更少但每个占用更多 slot 的查询）；减小此值会增加每个查询的 slot。应与 `query_queue_v2_num_rows_per_slot` 及并发设置一起调整，以在并行度与资源粒度之间取得平衡。
+- 引入版本: v3.3.4, v3.4.0, v3.5.0
+
 ##### semi_sync_collect_statistic_await_seconds
 
 - 默认值：30
@@ -1965,6 +2100,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Yarn 配置文件的保存目录。
 - 引入版本：-
 
+### 统计信息
+
 ### 存储
 
 ##### alter_table_timeout_second
@@ -2037,6 +2174,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 >
 > - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
 > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
+
+##### enable_online_optimize_table
+
+- 默认值: `true`
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制在创建优化（optimize）任务时 StarRocks 是否使用非阻塞的在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（没有分区/键/排序规范，分发方式不是 `RandomDistributionDesc`，存储类型不是 `COLUMN_WITH_ROW`，启用了副本存储，并且该表不是云原生表或物化视图）时，planner 会创建 `OnlineOptimizeJobV2` 来执行优化而不阻塞写入。如果为 false 或任一兼容性条件不满足，StarRocks 将回退到 `OptimizeJobV2`，在优化期间可能会阻塞写操作。
+- 引入版本: `v3.3.3, v3.4.0, v3.5.0`
 
 ##### enable_strict_storage_medium_check
 
@@ -2767,6 +2913,26 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
 - 引入版本：-
 
+### 数据湖
+
+##### lake_batch_publish_min_version_num
+
+- 默认值: `1`
+- 类型: Int
+- 単位: -
+- 是否可变: 是
+- 描述: 设置形成 lake 表发布批次所需的连续事务版本的最小数量。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 用于选择依赖事务。值为 `1` 允许单事务发布（不进行批处理）。值 >1 要求至少有该数量的连续版本、单表、非复制事务可用；如果版本不连续、出现复制事务，或架构变更消耗了某个版本，则中止批处理。增大此值可以通过将提交分组来提高发布吞吐，但在等待足够数量的连续事务时可能会延迟发布。
+- 引入版本: v3.2.0
+
+##### lake_use_combined_txn_log
+
+- 默认值: `false`
+- 类型: Boolean
+- 単位: -
+- 是否可变: 是
+- 描述: 启用时，StarRocks 允许 Lake 表对相关事务使用 combined transaction log 路径。仅在集群以 shared-data 模式运行（RunMode.isSharedDataMode()）时此标志才会被考虑。设置 `lake_use_combined_txn_log = true` 时，类型为 BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING 和 BATCH_LOAD_JOB 的加载事务将有资格使用 combined txn logs（参见 LakeTableHelper.supportCombinedTxnLog）。包含 compaction 的代码路径通过 isTransactionSupportCombinedTxnLog 检查 combined-log 支持。如果禁用或不在 shared-data 模式下，则不使用 combined transaction log 行为。
+- 引入版本: `v3.3.7, v3.4.0, v3.5.0`
+
 ### 其他
 
 ##### agent_task_resend_wait_time_ms
@@ -2858,6 +3024,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：Backup 作业的超时时间。
 - 引入版本：-
+
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: 是
+- 描述: 是否在 `SHOW PROC /BACKENDS/{id}` 命令中启用对每个磁盘的 tablet 数量的采集
+- 引入版本: v4.0.1, v3.5.8
 
 ##### enable_colocate_restore
 
@@ -3335,6 +3510,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：小文件的根目录。
 - 引入版本：-
+
+##### task_runs_max_history_number
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: 是
+- 描述: 内存中保留的任务运行记录的最大数量，并在查询归档的 task-run 历史时用作默认的 LIMIT。当 `enable_task_history_archive` 为 false 时，此值约束内存中的历史：Force GC 会修剪较旧的条目，使得只保留最新的 `task_runs_max_history_number` 条记录。当查询归档历史（且未提供显式 LIMIT）时，如果该值大于 0，`TaskRunHistoryTable.lookup` 会使用 `"ORDER BY create_time DESC LIMIT <value>"`。注意：将此值设置为 0 会禁用查询侧的 LIMIT（无限制），但会导致内存中的历史被截断为零（除非启用了归档）。
+- 引入版本: v3.2.0
 
 ##### tmp_dir
 
