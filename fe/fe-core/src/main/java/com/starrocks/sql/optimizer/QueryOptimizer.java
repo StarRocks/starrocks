@@ -94,7 +94,6 @@ import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
@@ -463,14 +462,6 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
             return;
         }
-        for (MaterializationContext mvContext : context.getCandidateMvs()) {
-            if (mvContext.getMv().isView()) {
-                continue;
-            }
-            // initialize query's compensate type based on query and mv's partition refresh status
-            MVCompensation ignored = mvContext.getOrInitMVCompensation(tree);
-        }
-
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {

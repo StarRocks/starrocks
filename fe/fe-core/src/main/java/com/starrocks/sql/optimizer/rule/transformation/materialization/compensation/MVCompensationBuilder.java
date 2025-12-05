@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.compensa
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -27,8 +28,14 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -38,7 +45,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
@@ -58,6 +67,104 @@ public class MVCompensationBuilder {
         this.mvContext = mvContext;
         this.mvUpdateInfo = mvUpdateInfo;
         this.mv = mvContext.getMv();
+    }
+
+    /**
+     * Build input opt expression query profile for mv compensation. See more details in MaterializationContext.QueryOptProfile.
+     */
+    public static MaterializationContext.QueryOptProfile buildQueryOptProfile(MaterializedView mv,
+                                                                              OptExpression queryPlan) {
+        List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryPlan);
+        Set<MaterializationContext.TableOptProfile> tableOptProfiles = Sets.newHashSet();
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        for (LogicalScanOperator scanOperator : scanOperators) {
+            Table refBaseTable = scanOperator.getTable();
+            if (refBaseTable == null) {
+                continue;
+            }
+            // skip if the table is not ref base table
+            if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
+                continue;
+            }
+            List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
+
+            Set<ScalarOperator> predicates = Sets.newHashSet();
+            Set<Long> partitionIds = Sets.newHashSet();
+            // only consider predicates with table's partition columns
+            if (refBaseTable.isNativeTableOrMaterializedView()) {
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+
+                // only consider selected partitions ids
+                if (olapScanOperator.getSelectedPartitionId() != null) {
+                    partitionIds.addAll(olapScanOperator.getSelectedPartitionId());
+                }
+                // only consider pruned partition predicates
+                if (olapScanOperator.getPrunedPartitionPredicates() != null) {
+                    predicates.addAll(olapScanOperator.getPrunedPartitionPredicates());
+                }
+                // consider partition predicates
+                if (olapScanOperator.getPredicate() != null) {
+                    ColumnRefSet partitionColumnRefSet = getPartitionColumnRefSet(partitionColumns, scanOperator);
+                    List<ScalarOperator> partitionPredicates = Utils.extractConjuncts(olapScanOperator.getPredicate());
+                    for (ScalarOperator predicate : partitionPredicates) {
+                        if (predicate.getUsedColumns().isIntersect(partitionColumnRefSet)) {
+                            predicates.add(predicate);
+                        }
+                    }
+                }
+                tableOptProfiles.add(new MaterializationContext.TableOptProfile(refBaseTable, partitionIds, predicates));
+            } else {
+                try {
+                    ScanOperatorPredicates scanOperatorPredicates = scanOperator.getScanOperatorPredicates();
+                    if (scanOperatorPredicates == null) {
+                        continue;
+                    }
+                    // only consider selected partitions ids
+                    if (scanOperatorPredicates.getSelectedPartitionIds() != null) {
+                        partitionIds.addAll(scanOperatorPredicates.getSelectedPartitionIds());
+                    }
+                    // consider pruned partition predicates and partition predicates
+                    if (scanOperatorPredicates.getPrunedPartitionConjuncts() != null) {
+                        predicates.addAll(scanOperatorPredicates.getPrunedPartitionConjuncts());
+                    }
+                    if (scanOperatorPredicates.getPartitionConjuncts() != null) {
+                        predicates.addAll(scanOperatorPredicates.getPartitionConjuncts());
+                    }
+                    // for non partition predicates, only consider those related to partition columns
+                    if (scanOperatorPredicates.getNonPartitionConjuncts() != null) {
+                        ColumnRefSet partitionColumnRefSet = getPartitionColumnRefSet(partitionColumns, scanOperator);
+                        List<ScalarOperator> nonPartitionPredicates = scanOperatorPredicates.getNonPartitionConjuncts();
+                        for (ScalarOperator predicate : nonPartitionPredicates) {
+                            if (predicate.getUsedColumns().isIntersect(partitionColumnRefSet)) {
+                                predicates.add(predicate);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get scan operator predicates for table {}: {}",
+                            refBaseTable.getName(), e.getMessage());
+                }
+                tableOptProfiles.add(new MaterializationContext.TableOptProfile(
+                        refBaseTable, partitionIds, predicates));
+
+            }
+        }
+        return new MaterializationContext.QueryOptProfile(tableOptProfiles);
+    }
+
+    private static ColumnRefSet getPartitionColumnRefSet(List<Column> partitionColumns,
+                                                         LogicalScanOperator scanOperator) {
+        if (partitionColumns.isEmpty()) {
+            return new ColumnRefSet();
+        }
+        Map<Column, ColumnRefOperator> columnColumnRefOperatorMap = scanOperator.getColumnMetaToColRefMap();
+        Set<ColumnRefOperator>  partitionColumnRefs = partitionColumns.stream()
+                .map(columnColumnRefOperatorMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        ColumnRefSet partitionColumnRefSet = new ColumnRefSet();
+        partitionColumnRefs.forEach(colRef -> partitionColumnRefSet.union(colRef.getId()));
+        return partitionColumnRefSet;
     }
 
     /**
