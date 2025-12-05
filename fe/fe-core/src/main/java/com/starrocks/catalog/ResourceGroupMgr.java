@@ -388,8 +388,6 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setMemPool(ResourceGroup.DEFAULT_MEM_POOL);
                 }
 
-                wg.normalizeCpuWeight();
-
                 if (exclusiveCpuCores != null) {
                     alterResourceGroupLog.setExclusiveCpuCores(exclusiveCpuCores);
                 }
