@@ -16,9 +16,16 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+>>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -158,15 +165,44 @@ public abstract class ScalarOperator implements Cloneable {
     }
 
     public int getNumFlatChildren() {
-        if (numberFlatChildren.isPresent()) {
+        return getNumFlatChildren(true);
+    }
+
+    public int getNumFlatChildren(boolean useCache) {
+        if (useCache && numberFlatChildren.isPresent()) {
             return numberFlatChildren.get();
         }
         int numFlatChildren = 0;
         for (ScalarOperator child : getChildren()) {
+<<<<<<< HEAD
             numFlatChildren += child.getNumFlatChildren() + 1;
+=======
+            numFlatChildren += child.getNumFlatChildren(useCache);
+>>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
         }
         numberFlatChildren = Optional.of(numFlatChildren);
-        return numberFlatChildren.get();
+        return numFlatChildren;
+    }
+
+    public void checkMaxFlatChildren() {
+        checkMaxFlatChildren(true);
+    }
+
+    /**
+     * Check if the expression complexity exceeds the limit.
+     * 
+     * @param useCache whether to use cached node count. Set to false when the expression
+     *                 structure has been modified without cloning.
+     * @throws SemanticException if the expression is too complex
+     */
+    public void checkMaxFlatChildren(boolean useCache) {
+        if (Config.max_scalar_operator_flat_children > 0 &&
+                getNumFlatChildren(useCache) > Config.max_scalar_operator_flat_children) {
+            throw new SemanticException(
+                    String.format("Expression too complex. Current nodes: %d, Limit: %d. " +
+                            "Please simplify your expression or increase Config.max_scalar_operator_flat_children.",
+                             getNumFlatChildren(useCache), Config.max_scalar_operator_flat_children));
+        }
     }
 
     /**
@@ -216,6 +252,8 @@ public abstract class ScalarOperator implements Cloneable {
             operator.hints = Lists.newArrayList(hints);
             operator.isRedundant = this.isRedundant;
             operator.isPushdown = this.isPushdown;
+            // Clear cache after cloning, as the cloned operator may be modified
+            operator.numberFlatChildren = Optional.empty();
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;

@@ -73,11 +73,14 @@ public class CaseWhenOperator extends CallOperator {
         checkMaxFlatChildren();
     }
 
-    private void checkMaxFlatChildren() {
+    @Override
+    public void checkMaxFlatChildren(boolean useCache) {
         if (Config.max_scalar_operator_flat_children > 0 &&
                 getNumFlatChildren() > Config.max_scalar_operator_flat_children) {
             throw new SemanticException(
-                    "The flat children of the case when statement exceeds the FE Config.max_scalar_operator_flat_children");
+                    String.format("Expression CaseWhen too complex, limit: %d. " +
+                                    "Please simplify your expression or increase Config.max_scalar_operator_flat_children.",
+                            Config.max_scalar_operator_flat_children));
         }
     }
 
