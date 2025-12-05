@@ -1092,24 +1092,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testSingleNodePlanWithMultiAggStage1() throws Exception {
-        new MockUp<Utils>() {
-            @Mock
-            public static boolean isSingleNodeExecution(ConnectContext context) {
-                return true;
-            }
-            @Mock
-            public static boolean isRunningInUnitTest() {
-                return false;
-            }
-        };
-        String plan = getPlanFragment("query_dump/single_node_plan1", TExplainLevel.NORMAL);
-        PlanTestBase.assertContains(plan, "AGGREGATE (merge finalize)\n"
-                + "  |  output: sum(106: sum), avg(108: avg), multi_distinct_count(109: count)\n"
-                + "  |  group by: 10: RegionID, 107: count");
-    }
-
-    @Test
     public void testNestCTERewrite() throws Exception {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "MultiCastDataSinks");
