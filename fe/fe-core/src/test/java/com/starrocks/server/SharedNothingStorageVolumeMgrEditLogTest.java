@@ -126,6 +126,15 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
         SharedNothingStorageVolumeMgr exceptionStorageVolumeMgr =
                 (SharedNothingStorageVolumeMgr) GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
 
+        // Clean up if exists
+        if (exceptionStorageVolumeMgr.exists(svName)) {
+            try {
+                exceptionStorageVolumeMgr.removeStorageVolume(svName);
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
+
         EditLog spyEditLog = spy(new EditLog(null));
 
         // 3. Mock EditLog.logCreateStorageVolume to throw exception
@@ -144,10 +153,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
                 Map.class, Optional.class, String.class);
         createMethod.setAccessible(true);
 
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+        Exception exception = Assertions.assertThrows(Exception.class, () -> {
             createMethod.invoke(exceptionStorageVolumeMgr, svName, svType, locations, params, enabled, comment);
         });
-        Assertions.assertTrue(exception.getCause().getMessage().contains("EditLog write failed"));
+        // When using reflection, exceptions are wrapped in InvocationTargetException
+        Throwable cause = exception.getCause();
+        Assertions.assertNotNull(cause);
+        Assertions.assertTrue(cause.getMessage().contains("EditLog write failed"));
 
         // 5. Verify leader memory state remains unchanged after exception
         Assertions.assertFalse(exceptionStorageVolumeMgr.exists(svName));
@@ -186,12 +198,17 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
 
         // 5. Test follower replay functionality
         SharedNothingStorageVolumeMgr followerStorageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        followerStorageVolumeMgr.createStorageVolume(
-                svName, "S3", Arrays.asList("s3://test-bucket"),
-                createTestParams(), Optional.of(true), "original comment");
-
+        
         StorageVolume replaySv = (StorageVolume) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_STORAGE_VOLUME);
+        
+        // Create storage volume in follower with the same ID as in the replay log
+        // This simulates the state before replay
+        StorageVolume originalFollowerSv = new StorageVolume(
+                replaySv.getId(), svName, "S3", 
+                Arrays.asList("s3://test-bucket"), createTestParams(), true, "original comment");
+        followerStorageVolumeMgr.replayCreateStorageVolume(originalFollowerSv);
+        Assertions.assertTrue(followerStorageVolumeMgr.exists(svName));
 
         // Execute follower replay
         followerStorageVolumeMgr.replayUpdateStorageVolume(replaySv);
@@ -217,9 +234,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
         // 2. Create a separate StorageVolumeMgr for exception testing
         SharedNothingStorageVolumeMgr exceptionStorageVolumeMgr =
                 (SharedNothingStorageVolumeMgr) GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        exceptionStorageVolumeMgr.createStorageVolume(
-                svName, "S3", Arrays.asList("s3://test-bucket"),
-                createTestParams(), Optional.of(true), "original comment");
+        
+        // Ensure storage volume exists for exception testing
+        if (!exceptionStorageVolumeMgr.exists(svName)) {
+            exceptionStorageVolumeMgr.createStorageVolume(
+                    svName, "S3", Arrays.asList("s3://test-bucket"),
+                    createTestParams(), Optional.of(true), "original comment");
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 
@@ -239,10 +260,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
                 "updateInternalNoLock", StorageVolume.class);
         updateMethod.setAccessible(true);
 
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+        Exception exception = Assertions.assertThrows(Exception.class, () -> {
             updateMethod.invoke(exceptionStorageVolumeMgr, updatedSv);
         });
-        Assertions.assertTrue(exception.getCause().getMessage().contains("EditLog write failed"));
+        // When using reflection, exceptions are wrapped in InvocationTargetException
+        Throwable cause = exception.getCause();
+        Assertions.assertNotNull(cause);
+        Assertions.assertTrue(cause.getMessage().contains("EditLog write failed"));
 
         // 5. Verify leader memory state remains unchanged after exception
         StorageVolume currentSv = exceptionStorageVolumeMgr.getStorageVolumeByName(svName);
@@ -280,12 +304,17 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
 
         // 5. Test follower replay functionality
         SharedNothingStorageVolumeMgr followerStorageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        followerStorageVolumeMgr.createStorageVolume(
-                svName, "S3", Arrays.asList("s3://test-bucket"),
-                createTestParams(), Optional.of(true), "original comment");
-
+        
         StorageVolume replaySv = (StorageVolume) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_STORAGE_VOLUME);
+        
+        // Create storage volume in follower with the same ID as in the replay log
+        // This simulates the state before replay
+        StorageVolume originalFollowerSv = new StorageVolume(
+                replaySv.getId(), svName, "S3", 
+                Arrays.asList("s3://test-bucket"), createTestParams(), true, "original comment");
+        followerStorageVolumeMgr.replayCreateStorageVolume(originalFollowerSv);
+        Assertions.assertTrue(followerStorageVolumeMgr.exists(svName));
 
         // Execute follower replay
         followerStorageVolumeMgr.replayUpdateStorageVolume(replaySv);
@@ -294,6 +323,7 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
         StorageVolume followerSv = followerStorageVolumeMgr.getStorageVolumeByName(svName);
         Assertions.assertNotNull(followerSv);
         Assertions.assertEquals("replaced comment", followerSv.getComment());
+        Assertions.assertEquals(newLocations, followerSv.getLocations());
     }
 
     @Test
@@ -311,9 +341,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
         // 2. Create a separate StorageVolumeMgr for exception testing
         SharedNothingStorageVolumeMgr exceptionStorageVolumeMgr =
                 (SharedNothingStorageVolumeMgr) GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        exceptionStorageVolumeMgr.createStorageVolume(
-                svName, "S3", Arrays.asList("s3://test-bucket"),
-                createTestParams(), Optional.of(true), "original comment");
+        
+        // Ensure storage volume exists for exception testing
+        if (!exceptionStorageVolumeMgr.exists(svName)) {
+            exceptionStorageVolumeMgr.createStorageVolume(
+                    svName, "S3", Arrays.asList("s3://test-bucket"),
+                    createTestParams(), Optional.of(true), "original comment");
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 
@@ -333,10 +367,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
                 "replaceInternalNoLock", StorageVolume.class);
         replaceMethod.setAccessible(true);
 
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+        Exception exception = Assertions.assertThrows(Exception.class, () -> {
             replaceMethod.invoke(exceptionStorageVolumeMgr, replacedSv);
         });
-        Assertions.assertTrue(exception.getCause().getMessage().contains("EditLog write failed"));
+        // When using reflection, exceptions are wrapped in InvocationTargetException
+        Throwable cause = exception.getCause();
+        Assertions.assertNotNull(cause);
+        Assertions.assertTrue(cause.getMessage().contains("EditLog write failed"));
 
         // 5. Verify leader memory state remains unchanged after exception
         StorageVolume currentSv = exceptionStorageVolumeMgr.getStorageVolumeByName(svName);
@@ -369,12 +406,17 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
 
         // 5. Test follower replay functionality
         SharedNothingStorageVolumeMgr followerStorageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        followerStorageVolumeMgr.createStorageVolume(
-                svName, "S3", Arrays.asList("s3://test-bucket"),
-                createTestParams(), Optional.of(true), "test storage volume");
-
+        
         DropStorageVolumeLog replayLog = (DropStorageVolumeLog) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_STORAGE_VOLUME);
+        
+        // Create storage volume in follower with the same ID as in the log
+        // This simulates the state before replay
+        StorageVolume followerSv = new StorageVolume(
+                replayLog.getId(), svName, "S3", 
+                Arrays.asList("s3://test-bucket"), createTestParams(), true, "test storage volume");
+        followerStorageVolumeMgr.replayCreateStorageVolume(followerSv);
+        Assertions.assertTrue(followerStorageVolumeMgr.exists(svName));
 
         // Execute follower replay
         followerStorageVolumeMgr.replayDropStorageVolume(replayLog);
@@ -398,9 +440,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
         // 2. Create a separate StorageVolumeMgr for exception testing
         SharedNothingStorageVolumeMgr exceptionStorageVolumeMgr =
                 (SharedNothingStorageVolumeMgr) GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        exceptionStorageVolumeMgr.createStorageVolume(
-                svName, "S3", Arrays.asList("s3://test-bucket"),
-                createTestParams(), Optional.of(true), "test storage volume");
+        
+        // Ensure storage volume exists for exception testing
+        if (!exceptionStorageVolumeMgr.exists(svName)) {
+            exceptionStorageVolumeMgr.createStorageVolume(
+                    svName, "S3", Arrays.asList("s3://test-bucket"),
+                    createTestParams(), Optional.of(true), "test storage volume");
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 
@@ -419,10 +465,13 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
                 "removeInternalNoLock", StorageVolume.class);
         removeMethod.setAccessible(true);
 
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+        Exception exception = Assertions.assertThrows(Exception.class, () -> {
             removeMethod.invoke(exceptionStorageVolumeMgr, sv);
         });
-        Assertions.assertTrue(exception.getCause().getMessage().contains("EditLog write failed"));
+        // When using reflection, exceptions are wrapped in InvocationTargetException
+        Throwable cause = exception.getCause();
+        Assertions.assertNotNull(cause);
+        Assertions.assertTrue(cause.getMessage().contains("EditLog write failed"));
 
         // 5. Verify leader memory state remains unchanged after exception
         Assertions.assertTrue(exceptionStorageVolumeMgr.exists(svName));

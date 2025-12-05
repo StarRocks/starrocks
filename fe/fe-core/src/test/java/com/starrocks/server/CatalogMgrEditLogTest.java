@@ -82,7 +82,9 @@ public class CatalogMgrEditLogTest {
         Assertions.assertEquals(comment, catalog.getComment());
 
         // 5. Test follower replay functionality
-        CatalogMgr followerCatalogMgr = new CatalogMgr(connectorMgr);
+        // Create a new ConnectorMgr for follower to avoid connector conflicts
+        ConnectorMgr followerConnectorMgr = new ConnectorMgr();
+        CatalogMgr followerCatalogMgr = new CatalogMgr(followerConnectorMgr);
 
         Catalog replayCatalog = (Catalog) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CATALOG);
@@ -171,7 +173,9 @@ public class CatalogMgrEditLogTest {
         Assertions.assertNull(catalog);
 
         // 5. Test follower replay functionality
-        CatalogMgr followerCatalogMgr = new CatalogMgr(connectorMgr);
+        // Create a new ConnectorMgr for follower to avoid connector conflicts
+        ConnectorMgr followerConnectorMgr = new ConnectorMgr();
+        CatalogMgr followerCatalogMgr = new CatalogMgr(followerConnectorMgr);
         followerCatalogMgr.createCatalog(type, catalogName, "comment", properties);
 
         DropCatalogLog replayLog = (DropCatalogLog) UtFrameUtils
@@ -196,7 +200,11 @@ public class CatalogMgrEditLogTest {
 
         // 2. Create a separate CatalogMgr for exception testing
         CatalogMgr exceptionCatalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        exceptionCatalogMgr.createCatalog(type, catalogName, "comment", properties);
+        
+        // Ensure catalog exists for exception testing
+        if (!exceptionCatalogMgr.catalogExists(catalogName)) {
+            exceptionCatalogMgr.createCatalog(type, catalogName, "comment", properties);
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 
@@ -262,8 +270,15 @@ public class CatalogMgrEditLogTest {
         Assertions.assertEquals("thrift://127.0.0.1:9084", catalog.getConfig().get("hive.metastore.uris"));
 
         // 6. Test follower replay functionality
-        CatalogMgr followerCatalogMgr = new CatalogMgr(connectorMgr);
-        followerCatalogMgr.createCatalog(type, catalogName, "comment", properties);
+        // Create a new ConnectorMgr for follower to avoid connector conflicts
+        ConnectorMgr followerConnectorMgr = new ConnectorMgr();
+        CatalogMgr followerCatalogMgr = new CatalogMgr(followerConnectorMgr);
+        
+        // First replay the create catalog operation to set up the initial state
+        Catalog createReplayCatalog = (Catalog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CATALOG);
+        followerCatalogMgr.replayCreateCatalog(createReplayCatalog);
+        Assertions.assertTrue(followerCatalogMgr.catalogExists(catalogName));
 
         AlterCatalogLog replayLog = (AlterCatalogLog) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_CATALOG);
@@ -287,7 +302,11 @@ public class CatalogMgrEditLogTest {
 
         // 2. Create a separate CatalogMgr for exception testing
         CatalogMgr exceptionCatalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        exceptionCatalogMgr.createCatalog(type, catalogName, "comment", properties);
+        
+        // Ensure catalog exists for exception testing
+        if (!exceptionCatalogMgr.catalogExists(catalogName)) {
+            exceptionCatalogMgr.createCatalog(type, catalogName, "comment", properties);
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 

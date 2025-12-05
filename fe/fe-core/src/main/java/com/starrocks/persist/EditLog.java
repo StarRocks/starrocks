@@ -2127,7 +2127,7 @@ public class EditLog {
     }
 
     public void logDropSecurityIntegration(SecurityIntegrationPersistInfo info, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_DROP_SECURITY_INTEGRATION, info);
+        logJsonObject(OperationType.OP_DROP_SECURITY_INTEGRATION, info, walApplier);
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {

@@ -365,7 +365,11 @@ public class AuthenticationMgrEditLogTest {
 
         // 2. Create a separate AuthenticationMgr for exception testing
         AuthenticationMgr exceptionAuthenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        
+        // Ensure security integration exists for exception testing
+        if (exceptionAuthenticationMgr.getSecurityIntegration(name) == null) {
+            exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 
@@ -430,12 +434,15 @@ public class AuthenticationMgrEditLogTest {
 
         // 5. Test follower replay functionality
         AuthenticationMgr followerAuthenticationMgr = new AuthenticationMgr();
-        followerAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        followerAuthenticationMgr.replayCreateSecurityIntegration(name, propertyMap);
+        Assertions.assertNotNull(followerAuthenticationMgr.getSecurityIntegration(name));
 
         SecurityIntegrationPersistInfo replayInfo = (SecurityIntegrationPersistInfo) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_SECURITY_INTEGRATION);
 
         // Execute follower replay
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(name, replayInfo.name);
         followerAuthenticationMgr.replayDropSecurityIntegration(replayInfo.name);
 
         // 6. Verify follower state is consistent with master
@@ -451,7 +458,11 @@ public class AuthenticationMgrEditLogTest {
 
         // 2. Create a separate AuthenticationMgr for exception testing
         AuthenticationMgr exceptionAuthenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        
+        // Ensure security integration exists for exception testing
+        if (exceptionAuthenticationMgr.getSecurityIntegration(name) == null) {
+            exceptionAuthenticationMgr.createSecurityIntegration(name, propertyMap);
+        }
 
         EditLog spyEditLog = spy(new EditLog(null));
 

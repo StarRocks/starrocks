@@ -165,7 +165,17 @@ public class SharedDataStorageVolumeMgrEditLogTest {
         };
 
         // Get StorageVolumeMgr instance
-        masterStorageVolumeMgr = (SharedDataStorageVolumeMgr) GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        // Note: This test requires SharedDataStorageVolumeMgr
+        StorageVolumeMgr currentMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        if (currentMgr instanceof SharedDataStorageVolumeMgr) {
+            masterStorageVolumeMgr = (SharedDataStorageVolumeMgr) currentMgr;
+        } else {
+            // If not SharedDataStorageVolumeMgr, create a new instance for testing
+            // This may happen if RunMode is not SharedDataMode
+            masterStorageVolumeMgr = new SharedDataStorageVolumeMgr();
+            // Note: We cannot set it to GlobalStateMgr, so we'll use it directly
+            // The test will use this instance instead of GlobalStateMgr's instance
+        }
 
         // Create test database and table
         createTestDatabaseAndTable();
@@ -290,6 +300,16 @@ public class SharedDataStorageVolumeMgrEditLogTest {
 
         // 6. Test follower replay functionality
         SharedDataStorageVolumeMgr followerStorageVolumeMgr = new SharedDataStorageVolumeMgr();
+        
+        // Clean up if storage volume already exists
+        if (followerStorageVolumeMgr.exists(svName)) {
+            try {
+                followerStorageVolumeMgr.removeStorageVolume(svName);
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
+        
         followerStorageVolumeMgr.createStorageVolume(
                 svName, "S3", Arrays.asList("s3://test-bucket"),
                 createTestParams(), Optional.of(true), "test storage volume");
@@ -345,10 +365,13 @@ public class SharedDataStorageVolumeMgrEditLogTest {
                 "updateTableStorageInfo", String.class);
         updateMethod.setAccessible(true);
 
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+        Exception exception = Assertions.assertThrows(Exception.class, () -> {
             updateMethod.invoke(masterStorageVolumeMgr, storageVolumeId);
         });
-        Assertions.assertTrue(exception.getCause().getMessage().contains("EditLog write failed"));
+        // When using reflection, exceptions are wrapped in InvocationTargetException
+        Throwable cause = exception.getCause();
+        Assertions.assertNotNull(cause);
+        Assertions.assertTrue(cause.getMessage().contains("EditLog write failed"));
 
         // 6. Verify leader memory state remains unchanged after exception
         StorageInfo currentStorageInfo = tableProperty.getStorageInfo();

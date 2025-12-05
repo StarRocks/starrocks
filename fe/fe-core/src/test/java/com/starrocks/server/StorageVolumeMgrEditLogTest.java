@@ -57,6 +57,14 @@ public class StorageVolumeMgrEditLogTest {
     }
 
     private StorageVolume createTestStorageVolume(String name) throws AlreadyExistsException, DdlException {
+        // Check if storage volume already exists and remove it first
+        if (masterStorageVolumeMgr.exists(name)) {
+            try {
+                masterStorageVolumeMgr.removeStorageVolume(name);
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
         List<String> locations = Arrays.asList("s3://test-bucket");
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "us-west-2");
@@ -92,9 +100,33 @@ public class StorageVolumeMgrEditLogTest {
         // 5. Test follower replay functionality
         StorageVolumeMgr followerStorageVolumeMgr = new SharedNothingStorageVolumeMgr();
 
-        // Create same storage volumes in follower
-        createTestStorageVolume(svName1);
-        createTestStorageVolume(svName2);
+        // Create same storage volumes in follower (using the follower manager)
+        List<String> locations = Arrays.asList("s3://test-bucket");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "us-west-2");
+        storageParams.put(AWS_S3_ENDPOINT, "https://s3.us-west-2.amazonaws.com");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        
+        // Clean up if exists in follower
+        if (followerStorageVolumeMgr.exists(svName1)) {
+            try {
+                followerStorageVolumeMgr.removeStorageVolume(svName1);
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
+        if (followerStorageVolumeMgr.exists(svName2)) {
+            try {
+                followerStorageVolumeMgr.removeStorageVolume(svName2);
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
+        
+        followerStorageVolumeMgr.createStorageVolume(
+                svName1, "S3", locations, storageParams, Optional.of(true), "test storage volume");
+        followerStorageVolumeMgr.createStorageVolume(
+                svName2, "S3", locations, storageParams, Optional.of(true), "test storage volume");
 
         SetDefaultStorageVolumeLog replayLog = (SetDefaultStorageVolumeLog) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME);
@@ -123,7 +155,6 @@ public class StorageVolumeMgrEditLogTest {
 
         // 2. Create a separate StorageVolumeMgr for exception testing
         StorageVolumeMgr exceptionStorageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-        createTestStorageVolume(svName);
 
         EditLog spyEditLog = spy(new EditLog(null));
 
