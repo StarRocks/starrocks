@@ -30,7 +30,7 @@ JSON 型の特性により、クエリのパフォーマンスは標準型（INT
 - 冗長データ：クエリは JSON データ全体を読み取る必要があり、多くの冗長なフィールドを含んでいます。
 
 StarRocks は、JSON データのクエリ効率を向上させ、JSON の使用の複雑さを軽減するために Flat JSON 機能を導入しました。
-- この機能はバージョン 3.3.0 から利用可能で、デフォルトでは無効になっており、手動で有効にする必要があります。
+- この機能はバージョン 3.3.0 から利用可能です。v4.0 より前はデフォルトで無効になっており、手動で有効にする必要があります。v4.0 以降では、デフォルトで有効になっています。
 
 ## Flat JSON とは
 
@@ -49,11 +49,17 @@ Flat JSON の核心原理は、ロード中に JSON データを検出し、JSON
 
 ## Flat JSON 機能の有効化
 
-v3.4 以降では、Flat JSON はデフォルトでグローバルに有効化されています。v3.4 より前のバージョンでは、手動で有効にする必要があります。
+v4.0 以降では、Flat JSON はデフォルトでグローバルに有効化されています。v4.0 より前のバージョンでは、手動で有効にする必要があります。
 
+<<<<<<< HEAD
 ### v3.4 より前のバージョンで有効にする
+=======
+v4.0 以降では、この機能はテーブルレベルで設定可能です。
 
-1. BE 設定を変更します：`enable_json_flat` はバージョン 3.4 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
+### v4.0 より前のバージョンで有効にする
+>>>>>>> 3d2acd118d ([Doc] update flatjson default version 4.0 (#66261))
+
+1. BE 設定を変更します：`enable_json_flat` はバージョン 4.0 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
 2. FE プルーニング機能を有効化します：
 
    ```SQL

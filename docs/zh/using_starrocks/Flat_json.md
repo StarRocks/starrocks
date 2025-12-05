@@ -30,7 +30,7 @@ FROM logs;
 - 冗余数据：查询需要读取整个JSON数据，其中包含许多冗余字段。
 
 StarRocks引入了Flat JSON功能，以提高JSON数据查询效率并降低使用JSON的复杂性。
-- 此功能从3.3.0版本开始提供，默认禁用，需要手动启用。
+- 此功能从3.3.0版本开始提供。在 v4.0 之前默认禁用，需要手动启用。从 v4.0 版本起，默认启用。
 
 ## 什么是Flat JSON
 
@@ -49,11 +49,17 @@ Flat JSON的核心原理是在导入时检测JSON数据，并从JSON数据中提
 
 ## 启用 Flat JSON
 
-从 v3.4 版本起，Flat JSON 默认全局启用。对于 v3.4 之前的版本，必须手动启用此功能。
+从 v4.0 版本起，Flat JSON 默认全局启用。对于 v4.0 之前的版本，必须手动启用此功能。
 
+<<<<<<< HEAD
 ### 为 v3.4 前版本启用
+=======
+从 v4.0 版本起，此功能可在表级别进行配置。
 
-1. 修改 BE 配置：`enable_json_flat`，在 v3.4 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/management/BE_configuration.md#configure-be-parameters)。
+### 为 v4.0 前版本启用
+>>>>>>> 3d2acd118d ([Doc] update flatjson default version 4.0 (#66261))
+
+1. 修改 BE 配置：`enable_json_flat`，在 v4.0 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/management/BE_configuration.md#configure-be-parameters)。
 2. 启用FE分区裁剪功能：
 
    ```SQL
