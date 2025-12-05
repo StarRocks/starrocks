@@ -28,6 +28,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -352,6 +353,156 @@ TEST_P(LakeTabletWriterTest, test_write_sdk) {
 }
 
 #endif // USE_STAROS
+
+// Helper class for testing check_global_dict by exposing SegmentWriter interface
+class TestSegmentWriterWrapper : public SegmentWriter {
+public:
+    TestSegmentWriterWrapper(std::unique_ptr<WritableFile> wfile, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+                             SegmentWriterOptions opts)
+            : SegmentWriter(std::move(wfile), segment_id, std::move(tablet_schema), opts) {}
+
+    // Expose method to set global_dict_columns_valid_info for testing
+    void set_global_dict_info(const std::string& column_name, bool is_valid) {
+        _global_dict_columns_valid_info[column_name] = is_valid;
+    }
+
+    // Access the protected member through public method
+    DictColumnsValidMap& get_global_dict_info() { return _global_dict_columns_valid_info; }
+};
+
+TEST_P(LakeTabletWriterTest, test_check_global_dict_all_valid) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+
+    // Create a segment writer wrapper with all columns marked as valid
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment");
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+
+    SegmentWriterOptions opts;
+    auto seg_writer = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+    seg_writer->set_global_dict_info("col1", true);
+    seg_writer->set_global_dict_info("col2", true);
+
+    // Call check_global_dict
+    writer->check_global_dict(seg_writer.get());
+
+    // Verify that all columns are marked as valid
+    const auto& dict_info = writer->global_dict_columns_valid_info();
+    ASSERT_EQ(2, dict_info.size());
+    ASSERT_TRUE(dict_info.at("col1"));
+    ASSERT_TRUE(dict_info.at("col2"));
+
+    writer->close();
+}
+
+TEST_P(LakeTabletWriterTest, test_check_global_dict_some_invalid) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    SegmentWriterOptions opts;
+
+    // First segment: all valid
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment1");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer1 = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+        seg_writer1->set_global_dict_info("col1", true);
+        seg_writer1->set_global_dict_info("col2", true);
+        writer->check_global_dict(seg_writer1.get());
+    }
+
+    // Second segment: col1 becomes invalid
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment2");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer2 = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 1, _tablet_schema, opts);
+        seg_writer2->set_global_dict_info("col1", false);
+        seg_writer2->set_global_dict_info("col2", true);
+        writer->check_global_dict(seg_writer2.get());
+    }
+
+    // Verify that col1 is invalid, col2 is still valid
+    const auto& dict_info = writer->global_dict_columns_valid_info();
+    ASSERT_EQ(2, dict_info.size());
+    ASSERT_FALSE(dict_info.at("col1")); // Should be false due to second segment
+    ASSERT_TRUE(dict_info.at("col2"));
+
+    writer->close();
+}
+
+TEST_P(LakeTabletWriterTest, test_check_global_dict_once_invalid_always_invalid) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    SegmentWriterOptions opts;
+
+    // First segment: col1 is invalid
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment3");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer1 = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+        seg_writer1->set_global_dict_info("col1", false);
+        writer->check_global_dict(seg_writer1.get());
+    }
+
+    // Second segment: col1 becomes valid again
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment4");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer2 = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 1, _tablet_schema, opts);
+        seg_writer2->set_global_dict_info("col1", true);
+        writer->check_global_dict(seg_writer2.get());
+    }
+
+    // Verify that col1 remains invalid (once invalid, always invalid)
+    const auto& dict_info = writer->global_dict_columns_valid_info();
+    ASSERT_EQ(1, dict_info.size());
+    ASSERT_FALSE(dict_info.at("col1"));
+
+    writer->close();
+}
+
+TEST_P(LakeTabletWriterTest, test_check_global_dict_new_columns_in_later_segments) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    SegmentWriterOptions opts;
+
+    // First segment: only col1
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment5");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer1 = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 0, _tablet_schema, opts);
+        seg_writer1->set_global_dict_info("col1", true);
+        writer->check_global_dict(seg_writer1.get());
+    }
+
+    // Second segment: col1 and col2
+    {
+        std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment6");
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
+        auto seg_writer2 = std::make_unique<TestSegmentWriterWrapper>(std::move(wfile), 1, _tablet_schema, opts);
+        seg_writer2->set_global_dict_info("col1", true);
+        seg_writer2->set_global_dict_info("col2", true);
+        writer->check_global_dict(seg_writer2.get());
+    }
+
+    // Verify both columns are valid
+    const auto& dict_info = writer->global_dict_columns_valid_info();
+    ASSERT_EQ(2, dict_info.size());
+    ASSERT_TRUE(dict_info.at("col1"));
+    ASSERT_TRUE(dict_info.at("col2"));
+
+    writer->close();
+}
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,
                          ::testing::Values(DUP_KEYS, AGG_KEYS, UNIQUE_KEYS, PRIMARY_KEYS));
