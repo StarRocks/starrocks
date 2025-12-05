@@ -2586,7 +2586,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: double
 - Unit: Fraction (0.0–1.0)
 - Is mutable: Yes
-- Description: The high-water threshold of disk capacity used percent (fraction of total capacity) used when computing backend load scores. `BackendLoadStatistic.calcSore` uses `capacity_used_percent_high_water` to set `LoadScore.capacityCoefficient`: if a backend's used percent < 0.5 the coefficient = 0.5; if used percent > `capacity_used_percent_high_water` the coefficient = 1.0; otherwise the coefficient transitions linearly with used percent via (2 * usedPercent - 0.5). When the coefficient is 1.0, the load score is driven entirely by capacity proportion; lower values increase the weight of replica count. Adjusting this value changes how aggressively the balancer penalizes backends with high disk utilization.
+- Description: The high-water threshold of disk capacity used percent (fraction of total capacity) used when computing backend load scores. `BackendLoadStatistic.calcSore` uses `capacity_used_percent_high_water` to set `LoadScore.capacityCoefficient`: if a backend's used percent less than 0.5 the coefficient equal to 0.5; if used percent > `capacity_used_percent_high_water` the coefficient = 1.0; otherwise the coefficient transitions linearly with used percent via (2 * usedPercent - 0.5). When the coefficient is 1.0, the load score is driven entirely by capacity proportion; lower values increase the weight of replica count. Adjusting this value changes how aggressively the balancer penalizes backends with high disk utilization.
 - Introduced in: v3.2.0
 
 ##### catalog_trash_expire_second
@@ -3444,7 +3444,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Kilobytes
 - Is mutable: Yes
-- Description: Sets the HDFS write buffer size (in KB) used for direct writes to HDFS or object stores when not using a broker. The FE converts this value to bytes (<< 10) and initializes the local write buffer in HdfsFsManager, and it is propagated in Thrift requests (e.g., TUploadReq, TExportSink, sink options) so backends/agents use the same buffer size. Increasing this value can improve throughput for large sequential writes at the cost of more memory per writer; decreasing it reduces per-stream memory usage and may lower latency for small writes. Tune alongside `hdfs_read_buffer_size_kb` and consider available memory and concurrent writers.
+- Description: Sets the HDFS write buffer size (in KB) used for direct writes to HDFS or object stores when not using a broker. The FE converts this value to bytes (`<< 10`) and initializes the local write buffer in HdfsFsManager, and it is propagated in Thrift requests (e.g., TUploadReq, TExportSink, sink options) so backends/agents use the same buffer size. Increasing this value can improve throughput for large sequential writes at the cost of more memory per writer; decreasing it reduces per-stream memory usage and may lower latency for small writes. Tune alongside `hdfs_read_buffer_size_kb` and consider available memory and concurrent writers.
 - Introduced in: v3.2.0
 
 ##### lake_batch_publish_max_version_num
