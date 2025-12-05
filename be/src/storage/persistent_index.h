@@ -956,7 +956,7 @@ private:
     // Re-calculated when commit end
     std::atomic<size_t> _memory_usage{0};
 
-    bool _need_rebuild = false;
+    std::atomic<bool> _need_rebuild{false};
 };
 
 } // namespace starrocks
