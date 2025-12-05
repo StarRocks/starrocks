@@ -2409,7 +2409,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: String
 - 単位: Minutes (string with suffix, e.g. "5m")
 - 是否可变: 否
-- 描述: 发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (?scroll=<value>) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
+- 描述: 发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (`?scroll=<value>`) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
 - 引入版本: v3.2.0
 
 ##### load_replica_status_check_interval_ms_on_failure
