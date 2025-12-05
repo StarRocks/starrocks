@@ -1161,9 +1161,9 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 
 * **Scope**: Session
 * **Description**: The per-session upper bound for the pipeline engine's degree-of-parallelism (DOP). Behavior:
-  * Applies only when `enable_pipeline_engine` is enabled and `pipeline_dop` is not explicitly set (> 0). If `pipeline_dop` > 0 this variable is ignored and `pipeline_dop` is used directly.
-  * When `pipeline_dop` <= 0 (adaptive/default mode), the effective DOP for execution is computed as min(`max_pipeline_dop`, the backend default DOP returned by BackendResourceStat). For pipeline sinks the same logic uses the sink default DOP.
-  * If `max_pipeline_dop` <= 0 no additional cap is applied and the backend default DOP is used.
+  * Applies only when `enable_pipeline_engine` is enabled and `pipeline_dop` is not explicitly set (greater than 0). If `pipeline_dop` greater than 0 this variable is ignored and `pipeline_dop` is used directly.
+  * When `pipeline_dop` less than or equal to 0 (adaptive/default mode), the effective DOP for execution is computed as min(`max_pipeline_dop`, the backend default DOP returned by BackendResourceStat). For pipeline sinks the same logic uses the sink default DOP.
+  * If `max_pipeline_dop` less than or equal to 0 no additional cap is applied and the backend default DOP is used.
   * Purpose: avoid negative overhead from scheduling on machines with very large core counts by capping automatically computed parallelism.
 * **Default**: `64`
 * **Data Type**: int
