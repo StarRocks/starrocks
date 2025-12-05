@@ -9,7 +9,7 @@ StarRocks は v3.1 以降で Elasticsearch catalog をサポートしていま�
 
 StarRocks と Elasticsearch は、それぞれ異なる強みを持つ人気のある分析システムです。StarRocks は大規模な分散コンピューティングに優れ、外部テーブルを通じて Elasticsearch からデータをクエリすることができます。Elasticsearch は全文検索機能で知られています。StarRocks と Elasticsearch の組み合わせにより、より包括的な OLAP ソリューションを提供します。Elasticsearch catalog を使用すると、データ移行の必要なく、StarRocks 上で SQL ステートメントを使用して Elasticsearch クラスター内のすべてのインデックスデータを直接分析できます。
 
-他のデータソースの catalog とは異なり、Elasticsearch catalog には作成時に `default` という名前のデータベースが 1 つだけ含まれています。各 Elasticsearch インデックスは自動的にデータテーブルにマッピングされ、`default` データベースにマウントされます。
+他のデータソースの catalog とは異なり、Elasticsearch catalog には作成時に `default_db` という名前のデータベースが 1 つだけ含まれています。各 Elasticsearch インデックスは自動的にデータテーブルにマッピングされ、`default_db` データベースにマウントされます。
 
 ## Elasticsearch catalog の作成
 
@@ -152,5 +152,10 @@ StarRocks は、Elasticsearch テーブルに対するクエリで指定され�
 ## 使用上の注意
 
 - v5.x 以降、Elasticsearch は異なるデータスキャン方法を採用しています。StarRocks は Elasticsearch v5.x 以降からのデータクエリのみをサポートしています。
+<<<<<<< HEAD
 - StarRocks は、HTTP ベーシック認証が有効な Elasticsearch クラスターからのデータクエリのみをサポートしています。
 - `count()` を含むクエリなど、一部のクエリは StarRocks 上で実行するよりも Elasticsearch 上で実行する方がはるかに高速です。これは、Elasticsearch がクエリ条件を満たす指定されたドキュメント数に関連するメタデータを直接読み取ることができ、要求されたデータをフィルタリングする必要がないためです。
+=======
+- StarRocks は HTTP ベーシック認証が有効な Elasticsearch クラスターからのデータクエリのみをサポートしています。
+- `count()` を含むクエリなど、一部のクエリは StarRocks 上で Elasticsearch よりもはるかに遅く実行されます。これは、Elasticsearch がクエリ条件を満たす指定されたドキュメント数に関連するメタデータを直接読み取ることができ、要求されたデータをフィルタリングする必要がないためです。
+>>>>>>> 91f8a1afbc ([Doc] Update default database name in Elasticsearch catalog (#66345))
