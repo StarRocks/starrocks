@@ -673,39 +673,11 @@ under the License.
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
                     </exclusion>
-<<<<<<< HEAD
-=======
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-server</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-util</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-io</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-servlet</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-client</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-security</artifactId>
-                    </exclusion>
                     <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                     <exclusion>
                         <artifactId>lz4-java</artifactId>
                         <groupId>org.lz4</groupId>
                     </exclusion>
-
->>>>>>> 0d820dabbf ([BugFix] Fix CVE-2025-12183 by upgrading lz4-java to 1.8.1 (#66362))
                 </exclusions>
             </dependency>
 
