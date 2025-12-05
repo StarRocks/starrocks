@@ -857,6 +857,19 @@ public class Utils {
         return false;
     }
 
+    /**
+     * Ensure the operator is predicate's min granularity.
+     */
+    public static boolean canPushDownPredicate(ScalarOperator operator) {
+        if (operator == null) {
+            return false;
+        }
+        if (hasNonDeterministicFunc(operator)) {
+            return false;
+        }
+        return true;
+    }
+
     public static void calculateStatistics(OptExpression expr, OptimizerContext context) {
         for (OptExpression child : expr.getInputs()) {
             calculateStatistics(child, context);
