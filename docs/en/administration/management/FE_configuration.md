@@ -3489,7 +3489,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks allows Lake tables to use the combined transaction log path for relevant transactions. This flag is only considered when the cluster is running in shared-data mode (`RunMode.isSharedDataMode()`). With `lake_use_combined_txn_log = true`, loading transactions of types BACKEND_STREAMING, ROUTINE_LOAD_TASK, INSERT_STREAMING and BATCH_LOAD_JOB will be eligible to use combined txn logs (see `LakeTableHelper.supportCombinedTxnLog`). Code paths that also include compaction check combined-log support via isTransactionSupportCombinedTxnLog. If disabled or when not in shared-data mode, combined transaction log behavior is not used.
+- Description: When enabled, StarRocks allows Lake tables to use the combined transaction log path for relevant transactions. Available only for shared-data clusters.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
 ### Other
