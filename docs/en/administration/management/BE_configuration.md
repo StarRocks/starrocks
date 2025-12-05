@@ -37,21 +37,21 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### diagnose_stack_trace_interval_ms
 
-- Default: `1800000` (30 minutes)
-- Type: long
+- Default: 1800000 (30 minutes)
+- Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Controls the minimum time gap between successive stack-trace diagnostics performed by DiagnoseDaemon for `STACK_TRACE` requests. When a diagnose request arrives, the daemon skips collecting and logging stack traces if the last collection happened less than `diagnose_stack_trace_interval_ms` milliseconds ago. Increase this value to reduce CPU overhead and log volume from frequent stack dumps; decrease it to capture more frequent traces when debugging transient issues (for example, in load fail-point simulations of long `TabletsChannel::add_chunk` blocking).
-- Introduced in: `v3.5.0`
+- Description: Controls the minimum time gap between successive stack-trace diagnostics performed by DiagnoseDaemon for `STACK_TRACE` requests. When a diagnose request arrives, the daemon skips collecting and logging stack traces if the last collection happened less than `diagnose_stack_trace_interval_ms` milliseconds ago. Increase this value to reduce CPU overhead and log volume from frequent stack dumps; decrease it to capture more frequent traces to debug transient issues (for example, in load fail-point simulations of long `TabletsChannel::add_chunk` blocking).
+- Introduced in: v3.5.0
 
 ##### load_rpc_slow_log_frequency_threshold_seconds
 
-- Default: `60`
+- Default: 60
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Controls how frequently StarRocks prints slow-log entries for load RPCs that exceed their configured RPC timeout. In LoadChannel::_check_and_log_timeout_rpc (be/src/runtime/load_channel.cpp) the code compares the RPC request timeout (milliseconds) against this threshold multiplied by 1000. If request.timeout_ms() > threshold * 1000 the timeout event is logged every time (LOG(WARNING)); otherwise the implementation reduces frequency using LOG_EVERY_N(WARNING, 10) (approximately once per 10 occurrences). The slow-log also includes the load channel runtime profile. Setting this value to 0 causes per-timeout logging in practice.
-- Introduced in: `v3.4.3, v3.5.0`
+- Description: Controls how frequently the system prints slow-log entries for load RPCs that exceed their configured RPC timeout. The slow-log also includes the load channel runtime profile. Setting this value to 0 causes per-timeout logging in practice.
+- Introduced in: v3.4.3, v3.5.0
 
 ##### log_buffer_level
 
@@ -65,11 +65,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### pprof_profile_dir
 
 - Default: `${STARROCKS_HOME}/log`
-- Type: string
+- Type: String
 - Unit: -
 - Is mutable: No
-- Description: Directory path where StarRocks writes pprof artifacts (jemalloc heap snapshots and gperftools CPU profiles). The code constructs filenames under this directory (for example `heap_profile.<pid>.<rand>` and `starrocks_profile.<pid>.<rand>`), and the HTTP handlers under /pprof/ deliver those profile files. At startup, if `pprof_profile_dir` is not empty StarRocks will attempt to create the directory. Ensure the path exists or is writable by the BE process and has sufficient disk space; profiling can produce large files and may affect performance while running.
-- Introduced in: `v3.2.0`
+- Description: Directory path where StarRocks writes pprof artifacts (Jemalloc heap snapshots and gperftools CPU profiles).
+- Introduced in: v3.2.0
 
 ##### sys_log_dir
 
@@ -201,12 +201,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### brpc_connection_type
 
-- Default: `single`
+- Default: `"single"`
 - Type: string
 - Unit: -
 - Is mutable: No
-- Description: Selects the brpc channel connection mode assigned to brpc::ChannelOptions.connection_type (used when protocol != "http" in internal and lake recoverable stubs). Allowed values: "single" (one persistent TCP connection per channel — the default), "pooled" (a pool of persistent connections for higher concurrency at the cost of more sockets/file descriptors), and "short" (short‑lived connections created per RPC to reduce persistent resource usage but with higher latency). The choice affects per-socket buffering behavior and can influence Socket.Write failures (EOVERCROWDED) when unwritten bytes exceed socket limits. This option is applied alongside `rpc_connect_timeout_ms` and per-channel `connection_group` in channel initialization.
-- Introduced in: `v3.2.5`
+- Description: The bRPC channel connection mode. Valid values:
+  - `"single"` (Default): One persistent TCP connection for each channel.
+  - `"pooled"`: A pool of persistent connections for higher concurrency at the cost of more sockets/file descriptors.
+  - `"short"`: Short‑lived connections created per RPC to reduce persistent resource usage but with higher latency.
+  The choice affects per-socket buffering behavior and can influence `Socket.Write` failures (EOVERCROWDED) when unwritten bytes exceed socket limits.
+- Introduced in: v3.2.5
 
 ##### brpc_max_body_size
 
@@ -247,10 +251,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### brpc_socket_max_unwritten_bytes
 
 - Default: 1073741824
-- Type: long
+- Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Sets the per-socket limit for unwritten outbound bytes in the BRPC server (applied to brpc::FLAGS_socket_max_unwritten_bytes). When the amount of buffered, not-yet-written data on a socket reaches this limit, subsequent Socket.Write calls fail with EOVERCROWDED. This prevents unbounded per-connection memory growth but can cause RPC send failures for very large messages or slow peers. Align this value with `brpc_max_body_size` to ensure single-message bodies are not larger than the allowed unwritten buffer. Increasing the value raises memory usage per connection; it cannot be changed at runtime.
+- Description: Sets the per-socket limit for unwritten outbound bytes in the bRPC server. When the amount of buffered, not-yet-written data on a socket reaches this limit, subsequent `Socket.Write` calls fail with EOVERCROWDED. This prevents unbounded per-connection memory growth but can cause RPC send failures for very large messages or slow peers. Align this value with `brpc_max_body_size` to ensure single-message bodies are not larger than the allowed unwritten buffer. Increasing the value raises memory usage per connection.
 - Introduced in: v3.2.0
 
 ##### brpc_stub_expire_s
@@ -273,12 +277,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### consistency_max_memory_limit_percent
 
-- Default: `20`
+- Default: 20
 - Type: Int
-- Unit: Percent
+- Unit: -
 - Is mutable: No
-- Description: Percentage cap used to compute the memory budget for consistency-related tasks. During BE startup the final consistency limit is computed as the minimum of the value parsed from `consistency_max_memory_limit` (bytes) and (process memory limit * `consistency_max_memory_limit_percent` / 100). If `process_mem_limit` is unset (-1) the code treats consistency memory as unlimited. Values < 0 or > 100 are treated as 100. Adjusting this percent increases or decreases memory reserved for consistency operations (affecting `MemTrackerType::CONSISTENCY`) and therefore affects memory available for queries and other services.
-- Introduced in: `v3.2.0`
+- Description: Percentage cap used to compute the memory budget for consistency-related tasks. During BE startup, the final consistency limit is computed as the minimum of the value parsed from `consistency_max_memory_limit` (bytes) and (`process_mem_limit * consistency_max_memory_limit_percent / 100`). If `process_mem_limit` is unset (-1), consistency memory is considered unlimited. For `consistency_max_memory_limit_percent`, values less than 0 or greater than 100 are treated as 100. Adjusting this value increases or decreases memory reserved for consistency operations and therefore affects memory available for queries and other services.
+- Introduced in: v3.2.0
 
 ##### delete_worker_count_normal_priority
 
@@ -291,12 +295,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### disable_mem_pools
 
-- Default: `false`
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: When enabled, disables MemPool chunk pooling so each allocation gets its own sized chunk instead of reusing or growing pooled chunks. In code paths in mem_pool.cpp this causes new chunks to be sized to the exact allocation (rounded for alignment) and prevents the normal next-chunk-size doubling behavior. Disabling pooling reduces long-lived retained buffer memory (for example, pooled IO buffer sizes across 1KB–8MB classes can sum to ~2GB) at the cost of more frequent allocations, increased number of chunks, and skipped integrity checks (which are avoided because of the large chunk count). Keep `disable_mem_pools` disabled (default) to benefit from allocation reuse and fewer system calls; enable it only when you must avoid large pooled memory retention (e.g., low-memory environments or diagnostic runs). Note: this flag is not mutable at runtime.
-- Introduced in: `v3.2.0`
+- Description: Whether to disable MemPool. When this item is set to `true`, the MemPool chunk pooling is disabled so each allocation gets its own sized chunk instead of reusing or increasing pooled chunks. Disabling pooling reduces long-lived retained buffer memory at the cost of more frequent allocations, increased number of chunks, and skipped integrity checks (which are avoided because of the large chunk count). Keep `disable_mem_pools` as `false` (default) to benefit from allocation reuse and fewer system calls. Set it to `true` only when you must avoid large pooled memory retention (for example, low-memory environments or diagnostic runs).
+- Introduced in: v3.2.0
 
 ##### enable_https
 
@@ -318,12 +322,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_jvm_metrics
 
-- Default: `false`
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Controls whether StarRocks initializes and registers JVM-specific metrics at startup. The value is read in Daemon::init via init_starrocks_metrics and passed to StarRocksMetrics::initialize as the init_jvm_metrics parameter; when enabled the metrics subsystem will create JVM-related collectors (e.g., heap, GC and thread metrics) for export, and when disabled those collectors are not initialized. This flag is evaluated only during startup and cannot be changed at runtime. It is intended for forward compatibility and may be removed in a future release. Use `enable_system_metrics` to control system-level metric collection.
-- Introduced in: `v4.0.0`
+- Description: Controls whether the system initializes and registers JVM-specific metrics at startup. When enabled the metrics subsystem will create JVM-related collectors (for example, heap, GC and thread metrics) for export, and when disabled, those collectors are not initialized. This parameter is intended for forward compatibility and may be removed in a future release. Use `enable_system_metrics` to control system-level metric collection.
+- Introduced in: v4.0.0
 
 ##### get_pindex_worker_count
 
@@ -372,11 +376,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### memory_max_alignment
 
-- Default: `16`
+- Default: 16
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Sets the maximum byte alignment that MemPool will accept for aligned allocations. Code paths (e.g., MemPool::allocate_aligned) DCHECK that a requested alignment is a power of two and <= `memory_max_alignment`; the pool's default alignment constant is 16 bytes. Increase this value only when callers require larger alignment (for SIMD, device buffers, or ABI constraints). Larger values increase per-allocation padding and reserved memory waste and must remain within what the system allocator and platform support.
+- Description: Sets the maximum byte alignment that MemPool will accept for aligned allocations. Increase this value only when callers require larger alignment (for SIMD, device buffers, or ABI constraints). Larger values increase per-allocation padding and reserved memory waste and must remain within what the system allocator and platform support.
 - Introduced in: v3.2.0
 
 ##### memory_urgent_level
@@ -403,7 +407,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Cores
 - Is mutable: No
-- Description: Controls the number of CPU cores StarRocks will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: StarRocks reads /proc/cpuinfo and uses all available cores. If set to a positive integer (&gt; 0), that value overrides the detected core count in CpuInfo::init and becomes the effective core count. When running inside containers, cgroup cpuset or cpu quota settings can further restrict usable cores; CpuInfo also respects those cgroup limits. This setting is applied at startup only — changing it requires restarting the server.
+- Description: Controls the number of CPU cores the system will use for CPU-aware decisions (for example, thread-pool sizing and runtime scheduling). A value of 0 enables auto-detection: the system reads `/proc/cpuinfo` and uses all available cores. If set to a positive integer, that value overrides the detected core count and becomes the effective core count. When running inside containers, cgroup cpuset or cpu quota settings can further restrict usable cores; `CpuInfo` also respects those cgroup limits.
 - Introduced in: v3.2.0
 
 ##### priority_networks
@@ -520,7 +524,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: When true, StarRocks allocates chunks using anonymous private mmap mappings (MAP_ANONYMOUS | MAP_PRIVATE) and frees them with munmap; memory accounting calls mem_tracker->consume on allocation and mem_tracker->release on free. When false (default), allocation uses posix_memalign (page-aligned) and ::free. Enabling this may create many virtual memory mappings — you must raise the kernel limit (as root), for example: "sysctl -w vm.max_map_count=262144" or "echo 262144 > /proc/sys/vm/max_map_count". Also set `chunk_reserved_bytes_limit` to a relatively large value; otherwise enabling mmap can cause very poor performance due to frequent mapping/unmapping.
+- Description: When this item is set to `true`, the system allocates chunks using anonymous private mmap mappings (MAP_ANONYMOUS | MAP_PRIVATE) and frees them with munmap. Enabling this may create many virtual memory mappings, thus you must raise the kernel limit (as root user, running `sysctl -w vm.max_map_count=262144` or `echo 262144 > /proc/sys/vm/max_map_count`), and set `chunk_reserved_bytes_limit` to a relatively large value. Otherwise, enabling mmap can cause very poor performance due to frequent mapping/unmapping.
 - Introduced in: v3.2.0
 
 ### Metadata and cluster management
@@ -536,39 +540,39 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### consistency_max_memory_limit
 
-- Default: `10G`
+- Default: 10G
 - Type: String
-- Unit: Bytes
+- Unit: -
 - Is mutable: No
-- Description: Memory size specification for the CONSISTENCY memory tracker. The value is parsed by ParseUtil::parse_mem_spec (accepts suffixes like K/M/G or percent form relative to process memory) and then capped by `consistency_max_memory_limit_percent`. The computed limit is min(parsed_value, process_mem_limit * `consistency_max_memory_limit_percent` / 100). If the parsed value is negative, it is treated as the full `mem_limit` (process memory); if the process memory is unknown (<0) the result is unbounded (-1). This setting is applied during BE startup to create the MemTracker for consistency tasks (MemTrackerType::CONSISTENCY) in GlobalEnv::_init_mem_tracker.
-- Introduced in: `v3.2.0`
+- Description: Memory size specification for the CONSISTENCY memory tracker.
+- Introduced in: v3.2.0
 
 ##### make_snapshot_rpc_timeout_ms
 
-- Default: `20000`
+- Default: 20000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: Sets the Thrift RPC timeout in milliseconds used when calling BackendService::make_snapshot on a remote BE. This value is passed to ThriftRpcHelper::rpc in ReplicationUtils::make_remote_snapshot and EngineCloneTask::_make_snapshot to bound how long the caller will wait for snapshot creation (hard-linking many segment files can take significant time). Increase this value when remote snapshot creation regularly exceeds the default; reduce it to fail faster on unresponsive BEs. Note other timeouts may affect end-to-end operations (for example the effective tablet-writer open timeout can relate to `tablet_writer_open_rpc_timeout_sec` and `load_timeout_sec`).
-- Introduced in: `v3.2.0`
+- Description: Sets the Thrift RPC timeout in milliseconds used when making a snapshot on a remote BE. Increase this value when remote snapshot creation regularly exceeds the default timeout; reduce it to fail faster on unresponsive BEs. Note other timeouts may affect end-to-end operations (for example the effective tablet-writer open timeout can relate to `tablet_writer_open_rpc_timeout_sec` and `load_timeout_sec`).
+- Introduced in: v3.2.0
 
 ##### metadata_cache_memory_limit_percent
 
-- Default: `30`
+- Default: 30
 - Type: Int
 - Unit: Percent
 - Is mutable: Yes
 - Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when metadata_cache_memory_limit_percent &gt; 0; set it &lt;= 0 to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
-- Introduced in: `v3.2.10`
+- Introduced in: v3.2.10
 
 ##### retry_apply_interval_second
 
-- Default: `30`
+- Default: 30
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Base interval (in seconds) used when scheduling retries of failed tablet apply operations. It is used directly to schedule a retry after a submission failure and as the base multiplier for backoff: the next retry delay is calculated as min(600, `retry_apply_interval_second` * failed_attempts). The code also uses `retry_apply_interval_second` to compute the cumulative retry duration (arithmetic-series sum) which is compared against `retry_apply_timeout_second` to decide whether to keep retrying. Effective only when `enable_retry_apply` is true. Increasing this value lengthens both individual retry delays and the cumulative time spent retrying; decreasing it makes retries more frequent and may increase the number of attempts before reaching `retry_apply_timeout_second`.
-- Introduced in: `v3.2.9`
+- Introduced in: v3.2.9
 
 ##### retry_apply_timeout_second
 
@@ -577,16 +581,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Maximum cumulative retry time (in seconds) allowed for applying a pending version before the apply process gives up and the tablet enters an error state. The apply logic accumulates exponential/backoff intervals based on `retry_apply_interval_second` and compares the total duration against `retry_apply_timeout_second`. If `enable_retry_apply` is true and the error is considered retryable, apply attempts will be rescheduled until the accumulated backoff exceeds `retry_apply_timeout_second`; then apply stops and the tablet transitions to error. Explicitly non-retryable errors (e.g., Corruption) are not retried regardless of this setting. Tune this value to control how long StarRocks will keep retrying apply operations (default 7200s = 2 hours).
-- Introduced in: `v3.3.13, v3.4.3, v3.5.0`
+- Introduced in: v3.3.13, v3.4.3, v3.5.0
 
 ##### txn_commit_rpc_timeout_ms
 
-- Default: `60000`
+- Default: 60000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Maximum allowed lifetime (in milliseconds) for Thrift RPC connections used by BE stream-load and transaction commit calls. StarRocks sets this value as the `thrift_rpc_timeout_ms` on requests sent to FE (used in stream_load planning, loadTxnBegin/loadTxnPrepare/loadTxnCommit, and getLoadTxnStatus). If a connection has been pooled longer than this value it will be closed. When a per-request timeout (`ctx->timeout_second`) is provided, the BE computes the RPC timeout as rpc_timeout_ms = max(ctx*1000/4, min(ctx*1000/2, txn_commit_rpc_timeout_ms)), so the effective RPC timeout is bounded by the context and this configuration. Keep this consistent with FE's `thrift_client_timeout_ms` to avoid mismatched timeouts.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### update_schema_worker_count
 
@@ -621,12 +625,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### dictionary_speculate_min_chunk_size
 
-- Default: `10000`
+- Default: 10000
 - Type: Int
 - Unit: Rows
 - Is mutable: No
 - Description: Minimum number of rows (chunk size) used by StringColumnWriter and DictColumnWriter to trigger dictionary-encoding speculation. If an incoming column (or the accumulated buffer plus incoming rows) has size >= `dictionary_speculate_min_chunk_size` the writer will run speculation immediately and set an encoding (DICT, PLAIN or BIT_SHUFFLE) rather than buffering more rows. Speculation uses `dictionary_encoding_ratio` for string columns and `dictionary_encoding_ratio_for_non_string_column` for numeric/non-string columns to decide whether dictionary encoding is beneficial. Also, a large column byte_size (>= UINT32_MAX) forces immediate speculation to avoid BinaryColumn<uint32_t> overflow.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### disable_storage_page_cache
 
@@ -1023,10 +1027,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - Default: 512
 - Type: Int
-- Unit: Count (number of removed tasks)
+- Unit: -
 - Is mutable: Yes
 - Description: Controls how often the BlockingPriorityQueue increases ("ages") the priority of all remaining tasks to avoid starvation. Each successful get/pop increments an internal `_upgrade_counter`; when `_upgrade_counter` exceeds `priority_queue_remaining_tasks_increased_frequency`, the queue increments every element's priority, rebuilds the heap, and resets the counter. Lower values cause more frequent priority aging (reducing starvation but increasing CPU cost due to iterating and re-heapifying); higher values reduce that overhead but delay priority adjustments. The value is a simple operation count threshold, not a time duration.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### query_cache_capacity
 
@@ -1053,7 +1057,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: -
 - Is mutable: No
 - Description: Comma-separated list of writable scratch directories used by query execution to spill intermediate data (for example, external sorts, hash joins, and other operators). Specify one or more paths separated by `;` (e.g. `/mnt/ssd1/tmp;/mnt/ssd2/tmp`). Directories should be accessible and writable by the BE process and have sufficient free space; StarRocks will pick among them to distribute spill I/O. Changes require a restart to take effect. If a directory is missing, not writable, or full, spilling may fail or degrade query performance.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### result_buffer_cancelled_interval_time
 
@@ -1125,7 +1129,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: Percent
 - Is mutable: No
 - Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `GlobalEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ### Loading
 
@@ -1333,48 +1337,48 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### enable_load_segment_parallel
 
-- Default: `false`
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
 - Description: When enabled, rowset segment loading and rowset-level reads are performed concurrently using StarRocks background thread pools (ExecEnv::load_segment_thread_pool and ExecEnv::load_rowset_thread_pool). Rowset::load_segments and TabletReader::get_segment_iterators submit per-segment or per-rowset tasks to these pools, falling back to serial loading and logging a warning if submission fails. Enable this to reduce read/load latency for large rowsets at the cost of increased CPU/IO concurrency and memory pressure. Note: parallel loading can change the load completion order of segments and therefore prevents partial compaction (code checks `_parallel_load` and disables partial compaction when enabled); consider implications for operations that rely on segment order.
-- Introduced in: `v3.3.0, v3.4.0, v3.5.0`
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### enable_streaming_load_thread_pool
 
-- Default: `true`
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
 - Description: Controls whether streaming load scanners are submitted to the dedicated streaming load thread pool. When enabled and a query is a LOAD with `TLoadJobType::STREAM_LOAD`, ConnectorScanNode submits scanner tasks to the `streaming_load_thread_pool` (which is configured with INT32_MAX threads and queue sizes, i.e. effectively unbounded). When disabled, scanners use the general `thread_pool` and its `PriorityThreadPool` submission logic (priority computation, try_offer/offer behavior). Enabling isolates streaming-load work from regular query execution to reduce interference; however, because the dedicated pool is effectively unbounded, enabling may increase concurrent threads and resource usage under heavy streaming-load traffic. This option is on by default and typically does not require modification.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### es_http_timeout_ms
 
-- Default: `5000`
+- Default: 5000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
 - Description: HTTP connection timeout (in milliseconds) used by the ES network client in ESScanReader for Elasticsearch scroll requests. This value is applied via network_client.set_timeout_ms() before sending subsequent scroll POSTs and controls how long the client waits for an ES response during scrolling. Increase this value for slow networks or large queries to avoid premature timeouts; decrease to fail faster on unresponsive ES nodes. This setting complements `es_scroll_keepalive`, which controls the scroll context keep-alive duration.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### es_index_max_result_window
 
-- Default: `10000`
+- Default: 10000
 - Type: Int
-- Unit: Documents
+- Unit: -
 - Is mutable: No
 - Description: Limits the maximum number of documents StarRocks will request from Elasticsearch in a single batch. StarRocks sets the ES request batch size to min(`es_index_max_result_window`, `chunk_size`) when building `KEY_BATCH_SIZE` for the ES reader. If an ES request exceeds the Elasticsearch index setting `index.max_result_window`, Elasticsearch returns HTTP 400 (Bad Request). Adjust this value when scanning large indexes or increase the ES `index.max_result_window` on the Elasticsearch side to permit larger single requests.
 - Introduced in: v3.2.0
 
 ##### load_channel_rpc_thread_pool_num
 
-- Default: `-1`
+- Default: -1
 - Type: Int
 - Unit: Threads
 - Is mutable: Yes
 - Description: Maximum number of threads for the load-channel async RPC thread pool. When set to <= 0 (default `-1`) the pool size is auto-set to the number of CPU cores (CpuInfo::num_cores()). The configured value is used as ThreadPoolBuilder's max threads and the pool's min threads is set to min(5, max_threads). The pool queue size is controlled separately by `load_channel_rpc_thread_pool_queue_size`. This setting was introduced to align the async RPC pool size with brpc workers' default (`brpc_num_threads`) so behavior remains compatible after switching load RPC handling from synchronous to asynchronous. Changing this config at runtime triggers ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(...).
-- Introduced in: `v3.5.0`
+- Introduced in: v3.5.0
 
 ##### load_channel_rpc_thread_pool_queue_size
 
@@ -1387,48 +1391,48 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### load_diagnose_rpc_timeout_profile_threshold_ms
 
-- Default: `60000`
+- Default: 60000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: When a load RPC times out (error contains "[E1008]Reached timeout") and `enable_load_diagnose` is true, this threshold controls whether a full profiling diagnose is requested. If the request-level RPC timeout `_rpc_timeout_ms` is greater than `load_diagnose_rpc_timeout_profile_threshold_ms`, profiling is enabled for that diagnose. For smaller `_rpc_timeout_ms` values, profiling is sampled once every 20 timeouts to avoid frequent heavy diagnostics for real-time/short-timeout loads. This value affects the `profile` flag in the `PLoadDiagnoseRequest` sent; stack-trace behavior is controlled separately by `load_diagnose_rpc_timeout_stack_trace_threshold_ms` and send timeout by `load_diagnose_send_rpc_timeout_ms`.
-- Introduced in: `v3.5.0`
+- Introduced in: v3.5.0
 
 ##### load_diagnose_rpc_timeout_stack_trace_threshold_ms
 
-- Default: `600000`
+- Default: 600000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Threshold (in ms) used to decide when to request remote stack traces for long-running load RPCs. When a load RPC times out with a timeout error and the effective RPC timeout (_rpc_timeout_ms) exceeds this value, `OlapTableSink`/`NodeChannel` will include `stack_trace=true` in a `load_diagnose` RPC to the target BE so the BE can return stack traces for debugging. `LocalTabletsChannel::SecondaryReplicasWaiter` also triggers a best-effort stack-trace diagnose from the primary if waiting for secondary replicas exceeds this interval. This behavior requires `enable_load_diagnose` and uses `load_diagnose_send_rpc_timeout_ms` for the diagnose RPC timeout; profiling is gated separately by `load_diagnose_rpc_timeout_profile_threshold_ms`. Lowering this value increases how aggressively stack traces are requested.
-- Introduced in: `v3.5.0`
+- Introduced in: v3.5.0
 
 ##### load_diagnose_send_rpc_timeout_ms
 
-- Default: `2000`
+- Default: 2000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Timeout (in milliseconds) applied to diagnosis-related brpc calls initiated by BE load paths. It is used to set the controller timeout for `load_diagnose` RPCs (sent by NodeChannel/OlapTableSink when a LoadChannel brpc call times out) and for replica-status queries (used by SecondaryReplicasWaiter / LocalTabletsChannel when checking primary replica state). Choose a value high enough to allow the remote side to respond with profile or stack-trace data, but not so high that failure handling is delayed. This parameter works together with `enable_load_diagnose`, `load_diagnose_rpc_timeout_profile_threshold_ms`, and `load_diagnose_rpc_timeout_stack_trace_threshold_ms` which control when and what diagnostic information is requested.
-- Introduced in: `v3.5.0`
+- Introduced in: v3.5.0
 
 ##### load_fp_brpc_timeout_ms
 
-- Default: `-1`
+- Default: -1
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: Overrides the per-channel brpc RPC timeout used by OlapTableSink when the `node_channel_set_brpc_timeout` fail point is triggered. If set to a positive value, NodeChannel will set its internal `_rpc_timeout_ms` to this value (in milliseconds) causing open/add-chunk/cancel RPCs to use the shorter timeout and enabling simulation of brpc timeouts that produce the "[E1008]Reached timeout" error. Default (`-1`) disables the override. Changing this value is intended for testing and fault injection; small values may produce false timeouts and trigger load diagnostics (see `enable_load_diagnose`, `load_diagnose_rpc_timeout_profile_threshold_ms`, `load_diagnose_rpc_timeout_stack_trace_threshold_ms`, and `load_diagnose_send_rpc_timeout_ms`).
-- Introduced in: `v3.5.0`
+- Introduced in: v3.5.0
 
 ##### load_fp_tablets_channel_add_chunk_block_ms
 
-- Default: `-1`
+- Default: -1
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: When enabled (set to a positive milliseconds value) this fail-point configuration makes TabletsChannel::add_chunk sleep for the specified time during load processing. It is used to simulate BRPC timeout errors (e.g., "[E1008]Reached timeout") and to emulate an expensive add_chunk operation that increases load latency. A value <= 0 (default `-1`) disables the injection. Intended for testing fault handling, timeouts, and replica synchronization behavior — do not enable in normal production workloads as it delays write completion and can trigger upstream timeouts or replica aborts.
-- Introduced in: `v3.5.0`
+- Introduced in: v3.5.0
 
 ##### load_segment_thread_pool_num_max
 
@@ -1437,7 +1441,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: No
 - Description: Sets the maximum number of worker threads for BE load-related thread pools. This value is used by ThreadPoolBuilder to limit threads for both `load_rowset_pool` and `load_segment_pool` in exec_env.cpp, controlling concurrency for processing loaded rowsets and segments (e.g., decoding, indexing, writing) during streaming and batch loads. Increasing this value raises parallelism and can improve load throughput but also increases CPU, memory usage, and potential contention; decreasing it limits concurrent load processing and may reduce throughput. Tune together with `load_segment_thread_pool_queue_size` and `streaming_load_thread_pool_idle_time_ms`. Change requires BE restart.
-- Introduced in: `v3.3.0, v3.4.0, v3.5.0`
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### load_segment_thread_pool_queue_size
 
@@ -1450,12 +1454,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### max_pulsar_consumer_num_per_group
 
-- Default: `10`
+- Default: 10
 - Type: Int
 - Unit: -
 - Is mutable: Yes
 - Description: Controls the maximum number of Pulsar consumers that may be created in a single data consumer group for routine load on a BE. Because cumulative acknowledge is not supported for multi-topic subscriptions, each consumer subscribes exactly one topic/partition; if the number of partitions in `pulsar_info->partitions` exceeds this value, group creation fails with an error advising to increase `max_pulsar_consumer_num_per_group` on the BE or add more BEs. This limit is enforced when constructing a PulsarDataConsumerGroup and prevents a BE from hosting more than this many consumers for one routine load group. For Kafka routine load, `max_consumer_num_per_group` is used instead.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### pull_load_task_dir
 
@@ -1468,30 +1472,30 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### routine_load_kafka_timeout_second
 
-- Default: `10`
+- Default: 10
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
 - Description: Timeout in seconds used for Kafka-related routine load operations. When a client request does not specify a timeout, `routine_load_kafka_timeout_second` is used as the default RPC timeout (converted to milliseconds) for `get_info`. It is also used as the per-call consume poll timeout for the librdkafka consumer (converted to milliseconds and capped by remaining runtime). Note: the internal `get_info` path reduces this value to 80% before passing it to librdkafka to avoid FE-side timeout races. Set this to a value that balances timely failure reporting and sufficient time for network/broker responses; changes require a restart because the setting is not mutable.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### routine_load_pulsar_timeout_second
 
-- Default: `10`
+- Default: 10
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
 - Description: Default timeout (in seconds) that the BE uses for Pulsar-related routine load operations when the request does not supply an explicit timeout. Specifically, `PInternalServiceImplBase::get_pulsar_info` multiplies this value by 1000 to form the millisecond timeout passed to the routine load task executor methods that fetch Pulsar partition metadata and backlog. Increase to allow slower Pulsar responses at the cost of longer failure detection; decrease to fail faster on slow brokers. Analogous to `routine_load_kafka_timeout_second` used for Kafka.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### streaming_load_thread_pool_idle_time_ms
 
-- Default: `2000`
+- Default: 2000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
 - Description: Sets the thread idle timeout (in milliseconds) for streaming-load related thread pools. The value is used as the idle timeout passed to ThreadPoolBuilder for the `stream_load_io` pool and also for `load_rowset_pool` and `load_segment_pool`. Threads in these pools are reclaimed when idle for this duration; lower values reduce idle resource usage but increase thread creation overhead, while higher values keep threads alive longer. The `stream_load_io` pool is used when `enable_streaming_load_thread_pool` is enabled.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### streaming_load_thread_pool_num_min
 
@@ -1500,18 +1504,18 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: No
 - Description: Minimum number of threads for the streaming load IO thread pool ("stream_load_io") created during ExecEnv initialization. The pool is built with `set_max_threads(INT32_MAX)` and `set_max_queue_size(INT32_MAX)` so it is effectively unbounded to avoid deadlocks for concurrent streaming loads. A value of 0 lets the pool start with no threads and grow on demand; setting a positive value reserves that many threads at startup. This pool is used when `enable_streaming_load_thread_pool` is true and its idle timeout is controlled by `streaming_load_thread_pool_idle_time_ms`. Overall concurrency is still constrained by `fragment_pool_thread_num_max` and `webserver_num_workers`; changing this value is rarely necessary and may increase resource usage if set too high.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ### Statistic report
 
 ##### enable_metric_calculator
 
-- Default: `true`
+- Default: true
 - Type: boolean
 - Unit: -
 - Is mutable: No
 - Description: When true, the BE process launches a background "metrics_daemon" thread (started in Daemon::init on non-Apple platforms) that runs every ~15 seconds to invoke `StarRocksMetrics::instance()->metrics()->trigger_hook()` and compute derived/system metrics (e.g., push/query bytes/sec, max disk I/O util, max network send/receive rates), log memory breakdowns and run table metrics cleanup. When false, those hooks are executed synchronously inside `MetricRegistry::collect` at metric collection time, which can increase metric-scrape latency. Requires process restart to take effect.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### enable_system_metrics
 
@@ -1520,7 +1524,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: No
 - Description: When true, StarRocks initializes system-level monitoring during startup: it discovers disk devices from the configured store paths and enumerates network interfaces, then passes this information into the metrics subsystem to enable collection of disk I/O, network traffic and memory-related system metrics. If device or interface discovery fails, initialization logs a warning and aborts system metrics setup. This flag only controls whether system metrics are initialized; periodic metric aggregation threads are controlled separately by `enable_metric_calculator`, and JVM metrics initialization is controlled by `enable_jvm_metrics`. Changing this value requires a restart.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### profile_report_interval
 
@@ -1670,21 +1674,21 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### compaction_max_memory_limit
 
-- Default: `-1`
+- Default: -1
 - Type: Long
 - Unit: Bytes
 - Is mutable: No
 - Description: Global upper bound (in bytes) for memory available to compaction tasks on this BE. During BE initialization the final compaction memory limit is computed as min(`compaction_max_memory_limit`, process_mem_limit * `compaction_max_memory_limit_percent` / 100). If `compaction_max_memory_limit` is negative (default `-1`) it falls back to the BE process memory limit derived from `mem_limit`. The percent value is clamped to [0,100]. If the process memory limit is not set (negative) compaction memory remains unlimited (`-1`). This computed value is used to initialize the `_compaction_mem_tracker`. See also `compaction_max_memory_limit_percent` and `compaction_memory_limit_per_worker`.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### compaction_max_memory_limit_percent
 
-- Default: `100`
+- Default: 100
 - Type: Int
 - Unit: Percent
 - Is mutable: No
 - Description: Percentage of the BE process memory that may be used for compaction. The BE computes the compaction memory cap as the minimum of `compaction_max_memory_limit` and (process memory limit × this percent / 100). If this value is < 0 or > 100 it is treated as 100. If `compaction_max_memory_limit` < 0 the process memory limit is used instead. The calculation also considers the BE process memory derived from `mem_limit`. Combined with `compaction_memory_limit_per_worker` (per-worker cap), this setting controls total compaction memory available and therefore affects compaction concurrency and OOM risk.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### compaction_memory_limit_per_worker
 
@@ -1760,16 +1764,16 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### dictionary_encoding_ratio
 
-- Default: `0.7`
+- Default: 0.7
 - Type: Double
 - Unit: -
 - Is mutable: No
 - Description: Fraction (0.0–1.0) used by StringColumnWriter during the encode-speculation phase to decide between dictionary (DICT_ENCODING) and plain (PLAIN_ENCODING) encoding for a chunk. The code computes max_card = row_count * `dictionary_encoding_ratio` and scans the chunk’s distinct key count; if the distinct count exceeds max_card the writer chooses PLAIN_ENCODING. The check is performed only when the chunk size passes `dictionary_speculate_min_chunk_size` (and when row_count > dictionary_min_rowcount). Setting the value higher favors dictionary encoding (tolerates more distinct keys); setting it lower causes earlier fallback to plain encoding. A value of 1.0 effectively forces dictionary encoding (distinct count can never exceed row_count).
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### dictionary_encoding_ratio_for_non_string_column
 
-- Default: `0`
+- Default: 0
 - Type: double
 - Unit: -
 - Is mutable: No
@@ -1778,12 +1782,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### dictionary_page_size
 
-- Default: `1048576`
+- Default: 1048576
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
 - Description: Size in bytes of dictionary pages used when building rowset segments. This value is read into `PageBuilderOptions::dict_page_size` in the BE rowset code and controls how many dictionary entries can be stored in a single dictionary page. Increasing this value can improve compression ratio for dictionary-encoded columns by allowing larger dictionaries, but larger pages consume more memory during write/encode and can increase I/O and latency when reading or materializing pages. Set conservatively for large-memory, write-heavy workloads and avoid excessively large values to prevent runtime performance degradation.
-- Introduced in: `v3.3.0, v3.4.0, v3.5.0`
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### disk_stat_monitor_interval
 
@@ -1940,12 +1944,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### ignore_broken_disk
 
-- Default: `false`
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
 - Description: Controls startup behavior when configured storage paths fail read/write checks or fail to parse. When `false` (default), BE treats any broken entry in `storage_root_path` or `spill_local_storage_dir` as fatal and will abort startup. When `true`, StarRocks will skip (log a warning and remove) any storage path that fails `check_datapath_rw` or fails parsing so the BE can continue starting with the remaining healthy paths. Note: if all configured paths are removed, BE will still exit. Enabling this can mask misconfigured or failed disks and cause data on ignored paths to be unavailable; monitor logs and disk health accordingly.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### inc_rowset_expired_sec
 
@@ -2084,12 +2088,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### max_queueing_memtable_per_tablet
 
-- Default: `2`
+- Default: 2
 - Type: Long
 - Unit: Count
 - Is mutable: Yes
 - Description: Controls per-tablet backpressure for write paths: when a tablet's number of queueing (not-yet-flushing) memtables reaches or exceeds `max_queueing_memtable_per_tablet`, writers in `LocalTabletsChannel` and `LakeTabletsChannel` will block (sleep/retry) before submitting more write work. This reduces simultaneous memtable flush concurrency and peak memory use at the cost of increased latency or RPC timeouts for heavy load. Set higher to allow more concurrent memtables (more memory and I/O burst); set lower to limit memory pressure and increase write throttling.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### max_row_source_mask_memory_bytes
 
@@ -2192,7 +2196,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### path_gc_check
 
-- Default: `true`
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
@@ -2201,12 +2205,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### path_gc_check_interval_second
 
-- Default: `86400`
+- Default: 86400
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
 - Description: Interval in seconds between runs of the storage engine's path garbage-collection background thread. Each wake triggers DataDir to perform path GC by tablet, by rowset id, delta column file GC and CRM GC (the CRM GC call uses `unused_crm_file_threshold_second`). If set to a non-positive value the code forces the interval to 1800 seconds (half hour) and emits a warning. Tune this to control how frequently on-disk temporary or downloaded files are scanned and removed.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### pending_data_expire_time_sec
 
@@ -2345,12 +2349,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### small_dictionary_page_size
 
-- Default: `4096`
+- Default: 4096
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
 - Description: Threshold (in bytes) used by BinaryPlainPageDecoder to decide whether to eagerly parse a dictionary (binary/plain) page. If a page's encoded size is &lt; `small_dictionary_page_size`, the decoder pre-parses all string entries into an in-memory vector (`_parsed_datas`) to accelerate random access and batch reads. Raising this value causes more pages to be pre-parsed (which can reduce per-access decoding overhead and may increase effective compression for larger dictionaries) but increases memory usage and CPU spent parsing; excessively large values can degrade overall performance. Tune only after measuring memory and access-latency trade-offs.
-- Introduced in: `v3.4.1, v3.5.0`
+- Introduced in: v3.4.1, v3.5.0
 
 ##### snapshot_expire_time_sec
 
@@ -2363,12 +2367,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### stale_memtable_flush_time_sec
 
-- Default: `0`
+- Default: 0
 - Type: long
 - Unit: Seconds
 - Is mutable: Yes
 - Description: When a sender job's memory usage is high, memtables that have not been updated for longer than `stale_memtable_flush_time_sec` seconds will be flushed to reduce memory pressure. This behavior is only considered when memory limits are approaching (`limit_exceeded_by_ratio(70)` or higher). In `LocalTabletsChannel`, an additional path at very high memory usage (`limit_exceeded_by_ratio(95)`) may flush memtables whose size exceeds `write_buffer_size / 4`. A value of `0` disables this age-based stale-memtable flushing (immutable-partition memtables still flush immediately when idle or on high memory).
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### storage_flood_stage_left_capacity_bytes
 
@@ -2390,7 +2394,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### storage_high_usage_disk_protect_ratio
 
-- Default: `0.1`
+- Default: 0.1
 - Type: double
 - Unit: -
 - Is mutable: Yes
@@ -2492,12 +2496,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### tablet_writer_open_rpc_timeout_sec
 
-- Default: `300`
+- Default: 300
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Timeout (in seconds) for the RPC that opens a tablet writer on a remote BE. The value is converted to milliseconds and applied to both the request timeout and the brpc control timeout when issuing the open call. The runtime uses the effective timeout as the minimum of `tablet_writer_open_rpc_timeout_sec` and half of the overall load timeout (i.e., min(`tablet_writer_open_rpc_timeout_sec`, `load_timeout_sec` / 2)). Set this to balance timely failure detection (too small may cause premature open failures) and giving BEs enough time to initialize writers (too large delays error handling).
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### transaction_apply_worker_count
 
@@ -2688,7 +2692,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: entries (cached client instances) per host
 - Is mutable: No
 - Description: The maximum number of cached client instances retained for each remote host by BE-wide client caches. This single setting is used when creating BackendServiceClientCache, FrontendServiceClientCache, and BrokerServiceClientCache during ExecEnv initialization, so it limits the number of client stubs/connections kept per host across those caches. Raising this value reduces reconnects and stub creation overhead at the cost of increased memory and file-descriptor usage; lowering it saves resources but may increase connection churn. The value is read at startup and cannot be changed at runtime. Currently one shared setting controls all client cache types; separate per-cache configuration may be introduced later.
-- Introduced in: `v3.2.0`
+- Introduced in: v3.2.0
 
 ##### starlet_filesystem_instance_cache_capacity
 
@@ -3027,7 +3031,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: -
 - Is mutable: Yes
 - Description: When enabled, Tablet apply failures that are classified as retryable (for example transient memory-limit errors) are rescheduled for retry instead of immediately marking the tablet in error. The retry path in TabletUpdates schedules the next attempt using `retry_apply_interval_second` multiplied by the current failure count and clamped to a 600s maximum, so backoff grows with successive failures. Explicitly non-retryable errors (for example corruption) bypass retries and cause the apply process to enter the error state immediately. Retries continue until an overall timeout/terminal condition is reached, after which the apply will enter the error state. Turning this off disables automatic rescheduling of failed apply tasks and causes failed applies to transition to error state without retries.
-- Introduced in: `v3.2.9`
+- Introduced in: v3.2.9
 
 ##### enable_token_check
 
@@ -3040,12 +3044,12 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### es_scroll_keepalive
 
-- Default: `5m`
+- Default: 5m
 - Type: String
 - Unit: Minutes (string with suffix, e.g. "5m")
 - Is mutable: No
-- Description: The keep-alive duration sent to Elasticsearch for scroll search contexts. The value is used verbatim (for example "5m") when building the initial scroll URL (?scroll=<value>) and when sending subsequent scroll requests (via ESScrollQueryBuilder). This controls how long the ES search context is retained before garbage collection on the ES side; setting it longer keeps scroll contexts alive for more time but prolongs resource usage on the ES cluster. The value is read at startup by the ES scan reader and is not changeable at runtime.
-- Introduced in: `v3.2.0`
+- Description: The keep-alive duration sent to Elasticsearch for scroll search contexts. The value is used verbatim (for example "5m") when building the initial scroll URL (`?scroll=<value>`) and when sending subsequent scroll requests (via ESScrollQueryBuilder). This controls how long the ES search context is retained before garbage collection on the ES side; setting it longer keeps scroll contexts alive for more time but prolongs resource usage on the ES cluster. The value is read at startup by the ES scan reader and is not changeable at runtime.
+- Introduced in: v3.2.0
 
 ##### load_replica_status_check_interval_ms_on_failure
 
