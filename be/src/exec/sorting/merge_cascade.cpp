@@ -16,7 +16,7 @@
 #include <memory>
 #include <utility>
 
-#include "column/column_helper.h"
+#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/merge.h"

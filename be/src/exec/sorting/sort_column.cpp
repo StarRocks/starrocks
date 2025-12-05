@@ -503,13 +503,13 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& col
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_column(const std::atomic<bool>& cancel, MutableColumnPtr& column, const SortDesc& sort_desc,
+Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
                            const SortDescs* sort_descs) {
     // Nullable column need set all the null rows to default values,
     // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
     if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_raw_column<NullableColumn>(column)->fill_null_with_default();
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     if (sort_descs != nullptr) {

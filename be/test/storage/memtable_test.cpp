@@ -430,8 +430,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
         }
         for (auto i = 0; i < read_chunk->num_rows(); ++i) {
             EXPECT_EQ(expected_chunk->get(pkey_read + i).compare((*itr)->schema(), read_chunk->get(i)), 0)
-                    << "expected: " << expected_chunk->get(pkey_read + i).to_string()
-                    << "actual: " << read_chunk->get(i).to_string();
+                    << ", expected: " << (pkey_read + i) << ", actual: " << i;
         }
         pkey_read += read_chunk->num_rows();
         read_chunk->reset();
