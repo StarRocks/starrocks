@@ -48,6 +48,10 @@ Usage: $0 <options>
                                     of loading binary into memory and start execution.
      -j                             build parallel
 
+  Environment variables:
+     BUILD_TYPE                     build type (default: ASAN)
+     SKIP_CMAKE                     set to ON to skip cmake step (default: OFF)
+
   Eg.
     $0                              run all unit tests
     $0 --test CompactionUtilsTest   run compaction test
@@ -55,6 +59,7 @@ Usage: $0 <options>
     $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
     $0 --gtest_filter CompactionUtilsTest*:TabletUpdatesTest*   run the two test suites: CompactionUtilsTest and TabletUpdatesTest
+    SKIP_CMAKE=ON $0 --test SomeTest   skip cmake and run SomeTest
   "
   exit 1
 }
@@ -153,6 +158,7 @@ fi
 
 CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
 CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+SKIP_CMAKE=${SKIP_CMAKE:-OFF}
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
@@ -203,20 +209,24 @@ else
 fi
 
 cd ${CMAKE_BUILD_DIR}
-${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
-            -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
-            -DSTARROCKS_HOME=${STARROCKS_HOME} \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
-            -DUSE_STAROS=${USE_STAROS} \
-            -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
-            -DWITH_GCOV=${WITH_GCOV} \
-            -DWITH_STARCACHE=${WITH_STARCACHE} \
-            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
-            -DSTARROCKS_JIT_ENABLE=ON \
-            -DWITH_RELATIVE_SRC_PATH=OFF \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+if [ "${SKIP_CMAKE}" != "ON" ]; then
+    ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
+                -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
+                -DSTARROCKS_HOME=${STARROCKS_HOME} \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+                -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
+                -DUSE_STAROS=${USE_STAROS} \
+                -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
+                -DWITH_GCOV=${WITH_GCOV} \
+                -DWITH_STARCACHE=${WITH_STARCACHE} \
+                -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
+                -DSTARROCKS_JIT_ENABLE=ON \
+                -DWITH_RELATIVE_SRC_PATH=OFF \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+else
+    echo "[INFO] Skip cmake step (SKIP_CMAKE=ON)"
+fi
 
 ${BUILD_SYSTEM} -j${PARALLEL}
 
@@ -356,4 +366,3 @@ do
         fi
     fi
 done
-
