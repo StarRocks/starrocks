@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
@@ -103,6 +105,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                     mvId, context.ctx.getDatabase()));
         }
         this.mv = (MaterializedView) table;
+        // refresh mv until mv is reloaded.
+        mv.waitForReloaded();
         this.logger = MVTraceUtils.getLogger(mv, MVTaskRunProcessor.class);
 
         // NOTE: mvId is set in Task's properties when creating
@@ -192,7 +196,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                     // if success, try to generate next task run
                     mvRefreshProcessor.generateNextTaskRunIfNeeded();
                 } else {
-                    logger.warn("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
+                    logger.info("Refresh materialized view {} failed with state: {}.", mv.getName(), taskRunState);
                 }
                 // update metrics
                 mvMetricsEntity.increaseRefreshJobStatus(taskRunState);
@@ -221,11 +225,25 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 if (logger.isDebugEnabled()) {
                     logger.debug("refresh mv trace logs: {}", Tracers.getTrace(mvRefreshTraceMode));
                 }
+                Tracers.close();
             } catch (Exception e) {
                 logger.error("Failed to close Tracers", e);
             }
         }
         return this.taskRunState;
+    }
+
+    /**
+     * Get the trace info for mv refresh for better debugging.
+     * @return current mv refresh trace info about base tables and partitions.
+     */
+    private String getMVRefreshTraceInfo() {
+        try {
+            return MetaFunctions.inspectMVRefreshInfo(db, mv);
+        } catch (Exception e) {
+            logger.warn("failed to inspect mv refresh info for mv: {}", mv.getName(), e);
+        }
+        return "";
     }
 
     /**
@@ -235,6 +253,11 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // Use current connection variables instead of mvContext's session variables to be better debug.
         int maxRefreshMaterializedViewRetryNum = mvRefreshProcessor.getRetryTimes(taskRunContext.getCtx());
         logger.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
+
+        // record mv refresh trace info for better debugging
+        // TODO: it may be too long, need to optimize it later.
+        String mvRefreshInfo = getMVRefreshTraceInfo();
+        Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
@@ -252,7 +275,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 }
                 Tracers.record("MVRefreshRetryTimes", String.valueOf(refreshFailedTimes));
                 Tracers.record("MVRefreshLockRetryTimes", String.valueOf(lockFailedTimes));
-                return mvRefreshProcessor.doProcessTaskRun(taskRunContext, this);
+                return doProcessTaskRun(taskRunContext, this);
             } catch (LockTimeoutException e) {
                 // if lock timeout, retry to refresh
                 lockFailedTimes += 1;
@@ -261,7 +284,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 lastException = e;
             } catch (Throwable e) {
                 refreshFailedTimes += 1;
-                logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, DebugUtil.getRootStackTrace(e));
+                logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, e);
                 lastException = e;
             }
 
@@ -273,6 +296,32 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         String errorMsg = MvUtils.shrinkToSize(DebugUtil.getRootStackTrace(lastException), MAX_FIELD_VARCHAR_LENGTH);
         throw new DmlException("Refresh mv %s failed after %s times, try lock failed: %s, error-msg : " +
                 "%s", lastException, mv.getName(), refreshFailedTimes, lockFailedTimes, errorMsg);
+    }
+
+    /**
+     * 1. prepare to check some conditions
+     * 2. sync partitions with base tables(add or drop partitions, which will be optimized  by dynamic partition creation later)
+     * 3. decide which partitions of mv to refresh and the corresponding base tables' source partitions
+     * 4. construct the refresh sql and execute it
+     * 5. update the source table version map if refresh task completes successfully
+     */
+    public Constants.TaskRunState doProcessTaskRun(TaskRunContext taskRunContext,
+                                                   MVRefreshExecutor executor) throws Exception {
+        Stopwatch watch = Stopwatch.createStarted();
+        final BaseMVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
+        if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
+            logger.info("MV {} refresh task skipped, no partitions to refresh", mv.getName());
+            long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+            mvMetricsEntity.updateRefreshDuration(elapsed);
+            return Constants.TaskRunState.SKIPPED;
+        }
+
+        // refresh materialized view
+        Constants.TaskRunState result = mvRefreshProcessor.execProcessExecPlan(taskRunContext, processExecPlan, executor);
+        long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+        logger.info("refresh mv success, cost time(ms): {}", DebugUtil.DECIMAL_FORMAT_SCALE_3.format(elapsed));
+        mvMetricsEntity.updateRefreshDuration(elapsed);
+        return result;
     }
 
     @Override
@@ -297,10 +346,10 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         // Add running query detail for MV refresh
         ctx.setQuerySource(QueryDetail.QuerySource.MV);
-        executor.addRunningQueryDetail(insertStmt);
 
         logger.info("[QueryId:{}] start to refresh mv in DML", ctx.getQueryId());
         try {
+            executor.addRunningQueryDetail(insertStmt);
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             logger.warn("[QueryId:{}] refresh mv {} failed in DML", ctx.getQueryId(), e);
@@ -308,6 +357,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
             auditAfterExec(mvTaskRunContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         }
     }
 
@@ -332,7 +382,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 TaskRunStatus status = mvTaskRunContext.getStatus();
                 if (status != null && status.getMvTaskRunExtraMessage() != null) {
                     MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
-
+                    // current refresh mode
+                    sb.append("RefreshMode: " + extraMessage.getRefreshMode());
                     // mv partitions to refresh
                     Set<String> mvPartitionsToRefresh = extraMessage.getMvPartitionsToRefresh();
                     if (!CollectionUtils.isEmpty(mvPartitionsToRefresh)) {
@@ -384,32 +435,5 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     @VisibleForTesting
     public RuntimeProfile getRuntimeProfile() {
         return runtimeProfile;
-    }
-
-    private String getPostRun(ConnectContext ctx, MaterializedView mv) {
-        // check whether it's enabled to analyze MV task after task run for each task run,
-        // so the analyze_for_mv can be set in session variable dynamically
-        if (mv == null) {
-            return "";
-        }
-        return TaskBuilder.getAnalyzeMVStmt(ctx, mv.getName());
-    }
-
-    @Override
-    public void postTaskRun(TaskRunContext context) throws Exception {
-        if (taskRunState != Constants.TaskRunState.SUCCESS) {
-            return;
-        }
-        // recreate post run context for each task run
-        final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, mv);
-        // visible for tests
-        if (mvTaskRunContext != null) {
-            mvTaskRunContext.setPostRun(postRun);
-        }
-        context.setPostRun(postRun);
-        if (StringUtils.isNotEmpty(postRun)) {
-            ctx.executeSql(postRun);
-        }
     }
 }

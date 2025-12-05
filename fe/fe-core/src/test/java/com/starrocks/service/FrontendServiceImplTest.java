@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -37,6 +38,7 @@ import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -71,10 +73,15 @@ import com.starrocks.thrift.TListRecycleBinCatalogsInfo;
 import com.starrocks.thrift.TListRecycleBinCatalogsParams;
 import com.starrocks.thrift.TListRecycleBinCatalogsResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TLoadTxnBeginRequest;
 import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
+import com.starrocks.thrift.TLoadTxnRollbackRequest;
+import com.starrocks.thrift.TLoadTxnRollbackResult;
+import com.starrocks.thrift.TLoadType;
+import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -82,6 +89,8 @@ import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TRefreshConnectionsRequest;
+import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -92,7 +101,9 @@ import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
@@ -117,6 +128,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -124,9 +136,11 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRIT
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
+import static com.starrocks.thrift.TFileType.FILE_STREAM;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
@@ -299,6 +313,12 @@ public class FrontendServiceImplTest {
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\"\n" +
                                 ");")
+                    .withTable("CREATE TABLE test_load (\n" +
+                                "    id INT\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(id)\n" +
+                                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");")
                     .withView("create view v as select * from site_access_empty")
                     .withView("create view v1 as select current_role()")
                     .withView("create view v2 as select current_user()")
@@ -792,7 +812,7 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
-        Assertions.assertEquals(17, result.tables.size());
+        Assertions.assertEquals(18, result.tables.size());
     }
 
     @Test
@@ -1188,6 +1208,149 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testLoadTxnPrepare() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        TLoadTxnCommitResult result = impl.loadTxnPrepare(request);
+        assertEquals(TStatusCode.OK, result.getStatus().status_code);
+
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+        Assertions.assertNotNull(loadInfos);
+        Assertions.assertEquals(1, loadInfos.size());
+        TLoadInfo loadInfo = loadInfos.get(0);
+        Assertions.assertEquals("", loadInfo.getError_msg());
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    @Test
+    public void testLoadTxnCommit() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        if (result.getStatus().status_code == TStatusCode.OK) {
+            StreamLoadTask streamLoadTask =
+                    GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+            Assertions.assertNotNull(streamLoadTask);
+            List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+            Assertions.assertNotNull(loadInfos);
+            Assertions.assertEquals(1, loadInfos.size());
+            TLoadInfo loadInfo = loadInfos.get(0);
+            Assertions.assertEquals("", loadInfo.getError_msg());
+            Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+            Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+        }
+    }
+
+    @Test
+    public void testLoadTxnRollback() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnRollbackRequest request = new TLoadTxnRollbackRequest();
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setTxnId(txnId);
+        request.setReason("artificial failure");
+        TManualLoadTxnCommitAttachment loadAttachment = new TManualLoadTxnCommitAttachment();
+        loadAttachment.setLoadedRows(2);
+        loadAttachment.setFilteredRows(1);
+        TTxnCommitAttachment txnAttachment = new TTxnCommitAttachment();
+        txnAttachment.setLoadType(TLoadType.MANUAL_LOAD);
+        txnAttachment.setManualLoadTxnCommitAttachment(loadAttachment);
+        request.setTxnCommitAttachment(txnAttachment);
+        request.setAuth_code(100);
+        TLoadTxnRollbackResult result = impl.loadTxnRollback(request);
+        assertEquals(TStatusCode.OK, result.getStatus().status_code);
+
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        List<TLoadInfo> loadInfos = streamLoadTask.toThrift();
+        Assertions.assertNotNull(loadInfos);
+        Assertions.assertEquals(1, loadInfos.size());
+        TLoadInfo loadInfo = loadInfos.get(0);
+        Assertions.assertEquals("artificial failure", loadInfo.getError_msg());
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    private long testBeginAndPutTxn(FrontendServiceImpl impl, String db, String table) throws TException {
+        TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+        beginRequest.setLabel(UUID.randomUUID().toString());
+        beginRequest.setDb(db);
+        beginRequest.setTbl(table);
+        beginRequest.setUser("root");
+        beginRequest.setPasswd("");
+        TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+        assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+
+        TUniqueId loadId = UUIDUtil.genTUniqueId();
+        TStreamLoadPutRequest putRequest = new TStreamLoadPutRequest();
+        putRequest.setDb(db);
+        putRequest.setTbl(table);
+        putRequest.setTxnId(beginResult.getTxnId());
+        putRequest.setLoadId(loadId);
+        putRequest.setFileType(FILE_STREAM);
+        putRequest.setAuth_code(100);
+        TStreamLoadPutResult putResult = impl.streamLoadPut(putRequest);
+        assertEquals(TStatusCode.OK, putResult.getStatus().status_code);
+        return beginResult.getTxnId();
+    }
+
+    private TLoadTxnCommitRequest buildCommitRequest(long txnId, String db, String table) {
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setTxnId(txnId);
+        List<TTabletCommitInfo> commitInfos = new ArrayList<>();
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db, table);
+        tbl.getAllPhysicalPartitions().stream().map(PhysicalPartition::getBaseIndex)
+                .map(MaterializedIndex::getTablets).flatMap(List::stream).forEach(tablet -> {
+                    TTabletCommitInfo commitInfo = new TTabletCommitInfo();
+                    commitInfo.setTabletId(tablet.getId());
+                    commitInfo.setBackendId(tablet.getBackendIds().iterator().next());
+                    commitInfos.add(commitInfo);
+                });
+        request.setCommitInfos(commitInfos);
+        TManualLoadTxnCommitAttachment loadAttachment = new TManualLoadTxnCommitAttachment();
+        loadAttachment.setLoadedRows(2);
+        loadAttachment.setFilteredRows(1);
+        TTxnCommitAttachment txnAttachment = new TTxnCommitAttachment();
+        txnAttachment.setLoadType(TLoadType.MANUAL_LOAD);
+        txnAttachment.setManualLoadTxnCommitAttachment(loadAttachment);
+        request.setTxnCommitAttachment(txnAttachment);
+        request.setAuth_code(100);
+        request.setThrift_rpc_timeout_ms(500);
+        return request;
+    }
+
+    @Test
     public void testLoadTxnCommitRateLimitExceeded() throws StarRocksException, TException, LockTimeoutException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
@@ -1576,5 +1739,42 @@ public class FrontendServiceImplTest {
             Assertions.assertEquals(physicalPartition.getNextVersion(), meta.getNext_version());
             Assertions.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
         }
+    }
+
+    @Test
+    public void testRefreshConnectionsSuccess() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsSuccessWithForce() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(true);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsWithException() throws TException {
+        new MockUp<com.starrocks.qe.VariableMgr>() {
+            @Mock
+            public void refreshConnectionsInternal(boolean force) {
+                throw new RuntimeException("Test exception");
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, response.getStatus().getStatus_code());
+        Assertions.assertNotNull(response.getStatus().getError_msgs());
+        Assertions.assertFalse(response.getStatus().getError_msgs().isEmpty());
     }
 }

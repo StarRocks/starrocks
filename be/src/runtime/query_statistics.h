@@ -60,6 +60,10 @@ public:
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
     void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
+    void add_read_stats(int64_t local_cnt, int64_t remote_cnt) {
+        read_local_cnt += local_cnt;
+        read_remote_cnt += remote_cnt;
+    }
     void add_transmitted_bytes(int64_t bytes) { transmitted_bytes += bytes; }
 
     void to_pb(PQueryStatistics* statistics);
@@ -72,6 +76,8 @@ public:
     int64_t get_mem_bytes() const { return mem_cost_bytes; }
     int64_t get_transmitted_bytes() const { return transmitted_bytes; }
     int64_t get_cpu_ns() const { return cpu_ns; }
+    int64_t get_read_local_cnt() const { return read_local_cnt; }
+    int64_t get_read_remote_cnt() const { return read_remote_cnt; }
 
     void clear();
 
@@ -86,6 +92,8 @@ private:
     std::atomic_int64_t cpu_ns{0};
     std::atomic_int64_t mem_cost_bytes{0};
     std::atomic_int64_t spill_bytes{0};
+    std::atomic_int64_t read_local_cnt{0};
+    std::atomic_int64_t read_remote_cnt{0};
     std::atomic_int64_t transmitted_bytes{0};
 
     // number rows returned by query.

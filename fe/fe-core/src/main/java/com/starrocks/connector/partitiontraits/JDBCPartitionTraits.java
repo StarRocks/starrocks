@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
-import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCPartitionKey;
@@ -25,6 +24,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.PCellSortedSet;
 
 import java.util.List;
 import java.util.Map;
@@ -50,7 +50,7 @@ public class JDBCPartitionTraits extends DefaultTraits {
     }
 
     @Override
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException {
         return PartitionUtil.getRangePartitionMapOfJDBCTable(
                 table, partitionColumn, getPartitionNames(), partitionExpr);

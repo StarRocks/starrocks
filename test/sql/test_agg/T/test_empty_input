@@ -1,4 +1,4 @@
--- name: test_empty_input
+-- name: test_empty_input @mac
 
 CREATE TABLE `t0` (
   `v1` bigint(20) COMMENT "",

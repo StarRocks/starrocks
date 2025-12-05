@@ -23,14 +23,14 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -60,6 +60,9 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
@@ -524,8 +527,8 @@ public class Utils {
      */
     public static Optional<ScalarOperator> tryCastConstant(ScalarOperator op, Type descType) {
         // Forbidden cast float, because behavior isn't same with before
-        if (!op.isConstantRef() || op.getType().matchesType(descType) || Type.FLOAT.equals(op.getType())
-                || descType.equals(Type.FLOAT)) {
+        if (!op.isConstantRef() || op.getType().matchesType(descType) || FloatType.FLOAT.equals(op.getType())
+                || descType.equals(FloatType.FLOAT)) {
             return Optional.empty();
         }
 
@@ -569,7 +572,7 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
+        if (!TypeManager.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
             return Optional.empty();
         }
 
@@ -581,7 +584,7 @@ public class Utils {
         if (result.isEmpty()) {
             return Optional.empty();
         }
-        if (Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+        if (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
             return Optional.of(result.get());
         } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
             // check lossless
@@ -861,6 +864,19 @@ public class Utils {
         return false;
     }
 
+    /**
+     * Ensure the operator is predicate's min granularity.
+     */
+    public static boolean canPushDownPredicate(ScalarOperator operator) {
+        if (operator == null) {
+            return false;
+        }
+        if (hasNonDeterministicFunc(operator)) {
+            return false;
+        }
+        return true;
+    }
+
     public static void calculateStatistics(OptExpression expr, OptimizerContext context) {
         for (OptExpression child : expr.getInputs()) {
             calculateStatistics(child, context);
@@ -1080,5 +1096,19 @@ public class Utils {
         }
 
         return new Pair<>(columnConstMap, otherPredicates);
+    }
+
+    /**
+     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
+     */
+    public static boolean isSingleNodeExecution(ConnectContext context) {
+        return context.getAliveExecutionNodesNumber() == 1;
+    }
+
+    /**
+     * Check whether the FE is running in unit test mode
+     */
+    public static boolean isRunningInUnitTest() {
+        return FeConstants.runningUnitTest;
     }
 }

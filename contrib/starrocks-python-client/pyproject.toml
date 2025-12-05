@@ -1,0 +1,122 @@
+
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "starrocks"
+authors = [
+    {name = "StarRocks Team", email = "no-reply@starrocks.com"},
+]
+maintainers = [
+    {name = "StarRocks Team", email = "no-reply@starrocks.com"},
+]
+description = "Python SQLAlchemy Dialect for StarRocks with optional Alembic integration"
+requires-python = ">=3.10,<3.14"
+keywords = ["starrocks", "sqlalchemy", "dialect"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Database :: Front-Ends",
+]
+dependencies = [
+    "sqlalchemy>=1.4",
+    "sqlalchemy-utils>=0.41.2",
+    "pymysql>=1.1.0",
+    "lark>=1.3.1",
+    "alembic>=1.14.0",
+]
+dynamic = ["readme", "version"]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"], content-type = "text/markdown"}
+version = {attr = "starrocks.__version__"}
+
+[tool.setuptools.package-data]
+starrocks = ["drivers/*.lark"]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-xdist",
+    "mock",
+]
+alembic = [
+    "alembic>=1.14.0"
+]
+
+[project.urls]
+Homepage = "https://starrocks.io"
+Documentation = "https://docs.starrocks.io"
+Repository = "https://github.com/starrocks/starrocks.git"
+Issues = "https://github.com/starrocks/starrocks/issues"
+
+[project.entry-points."sqlalchemy.dialects"]
+starrocks = "starrocks.dialect:StarRocksDialect"
+"starrocks.pymysql" = "starrocks.dialect:StarRocksDialect"
+
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+select = ["E", "F", "W", "I"]   # Basic PEP8 rules (E,W), F is for pyflakes
+ignore = ["F541", "E501"]          # Ignore line too long (can be ignored for now if you want to fix it incrementally)
+fix = true                 # Allow auto-fixing
+show-fixes = true
+exclude = [".git", "__pycache__", "build", "dist", "venv"]
+
+[tool.ruff.isort]
+known-first-party = ["starrocks"]
+combine-as-imports = true
+force-sort-within-sections = true
+lines-after-imports = 2
+
+[tool.black]
+target-version = ["py310", "py311", "py312", "py313"]
+line-length = 120
+skip-string-normalization = false
+include = '\.pyi?$'
+
+
+[tool.pytest.ini_options]
+addopts = "--tb native -n4 -v -r fxX --maxfail=500 -p no:warnings"
+#python_files = "test/*test_*.py test/**/*test_*.py"
+python_files = "test/**/*test_*.py"
+#python_functions = "test_engine_and_comment"
+
+# Integration test markers
+markers = [
+    "integration: marks tests as integration tests (require real database)",
+    "slow: marks tests as slow running",
+]
+
+# Logging configuration
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)s] %(name)s.%(funcName)s:%(lineno)d: %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"

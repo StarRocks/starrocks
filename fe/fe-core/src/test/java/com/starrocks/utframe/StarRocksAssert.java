@@ -43,6 +43,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -53,6 +54,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -86,7 +88,9 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.TypeDefAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -111,6 +115,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -120,12 +125,11 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.BackendResourceStat;
@@ -342,13 +346,15 @@ public class StarRocksAssert {
     }
 
     public static void utCreateFunctionMock(CreateFunctionStmt createFunctionStmt, ConnectContext ctx) throws Exception {
-        FunctionName functionName = createFunctionStmt.getFunctionName();
-        functionName.analyze(ctx.getDatabase());
+        FunctionRef functionRef = createFunctionStmt.getFunctionRef();
+        String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : ctx.getDatabase();
+        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
         FunctionArgsDef argsDef = createFunctionStmt.getArgsDef();
         TypeDef returnType = createFunctionStmt.getReturnType();
         // check argument
-        argsDef.analyze();
-        returnType.analyze();
+        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+        TypeDefAnalyzer.analyze(returnType);
+        FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
 
         Function function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
@@ -831,7 +837,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.accept(mvName);
         } catch (Exception e) {
-            Assertions.fail();
+            Assertions.fail(e.getMessage());
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {
@@ -1281,14 +1287,14 @@ public class StarRocksAssert {
         public void analysisError(String... keywords) {
             try {
                 explainQuery();
-            } catch (AnalysisException | StarRocksPlannerException analysisException) {
+            } catch (AnalysisException | StarRocksPlannerException | ParsingException analysisException) {
                 Assertions.assertTrue(Stream.of(keywords).allMatch(analysisException.getMessage()::contains),
                             analysisException.getMessage());
                 return;
             } catch (Exception ex) {
                 Assertions.fail();
             }
-            Assertions.fail();
+            Assertions.fail("expect error but actually succeed");
         }
     }
 

@@ -16,9 +16,6 @@ package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -32,12 +29,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import org.apache.iceberg.PartitionField;
 
 import java.util.List;
 
-import static com.starrocks.catalog.ScalarType.createType;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.IntegerType.INT;
 
 public class IcebergPartitionsTable extends MetadataTable {
     public static final String TABLE_NAME = "iceberg_partitions_table";
@@ -64,21 +65,21 @@ public class IcebergPartitionsTable extends MetadataTable {
             List<StructField> partitionStructFields = IcebergApiConverter.getPartitionColumns(partitionFields, table.schema());
             StructType partitionType = new StructType(partitionStructFields, true);
             builder.column("partition_value", partitionType);
-            builder.column("spec_id", createType(PrimitiveType.INT));
+            builder.column("spec_id", INT);
         }
 
         return new IcebergPartitionsTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
-                builder.column("record_count", createType(PrimitiveType.BIGINT))
-                        .column("file_count", createType(PrimitiveType.BIGINT))
-                        .column("total_data_file_size_in_bytes", createType(PrimitiveType.BIGINT))
-                        .column("position_delete_record_count", createType(PrimitiveType.BIGINT))
-                        .column("position_delete_file_count", createType(PrimitiveType.BIGINT))
-                        .column("equality_delete_record_count", createType(PrimitiveType.BIGINT))
-                        .column("equality_delete_file_count", createType(PrimitiveType.BIGINT))
-                        .column("last_updated_at", createType(PrimitiveType.DATETIME))
+                builder.column("record_count", BIGINT)
+                        .column("file_count", BIGINT)
+                        .column("total_data_file_size_in_bytes", BIGINT)
+                        .column("position_delete_record_count", BIGINT)
+                        .column("position_delete_file_count", BIGINT)
+                        .column("equality_delete_record_count", BIGINT)
+                        .column("equality_delete_file_count", BIGINT)
+                        .column("last_updated_at", DATETIME)
                         .build(),
                 originDb,
                 originTable,

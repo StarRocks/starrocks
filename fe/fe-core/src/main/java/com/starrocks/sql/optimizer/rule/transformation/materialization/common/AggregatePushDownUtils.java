@@ -18,11 +18,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -41,6 +39,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -266,7 +267,7 @@ public class AggregatePushDownUtils {
                 return null;
             }
             Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
+            Function newFunc = ExprUtils.getBuiltinFunction(rollupFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (newFunc == null) {
                 logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
@@ -362,7 +363,7 @@ public class AggregatePushDownUtils {
         if (argType.isDecimalV3()) {
             // There is not need to apply ImplicitCastRule to divide operator of decimal types.
             // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-            ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+            ScalarType decimal128p38s0 = TypeFactory.createDecimalV3NarrowestType(38, 0);
             newAvg.getChildren().set(1, new CastOperator(decimal128p38s0, newAvg.getChild(1), true));
         } else {
             final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();

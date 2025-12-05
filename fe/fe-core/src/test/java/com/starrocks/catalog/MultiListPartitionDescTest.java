@@ -17,11 +17,14 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -66,9 +69,9 @@ public class MultiListPartitionDescTest {
 
     @Test
     public void testGetMethods() throws ParseException, AnalysisException {
-        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
         province.setAggregateType(AggregateType.NONE);
-        ColumnDef dt = new ColumnDef("dt", TypeDef.create(PrimitiveType.DATE));
+        ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);
         List<ColumnDef> columnDefLists = Lists.newArrayList(dt, province);
 

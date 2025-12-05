@@ -20,10 +20,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -49,15 +51,14 @@ public class JDBCMetadataTest {
 
     @Mocked
     Connection connection;
-
+    @Mocked
+    PreparedStatement preparedStatement;
+    MockResultSet partitionsInfoTablesResult;
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
-    @Mocked
-    PreparedStatement preparedStatement;
     private MockResultSet partitionsResult;
-    MockResultSet partitionsInfoTablesResult;
 
     @BeforeEach
     public void setUp() throws SQLException {
@@ -69,17 +70,19 @@ public class JDBCMetadataTest {
         columnResult.addColumn("DATA_TYPE",
                 Arrays.asList(Types.INTEGER, Types.DECIMAL, Types.CHAR, Types.VARCHAR, Types.TINYINT, Types.SMALLINT,
                         Types.INTEGER, Types.BIGINT, Types.TINYINT, Types.SMALLINT,
-                        Types.INTEGER, Types.BIGINT, Types.DATE, Types.TIME, Types.TIMESTAMP));
+                        Types.INTEGER, Types.BIGINT, Types.DATE, Types.TIME, Types.TIMESTAMP,
+                        Types.BINARY, Types.VARBINARY));
         columnResult.addColumn("TYPE_NAME",
                 Arrays.asList("INTEGER", "DECIMAL", "CHAR", "VARCHAR", "TINYINT UNSIGNED", "SMALLINT UNSIGNED",
                         "INTEGER UNSIGNED", "BIGINT UNSIGNED", "TINYINT", "SMALLINT",
-                        "INTEGER", "BIGINT", "DATE", "TIME", "TIMESTAMP"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8, 8, 8, 8));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+                        "INTEGER", "BIGINT", "DATE", "TIME", "TIMESTAMP", "BINARY", "VARBINARY"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8, 8, 8, 8, 16, 16));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
         columnResult.addColumn("COLUMN_NAME",
-                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4", "g1", "g2", "g3"));
+                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4", "g1", "g2", "g3", "h1", "h2"));
         columnResult.addColumn("IS_NULLABLE",
-                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
+                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO",
+                        "NO"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
@@ -205,21 +208,23 @@ public class JDBCMetadataTest {
         Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
         List<Column> columns = table.getColumns();
         Assertions.assertEquals(columns.size(), columnResult.getRowCount());
-        Assertions.assertTrue(columns.get(0).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assertions.assertTrue(columns.get(1).getType().equals(ScalarType.createUnifiedDecimalType(10, 2)));
-        Assertions.assertTrue(columns.get(2).getType().equals(ScalarType.createCharType(10)));
-        Assertions.assertTrue(columns.get(3).getType().equals(ScalarType.createVarcharType(10)));
-        Assertions.assertTrue(columns.get(4).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
-        Assertions.assertTrue(columns.get(5).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assertions.assertTrue(columns.get(6).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
-        Assertions.assertTrue(columns.get(7).getType().equals(ScalarType.createType(PrimitiveType.LARGEINT)));
-        Assertions.assertTrue(columns.get(8).getType().equals(ScalarType.createType(PrimitiveType.TINYINT)));
-        Assertions.assertTrue(columns.get(9).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
-        Assertions.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
-        Assertions.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
-        Assertions.assertTrue(columns.get(12).getType().equals(ScalarType.createType(PrimitiveType.DATE)));
-        Assertions.assertTrue(columns.get(13).getType().equals(ScalarType.createType(PrimitiveType.TIME)));
-        Assertions.assertTrue(columns.get(14).getType().equals(ScalarType.createType(PrimitiveType.DATETIME)));
+        Assertions.assertTrue(columns.get(0).getType().equals(IntegerType.INT));
+        Assertions.assertTrue(columns.get(1).getType().equals(TypeFactory.createUnifiedDecimalType(10, 2)));
+        Assertions.assertTrue(columns.get(2).getType().equals(TypeFactory.createCharType(10)));
+        Assertions.assertTrue(columns.get(3).getType().equals(TypeFactory.createVarcharType(10)));
+        Assertions.assertTrue(columns.get(4).getType().equals(IntegerType.SMALLINT));
+        Assertions.assertTrue(columns.get(5).getType().equals(IntegerType.INT));
+        Assertions.assertTrue(columns.get(6).getType().equals(IntegerType.BIGINT));
+        Assertions.assertTrue(columns.get(7).getType().equals(IntegerType.LARGEINT));
+        Assertions.assertTrue(columns.get(8).getType().equals(IntegerType.TINYINT));
+        Assertions.assertTrue(columns.get(9).getType().equals(IntegerType.SMALLINT));
+        Assertions.assertTrue(columns.get(10).getType().equals(IntegerType.INT));
+        Assertions.assertTrue(columns.get(11).getType().equals(IntegerType.BIGINT));
+        Assertions.assertTrue(columns.get(12).getType().equals(DateType.DATE));
+        Assertions.assertTrue(columns.get(13).getType().equals(DateType.TIME));
+        Assertions.assertTrue(columns.get(14).getType().equals(DateType.DATETIME));
+        Assertions.assertTrue(columns.get(15).getType().equals(VarbinaryType.VARBINARY));
+        Assertions.assertTrue(columns.get(16).getType().equals(VarbinaryType.VARBINARY));
     }
 
     @Test

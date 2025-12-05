@@ -70,6 +70,9 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
@@ -188,9 +191,11 @@ public class OlapTableFactory implements AbstractTableFactory {
             Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
             for (OrderByElement orderByElement : stmt.getOrderByElements()) {
-                String column = orderByElement.castAsSlotRef();
+                Expr expr = orderByElement.getExpr();
+                String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                 if (column == null) {
-                    throw new DdlException("Unknown column '" + orderByElement.getExpr().toSql() + "' in order by clause");
+                    throw new DdlException("Unknown column '" +
+                            ExprToSql.toSql(orderByElement.getExpr()) + "' in order by clause");
                 }
                 int idx = IntStream.range(0, baseSchemaNames.size())
                         .filter(i -> baseSchemaNames.get(i).equalsIgnoreCase(column))
@@ -251,7 +256,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
 
                 processFlatJsonConfig(properties, table, tableName);
-
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -280,6 +284,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
+
+            if (table.isCloudNativeTable()) {
+                boolean fastSchemaEvolutionV2 = properties == null ? true :
+                        PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, true);
+                ((LakeTable) table).setFastSchemaEvolutionV2(fastSchemaEvolutionV2);
+            }
+
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
                 // check reserved column for PK table
@@ -465,6 +476,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
+            if (PropertyAnalyzer.analyzeBooleanProp(properties,
+                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
+                table.setEnableStatisticCollectOnFirstLoad(true);
+            } else {
+                table.setEnableStatisticCollectOnFirstLoad(false);
+            }
+
             try {
                 table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
                 if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
@@ -494,13 +512,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-            try {
-                Boolean enableDynamicTablet = PropertyAnalyzer.analyzeEnableDynamicTablet(properties, true);
-                table.setEnableDynamicTablet(enableDynamicTablet);
-            } catch (Exception e) {
-                throw new DdlException(e.getMessage());
-            }
-
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
@@ -508,26 +519,27 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-            // replicated storage
-            table.setEnableReplicatedStorage(
-                    PropertyAnalyzer.analyzeBooleanProp(
-                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                            Config.enable_replicated_storage_as_default_engine));
+            boolean enableReplicatedStorage = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine);
+            if (table.isOlapTableOrMaterializedView()) {
+                // replicated storage
+                table.setEnableReplicatedStorage(enableReplicatedStorage);
 
+                boolean hasGin = table.getIndexes().stream()
+                        .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+                if (hasGin && table.enableReplicatedStorage()) {
+                    // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
+                    // if table contains GIN Index.
+                    table.setEnableReplicatedStorage(false);
+                }
 
-            boolean hasGin = table.getIndexes().stream()
-                            .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            if (hasGin && table.enableReplicatedStorage()) {
-                // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
-                // if table contains GIN Index.
-                table.setEnableReplicatedStorage(false);
-            }
-
-            if (table.enableReplicatedStorage().equals(false)) {
-                for (Column col : baseSchema) {
-                    if (col.isAutoIncrement()) {
-                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
-                                " and not compatible with GIN Index");
+                if (table.enableReplicatedStorage().equals(false)) {
+                    for (Column col : baseSchema) {
+                        if (col.isAutoIncrement()) {
+                            throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
+                                    " and not compatible with GIN Index");
+                        }
                     }
                 }
             }
@@ -768,7 +780,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // do not create partition for external table
             if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    if (properties != null && !properties.isEmpty()) {
+                    if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
                         throw new DdlException("Unknown properties: " + properties);
                     }
@@ -802,7 +814,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         if (hasMedium) {
                             table.setStorageMedium(dataProperty.getStorageMedium());
                         }
-                        if (properties != null && !properties.isEmpty()) {
+                        if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
                         }

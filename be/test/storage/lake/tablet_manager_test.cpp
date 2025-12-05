@@ -27,6 +27,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
@@ -825,6 +826,27 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_tablet_metadata(_tablet_manager->tablet_metadata_location(4, 1)).ok());
 }
 
+TEST_F(LakeTabletManagerTest, get_inital_tablet_metadata) {
+    auto tablet_id = next_id();
+
+    // Create initial tablet metadata without setting tablet id
+    starrocks::TabletMetadata initial_metadata;
+    initial_metadata.set_version(1);
+    initial_metadata.set_next_rowset_id(1);
+
+    // Save it to initial metadata location
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(std::make_shared<starrocks::TabletMetadata>(initial_metadata),
+                                                   _tablet_manager->tablet_initial_metadata_location(tablet_id)));
+
+    // Get tablet metadata by tablet_id and version
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 1);
+    ASSERT_TRUE(res.ok());
+
+    // Verify that tablet_id is correctly set from the initial metadata
+    EXPECT_EQ(res.value()->id(), tablet_id);
+    EXPECT_EQ(res.value()->version(), 1);
+}
+
 TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
@@ -833,9 +855,117 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
     ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+    ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
 }
 
-TEST_F(LakeTabletManagerTest, get_tablet_metadata) {}
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
+
+    // 1. fill_meta_cache=true
+    _tablet_manager->metacache()->prune();
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {true, true});
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+
+    // 2. fill_meta_cache=false
+    _tablet_manager->metacache()->prune();
+    res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {false, true});
+    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
+}
+
+TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
+    // Create a corrupted bundle metadata file with bundle_metadata_size = 0
+    std::string serialized_string;
+    serialized_string.resize(sizeof(uint64_t));
+    // Set bundle_metadata_size to 0 in the footer
+    encode_fixed64_le((uint8_t*)serialized_string.data(), 0);
+
+    auto res = starrocks::lake::TabletManager::parse_bundle_tablet_metadata("test_path", serialized_string);
+    EXPECT_FALSE(res.ok());
+    EXPECT_TRUE(res.status().is_corruption());
+}
+
+TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {
+    // First, create a valid bundle metadata to get the file path
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletSchemaPB schema_pb;
+    {
+        schema_pb.set_id(10);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_rows_per_row_block(65535);
+        auto c0 = schema_pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+
+    starrocks::TabletMetadataPB metadata1;
+    {
+        metadata1.set_id(tablet_id);
+        metadata1.set_version(2);
+        metadata1.mutable_schema()->CopyFrom(schema_pb);
+        auto& item1 = (*metadata1.mutable_historical_schemas())[10];
+        item1.CopyFrom(schema_pb);
+    }
+
+    metadatas.emplace(tablet_id, metadata1);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    // Read the bundle file and corrupt it
+    auto bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, 2);
+    auto fs = FileSystem::Default();
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto content, read_file->read_all());
+
+    // Corrupt the tablet metadata portion by replacing with invalid data
+    // Keep the bundle metadata at the end intact, but corrupt the tablet data
+    // Replace the first part (tablet metadata) with garbage
+    for (size_t i = 0; i < 5; i++) {
+        content[i] = static_cast<char>(0xFF);
+    }
+
+    // Write the corrupted content back
+    ASSERT_OK(fs->delete_file(bundle_path));
+    ASSIGN_OR_ABORT(auto write_file, fs->new_writable_file(bundle_path));
+    ASSERT_OK(write_file->append(content));
+    ASSERT_OK(write_file->close());
+
+    // Clear cache to force reload from disk
+    _tablet_manager->metacache()->prune();
+
+    // Use sync point to mock corrupted_tablet_meta_handler
+    SyncPoint::GetInstance()->EnableProcessing();
+    bool handler_called = false;
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        handler_called = true;
+        // Return OK to allow the code to continue, but the parse will still fail
+        *(Status*)arg = Status::OK();
+    });
+
+    // Try to get metadata - should fail with corruption error
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+
+    // Should fail due to parse error
+    EXPECT_FALSE(res.ok());
+    EXPECT_TRUE(res.status().is_corruption());
+    EXPECT_TRUE(handler_called) << "corrupted_tablet_meta_handler should have been called";
+}
 
 namespace {
 class PartitionedLocationProvider : public lake::LocationProvider {

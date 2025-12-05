@@ -55,12 +55,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
-    REGISTER_STARROCKS_METRIC(pipe_scan_executor_queuing);
-    REGISTER_STARROCKS_METRIC(pipe_driver_schedule_count);
-    REGISTER_STARROCKS_METRIC(pipe_driver_execution_time);
-    REGISTER_STARROCKS_METRIC(pipe_driver_queue_len);
-    REGISTER_STARROCKS_METRIC(pipe_poller_block_queue_len);
-
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_eos_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);
@@ -81,6 +75,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
 
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
+    REGISTER_STARROCKS_METRIC(memtable_finalize_task_total);
     REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
@@ -254,8 +249,16 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(blocks_open_reading);
     REGISTER_STARROCKS_METRIC(blocks_open_writing);
 
+    REGISTER_STARROCKS_METRIC(exec_runtime_memory_size);
+
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
+
+    // data cache metrics
+    REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
@@ -279,7 +282,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
         _system_metrics.install(&_metrics, disk_devices, network_interfaces);
     }
 
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
     if (init_jvm_metrics) {
         auto status = _jvm_metrics.init();
         if (!status.ok()) {

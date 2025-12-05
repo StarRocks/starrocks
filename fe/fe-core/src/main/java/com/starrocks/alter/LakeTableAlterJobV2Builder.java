@@ -31,7 +31,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,7 +85,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds = createShards(originTablets.size(),
-                        table.getPartitionFilePathInfo(physicalPartition.getPathId()),
+                        table.getPartitionFilePathInfo(physicalPartitionId),
                         table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
                         originTabletIds, properties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
@@ -96,19 +95,13 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
-                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
                             .addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
-                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
                 }
-
-                List<Long> virtualBuckets = new ArrayList<>(originIndex.getVirtualBuckets());
-                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
-                shadowIndex.setVirtualBuckets(virtualBuckets);
 
                 schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
             } // end for physicalPartition

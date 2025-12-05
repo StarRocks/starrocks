@@ -946,9 +946,14 @@ void TabletUpdates::_check_for_apply() {
             std::make_shared<ApplyCommitTask>(std::static_pointer_cast<Tablet>(_tablet.shared_from_this())));
     auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->submit(std::move(task));
     if (!st.ok()) {
-        std::string msg =
-                strings::Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
-        LOG(FATAL) << msg;
+        LOG(ERROR) << strings::Substitute("submit apply task failed: $0 $1", st.to_string(),
+                                          _debug_string(false, false));
+        auto time_point = std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
+        StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
+        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        // reset _apply_running to false, so that next time _check_for_apply can submit task again
+        _apply_running = false;
+        _apply_stopped_cond.notify_all();
     }
 }
 
@@ -2173,6 +2178,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
                                          EditVersion* commit_version) {
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
+    bool add_rowset_succ = false;
+    DeferOp rowset_gc_defer([&]() {
+        // release rowsetid if rowset commit failed
+        if (!add_rowset_succ) {
+            StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
+        }
+    });
     _compaction_state = std::make_unique<CompactionState>();
     if (!config::enable_light_pk_compaction_publish) {
         // Skip load compaction state when enable light pk compaction
@@ -2270,6 +2282,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         _rowsets[rowsetid] = rowset;
+        add_rowset_succ = true;
     }
     {
         auto rowset_stats = std::make_unique<RowsetStats>();

@@ -30,11 +30,14 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -95,7 +98,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             Expr expr = columnIdExpr.getExpr();
             SlotRef slotRef = getPartitionExprSlotRef(expr);
             if (slotRef == null) {
-                LOG.warn("Unknown expr type: {}", expr.toSql());
+                LOG.warn("Unknown expr type: {}", ExprToSql.toSql(expr));
                 continue;
             }
             // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
@@ -139,11 +142,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         // TODO: Later, for automatically partitioned tables,
         //  partitions of materialized views (also created automatically),
         //  and partition by expr tables will use ExpressionRangePartitionInfoV2
-        if (slotRef.getType() == Type.INVALID) {
+        if (slotRef.getType() == InvalidType.INVALID) {
             if (partitionExpr instanceof FunctionCallExpr) {
                 if (MvUtils.isStr2Date(partitionExpr)) {
                     // `str2date`'s input argument type should always be string
-                    slotRef.setType(Type.STRING);
+                    slotRef.setType(StringType.STRING);
                 } else {
                     // otherwise input argument type is the same as the partition column's type
                     slotRef.setType(partitionColumn.getType());
@@ -156,7 +159,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         try {
             PartitionExprAnalyzer.analyzePartitionExpr(partitionExpr, slotRef);
         } catch (SemanticException ex) {
-            LOG.warn("Failed to analyze partition expr: {}", partitionExpr.toSql(), ex);
+            LOG.warn("Failed to analyze partition expr: {}", ExprToSql.toSql(partitionExpr), ex);
         }
     }
 
@@ -241,7 +244,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                             break;
                         }
                     }
-                    sb.append(cloneExpr.toSql()).append(",");
+                    sb.append(ExprToSql.toSql(cloneExpr)).append(",");
                 }
             }
             sb.deleteCharAt(sb.length() - 1);
@@ -250,7 +253,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         }
         sb.append(Joiner.on(", ").join(partitionExprs
                 .stream()
-                .map(columnIdExpr -> columnIdExpr.convertToColumnNameExpr(table.getIdToColumn()).toSql())
+                .map(columnIdExpr -> ExprToSql.toSql(columnIdExpr.convertToColumnNameExpr(table.getIdToColumn())))
                 .collect(toList())));
         return sb.toString();
     }

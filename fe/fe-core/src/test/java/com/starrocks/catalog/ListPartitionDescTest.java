@@ -21,6 +21,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -29,6 +30,12 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -55,29 +62,29 @@ public class ListPartitionDescTest {
     }
 
     private List<ColumnDef> findColumnDefList() {
-        ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
+        ColumnDef id = new ColumnDef("id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)));
         id.setAggregateType(AggregateType.NONE);
-        ColumnDef userId = new ColumnDef("user_id", TypeDef.create(PrimitiveType.BIGINT));
+        ColumnDef userId = new ColumnDef("user_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)));
         userId.setAggregateType(AggregateType.NONE);
-        ColumnDef rechargeMoney = new ColumnDef("recharge_money", TypeDef.createDecimal(32, 2));
+        ColumnDef rechargeMoney = new ColumnDef("recharge_money", new TypeDef(TypeFactory.createDecimalV2Type(32, 2)));
         rechargeMoney.setAggregateType(AggregateType.NONE);
-        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
         province.setAggregateType(AggregateType.NONE);
-        ColumnDef dt = new ColumnDef("dt", TypeDef.create(PrimitiveType.DATE));
+        ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }
 
     private List<Column> findColumnList() {
-        Column id = new Column("id", Type.BIGINT);
+        Column id = new Column("id", IntegerType.BIGINT);
         id.setAggregationType(AggregateType.NONE, false);
-        Column userId = new Column("user_id", Type.BIGINT);
+        Column userId = new Column("user_id", IntegerType.BIGINT);
         userId.setAggregationType(AggregateType.NONE, false);
-        Column rechargeMoney = new Column("recharge_money", Type.DECIMAL32);
+        Column rechargeMoney = new Column("recharge_money", DecimalType.DECIMAL32);
         rechargeMoney.setAggregationType(AggregateType.NONE, false);
-        Column province = new Column("province", Type.VARCHAR);
+        Column province = new Column("province", VarcharType.VARCHAR);
         province.setAggregationType(AggregateType.NONE, false);
-        Column dt = new Column("dt", Type.DATE);
+        Column dt = new Column("dt", DateType.DATE);
         dt.setAggregationType(AggregateType.NONE, false);
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }
@@ -210,9 +217,9 @@ public class ListPartitionDescTest {
     @Test
     public void testNotAggregatedColumn() {
         assertThrows(AnalysisException.class, () -> {
-            ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+            ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
             province.setAggregateType(AggregateType.MAX);
-            ColumnDef dt = new ColumnDef("dt", TypeDef.createVarchar(10));
+            ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createVarchar(10)));
             dt.setAggregateType(AggregateType.NONE);
             List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
@@ -416,7 +423,7 @@ public class ListPartitionDescTest {
     @Test
     public void testCheckHivePartitionColumns() {
         List<String> partitionNames = Lists.newArrayList("p1");
-        ColumnDef columnDef = new ColumnDef("p1", TypeDef.create(PrimitiveType.INT));
+        ColumnDef columnDef = new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)));
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionNames, new ArrayList<>());
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "Table contains only partition columns",
@@ -424,9 +431,9 @@ public class ListPartitionDescTest {
 
         partitionNames = Lists.newArrayList("p1", "p2");
         List<ColumnDef> columnDefs = Lists.newArrayList(
-                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p2", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p1", TypeDef.create(PrimitiveType.INT)));
+                new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p2", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))));
         ListPartitionDesc listPartitionDesc1 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
@@ -446,7 +453,7 @@ public class ListPartitionDescTest {
                 "Partition column[p1] does not exist in column list",
                 () -> listPartitionDesc3.analyzeExternalPartitionColumns(new ArrayList<>(), ""));
 
-        ColumnDef columnDef1 = new ColumnDef("p1", TypeDef.create(PrimitiveType.INT));
+        ColumnDef columnDef1 = new ColumnDef("p1", new TypeDef(IntegerType.INT));
         partitionNames = Lists.newArrayList("p1", "p1");
         ListPartitionDesc listPartitionDesc4 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
@@ -456,8 +463,8 @@ public class ListPartitionDescTest {
 
         partitionNames = Lists.newArrayList("p1");
         List<ColumnDef> columnDefs1 = Lists.newArrayList(
-                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p1", TypeDef.create(PrimitiveType.DECIMAL32)));
+                new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.DECIMAL32))));
         ListPartitionDesc listPartitionDesc5 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
@@ -466,8 +473,8 @@ public class ListPartitionDescTest {
 
         partitionNames = Lists.newArrayList("p1");
         List<ColumnDef> columnDefs2 = Lists.newArrayList(
-                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p1", TypeDef.create(PrimitiveType.INT)));
+                new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))));
         ListPartitionDesc listPartitionDesc6 = new ListPartitionDesc(partitionNames, new ArrayList<>());
         listPartitionDesc6.analyzeExternalPartitionColumns(columnDefs2, "hive");
     }

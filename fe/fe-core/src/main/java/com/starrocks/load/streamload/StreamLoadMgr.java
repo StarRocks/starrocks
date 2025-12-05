@@ -42,6 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -124,7 +125,6 @@ public class StreamLoadMgr implements MemoryTrackable {
             readUnlock();
         }
 
-        boolean createTask = false;
         writeLock();
         try {
             task = idToStreamLoadTask.get(label);
@@ -133,18 +133,15 @@ public class StreamLoadMgr implements MemoryTrackable {
                 return;
             }
             task = createMultiStatementLoadTask(db, label, user, clientIp, timeoutMillis, computeResource);
-            addLoadTask(task);
-            LOG.info("create multi statment task {}", task);
             task.beginTxnFromFrontend(resp);
-            createTask = true;
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob(
+                    (StreamLoadMultiStmtTask) task, wal -> addLoadTask((StreamLoadMultiStmtTask) wal));
+            LOG.info("create multi statement task {}", task);
         } finally {
             writeUnlock();
         }
 
-        if (createTask) {
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob((StreamLoadMultiStmtTask) task);
-            LOG.info("create multi statement task success");
-        }
+        LOG.info("create multi statement task success");
     }
 
     public void prepareMultiStatementLoadTask(String label, String tableName, HttpHeaders headers, TransactionResult resp)
@@ -177,8 +174,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
         Table table = checkMeta(db, tableName);
 
-        boolean createTask = true;
-
         writeLock();
         try {
             // double check here
@@ -191,14 +186,11 @@ public class StreamLoadMgr implements MemoryTrackable {
                     computeResource);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
-            addLoadTask(task);
             task.beginTxnFromFrontend(channelId, channelNum, resp);
-            createTask = true;
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob(
+                    (StreamLoadTask) task, wal -> addLoadTask((StreamLoadTask) wal));
         } finally {
             writeUnlock();
-        }
-        if (createTask) {
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateStreamLoadJob((StreamLoadTask) task);
         }
     }
 
@@ -579,6 +571,13 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public StreamLoadTask getSyncSteamLoadTaskByTxnId(long txnId) {
         return txnIdToSyncStreamLoadTasks.getOrDefault(txnId, null);
+    }
+
+    public void setSyncStreamLoadState(long txnId, TxnCommitAttachment attachment, String errorMsg) {
+        StreamLoadTask task = getSyncSteamLoadTaskByTxnId(txnId);
+        if (task != null && attachment != null) {
+            task.setLoadState(attachment, errorMsg);
+        }
     }
 
     // put history task in the end

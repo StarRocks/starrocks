@@ -20,10 +20,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.thrift.TExprOpcode;
 
 import java.util.HashMap;
 import java.util.List;
@@ -99,7 +101,7 @@ public class QueryStatement extends StatementBase {
         }
 
         Map<SlotRef, Expr> eqPredicates = new HashMap<>();
-        eqPredicates = getEQBinaryPredicates(eqPredicates, selectRelation.getPredicate(), TExprOpcode.EQ);
+        eqPredicates = getEQBinaryPredicates(eqPredicates, selectRelation.getPredicate(), BinaryType.EQ);
         if (eqPredicates == null) {
             return false;
         }
@@ -121,7 +123,7 @@ public class QueryStatement extends StatementBase {
     }
 
     private static Map<SlotRef, Expr> getEQBinaryPredicates(Map<SlotRef, Expr> result, Expr expr,
-                                                            TExprOpcode eqOpcode) {
+                                                            BinaryType eqType) {
         if (expr == null) {
             return null;
         }
@@ -131,21 +133,21 @@ public class QueryStatement extends StatementBase {
                 return null;
             }
 
-            result = getEQBinaryPredicates(result, compoundPredicate.getChild(0), eqOpcode);
+            result = getEQBinaryPredicates(result, compoundPredicate.getChild(0), eqType);
             if (result == null) {
                 return null;
             }
-            result = getEQBinaryPredicates(result, compoundPredicate.getChild(1), eqOpcode);
+            result = getEQBinaryPredicates(result, compoundPredicate.getChild(1), eqType);
             if (result == null) {
                 return null;
             }
             return result;
         } else if (expr instanceof BinaryPredicate) {
             BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
-            if (binaryPredicate.getOpcode() != eqOpcode) {
+            if (binaryPredicate.getOp() != eqType) {
                 return null;
             }
-            Pair<SlotRef, Expr> slotRefExprPair = binaryPredicate.createSlotAndLiteralPair();
+            Pair<SlotRef, Expr> slotRefExprPair = createSlotAndLiteralPair(binaryPredicate);
             if (slotRefExprPair == null || result.containsKey(slotRefExprPair.first)) {
                 return null;
             }
@@ -155,6 +157,21 @@ public class QueryStatement extends StatementBase {
         } else {
             return null;
         }
+    }
+
+    public static Pair<SlotRef, Expr> createSlotAndLiteralPair(Expr expr) {
+        Expr leftExpr = expr.getChild(0);
+        Expr rightExpr = expr.getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
     }
 
     private SlotRef findSlotRef(Set<SlotRef> slotRefs, String colName) {

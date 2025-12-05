@@ -14,30 +14,34 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.expression.BoolLiteral;
-import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
+import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
@@ -101,7 +105,7 @@ public class ColumnDefAnalyzer {
             typeDef.setType(extendedPrecision(typeDef.getType(), Config.enable_legacy_compatibility_for_replication));
         }
 
-        typeDef.analyze();
+        TypeDefAnalyzer.analyze(typeDef);
 
         Type type = typeDef.getType();
 
@@ -134,7 +138,7 @@ public class ColumnDefAnalyzer {
                             String.format("Invalid aggregate function '%s' for '%s'", aggregateType, name));
                 }
                 // Ensure agg_state_desc is compatible with type
-                AggregateFunction aggFunc = aggStateDesc.getAggregateFunction();
+                AggregateFunction aggFunc = getAggregateFunction(aggStateDesc);
                 if (aggFunc == null) {
                     throw new AnalysisException(
                             String.format("Invalid aggregate function '%s' for '%s': aggregate function is not found",
@@ -161,22 +165,16 @@ public class ColumnDefAnalyzer {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-
-            columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.EMPTY_VALUE);
         }
         if (type.isBitmapType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
-            columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.EMPTY_VALUE);
         }
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
             // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
             // If default value is not set, we set it NULL
             columnDef.setAllowNull(true);
-            if (!defaultValueDef.isSet) {
-                columnDef.setDefaultValueDef(ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE);
-            }
         }
 
         if (!isAllowNull && defaultValueDef == ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE) {
@@ -192,13 +190,36 @@ public class ColumnDefAnalyzer {
         }
     }
 
+    /**
+     * @return associated analyzed aggregate function
+     * @throws AnalysisException: when the aggregate function is not found or not an aggregate function
+     */
+    public static AggregateFunction getAggregateFunction(AggStateDesc aggStateDesc) throws AnalysisException {
+        List<Type> argTypes = aggStateDesc.getArgTypes();
+        String functionName = aggStateDesc.getFunctionName();
+        FunctionParams params = new FunctionParams(false, Lists.newArrayList());
+        Type[] argumentTypes = argTypes.toArray(Type[]::new);
+        Boolean[] isArgumentConstants = argTypes.stream().map(x -> false).toArray(Boolean[]::new);
+        Function result = FunctionAnalyzer.getAnalyzedAggregateFunction(ConnectContext.get(),
+                functionName, params, argumentTypes, isArgumentConstants, NodePosition.ZERO);
+        if (result == null) {
+            throw new AnalysisException(String.format("AggStateType function %s with input %s not found", functionName,
+                    argTypes));
+        }
+        if (!(result instanceof AggregateFunction)) {
+            throw new AnalysisException(String.format("AggStateType function %s with input %s found but not an aggregate " +
+                    "function", functionName, argTypes));
+        }
+        return (AggregateFunction) result;
+    }
+
     public static Type extendedPrecision(Type type, boolean legacyCompatible) {
         if (legacyCompatible) {
             return type;
         }
 
         if (type.isDecimalV3()) {
-            return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
+            return TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
         }
         return type;
     }
@@ -217,32 +238,25 @@ public class ColumnDefAnalyzer {
                 case TINYINT:
                 case SMALLINT:
                 case INT:
-                case BIGINT:
-                    IntLiteral intLiteral = new IntLiteral(defaultValue, type);
-                    break;
-                case LARGEINT:
-                    LargeIntLiteral largeIntLiteral = new LargeIntLiteral(defaultValue);
+                case BIGINT, LARGEINT, DATE, DATETIME, BOOLEAN:
+                    LiteralExprFactory.create(defaultValue, scalarType);
                     break;
                 case FLOAT:
-                    FloatLiteral floatLiteral = new FloatLiteral(defaultValue);
+                    FloatLiteral floatLiteral = (FloatLiteral) LiteralExprFactory.create(defaultValue, scalarType);
                     if (floatLiteral.getType().isDouble()) {
                         throw new AnalysisException("Default value will loose precision: " + defaultValue);
                     }
                 case DOUBLE:
-                    FloatLiteral doubleLiteral = new FloatLiteral(defaultValue);
+                    LiteralExprFactory.create(defaultValue, scalarType);
                     break;
                 case DECIMALV2:
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
                 case DECIMAL256:
-                    DecimalLiteral decimalLiteral = new DecimalLiteral(defaultValue);
+                    DecimalLiteral decimalLiteral = (DecimalLiteral) LiteralExprFactory.create(defaultValue, scalarType);
                     decimalLiteral.checkPrecisionAndScale(scalarType,
                             scalarType.getScalarPrecision(), scalarType.getScalarScale());
-                    break;
-                case DATE:
-                case DATETIME:
-                    DateLiteral dateLiteral = new DateLiteral(defaultValue, type);
                     break;
                 case CHAR:
                 case VARCHAR:
@@ -253,15 +267,12 @@ public class ColumnDefAnalyzer {
                     break;
                 case BITMAP:
                     break;
-                case BOOLEAN:
-                    BoolLiteral boolLiteral = new BoolLiteral(defaultValue);
-                    break;
                 default:
                     throw new AnalysisException(String.format("Cannot add default value for type '%s'", type));
             }
         } else if (defaultExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             boolean supported = isValidDefaultFunction(functionName + "()");
 
             if (!supported) {

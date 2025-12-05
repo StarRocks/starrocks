@@ -296,28 +296,8 @@ void DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status =
-            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
-    if (load_tablet_status.is_time_out()) {
-        LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
-        Status s = _kv_store->compact();
-        if (!s.ok()) {
-            // We don't need to make sure compact MUST success. Just ignore the error.
-            LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
-        } else {
-            LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
-        }
-        for (auto tablet_id : tablet_ids) {
-            Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
-            if (!s.ok()) {
-                // Only print log, do not return error. Later load tablet from rocksdb can handle this.
-                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
-            }
-        }
-        tablet_ids.clear();
-        failed_tablet_ids.clear();
-        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
-    }
+    Status load_tablet_status = TabletMetaManager::walk_with_compact_on_timeout(_kv_store, load_tablet_func,
+                                                                                config::load_tablet_timeout_seconds);
 
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
@@ -402,10 +382,9 @@ void DataDir::load() {
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
                 rowset_meta->set_skip_tablet_schema(true);
             }
-            Status commit_txn_status = _txn_manager->commit_txn(
-                    _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
-                    rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true,
-                    tablet->tablet_state() != TABLET_RUNNING);
+            Status commit_txn_status = _txn_manager->commit_txn(tablet, rowset_meta->partition_id(),
+                                                                rowset_meta->txn_id(), rowset_meta->load_id(), rowset,
+                                                                true, tablet->tablet_state() != TABLET_RUNNING);
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
                              << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();

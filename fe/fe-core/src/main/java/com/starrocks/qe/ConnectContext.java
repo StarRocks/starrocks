@@ -55,6 +55,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.iceberg.IcebergRewriteDataJob.FinishSinkHandler;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -93,6 +94,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.LazyComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -102,7 +104,6 @@ import org.xnio.StreamConnection;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -174,7 +175,7 @@ public class ConnectContext {
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
-    protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
+    protected Map<String, SystemVariable> modifiedSessionVariables = Maps.newConcurrentMap();
     // user define variable in this session
     protected Map<String, UserVariable> userVariables;
     protected Map<String, UserVariable> userVariablesCopyInWrite;
@@ -271,6 +272,9 @@ public class ConnectContext {
 
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
+
+    private boolean skipFinishSink = false;
+    private FinishSinkHandler handler = null;
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -560,12 +564,16 @@ public class ConnectContext {
         return accessControlContext;
     }
 
-    public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+    public boolean modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        if (!globalStateMgr.getVariableMgr().containsVariable(setVar.getVariable())) {
+            return false;
+        }
         globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!SetType.GLOBAL.equals(setVar.getType())
                 && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
+        return true;
     }
 
     public void modifyUserVariable(UserVariable userVariable) {
@@ -645,6 +653,10 @@ public class ConnectContext {
         }
     }
 
+    public Map<String, SystemVariable> getModifiedSessionVariablesMap() {
+        return modifiedSessionVariables;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
@@ -686,6 +698,14 @@ public class ConnectContext {
         return command;
     }
 
+    public String getCommandStr() {
+        if (command == null) {
+            return "MySQL.UNKNOWN";
+        } else {
+            return "MySQL." + command;
+        }
+    }
+
     public void setCommand(MysqlCommand command) {
         this.command = command;
     }
@@ -713,6 +733,10 @@ public class ConnectContext {
 
     public void setEndTime() {
         endTime = Instant.now();
+    }
+
+    public Instant getEndTime() {
+        return endTime;
     }
 
     public void updateReturnRows(int returnRows) {
@@ -817,7 +841,11 @@ public class ConnectContext {
     }
 
     public String getDatabase() {
-        return currentDb;
+        if (GlobalVariable.enableTableNameCaseInsensitive && currentDb != null) {
+            return currentDb.toLowerCase();
+        } else {
+            return currentDb;
+        }
     }
 
     public void setDatabase(String db) {
@@ -1000,7 +1028,8 @@ public class ConnectContext {
         // try to acquire cn group id once the warehouse is set
         final long warehouseId = this.getCurrentWarehouseId();
         final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        this.computeResource = warehouseManager.acquireComputeResource(warehouseId, this.computeResource);
+        this.computeResource = LazyComputeResource.of(warehouseId, () ->
+                warehouseManager.acquireComputeResource(warehouseId, this.computeResource));
     }
 
     /**
@@ -1020,7 +1049,7 @@ public class ConnectContext {
             // throw exception if the current warehouse is not exist.
             if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
                 String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
-                                "set to another warehouse.", this.getCurrentWarehouseName());
+                        "set to another warehouse.", this.getCurrentWarehouseName());
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
@@ -1045,6 +1074,7 @@ public class ConnectContext {
      * Get the name of the current compute resource.
      * During the execution of a statement, the compute resource should be fixed.
      * NOTE: this method will not acquire compute resource if it is not set.
+     *
      * @return: the name of the current compute resource, or empty string if not set.
      */
     public String getCurrentComputeResourceName() {
@@ -1081,13 +1111,8 @@ public class ConnectContext {
         if (!RunMode.isSharedDataMode() || this.computeResource == null) {
             return;
         }
-        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
-        if (!warehouseManager.isResourceAvailable(computeResource)) {
-            this.computeResource = warehouseManager.acquireComputeResource(this.getCurrentWarehouseId());
-        } else {
-            // acquire compute resource again to for better-schedule balance
-            acquireComputeResource();
-        }
+        // acquire compute resource again for better schedule balance
+        acquireComputeResource();
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -1654,6 +1679,19 @@ public class ConnectContext {
 
     public void setCurrentThreadId(long currentThreadId) {
         this.currentThreadId = new AtomicLong(currentThreadId);
+    }
+
+    public void setFinishSinkHandler(FinishSinkHandler handler) {
+        this.skipFinishSink = true;
+        this.handler = handler;
+    }
+
+    public boolean getSkipFinishSink() {
+        return skipFinishSink;
+    }
+
+    public FinishSinkHandler getFinishSinkHandler() {
+        return handler;
     }
 
     public interface Listener {

@@ -19,9 +19,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -37,6 +37,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -60,9 +61,11 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -108,11 +111,11 @@ import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -134,7 +137,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
     private final Table table;
@@ -150,6 +153,33 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     @Override
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexAnalyzer.analyze(clause.getIndexDef());
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableModifyDefaultBucketsClause(AlterTableModifyDefaultBucketsClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Only support OLAP table");
+        }
+        OlapTable tbl = (OlapTable) table;
+        if (!(tbl.getDefaultDistributionInfo() instanceof HashDistributionInfo)) {
+            throw new SemanticException("Only support hash distribution tables");
+        }
+        HashDistributionInfo current = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+        List<Column> cols = MetaUtils.getColumnsByColumnIds(tbl, current.getDistributionColumns());
+        List<String> currentNames = cols.stream().map(c -> c.getName()).collect(Collectors.toList());
+        List<String> input = clause.getDistributionColumns();
+        if (currentNames.size() != input.size()) {
+            throw new SemanticException("Distribution columns mismatch: " + input + " vs " + currentNames);
+        }
+        for (int i = 0; i < currentNames.size(); i++) {
+            if (!currentNames.get(i).equalsIgnoreCase(input.get(i))) {
+                throw new SemanticException("Distribution columns mismatch: " + input + " vs " + currentNames);
+            }
+        }
+        if (clause.getBucketNum() <= 0) {
+            throw new SemanticException("Bucket num must > 0");
+        }
         return null;
     }
 
@@ -329,6 +359,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeMutableBucketNum(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
@@ -428,14 +460,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                         "update for a primary key table. ");
             }
-        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET)) {
-            try {
-                PropertyAnalyzer.analyzeEnableDynamicTablet(properties, false);
-            } catch (Exception e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET +
-                                " must be bool type(false/true)");
-            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+            PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, false);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -533,7 +559,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
                 ErrorReport.reportSemanticException("Unsupported change to %s partition function when merge partitions",
                         ErrorCode.ERR_COMMON_ERROR, functionName);
@@ -728,7 +754,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(Column.fromColumnDef(table, columnDef));
             return null;
         }
 
@@ -746,15 +771,9 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
-        }
-
-        if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
-            throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(columnDef.getName()), columnDef.getPos());
         }
 
         if (columnDef.getAggregateType() != null && colPos != null && colPos.isFirst()) {
@@ -765,7 +784,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        clause.setColumn(Column.fromColumnDef(table, columnDef));
+        Column column = ColumnBuilder.buildColumn(columnDef);
+        if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+            throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()), columnDef.getPos());
+        }
         return null;
     }
 
@@ -786,10 +808,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
             }
-            if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
-                throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(colDef.getName()), colDef.getPos());
-            }
-
             if (colDef.isGeneratedColumn()) {
                 hasGeneratedColumn = true;
 
@@ -860,7 +878,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         // Make sure return null if rollup name is empty.
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
 
-        columnDefs.forEach(columnDef -> clause.addColumn(Column.fromColumnDef(table, columnDef)));
+        if (!hasGeneratedColumn) {
+            columnDefs.forEach(columnDef -> {
+                Column column = ColumnBuilder.buildColumn(columnDef);
+                if (!column.isAllowNull() && column.getDefaultValue() == null && column.getDefaultExpr() == null) {
+                    throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(column.getName()),
+                            columnDef.getPos());
+                }
+            });
+        }
         return null;
     }
 
@@ -899,11 +925,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
-        try {
-            fieldDesc.analyze(baseColumn, false);
-        } catch (AnalysisException e) {
-            throw new SemanticException("Analyze add field definition failed: %s", e.getMessage());
-        }
+        StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
     }
 
@@ -920,11 +942,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
-        try {
-            fieldDesc.analyze(baseColumn, true);
-        } catch (AnalysisException e) {
-            throw new SemanticException("Analyze drop field definition failed: %s", e.getMessage());
-        }
+        StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;
     }
 
@@ -993,16 +1011,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Column Type: " + columnDef.getType().toString() +
                         ", Expression Type: " + expr.getType().toString());
             }
-            clause.setColumn(Column.fromColumnDef(table, columnDef));
             return null;
         }
 
         ColumnPosition colPos = clause.getColPos();
         if (colPos != null) {
-            try {
-                colPos.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+            if (colPos != ColumnPosition.FIRST && Strings.isNullOrEmpty(colPos.getLastCol())) {
+                throw new SemanticException("Column is empty.");
             }
         }
         if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
@@ -1013,8 +1028,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
 
         clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
-
-        clause.setColumn(Column.fromColumnDef(table, columnDef));
         return null;
     }
 
@@ -1107,7 +1120,6 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
             throw new SemanticException("Unknown properties: " + clause.getProperties());
         }
-
 
         if (table instanceof OlapTable) {
             List<String> partitionNames = clause.getPartitionNames();
@@ -1256,8 +1268,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long dynamicTabletSplitSize = PropertyAnalyzer.analyzeDynamicTabletSplitSize(copiedProperties, true);
-            clause.setDynamicTabletSplitSize(dynamicTabletSplitSize);
+            long tabletReshardSplitSize = PropertyAnalyzer.analyzeTabletReshardSplitSize(copiedProperties, true);
+            clause.setTabletReshardSplitSize(tabletReshardSplitSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
         }
@@ -1392,8 +1404,19 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         .collect(Collectors.toList());
                 PartitionDescAnalyzer.analyze(partitionDesc, columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
-                    CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
-                            addPartitionClause.isTempPartition());
+                    boolean isDuplicate = CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable,
+                            partitionDesc, addPartitionClause.isTempPartition());
+                    if (isDuplicate) {
+                        if (partitionDesc.isSystem()) {
+                            // For system-created partitions (automatic partition), skip if values already exist.
+                            // duplicate partition will be ignored in create partition phase
+                            continue;
+                        } else {
+                            // For user-created partitions, throw error
+                            throw new DdlException("Duplicate partition values exist for partition: " +
+                                    partitionDesc.getPartitionName());
+                        }
+                    }
                 }
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
@@ -1443,15 +1466,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         List<String> sortKeys = new ArrayList<>();
         for (OrderByElement orderByElement : orderByElements) {
-            String column = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             if (column == null) {
-                throw new SemanticException("Unknown column '%s' in order by clause", orderByElement.getExpr().toSql());
+                throw new SemanticException("Unknown column '%s' in order by clause", ExprToSql.toSql(orderByElement.getExpr()));
             }
             sortKeys.add(column);
         }
         return sortKeys;
     }
-
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {

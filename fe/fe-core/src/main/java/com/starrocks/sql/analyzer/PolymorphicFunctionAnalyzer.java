@@ -20,20 +20,21 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.AnyMapType;
-import com.starrocks.catalog.AnyStructType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyMapType;
+import com.starrocks.type.AnyStructType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -111,6 +112,21 @@ public class PolymorphicFunctionAnalyzer {
         public Type apply(Type[] types) {
             MapType mapType = (MapType) types[0];
             return new ArrayType(mapType.getValueType());
+        }
+    }
+
+    private static class MapEntriesDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            // Return ARRAY<STRUCT<key_type, value_type>>
+            // Create named struct fields with "key" and "value" as field names
+            List<StructField> structFields = Arrays.asList(
+                    new StructField("key", mapType.getKeyType()),
+                    new StructField("value", mapType.getValueType())
+            );
+            StructType structType = new StructType(structFields, true);
+            return new ArrayType(structType);
         }
     }
 
@@ -199,10 +215,30 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class ArraysZipDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            // Get element types from all input arrays
+            List<StructField> structFields = new ArrayList<>();
+            for (int i = 0; i < types.length; i++) {
+                if (types[i] instanceof ArrayType) {
+                    ArrayType arrayType = (ArrayType) types[i];
+                    // Field name is col1, col2, col3...
+                    String fieldName = "col" + (i + 1);
+                    structFields.add(new StructField(fieldName, arrayType.getItemType()));
+                }
+            }
+            // Return ARRAY<STRUCT<col1:type1, col2:type2, ...>>
+            StructType structType = new StructType(structFields, true);
+            return new ArrayType(structType);
+        }
+    }
+
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put(FunctionSet.MAP_KEYS, new MapKeysDeduce())
             .put(FunctionSet.MAP_VALUES, new MapValuesDeduce())
+            .put(FunctionSet.MAP_ENTRIES, new MapEntriesDeduce())
             .put(FunctionSet.MAP_FROM_ARRAYS, new MapFromArraysDeduce())
             .put(FunctionSet.ROW, new RowDeduce())
             .put(FunctionSet.MAP_APPLY, new LambdaDeduce())
@@ -251,6 +287,8 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.getStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateCombineName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.MAP_AGG, new MapAggDeduce())
+            // array functions
+            .put(FunctionSet.ARRAYS_ZIP, new ArraysZipDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
@@ -408,8 +446,8 @@ public class PolymorphicFunctionAnalyzer {
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {
-            typeElement = Type.BOOLEAN;
-            typeArray = new ArrayType(Type.BOOLEAN);
+            typeElement = BooleanType.BOOLEAN;
+            typeArray = new ArrayType(BooleanType.BOOLEAN);
         }
 
         if (retType instanceof AnyArrayType) {

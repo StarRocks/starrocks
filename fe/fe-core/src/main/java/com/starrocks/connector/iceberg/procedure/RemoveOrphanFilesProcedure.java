@@ -14,13 +14,13 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.DateType;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -70,7 +70,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(OLDER_THAN, Type.DATETIME, false)
+                        new NamedArgument(OLDER_THAN, DateType.DATETIME, false)
                 ),
                 IcebergTableOperation.REMOVE_ORPHAN_FILES
         );
@@ -89,7 +89,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
             LocalDateTime time = LocalDateTime.now(TimeUtils.getTimeZone().toZoneId());
             olderThanMillis = time.minus(DEFAULT_RETENTION_THRESHOLD).toInstant(ZoneOffset.UTC).toEpochMilli();
         } else {
-            LocalDateTime time = olderThanArg.castTo(Type.DATETIME).
+            LocalDateTime time = olderThanArg.castTo(DateType.DATETIME).
                     map(ConstantOperator::getDatetime).orElseThrow(() ->
                             new StarRocksConnectorException("invalid argument type for %s, expected DATETIME", OLDER_THAN));
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();

@@ -22,7 +22,7 @@ import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -36,8 +36,8 @@ import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -105,7 +105,7 @@ public class RangerInterfaceTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
-        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+        List<Column> columns = Lists.newArrayList(new Column("v1", IntegerType.INT));
 
         RangerStarRocksAccessController connectScheduler = new RangerStarRocksAccessController();
         try {
@@ -155,7 +155,7 @@ public class RangerInterfaceTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         TableName tableName = new TableName("db", "tbl");
-        List<Column> columns = Lists.newArrayList(new Column("v1", Type.INT));
+        List<Column> columns = Lists.newArrayList(new Column("v1", IntegerType.INT));
 
         Map<String, Expr> e = rangerStarRocksAccessController.getColumnMaskingPolicy(connectContext, tableName, columns);
         Assertions.assertTrue(new ArrayList<>(e.values()).get(0) instanceof NullLiteral);

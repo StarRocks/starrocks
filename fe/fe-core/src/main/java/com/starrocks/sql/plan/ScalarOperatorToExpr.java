@@ -17,8 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -42,9 +41,9 @@ import com.starrocks.sql.ast.expression.DictMappingExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
@@ -61,8 +60,8 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -83,6 +82,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -92,10 +92,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.spm.SPMFunctions;
-import com.starrocks.thrift.TExprOpcode;
-import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -230,26 +238,26 @@ public class ScalarOperatorToExpr {
                     NullLiteral nullLiteral = new NullLiteral();
                     nullLiteral.setType(literal.getType());
                     hackTypeNull(nullLiteral);
-                    nullLiteral.setOriginType(Type.NULL);
+                    nullLiteral.setOriginType(NullType.NULL);
                     return nullLiteral;
                 }
 
                 if (type.isBoolean()) {
                     return new BoolLiteral(literal.getBoolean());
                 } else if (type.isTinyint()) {
-                    return new IntLiteral(literal.getTinyInt(), Type.TINYINT);
+                    return new IntLiteral(literal.getTinyInt(), IntegerType.TINYINT);
                 } else if (type.isSmallint()) {
-                    return new IntLiteral(literal.getSmallint(), Type.SMALLINT);
+                    return new IntLiteral(literal.getSmallint(), IntegerType.SMALLINT);
                 } else if (type.isInt()) {
-                    return new IntLiteral(literal.getInt(), Type.INT);
+                    return new IntLiteral(literal.getInt(), IntegerType.INT);
                 } else if (type.isBigint()) {
-                    return new IntLiteral(literal.getBigint(), Type.BIGINT);
+                    return new IntLiteral(literal.getBigint(), IntegerType.BIGINT);
                 } else if (type.isLargeint()) {
                     return new LargeIntLiteral(literal.getLargeInt().toString());
                 } else if (type.isFloat()) {
-                    return new FloatLiteral(literal.getDouble(), Type.FLOAT);
+                    return new FloatLiteral(literal.getDouble(), FloatType.FLOAT);
                 } else if (type.isDouble()) {
-                    return new FloatLiteral(literal.getDouble(), Type.DOUBLE);
+                    return new FloatLiteral(literal.getDouble(), FloatType.DOUBLE);
                 } else if (type.isDate()) {
                     LocalDateTime ldt = literal.getDate();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth());
@@ -258,10 +266,10 @@ public class ScalarOperatorToExpr {
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), ldt.getHour(),
                             ldt.getMinute(), ldt.getSecond(), ldt.getNano() / 1000);
                 } else if (type.isTime()) {
-                    return new FloatLiteral(literal.getTime(), Type.TIME);
+                    return new FloatLiteral(literal.getTime(), DateType.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
                     DecimalLiteral d = new DecimalLiteral(literal.getDecimal());
-                    d.uncheckedCastTo(type);
+                    ExprCastFunction.uncheckedCastTo(d, type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     String str = literal.getVarchar();
@@ -297,7 +305,7 @@ public class ScalarOperatorToExpr {
                 callExpr = new CompoundPredicate(CompoundPredicate.Operator.NOT,
                         buildExpr.build(predicate.getChild(0), context), null);
             }
-            callExpr.setType(Type.BOOLEAN);
+            callExpr.setType(BooleanType.BOOLEAN);
             callExpr.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return callExpr;
         }
@@ -306,7 +314,7 @@ public class ScalarOperatorToExpr {
             BinaryPredicate call = new BinaryPredicate(predicate.getBinaryType(),
                     buildExpr.build(predicate.getChildren().get(0), context),
                     buildExpr.build(predicate.getChildren().get(1), context));
-            call.setType(Type.BOOLEAN);
+            call.setType(BooleanType.BOOLEAN);
             call.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return call;
         }
@@ -316,7 +324,7 @@ public class ScalarOperatorToExpr {
             BetweenPredicate call = new BetweenPredicate(buildExpr.build(predicate.getChild(0), context),
                     buildExpr.build(predicate.getChild(1), context),
                     buildExpr.build(predicate.getChild(2), context), predicate.isNotBetween());
-            call.setType(Type.BOOLEAN);
+            call.setType(BooleanType.BOOLEAN);
             return call;
         }
 
@@ -337,34 +345,39 @@ public class ScalarOperatorToExpr {
             InPredicate expr =
                     new InPredicate(buildExpr.build(predicate.getChild(0), context), args, predicate.isNotIn());
 
-            expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
-
-            expr.setType(Type.BOOLEAN);
+            expr.setType(BooleanType.BOOLEAN);
             return expr;
         }
 
-        static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
-        static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
-
-        {
-            isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
-            isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
+        /**
+         * LargeInPredicate should have been transformed to a join by LargeInPredicateToJoinRule
+         * during the optimization phase. If execution reaches here, it indicates that the
+         * transformation was not applied, which can happen in certain unsupported scenarios:
+         *
+         * <p>Unsupported cases include:
+         * <ul>
+         *   <li>LargeInPredicate used within CASE WHEN expressions (e.g., CASE WHEN col IN (...))</li>
+         *   <li>LargeInPredicate in complex nested expressions where join rewrite is not applicable</li>
+         * </ul>
+         *
+         * <p>When this exception is thrown, the query will be automatically retried with
+         * LargeInPredicate optimization disabled, falling back to the standard InPredicate evaluation.
+         *
+         * @throws LargeInPredicateException to trigger query retry with LargeInPredicate disabled
+         */
+        @Override
+        public Expr visitLargeInPredicate(LargeInPredicateOperator predicate, FormatterContext context) {
+            throw new LargeInPredicateException(
+                    "LargeInPredicate was not transformed to join during optimization. " +
+                            "This may occur in unsupported contexts such as CASE WHEN expressions. " +
+                            "Retrying query with LargeInPredicate optimization disabled.");
         }
 
         @Override
         public Expr visitIsNullPredicate(IsNullPredicateOperator predicate, FormatterContext context) {
-            Expr expr = new IsNullPredicate(buildExpr.build(predicate.getChild(0), context), predicate.isNotNull());
+            IsNullPredicate expr = new IsNullPredicate(buildExpr.build(predicate.getChild(0), context), predicate.isNotNull());
 
-            // for set function name
-            if (predicate.isNotNull()) {
-                expr.setFn(isNotNullFN);
-            } else {
-                expr.setFn(isNullFN);
-            }
-
-            expr.setType(Type.BOOLEAN);
+            expr.setType(BooleanType.BOOLEAN);
             return expr;
         }
 
@@ -380,11 +393,7 @@ public class ScalarOperatorToExpr {
                 expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2);
             }
 
-            expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(),
-                    new Type[] {child1.getType(), child2.getType()},
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF));
-
-            expr.setType(Type.BOOLEAN);
+            expr.setType(BooleanType.BOOLEAN);
             return expr;
         }
 
@@ -511,7 +520,7 @@ public class ScalarOperatorToExpr {
                     }
                     callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(false, arguments));
                     Preconditions.checkNotNull(call.getFunction());
-                    callExpr.setFn(call.getFunction());
+                    ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
@@ -524,7 +533,7 @@ public class ScalarOperatorToExpr {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }
                     Preconditions.checkNotNull(call.getFunction());
-                    callExpr.setFn(call.getFunction());
+                    ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
             }
@@ -599,9 +608,25 @@ public class ScalarOperatorToExpr {
             newArguments.add(lambdaExpr);
             newArguments.addAll(arguments);
 
-            LambdaFunctionExpr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
-            result.setType(Type.FUNCTION);
-            result.checkValidAfterToExpr();
+            List<Expr> children = new ArrayList<>(newArguments);
+            if (!commonSubOperatorMap.isEmpty()) { // flatten commonSubOperatorMap's slot_id and sub_expr to children
+                children.addAll(commonSubOperatorMap.keySet());
+                children.addAll(commonSubOperatorMap.values());
+            }
+
+            LambdaFunctionExpr result = new LambdaFunctionExpr(children, commonSubOperatorMap.size());
+            result.setType(FunctionType.FUNCTION);
+
+            // 1 lambda expr, at least 1 lambda argument and common sub op's slotref + expr
+            Preconditions.checkState(result.getChildren().size() >= 2 + 2 * result.getCommonSubOperatorNum(),
+                    "lambda expr's children num " + result.getChildren().size() + " should >= " +
+                            (2 + 2 * result.getCommonSubOperatorNum()));
+            int realChildrenNum = result.getChildren().size() - 2 * result.getCommonSubOperatorNum();
+            for (int i = 1; i < realChildrenNum; i++) {
+                Preconditions.checkState(result.getChild(i) instanceof SlotRef,
+                        i + "-th lambda argument should be type of SlotRef, but actually " + result.getChild(i));
+            }
+
             return result;
         }
 
@@ -621,10 +646,10 @@ public class ScalarOperatorToExpr {
             // 2. use a placeholder instead of string column to build DictMapping
             if (key.getType().isArrayType()) {
                 context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
-                        Type.ARRAY_VARCHAR));
+                        ArrayType.ARRAY_VARCHAR));
             } else {
                 context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
-                        Type.VARCHAR));
+                        VarcharType.VARCHAR));
             }
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column

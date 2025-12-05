@@ -18,7 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 

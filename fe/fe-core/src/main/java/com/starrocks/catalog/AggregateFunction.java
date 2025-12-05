@@ -40,10 +40,11 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TAggregateFunction;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.util.Strings;
 
 import java.util.List;
@@ -372,9 +373,9 @@ public class AggregateFunction extends Function {
         TAggregateFunction aggFn = new TAggregateFunction();
         aggFn.setIs_analytic_only_fn(isAnalyticFn && !isAggregateFn);
         if (intermediateType != null) {
-            aggFn.setIntermediate_type(intermediateType.toThrift());
+            aggFn.setIntermediate_type(TypeSerializer.toThrift(intermediateType));
         } else {
-            aggFn.setIntermediate_type(getReturnType().toThrift());
+            aggFn.setIntermediate_type(TypeSerializer.toThrift(getReturnType()));
         }
         if (isAscOrder != null && !isAscOrder.isEmpty()) {
             aggFn.setIs_asc_order(isAscOrder);

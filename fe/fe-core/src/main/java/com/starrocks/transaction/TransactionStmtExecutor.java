@@ -20,6 +20,7 @@ import com.google.common.primitives.Ints;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -60,7 +61,6 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -140,7 +140,7 @@ public class TransactionStmtExecutor {
                                 OriginStatement originStmt,
                                 ConnectContext context) {
         Coordinator coordinator = new DefaultCoordinator.Factory().createInsertScheduler(
-                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
@@ -168,6 +168,8 @@ public class TransactionStmtExecutor {
             if (!transactionState.getTableIdList().contains(targetTable.getId())) {
                 transactionState.addTableIdList(targetTable.getId());
             }
+            // record modified table id in explicit txn state for later SELECT validation
+            explicitTxnState.addModifiedTableId(targetTable.getId());
 
             for (TableName tableName : m.keySet()) {
                 if (explicitTxnState.getTableHasExplicitStmt(tableName.getTbl())) {
@@ -204,6 +206,9 @@ public class TransactionStmtExecutor {
         }
 
         transactionState.addTableIdList(tableId);
+
+        // record modified table id in explicit txn state for later SELECT validation
+        explicitTxnState.addModifiedTableId(tableId);
 
         explicitTxnState.addTransactionItem(item);
 

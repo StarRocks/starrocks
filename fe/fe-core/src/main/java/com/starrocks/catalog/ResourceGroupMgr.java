@@ -25,6 +25,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.AlterResourceGroupLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -162,10 +163,16 @@ public class ResourceGroupMgr implements Writable {
                 classifier.setResourceGroupId(wg.getId());
                 classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
-            addResourceGroupInternal(wg);
+
+            if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) && !resourceGroupInMemPoolHaveSameMemLimit(wg)) {
+                throw new DdlException(
+                        "Property `mem_limit` must be equal for all resource groups using the mem_pool [" + wg.getMemPool() +
+                                "].");
+            }
 
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
-            GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logResourceGroupOp(workGroupOp, wal -> addResourceGroupInternal(wg));
             resourceGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
@@ -193,6 +200,14 @@ public class ResourceGroupMgr implements Writable {
         } finally {
             readUnlock();
         }
+    }
+
+    private boolean resourceGroupInMemPoolHaveSameMemLimit(ResourceGroup wg) {
+        if (wg.getMemPool() == null) {
+            return true;
+        }
+        return resourceGroupMap.entrySet().stream().allMatch(entry -> !wg.getMemPool().equals(entry.getValue().getMemPool()) ||
+                wg.getMemLimit().equals(entry.getValue().getMemLimit()));
     }
 
     private String getUnqualifiedUser(ConnectContext ctx) {
@@ -309,6 +324,8 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
             }
             ResourceGroup wg = resourceGroupMap.get(name);
+            AlterResourceGroupLog alterResourceGroupLog = new AlterResourceGroupLog();
+            alterResourceGroupLog.setName(name);
             AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
             if (wg.getResourceGroupType() == TWorkGroupType.WG_MV &&
                     !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
@@ -326,9 +343,10 @@ public class ResourceGroupMgr implements Writable {
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
                     classifier.setResourceGroupId(wg.getId());
                     classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
-                    classifierMap.put(classifier.getId(), classifier);
                 }
-                wg.getClassifiers().addAll(newAddedClassifiers);
+                List<ResourceGroupClassifier> classifiers = new ArrayList<>(wg.getClassifiers());
+                classifiers.addAll(newAddedClassifiers);
+                alterResourceGroupLog.setClassifiers(classifiers);
             } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
                 // Build changed properties using ResourceGroupBuilder instead of getting from stmt
                 ResourceGroup changedProperties;
@@ -363,48 +381,55 @@ public class ResourceGroupMgr implements Writable {
                 // NOTE that validate cpu parameters should be called before setting properties.
 
                 if (cpuWeight != null) {
-                    wg.setCpuWeight(cpuWeight);
+                    alterResourceGroupLog.setCpuWeight(cpuWeight);
                 }
-                wg.normalizeCpuWeight();
 
                 if (exclusiveCpuCores != null) {
-                    sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
-                    wg.setExclusiveCpuCores(exclusiveCpuCores);
-                    sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+                    alterResourceGroupLog.setExclusiveCpuCores(exclusiveCpuCores);
                 }
 
                 Integer maxCpuCores = changedProperties.getMaxCpuCores();
                 if (maxCpuCores != null) {
-                    wg.setMaxCpuCores(maxCpuCores);
+                    alterResourceGroupLog.setMaxCpuCores(maxCpuCores);
+                }
+                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(wg.getMemPool())) {
+                    throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
+                }
+                if (!ResourceGroup.DEFAULT_MEM_POOL.equals(wg.getMemPool()) &&
+                        changedProperties.getMemLimit() != null &&
+                        !wg.getMemLimit().equals(changedProperties.getMemLimit())) {
+                    throw new DdlException(
+                            "Property `mem_limit` cannot be altered for resource groups with mem_pool [" +
+                                    wg.getMemPool() + "].");
                 }
                 Double memLimit = changedProperties.getMemLimit();
                 if (memLimit != null) {
-                    wg.setMemLimit(memLimit);
+                    alterResourceGroupLog.setMemLimit(memLimit);
                 }
 
                 Long bigQueryMemLimit = changedProperties.getBigQueryMemLimit();
                 if (bigQueryMemLimit != null) {
-                    wg.setBigQueryMemLimit(bigQueryMemLimit);
+                    alterResourceGroupLog.setBigQueryMemLimit(bigQueryMemLimit);
                 }
 
                 Long bigQueryScanRowsLimit = changedProperties.getBigQueryScanRowsLimit();
                 if (bigQueryScanRowsLimit != null) {
-                    wg.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+                    alterResourceGroupLog.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
                 }
 
                 Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuSecondLimit();
                 if (bigQueryCpuCoreSecondLimit != null) {
-                    wg.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
+                    alterResourceGroupLog.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 }
 
                 Integer concurrentLimit = changedProperties.getConcurrencyLimit();
                 if (concurrentLimit != null) {
-                    wg.setConcurrencyLimit(concurrentLimit);
+                    alterResourceGroupLog.setConcurrencyLimit(concurrentLimit);
                 }
 
                 Double spillMemLimitThreshold = changedProperties.getSpillMemLimitThreshold();
                 if (spillMemLimitThreshold != null) {
-                    wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
+                    alterResourceGroupLog.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
                 // Type is guaranteed to be immutable during the analyzer phase.
@@ -412,28 +437,73 @@ public class ResourceGroupMgr implements Writable {
                 Preconditions.checkState(workGroupType == null);
             } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers dropClassifiers) {
                 Set<Long> classifierToDrop = new HashSet<>(dropClassifiers.getClassifierIds());
-                wg.getClassifiers().removeIf(classifier -> classifierToDrop.contains(classifier.getId()));
-                for (Long classifierId : classifierToDrop) {
-                    classifierMap.remove(classifierId);
-                }
+                List<ResourceGroupClassifier> classifiers = new ArrayList<>(wg.getClassifiers());
+                classifiers.removeIf(classifier -> classifierToDrop.contains(classifier.getId()));
+                alterResourceGroupLog.setClassifiers(classifiers);
             } else if (cmd instanceof AlterResourceGroupStmt.DropAllClassifiers) {
-                List<ResourceGroupClassifier> classifierList = wg.getClassifiers();
-                for (ResourceGroupClassifier classifier : classifierList) {
-                    classifierMap.remove(classifier.getId());
-                }
-                classifierList.clear();
+                alterResourceGroupLog.setClassifiers(Collections.emptyList());
             }
 
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
-                wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+                alterResourceGroupLog.setVersion(GlobalStateMgr.getCurrentState().getNextId());
             }
-            ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg);
-            GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
-            resourceGroupOps.add(workGroupOp.toThrift());
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterResourceGroup(
+                    alterResourceGroupLog, wal -> updateResourceGroup(wg, alterResourceGroupLog));
+            resourceGroupOps.add(new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg).toThrift());
         } finally {
             writeUnlock();
+        }
+    }
+
+    private void updateResourceGroup(ResourceGroup wg, AlterResourceGroupLog log) {
+        if (log.getClassifiers() != null) {
+            List<ResourceGroupClassifier> oldClassifiers = wg.getClassifiers();
+            Set<Long> newClassifierIds = log.getClassifiers().stream()
+                    .map(ResourceGroupClassifier::getId).collect(Collectors.toSet());
+            for (ResourceGroupClassifier classifier : oldClassifiers) {
+                if (!newClassifierIds.contains(classifier.getId())) {
+                    classifierMap.remove(classifier.getId());
+                }
+            }
+            for (ResourceGroupClassifier classifier : log.getClassifiers()) {
+                classifierMap.put(classifier.getId(), classifier);
+            }
+            wg.setClassifiers(log.getClassifiers());
+        }
+        if (log.getCpuWeight() != null) {
+            wg.setCpuWeight(log.getCpuWeight());
+            wg.normalizeCpuWeight();
+        }
+        if (log.getExclusiveCpuCores() != null) {
+            sumExclusiveCpuCores -= wg.getNormalizedExclusiveCpuCores();
+            wg.setExclusiveCpuCores(log.getExclusiveCpuCores());
+            sumExclusiveCpuCores += wg.getNormalizedExclusiveCpuCores();
+        }
+        if (log.getMaxCpuCores() != null) {
+            wg.setMaxCpuCores(log.getMaxCpuCores());
+        }
+        if (log.getMemLimit() != null) {
+            wg.setMemLimit(log.getMemLimit());
+        }
+        if (log.getBigQueryMemLimit() != null) {
+            wg.setBigQueryMemLimit(log.getBigQueryMemLimit());
+        }
+        if (log.getBigQueryScanRowsLimit() != null) {
+            wg.setBigQueryScanRowsLimit(log.getBigQueryScanRowsLimit());
+        }
+        if (log.getBigQueryCpuSecondLimit() != null) {
+            wg.setBigQueryCpuSecondLimit(log.getBigQueryCpuSecondLimit());
+        }
+        if (log.getConcurrencyLimit() != null) {
+            wg.setConcurrencyLimit(log.getConcurrencyLimit());
+        }
+        if (log.getSpillMemLimitThreshold() != null) {
+            wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+        }
+        if (log.getVersion() != 0) {
+            wg.setVersion(log.getVersion());
         }
     }
 
@@ -455,10 +525,10 @@ public class ResourceGroupMgr implements Writable {
 
     public void dropResourceGroupUnlocked(String name) {
         ResourceGroup wg = resourceGroupMap.get(name);
-        removeResourceGroupInternal(name);
         wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
         ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
-        GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logResourceGroupOp(workGroupOp, wal -> removeResourceGroupInternal(name));
         resourceGroupOps.add(workGroupOp.toThrift());
     }
 
@@ -480,6 +550,19 @@ public class ResourceGroupMgr implements Writable {
                     break;
             }
             resourceGroupOps.add(entry.toThrift());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayAlterResourceGroup(AlterResourceGroupLog log) {
+        writeLock();
+        try {
+            ResourceGroup wg = resourceGroupMap.get(log.getName());
+            if (wg == null) {
+                return;
+            }
+            updateResourceGroup(wg, log);
         } finally {
             writeUnlock();
         }

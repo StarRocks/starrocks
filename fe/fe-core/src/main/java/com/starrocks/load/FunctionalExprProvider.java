@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -27,12 +26,14 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.PrimitiveType;
 
 import java.util.Comparator;
 import java.util.List;
@@ -181,7 +182,7 @@ public abstract class FunctionalExprProvider<U> {
 
         if (!(predicate.getChild(0) instanceof SlotRef)) {
             throw new SemanticException(
-                    String.format("`%s` is not allowed in `where` clause.", predicate.getChild(0).toSql()));
+                    String.format("`%s` is not allowed in `where` clause.", ExprToSql.toSql(predicate.getChild(0))));
         }
         String leftKey = ((SlotRef) predicate.getChild(0)).getColumnName();
         Optional<ColumnValueSupplier<U>> colValSupplier =
@@ -263,7 +264,7 @@ public abstract class FunctionalExprProvider<U> {
             return;
         }
         throw new SemanticException(
-                String.format("`%s` is not allowed in `where` clause for column `%s`.", predicate.toSql(), leftKey));
+                String.format("`%s` is not allowed in `where` clause for column `%s`.", ExprToSql.toSql(predicate), leftKey));
     }
 
     /**
@@ -278,7 +279,7 @@ public abstract class FunctionalExprProvider<U> {
         for (OrderByElement orderByElement : orderByElements) {
             if (!(orderByElement.getExpr() instanceof SlotRef)) {
                 throw new SemanticException(
-                        String.format("`%s` is not allowed in `order by` clause.", orderByElement.toSql()));
+                        String.format("`%s` is not allowed in `order by` clause.", ExprToSql.toSql(orderByElement.getExpr())));
             }
             SlotRef slotRef = (SlotRef) orderByElement.getExpr();
             Optional<ColumnValueSupplier<U>> colValSupplier = delegateWhereSuppliers().parallelStream()

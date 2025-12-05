@@ -14,6 +14,7 @@
 
 package com.starrocks.common;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.sql.common.PListCell;
@@ -137,5 +138,42 @@ public class PListCellTest {
             ));
             Assertions.assertEquals(-2, c1.compareTo(c2));
         }
+    }
+
+    @Test
+    public void toStringReturnsEmptyStringForEmptyPartitionItems() {
+        PListCell cell = new PListCell(ImmutableList.of());
+        Assertions.assertEquals("", cell.toString());
+    }
+
+    @Test
+    public void toStringHandlesPartitionItemsWithinMaxLength() {
+        Config.max_mv_task_run_meta_message_values_length = 5;
+        PListCell cell = new PListCell(ImmutableList.of(
+                ImmutableList.of("item1"),
+                ImmutableList.of("item2"),
+                ImmutableList.of("item3")
+        ));
+        Assertions.assertEquals("(item1),(item2),(item3)", cell.toString());
+    }
+
+    @Test
+    public void toStringHandlesPartitionItemsExceedingMaxLength() {
+        Config.max_mv_task_run_meta_message_values_length = 4;
+        PListCell cell = new PListCell(ImmutableList.of(
+                ImmutableList.of("item1"),
+                ImmutableList.of("item2"),
+                ImmutableList.of("item3"),
+                ImmutableList.of("item4"),
+                ImmutableList.of("item5")
+        ));
+        Assertions.assertEquals("(item1),(item2),...,(item4),(item5)", cell.toString());
+        Config.max_mv_task_run_meta_message_values_length = 8;
+    }
+
+    @Test
+    public void toStringHandlesNullPartitionItemsGracefully() {
+        PListCell cell = new PListCell(Lists.newArrayList());
+        Assertions.assertEquals("", cell.toString());
     }
 }

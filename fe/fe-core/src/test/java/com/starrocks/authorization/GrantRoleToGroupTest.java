@@ -15,6 +15,7 @@
 package com.starrocks.authorization;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.persist.EditLog;
@@ -39,7 +40,6 @@ import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.transaction.MockedLocalMetaStore;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;

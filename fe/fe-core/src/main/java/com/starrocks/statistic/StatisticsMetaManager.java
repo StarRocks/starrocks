@@ -21,9 +21,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -43,11 +42,12 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,12 +66,17 @@ import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+import static com.starrocks.type.BooleanType.BOOLEAN;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.FloatType.DOUBLE;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.JsonType.JSON;
 
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
-        super("statistics meta manager", 60L * 1000L);
+        super("statistics-meta-manager", 60L * 1000L);
     }
 
     private boolean checkDatabaseExist() {
@@ -347,16 +352,16 @@ public class StatisticsMetaManager extends FrontendDaemon {
         Map<String, String> properties = Maps.newHashMap();
         try {
             List<ColumnDef> columns = ImmutableList.of(
-                    new ColumnDef("id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("is_enable", new TypeDef(ScalarType.createType(PrimitiveType.BOOLEAN))),
-                    new ColumnDef("bind_sql", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("bind_sql_digest", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("bind_sql_hash", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("plan_sql", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("costs", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("query_ms", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("source", new TypeDef(ScalarType.createVarcharType(100))),
-                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("id", new TypeDef(BIGINT)),
+                    new ColumnDef("is_enable", new TypeDef(BOOLEAN)),
+                    new ColumnDef("bind_sql", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("bind_sql_digest", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("bind_sql_hash", new TypeDef(BIGINT)),
+                    new ColumnDef("plan_sql", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("costs", new TypeDef(DOUBLE)),
+                    new ColumnDef("query_ms", new TypeDef(DOUBLE)),
+                    new ColumnDef("source", new TypeDef(TypeFactory.createVarcharType(100))),
+                    new ColumnDef("update_time", new TypeDef(DATETIME))
             );
 
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
@@ -384,15 +389,15 @@ public class StatisticsMetaManager extends FrontendDaemon {
         Map<String, String> properties = Maps.newHashMap();
         try {
             List<ColumnDef> columns = ImmutableList.of(
-                    new ColumnDef("dt", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME))),
-                    new ColumnDef("frontend", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("db", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("sql_digest", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("sql", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("plan", new TypeDef(ScalarType.createVarcharType(65530))),
-                    new ColumnDef("plan_costs", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("query_ms", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("other", new TypeDef(ScalarType.createType(PrimitiveType.JSON)))
+                    new ColumnDef("dt", new TypeDef(DATETIME)),
+                    new ColumnDef("frontend", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("db", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("sql_digest", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("sql", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("plan", new TypeDef(TypeFactory.createVarcharType(65530))),
+                    new ColumnDef("plan_costs", new TypeDef(DOUBLE)),
+                    new ColumnDef("query_ms", new TypeDef(DOUBLE)),
+                    new ColumnDef("other", new TypeDef(JSON))
             );
 
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
@@ -477,8 +482,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
-                    ColumnDef.DefaultValueDef defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral("-1"));
-                    ColumnDef columnDef = new ColumnDef(columnName, new TypeDef(ScalarType.createType(PrimitiveType.BIGINT)),
+                    ColumnDef.DefaultValueDef defaultValueDef =
+                            new ColumnDef.DefaultValueDef(true, new StringLiteral("-1"));
+                    ColumnDef columnDef = new ColumnDef(columnName,
+                            new TypeDef(IntegerType.BIGINT),
                             false, null, null, true, defaultValueDef, "");
                     AddColumnClause addColumnClause = new AddColumnClause(columnDef, null, null, new HashMap<>());
                     AlterTableStmt alterTableStmt = new AlterTableStmt(

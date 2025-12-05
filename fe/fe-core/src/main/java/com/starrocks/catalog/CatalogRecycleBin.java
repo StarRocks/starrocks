@@ -119,7 +119,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     protected Set<Long> enableEraseLater;
 
     public CatalogRecycleBin() {
-        super("recycle bin");
+        super("recycle-bin");
         idToDatabase = Maps.newHashMap();
         idToTableInfo = HashBasedTable.create();
         nameToTableInfo = HashBasedTable.create();
@@ -322,7 +322,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         RecyclePartitionInfo partitionInfo = idToPartition.get(id);
         if (partitionInfo != null && !partitionInfo.isRecoverable()) {
-            return 0;
+            if (partitionInfo.getRetentionPeriod() > 0) {
+                // partition retention period is set, return the original recycle timestamp
+                return idToRecycleTime.get(id);
+            } else {
+                return 0;
+            }
         }
 
         RecycleDatabaseInfo databaseInfo = idToDatabase.get(id);
@@ -340,6 +345,16 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private synchronized boolean timeExpired(long id, long currentTimeMs) {
         long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
+        // customize expireMs for partition that need to be retained for a configurable period
+        if (idToPartition.containsKey(id)) {
+            RecyclePartitionInfo recyclePartitionInfo = idToPartition.get(id);
+            if (recyclePartitionInfo.getRetentionPeriod() > 0) {
+                // retain the partition alive for `tabletReservePeriod` seconds
+                // while retention period is set, `catalog_trash_expire_second` will not take effect and the partition
+                // is assumed to have been set un-recoverable (i.e. partition is not recoverable)
+                expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, MIN_ERASE_LATENCY);
+            }
+        }
         if (enableEraseLater.contains(id)) {
             // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
             expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
@@ -556,7 +571,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         LOG.info("Finished log erase tables: {}", StringUtils.join(tableIds, ","));
     }
 
-    private List<RecycleTableInfo> removeTableFromRecycleBin(List<Long> tableIds) {
+    List<RecycleTableInfo> removeTableFromRecycleBin(List<Long> tableIds) {
         List<RecycleTableInfo> removedTableInfos = Lists.newArrayListWithCapacity(tableIds.size());
         for (Long tableId : tableIds) {
             Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
@@ -1164,8 +1179,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return info != null && asyncDeleteForTables.get(info) != null;
     }
 
-
-
+    @VisibleForTesting
+    synchronized boolean isDeletingTableDone(long id) {
+        RecycleTableInfo info = getRecycleTableInfo(id);
+        if (info == null) {
+            return true;
+        }
+        CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
+        return future != null && future.isDone();
+    }
 
     public static class RecycleDatabaseInfo implements Writable {
         @SerializedName("d")

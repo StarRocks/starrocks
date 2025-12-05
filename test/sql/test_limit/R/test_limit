@@ -130,6 +130,9 @@ set enable_multi_cast_limit_push_down = false;
 set cbo_enable_low_cardinality_optimize=false;
 -- result:
 -- !result
+set cbo_cte_force_reuse_limit_without_order_by = false;
+-- result:
+-- !result
 with C as (select region, sum(income) as total from t0 group by 1), 
      L as (select total from C limit 3), 
      R as (select total from C limit 4)
@@ -156,5 +159,8 @@ function: assert_explain_verbose_contains('with C as (select region, sum(income)
 None
 -- !result
 set cbo_enable_low_cardinality_optimize=true;
+-- result:
+-- !result
+set cbo_cte_force_reuse_limit_without_order_by = true;
 -- result:
 -- !result

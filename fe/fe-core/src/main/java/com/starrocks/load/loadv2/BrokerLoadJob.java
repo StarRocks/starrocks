@@ -65,6 +65,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -120,7 +121,8 @@ public class BrokerLoadJob extends BulkLoadJob {
             throws MetaNotFoundException {
         super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
-        this.brokerDesc = brokerDesc;
+        this.brokerPersistInfo =
+                brokerDesc != null ? new BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties()) : null;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
         this.stmt = stmt;
@@ -146,15 +148,15 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         try {
             if (stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY)) {
-                priority = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
+                int prio = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
                 AlterLoadJobOperationLog log = new AlterLoadJobOperationLog(id,
                         stmt.getAnalyzedJobProperties());
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log, wal -> setPriority(prio));
 
                 for (LoadTask loadTask : newLoadingTasks) {
                     GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().updatePriority(
                             loadTask.getSignature(),
-                            priority);
+                            prio);
                 }
             }
 
@@ -167,13 +169,19 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     public void replayAlterJob(AlterLoadJobOperationLog log) {
         if (log.getJobProperties().containsKey(LoadStmt.PRIORITY)) {
-            priority = LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY));
+            setPriority(LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY)));
         }
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 
     @Override
     protected void unprotectedExecuteJob() throws LoadException {
-        LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(), brokerDesc);
+        LoadTask task = new BrokerLoadPendingTask(this, fileGroupAggInfo.getAggKeyToFileGroups(),
+                brokerPersistInfo == null ? null :
+                        new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
         idToTasks.put(task.getSignature(), task);
         submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
     }
@@ -289,7 +297,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                 LoadLoadingTask task = new LoadLoadingTask.Builder()
                         .setDb(db)
                         .setTable(table)
-                        .setBrokerDesc(brokerDesc)
+                        .setBrokerDesc(brokerPersistInfo == null ? null :
+                                new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()))
                         .setFileGroups(brokerFileGroups)
                         .setJobDeadlineMs(getDeadlineMs())
                         .setExecMemLimit(loadMemLimit)

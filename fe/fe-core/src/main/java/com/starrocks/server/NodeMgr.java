@@ -1227,11 +1227,12 @@ public class NodeMgr {
     }
 
     public void setLeaderInfo() {
-        this.leaderIp = FrontendOptions.getLocalHostAddress();
-        this.leaderRpcPort = Config.rpc_port;
-        this.leaderHttpPort = Config.http_port;
-        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
-        GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
+        LeaderInfo info = new LeaderInfo(FrontendOptions.getLocalHostAddress(), Config.http_port, Config.rpc_port);
+        GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info, wal -> {
+            leaderIp = info.getIp();
+            leaderRpcPort = info.getRpcPort();
+            leaderHttpPort = info.getHttpPort();
+        });
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
@@ -1262,5 +1263,9 @@ public class NodeMgr {
                 .stream()
                 .mapToLong(Frontend::getCpuCores)
                 .sum() + systemInfo.getTotalCpuCores();
+    }
+
+    protected LeaderInfo getLeaderInfo() {
+        return new LeaderInfo(leaderIp, leaderHttpPort, leaderRpcPort);
     }
 }

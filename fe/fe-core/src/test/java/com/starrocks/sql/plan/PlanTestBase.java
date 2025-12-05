@@ -310,6 +310,17 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE test_using (" +
+                "v1 bigint," +
+                "v2 array<int>," +
+                "v3 int," +
+                "v5 int," +
+                "v6 bigint," +
+                "v4 json) " +
+                "DUPLICATE KEY (`v1`) " +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 1 " +
+                "PROPERTIES(\"replication_num\" = \"1\");");
+
         starRocksAssert.withTable(TpchSQL.REGION);
         starRocksAssert.withTable(TpchSQL.SUPPLIER);
         starRocksAssert.withTable(TpchSQL.PARTSUPP);
@@ -987,6 +998,18 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"fast_schema_evolution\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE test_laglead (\n" +
+                "  `ta` int(11) NULL COMMENT \"\",\n" +
+                "  `tb` int(11) NULL COMMENT \"\",\n" +
+                "  `tc` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`ta`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));

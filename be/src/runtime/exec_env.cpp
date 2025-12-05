@@ -94,7 +94,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "udf/python/env.h"
-#include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/mem_info.h"
@@ -102,6 +101,7 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -432,8 +432,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
                                        : config::pipeline_scan_thread_pool_thread_num;
-
-    const int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+    int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+#ifdef BE_TEST
+    connector_num_io_threads = std::min(connector_num_io_threads, 2);
+#endif
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {
@@ -483,7 +485,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                     .build(&load_segment_pool));
     _load_segment_thread_pool = load_segment_pool.release();
 
-    _broker_mgr = new BrokerMgr(this);
+    _broker_mgr = new BrokerMgr();
 
     RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
                             .set_min_threads(0)
@@ -492,9 +494,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-#ifndef BE_TEST
-    _bfd_parser = BfdParser::create();
-#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache(this);
@@ -514,8 +513,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
     RETURN_IF_ERROR(_batch_write_mgr->init());
 
+#ifndef __APPLE__
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
+#endif
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
@@ -627,102 +628,171 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
+    int64_t total_start = MonotonicMillis();
+    int64_t start;
+    std::vector<std::pair<std::string, int64_t>> component_times;
+
     if (_load_channel_mgr) {
+        start = MonotonicMillis();
         // Clear load channel should be executed before stopping the storage engine,
         // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
         // so when the ThreadPool is destroyed, it will crash.
         _load_channel_mgr->close();
+        component_times.emplace_back("load_channel_mgr", MonotonicMillis() - start);
     }
 
     if (_load_stream_mgr) {
+        start = MonotonicMillis();
         _load_stream_mgr->close();
+        component_times.emplace_back("load_stream_mgr", MonotonicMillis() - start);
     }
 
     if (_fragment_mgr) {
+        start = MonotonicMillis();
         _fragment_mgr->close();
+        component_times.emplace_back("fragment_mgr", MonotonicMillis() - start);
     }
 
     if (_stream_mgr != nullptr) {
+        start = MonotonicMillis();
         _stream_mgr->close();
+        component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
     }
 
     if (_pipeline_sink_io_pool) {
+        start = MonotonicMillis();
         _pipeline_sink_io_pool->shutdown();
+        component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
     }
 
     if (_put_aggregate_metadata_thread_pool) {
+        start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
+        component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
+        start = MonotonicMillis();
         _agent_server->stop();
+        component_times.emplace_back("agent_server", MonotonicMillis() - start);
     }
 
     if (_runtime_filter_worker) {
+        start = MonotonicMillis();
         _runtime_filter_worker->close();
+        component_times.emplace_back("runtime_filter_worker", MonotonicMillis() - start);
     }
 
     if (_profile_report_worker) {
+        start = MonotonicMillis();
         _profile_report_worker->close();
+        component_times.emplace_back("profile_report_worker", MonotonicMillis() - start);
     }
 
     if (_automatic_partition_pool) {
+        start = MonotonicMillis();
         _automatic_partition_pool->shutdown();
+        component_times.emplace_back("automatic_partition_pool", MonotonicMillis() - start);
     }
 
     if (_query_rpc_pool) {
+        start = MonotonicMillis();
         _query_rpc_pool->shutdown();
+        component_times.emplace_back("query_rpc_pool", MonotonicMillis() - start);
     }
 
     if (_datacache_rpc_pool) {
+        start = MonotonicMillis();
         _datacache_rpc_pool->shutdown();
+        component_times.emplace_back("datacache_rpc_pool", MonotonicMillis() - start);
     }
 
     if (_load_rpc_pool) {
+        start = MonotonicMillis();
         _load_rpc_pool->shutdown();
+        component_times.emplace_back("load_rpc_pool", MonotonicMillis() - start);
     }
 
     if (_workgroup_manager) {
+        start = MonotonicMillis();
         _workgroup_manager->close();
+        component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
     }
 
     if (_thread_pool) {
+        start = MonotonicMillis();
         _thread_pool->shutdown();
+        component_times.emplace_back("thread_pool", MonotonicMillis() - start);
     }
 
     if (_query_context_mgr) {
+        start = MonotonicMillis();
         _query_context_mgr->clear();
+        component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
     }
 
     if (_result_mgr) {
+        start = MonotonicMillis();
         _result_mgr->stop();
+        component_times.emplace_back("result_mgr", MonotonicMillis() - start);
     }
 
     if (_stream_mgr) {
+        start = MonotonicMillis();
         _stream_mgr->close();
+        component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
     }
 
     if (_batch_write_mgr) {
+        start = MonotonicMillis();
         _batch_write_mgr->stop();
+        component_times.emplace_back("batch_write_mgr", MonotonicMillis() - start);
     }
 
+#ifndef __APPLE__
     if (_routine_load_task_executor) {
+        start = MonotonicMillis();
         _routine_load_task_executor->stop();
+        component_times.emplace_back("routine_load_task_executor", MonotonicMillis() - start);
     }
+#endif
 
     if (_dictionary_cache_pool) {
+        start = MonotonicMillis();
         _dictionary_cache_pool->shutdown();
+        component_times.emplace_back("dictionary_cache_pool", MonotonicMillis() - start);
     }
 
     if (_diagnose_daemon) {
+        start = MonotonicMillis();
         _diagnose_daemon->stop();
+        component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
     }
 
-#ifndef BE_TEST
+#if !defined(__APPLE__) && !defined(BE_TEST)
+    start = MonotonicMillis();
     close_s3_clients();
+    component_times.emplace_back("close_s3_clients", MonotonicMillis() - start);
 #endif
 
+    start = MonotonicMillis();
     PythonEnvManager::getInstance().close();
+    component_times.emplace_back("PythonEnvManager", MonotonicMillis() - start);
+
+    int64_t total_time = MonotonicMillis() - total_start;
+    std::string summary = strings::Substitute("[ExecEnv::stop] Total: $0 ms", total_time);
+    if (!component_times.empty()) {
+        summary += " (";
+        std::vector<std::string> parts;
+        for (const auto& [name, time] : component_times) {
+            if (time > 0) {
+                parts.push_back(strings::Substitute("$0:$1ms", name, time));
+            }
+        }
+        summary += JoinStrings(parts, ", ");
+        summary += ")";
+    }
+    LOG(INFO) << summary;
 }
 
 void ExecEnv::destroy() {
@@ -733,14 +803,15 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
     SAFE_DELETE(_stream_context_mgr);
+#ifndef __APPLE__
     SAFE_DELETE(_routine_load_task_executor);
+#endif
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
-    SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
@@ -767,9 +838,11 @@ void ExecEnv::destroy() {
     if (HttpBrpcStubCache::getInstance() != nullptr) {
         HttpBrpcStubCache::getInstance()->shutdown();
     }
+#ifndef __APPLE__
     if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
         LakeServiceBrpcStubCache::getInstance()->shutdown();
     }
+#endif
     SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);

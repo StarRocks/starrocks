@@ -13,12 +13,15 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,39 +34,38 @@ public class PartitionsMetaSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("COMPACT_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VISIBLE_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VISIBLE_VERSION_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("NEXT_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DATA_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VERSION_EPOCH", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("VERSION_TXN_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("DB_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_ID", IntegerType.BIGINT)
+                        .column("COMPACT_VERSION", IntegerType.BIGINT)
+                        .column("VISIBLE_VERSION", IntegerType.BIGINT)
+                        .column("VISIBLE_VERSION_TIME", DateType.DATETIME)
+                        .column("NEXT_VERSION", IntegerType.BIGINT)
+                        .column("DATA_VERSION", IntegerType.BIGINT)
+                        .column("VERSION_EPOCH", IntegerType.BIGINT)
+                        .column("VERSION_TXN_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         // corresponding to `Range` or `List` in `SHOW PARTITIONS FROM XXX`
-                        .column("PARTITION_VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DISTRIBUTION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("BUCKETS", ScalarType.createType(PrimitiveType.INT))
-                        .column("REPLICATION_NUM", ScalarType.createType(PrimitiveType.INT))
-                        .column("STORAGE_MEDIUM", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("COOLDOWN_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_CONSISTENCY_CHECK_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("IS_IN_MEMORY", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("IS_TEMP", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("ROW_COUNT", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("ENABLE_DATACACHE", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("AVG_CS", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("P50_CS", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("MAX_CS", ScalarType.createType(PrimitiveType.DOUBLE))
-                        .column("STORAGE_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STORAGE_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TABLET_BALANCED", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("METADATA_SWITCH_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PATH_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("PARTITION_VALUE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DISTRIBUTION_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("BUCKETS", IntegerType.INT)
+                        .column("REPLICATION_NUM", IntegerType.INT)
+                        .column("STORAGE_MEDIUM", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("COOLDOWN_TIME", DateType.DATETIME)
+                        .column("LAST_CONSISTENCY_CHECK_TIME", DateType.DATETIME)
+                        .column("IS_IN_MEMORY", BooleanType.BOOLEAN)
+                        .column("IS_TEMP", BooleanType.BOOLEAN)
+                        .column("DATA_SIZE", IntegerType.BIGINT)
+                        .column("ROW_COUNT", IntegerType.BIGINT)
+                        .column("ENABLE_DATACACHE", BooleanType.BOOLEAN)
+                        .column("AVG_CS", FloatType.DOUBLE)
+                        .column("P50_CS", FloatType.DOUBLE)
+                        .column("MAX_CS", FloatType.DOUBLE)
+                        .column("STORAGE_PATH", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("STORAGE_SIZE", IntegerType.BIGINT)
+                        .column("TABLET_BALANCED", BooleanType.BOOLEAN)
+                        .column("METADATA_SWITCH_VERSION", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_PARTITIONS_META);
     }
 }

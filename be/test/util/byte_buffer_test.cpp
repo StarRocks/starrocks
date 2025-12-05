@@ -28,6 +28,10 @@ class ByteBufferTest : public testing::Test {
 public:
     ByteBufferTest() = default;
     ~ByteBufferTest() override = default;
+
+protected:
+    char _write_data[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    char _read_data[10];
 };
 
 TEST_F(ByteBufferTest, normal) {
@@ -44,7 +48,7 @@ TEST_F(ByteBufferTest, normal) {
     ASSERT_EQ(4, buf->capacity);
 
     ASSERT_EQ(1, buf->remaining());
-    buf->flip();
+    buf->flip_to_read();
     ASSERT_EQ(0, buf->pos);
     ASSERT_EQ(3, buf->limit);
     ASSERT_EQ(4, buf->capacity);
@@ -90,7 +94,7 @@ TEST_F(ByteBufferTest, test_allocate_with_meta) {
     auto buf1 = ByteBuffer::allocate_with_tracker(4).value();
     ASSERT_EQ(NoneByteBufferMeta::instance(), buf1->meta());
 
-    auto buf2 = ByteBuffer::allocate_with_tracker(4, ByteBufferMetaType::KAFKA).value();
+    auto buf2 = ByteBuffer::allocate_with_tracker(4, 0, ByteBufferMetaType::KAFKA).value();
     KafkaByteBufferMeta* meta2 = dynamic_cast<KafkaByteBufferMeta*>(buf2->meta());
     ASSERT_TRUE(meta2 != nullptr);
     ASSERT_EQ(-1, meta2->partition());
@@ -106,6 +110,80 @@ TEST_F(ByteBufferTest, test_allocate_with_meta) {
     ASSERT_TRUE(meta2 != meta3);
     ASSERT_EQ(2, meta3->partition());
     ASSERT_EQ(4, meta3->offset());
+}
+
+TEST_F(ByteBufferTest, test_flip_to_write_partial_read) {
+    auto buf = ByteBuffer::allocate_with_tracker(16).value();
+
+    // write [1, 2, 3, 4, 5]
+    buf->put_bytes(_write_data, 5);
+
+    // read [1, 2, 3]
+    buf->flip_to_read();
+    buf->get_bytes(_read_data, 3);
+
+    // write [1, 2, 3, 4]
+    buf->flip_to_write();
+    buf->put_bytes(_write_data, 4);
+
+    // read all bytes
+    buf->flip_to_read();
+    ASSERT_EQ(6, buf->remaining());
+    buf->get_bytes(_read_data, 6);
+    char check_data[] = {4, 5, 1, 2, 3, 4};
+    ASSERT_EQ(0, memcmp(check_data, _read_data, 6));
+    ASSERT_EQ(16, buf->capacity);
+    ASSERT_EQ(6, buf->pos);
+    ASSERT_EQ(6, buf->limit);
+}
+
+TEST_F(ByteBufferTest, test_flip_to_write_read_all) {
+    auto buf = ByteBuffer::allocate_with_tracker(16).value();
+
+    // write [1, 2, 3, 4, 5]
+    buf->put_bytes(_write_data, 5);
+
+    // read [1, 2, 3, 4, 5]
+    buf->flip_to_read();
+    buf->get_bytes(_read_data, 5);
+
+    // write [1, 2, 3, 4]
+    buf->flip_to_write();
+    buf->put_bytes(_write_data, 4);
+
+    // read all bytes
+    buf->flip_to_read();
+    ASSERT_EQ(4, buf->remaining());
+    buf->get_bytes(_read_data, 4);
+    char check_data[] = {1, 2, 3, 4};
+    ASSERT_EQ(0, memcmp(check_data, _read_data, 4));
+    ASSERT_EQ(16, buf->capacity);
+    ASSERT_EQ(4, buf->pos);
+    ASSERT_EQ(4, buf->limit);
+}
+
+TEST_F(ByteBufferTest, test_flip_to_write_read_nothing) {
+    auto buf = ByteBuffer::allocate_with_tracker(16).value();
+
+    // write [1, 2, 3, 4, 5]
+    buf->put_bytes(_write_data, 5);
+
+    // read [1, 2, 3, 4, 5]
+    buf->flip_to_read();
+
+    // write [1, 2, 3, 4]
+    buf->flip_to_write();
+    buf->put_bytes(_write_data, 4);
+
+    // read all bytes
+    buf->flip_to_read();
+    ASSERT_EQ(9, buf->remaining());
+    buf->get_bytes(_read_data, 9);
+    char check_data[] = {1, 2, 3, 4, 5, 1, 2, 3, 4};
+    ASSERT_EQ(0, memcmp(check_data, _read_data, 9));
+    ASSERT_EQ(16, buf->capacity);
+    ASSERT_EQ(9, buf->pos);
+    ASSERT_EQ(9, buf->limit);
 }
 
 } // namespace starrocks

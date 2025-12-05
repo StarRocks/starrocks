@@ -138,7 +138,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
         }
     }
 
-    // Just return the chunk whether its full or not in order to keep the semantics of pipeline
+    // Just return the chunk whether it's full or not in order to keep the semantics of pipeline
     for (const auto& column : output_columns) {
         RETURN_IF_ERROR(column->capacity_limit_reached());
     }
@@ -211,6 +211,8 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
     const auto& fn_result_cols = _table_function_result.first;
     const auto& offsets_col = _table_function_result.second;
     const auto offsets_data = offsets_col->immutable_data();
+    uint32_t fn_result_start = _next_output_row;
+    uint32_t fn_result_count = 0;
     while (curr_output_size < max_output_size && _next_output_row < offsets_data.back()) {
         uint32_t start = _next_output_row;
         uint32_t end = offsets_data[_next_output_row_offset + 1];
@@ -234,20 +236,21 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
                     columns[i]->append_value_multiple_times(&value, copy_rows);
                 }
             }
-
-            // Build table function result
-            if (_fn_result_required) {
-                for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-                    columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
-                }
-            }
         }
 
         curr_output_size += copy_rows;
         _next_output_row += copy_rows;
+        fn_result_count += copy_rows;
         DCHECK_LE(start + copy_rows, end);
         if (start + copy_rows == end) {
             _next_output_row_offset++;
+        }
+    }
+
+    // Build table function result
+    if (_fn_result_required) {
+        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+            columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), fn_result_start, fn_result_count);
         }
     }
 }

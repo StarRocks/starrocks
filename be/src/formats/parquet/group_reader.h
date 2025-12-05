@@ -163,7 +163,7 @@ private:
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                  std::vector<std::string>& sub_field_path, bool is_decode_needed);
 
-    void _init_read_chunk();
+    Status _init_read_chunk();
 
     Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
                        ChunkPtr* chunk, bool ignore_reserved_field = false);

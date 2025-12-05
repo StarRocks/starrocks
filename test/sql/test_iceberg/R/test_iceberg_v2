@@ -5,6 +5,9 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 set enable_connector_incremental_scan_ranges=true;
 -- result:
 -- !result
+set new_planner_optimize_timeout = 30000;
+-- result:
+-- !result
 /*
  CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_orc_unpartitioned_table` (
   `k1` INT NOT NULL,

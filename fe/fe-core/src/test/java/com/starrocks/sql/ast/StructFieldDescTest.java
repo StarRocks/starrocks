@@ -16,26 +16,27 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.StructFieldDescAnalyzer;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class StructFieldDescTest {
     @Test
     public void testAnalyze() {
-        StructField field1 = new StructField("v1", Type.INT);
-        StructField field2 = new StructField("v2", Type.VARCHAR);
-        StructField field3 = new StructField("v3", Type.INT);
+        StructField field1 = new StructField("v1", IntegerType.INT);
+        StructField field2 = new StructField("v2", VarcharType.VARCHAR);
+        StructField field3 = new StructField("v3", IntegerType.INT);
 
         Assertions.assertEquals("StructField[name='v3', type=INT, position=0, fieldId=-1, fieldPhysicalName='']",
                 field3.toString());
-        StructField unnamedField = new StructField(null, Type.VARCHAR);
+        StructField unnamedField = new StructField(null, VarcharType.VARCHAR);
         Assertions.assertEquals("StructField[name='', type=VARCHAR, position=0, fieldId=-1, fieldPhysicalName='']",
                 unnamedField.toString());
 
@@ -45,40 +46,40 @@ public class StructFieldDescTest {
 
         Column structCol1 = new Column("structCol1", type);
 
-        Type addType = ScalarType.createType(PrimitiveType.INT);
+        Type addType = IntegerType.INT;
         TypeDef addTypeDef = new TypeDef(addType);
         Column intCol1 = new Column("intCol1", addType);
 
         StructFieldDesc dropFieldDesc1 = new StructFieldDesc("v2", Lists.newArrayList("v1"), null, null);
 
         // base column not exist;
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(null, true));
-    
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc1, null, true));
+
         // base column is not struct column
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(intCol1, true));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc1, intCol1, true));
 
         // nested field is not struct
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc1.analyze(structCol1, true));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc1, structCol1, true));
 
         // drop field is not exist
         StructFieldDesc dropFieldDesc2 = new StructFieldDesc("v1", Lists.newArrayList("v6"), null, null);
-        Assertions.assertThrows(AnalysisException.class, () -> dropFieldDesc2.analyze(structCol1, true));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(dropFieldDesc2, structCol1, true));
 
         // normal drop field
         StructFieldDesc dropFieldDesc3 = new StructFieldDesc("v2", Lists.newArrayList("v4"), null, null);
-        Assertions.assertDoesNotThrow(() -> dropFieldDesc3.analyze(structCol1, true));        
+        Assertions.assertDoesNotThrow(() -> StructFieldDescAnalyzer.analyze(dropFieldDesc3, structCol1, true));
 
         // add exist field
         StructFieldDesc addFieldDesc1 = new StructFieldDesc("v2", Lists.newArrayList("v4"), addTypeDef, null);
-        Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc1.analyze(structCol1, false));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(addFieldDesc1, structCol1, false));
 
         // type not exist
         StructFieldDesc addFieldDesc2 = new StructFieldDesc("v5", Lists.newArrayList("v6"), null, null);
-        Assertions.assertThrows(AnalysisException.class, () -> addFieldDesc2.analyze(structCol1, false));
+        Assertions.assertThrows(SemanticException.class, () -> StructFieldDescAnalyzer.analyze(addFieldDesc2, structCol1, false));
 
         // normal add field
         StructFieldDesc addFieldDesc3 = new StructFieldDesc("v5", Lists.newArrayList("v4"), addTypeDef, null);
-        Assertions.assertDoesNotThrow(() -> addFieldDesc3.analyze(structCol1, false));
+        Assertions.assertDoesNotThrow(() -> StructFieldDescAnalyzer.analyze(addFieldDesc3, structCol1, false));
 
     }
 }

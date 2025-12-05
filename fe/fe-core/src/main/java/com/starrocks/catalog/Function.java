@@ -40,16 +40,21 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.thrift.TTypeDesc;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -337,7 +342,7 @@ public class Function implements Writable {
 
     public Type getVarArgsType() {
         if (!hasVarArgs) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         Preconditions.checkState(argTypes.length > 0);
         return argTypes[argTypes.length - 1];
@@ -496,6 +501,7 @@ public class Function implements Writable {
         }
         return true;
     }
+
     /**
      * Returns true if 'this' is a supertype of 'other'. Each argument in other must
      * be implicitly castable to the matching argument in this.
@@ -511,11 +517,11 @@ public class Function implements Writable {
         }
         if (other.hasNamedArg()) {
             return compareNamedArguments(other, startArgIndex,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.isImplicitlyCastable(ot, m, true));
         } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
             // positional args with defaults in table functions
             return comparePositionalArguments(other, startArgIndex,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.isImplicitlyCastable(ot, m, true));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.isImplicitlyCastable(ot, m, true));
         } else {
             if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
                 return false;
@@ -530,7 +536,7 @@ public class Function implements Writable {
                 if (other.argTypes[i].matchesType(this.argTypes[i])) {
                     continue;
                 }
-                if (!Type.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
+                if (!TypeManager.isImplicitlyCastable(other.argTypes[i], this.argTypes[i], true)) {
                     return false;
                 }
             }
@@ -541,7 +547,7 @@ public class Function implements Writable {
                     if (other.argTypes[i].matchesType(getVarArgsType())) {
                         continue;
                     }
-                    if (!Type.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
+                    if (!TypeManager.isImplicitlyCastable(other.argTypes[i], getVarArgsType(), true)) {
                         return false;
                     }
                 }
@@ -555,11 +561,11 @@ public class Function implements Writable {
     private boolean isAssignCompatible(Function other) {
         if (other.hasNamedArg()) {
             return compareNamedArguments(other, 0,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.canCastTo(ot, m));
         } else if (this.defaultArgExprs != null && !other.hasVarArgs) {
             // positional args with defaults in table functions
             return comparePositionalArguments(other, 0,
-                    (Type ot, Type m) -> !ot.matchesType(m) && !Type.canCastTo(ot, m));
+                    (Type ot, Type m) -> !ot.matchesType(m) && !TypeManager.canCastTo(ot, m));
         } else {
             if (!this.hasVarArgs && other.argTypes.length != this.argTypes.length) {
                 return false;
@@ -571,7 +577,7 @@ public class Function implements Writable {
                 if (other.argTypes[i].matchesType(this.argTypes[i])) {
                     continue;
                 }
-                if (!Type.canCastTo(other.argTypes[i], argTypes[i])) {
+                if (!TypeManager.canCastTo(other.argTypes[i], argTypes[i])) {
                     return false;
                 }
             }
@@ -581,7 +587,7 @@ public class Function implements Writable {
                     if (other.argTypes[i].matchesType(getVarArgsType())) {
                         continue;
                     }
-                    if (!Type.canCastTo(other.argTypes[i], getVarArgsType())) {
+                    if (!TypeManager.canCastTo(other.argTypes[i], getVarArgsType())) {
                         return false;
                     }
                 }
@@ -743,8 +749,14 @@ public class Function implements Writable {
         if (location != null) {
             fn.setHdfs_location(location.toString());
         }
-        fn.setArg_types(Type.toThrift(argTypes));
-        fn.setRet_type(getReturnType().toThrift());
+
+        ArrayList<TTypeDesc> result = Lists.newArrayList();
+        for (Type t : argTypes) {
+            result.add(TypeSerializer.toThrift(t));
+        }
+        fn.setArg_types(result);
+
+        fn.setRet_type(TypeSerializer.toThrift(getReturnType()));
         fn.setHas_var_args(hasVarArgs);
         fn.setId(id);
         fn.setFid(functionId);
@@ -752,7 +764,7 @@ public class Function implements Writable {
             fn.setChecksum(checksum);
         }
         if (aggStateDesc != null) {
-            fn.setAgg_state_desc(aggStateDesc.toThrift());
+            fn.setAgg_state_desc(TypeSerializer.toThrift(aggStateDesc));
         }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
@@ -904,7 +916,6 @@ public class Function implements Writable {
         }
         return obj != null && obj.getClass() == this.getClass() && isIdentical((Function) obj);
     }
-
 
     // just shallow copy
     public Function copy() {

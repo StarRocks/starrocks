@@ -14,11 +14,11 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.DateType;
 import org.apache.iceberg.ExpireSnapshots;
 
 import java.time.Duration;
@@ -41,7 +41,7 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(OLDER_THAN, Type.DATETIME, false)
+                        new NamedArgument(OLDER_THAN, DateType.DATETIME, false)
                 ),
                 IcebergTableOperation.EXPIRE_SNAPSHOTS
         );
@@ -58,7 +58,7 @@ public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
         if (olderThanArg == null) {
             olderThanMillis = -1L;
         } else {
-            LocalDateTime time = olderThanArg.castTo(Type.DATETIME).map(ConstantOperator::getDatetime)
+            LocalDateTime time = olderThanArg.castTo(DateType.DATETIME).map(ConstantOperator::getDatetime)
                     .orElseThrow(() ->
                             new StarRocksConnectorException("invalid argument type for %s, expected DATETIME", OLDER_THAN));
             olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();

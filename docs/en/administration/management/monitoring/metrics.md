@@ -651,6 +651,17 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the highest Compaction Score on each BE node.
 
+### starrocks_fe_slow_lock_held_time_ms
+
+- Unit: ms
+- Type: Summary
+- Description: Histogram tracking the lock held time (in milliseconds) when slow locks are detected. This metric is updated when lock wait time exceeds the `slow_lock_threshold_ms` configuration parameter. It tracks the maximum lock held time among all lock owners when a slow lock event is detected. Each metric includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs. Note: This metric may not accurately reflect the exact lock held time under high contention, because the metric is updated once the wait time exceeds the threshold, but the held time may continue to increase until the owner completes its operation and releases the lock. However, this metric can still be updated even when deadlock occurs.
+
+### starrocks_fe_slow_lock_wait_time_ms
+
+- Unit: ms
+- Type: Summary
+- Description: Histogram tracking the lock wait time (in milliseconds) when slow locks are detected. This metric is updated when lock wait time exceeds the `slow_lock_threshold_ms` configuration parameter. It accurately tracks how long threads wait to acquire locks during lock contention scenarios. Each metric includes quantile values (0.75, 0.95, 0.98, 0.99, 0.999), `_sum`, and `_count` outputs. This metric provides precise wait time measurements. Note: This metric cannot be updated when deadlock occurs, hence it cannot be used to detect deadlock situations.
 
 ### update_compaction_outputs_total
 
@@ -1794,3 +1805,52 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: ms
 - Type: Cumulative
 - Description: The total time for copy consumed by Clone tasks in the BE node, including both INTER_NODE and INTRA_NODE types.
+
+### Transaction Latency Metrics
+
+The following metrics are `summary`-type metrics that provide latency distributions for different phases of a transaction. These metrics are reported exclusively by the Leader FE node.
+
+Each metric includes the following outputs:
+- **Quantiles**: Latency values at different percentile boundaries. These are exposed via the `quantile` label, which can have values of `0.75`, `0.95`, `0.98`, `0.99`, and `0.999`.
+- **`<metric_name>_sum`**: The total cumulative time spent in this phase, for example, `starrocks_fe_txn_total_latency_ms_sum`.
+- **`<metric_name>_count`**: The total number of transactions recorded for this phase, for example, `starrocks_fe_txn_total_latency_ms_count`.
+
+All transaction metrics share the following labels:
+- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups).
+- `is_leader`: Indicates whether the reporting FE node is the Leader. Only the Leader FE (`is_leader="true"`) reports actual metric values. Followers will have `is_leader="false"` and report no data.
+
+#### starrocks_fe_txn_total_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The total latency for a transaction to complete, measured from the `prepare` time to the `finish` time. This metric represents the full end-to-end duration of a transaction.
+
+#### starrocks_fe_txn_write_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The latency of the `write` phase of a transaction, from `prepare` time to `commit` time. This metric isolates the performance of the data writing and preparation stage before the transaction is ready to be published.
+
+#### starrocks_fe_txn_publish_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, and `ack` sub-phases.
+
+#### starrocks_fe_txn_publish_schedule_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The time a transaction spends waiting to be published after it has been committed, measured from `commit` time to when the publish task is picked up. This metric reflects scheduling delays or queueing time in the `publish` pipeline.
+
+#### starrocks_fe_txn_publish_execute_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The active execution time of the `publish` task, from when the task is picked up to when it finishes. This metric represents the actual time being spent to make the transaction's changes visible.
+
+#### starrocks_fe_txn_publish_ack_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The final acknowledgment latency, from when the `publish` task finishes to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes any final steps or acknowledgments required.

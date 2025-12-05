@@ -26,7 +26,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -55,11 +54,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -108,7 +110,7 @@ public class ColumnFilterConverter {
 
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
-            String functionName = node.getFnName().getFunction();
+            String functionName = node.getFunctionName();
             if (FunctionSet.SUBSTRING.equalsIgnoreCase(functionName) ||
                     FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
@@ -372,7 +374,7 @@ public class ColumnFilterConverter {
 
             if (type.isFixedPointType() && columnType.isFixedPointType()) {
                 // LargeIntLiteral getHashValue method is different with IntLiteral
-                return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
+                return type == columnType || (type != IntegerType.LARGEINT && columnType != IntegerType.LARGEINT);
             }
 
             return type.equals(columnType);
@@ -410,7 +412,7 @@ public class ColumnFilterConverter {
 
     private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
                                                             CallOperator callOperator) {
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
         if (!Objects.equals(fnName, callOperator.getFnName())) {
             return false;
         }
@@ -498,6 +500,12 @@ public class ColumnFilterConverter {
                 LOG.warn("build column filter failed.", e);
             }
             return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate,
+                                                    Map<String, PartitionColumnFilter> context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ColumnFilterConverter");
         }
 
         @Override

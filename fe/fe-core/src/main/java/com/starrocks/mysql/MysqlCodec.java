@@ -15,21 +15,21 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static com.starrocks.catalog.Type.CHARSET_BINARY;
-import static com.starrocks.catalog.Type.CHARSET_UTF8;
-
 public class MysqlCodec {
+    public static final int CHARSET_BINARY = 63;
+    public static final int CHARSET_UTF8 = 33;
+
     public static byte readByte(ByteBuffer buffer) {
         return buffer.get();
     }
@@ -224,7 +224,7 @@ public class MysqlCodec {
         // Flags: two byte integer
         writeInt2(out, 0);
         // Decimals: one byte integer
-        writeInt1(out, type.getMysqlResultSetFieldDecimals());
+        writeInt1(out, getMysqlResultSetFieldDecimals(type));
         // filler: two byte integer
         writeInt2(out, 0);
 
@@ -360,6 +360,33 @@ public class MysqlCodec {
                 case CHAR, VARCHAR, HLL, BITMAP, LARGEINT, JSON -> CHARSET_UTF8;
                 default -> CHARSET_BINARY;
             };
+        }
+    }
+
+    /**
+     * @return scalar scale if type is decimal
+     * 31 if type is float or double
+     * 0 others
+     * <p>
+     * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
+     * decimals (1) -- max shown decimal digits
+     * 0x00 for integers and static strings
+     * 0x1f for dynamic strings, double, float
+     * 0x00 to 0x51 for decimals
+     */
+    public static int getMysqlResultSetFieldDecimals(Type type) {
+        switch (type.getPrimitiveType()) {
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMAL256:
+                return ((ScalarType) type).getScalarScale();
+            case FLOAT:
+            case DOUBLE:
+                return 31;
+            default:
+                return 0;
         }
     }
 }

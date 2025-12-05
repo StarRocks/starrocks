@@ -213,6 +213,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | If the number of columns in the table exceeds this configuration during automatic collection, only the column statistics for the Predicate Column will be collected. |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | The interval at which FE synchronize and persists statistics of Predicate Column. |
 | statistic_predicate_columns_ttl_hours       | LONG    | 24       | The elimination time of the Predicate Column statistics cached in FE. |
+| enable_predicate_columns_collection         | BOOLEAN | TRUE     | Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization. |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | Whether to enable manual collection for the NDV information of the ARRAY type. |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | Whether to enable automatic collection for the NDV information of the ARRAY type. |
 
@@ -323,13 +324,14 @@ Parameter description:
 
 - PROPERTIES: custom parameters. If `PROPERTIES` is not specified, the default settings in `fe.conf` are used.
 
-| **PROPERTIES**                 | **Type** | **Default value** | **Description**                                              |
-| ------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
-| statistic_sample_collect_rows  | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
-| histogram_buckets_size         | LONG     | 64                | The default bucket number for a histogram.                   |
-| histogram_mcv_size             | INT      | 100               | The number of most common values (MCV) for a histogram.      |
-| histogram_sample_ratio         | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
-| histogram_max_sample_row_count | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
+| **PROPERTIES**                    | **Type** | **Default value** | **Description**                                              |
+| --------------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
+| statistic_sample_collect_rows     | INT      | 200000            | The minimum number of rows to collect. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| histogram_buckets_size            | LONG     | 64                | The default bucket number for a histogram.                   |
+| histogram_mcv_size                | INT      | 100               | The number of most common values (MCV) for a histogram.      |
+| histogram_sample_ratio            | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |
+| histogram_max_sample_row_count    | LONG     | 10000000          | The maximum number of rows to collect for a histogram.       |
+| histogram_collect_bucket_ndv_mode | STRING   | none              | The mode for estimating the number of distinct values (NDV) per histogram bucket. `none` (default, no distinct count collected), `hll` (uses HyperLogLog for accurate estimation), or `sample` (uses a low overhead sample-based estimator). |
 
 The number of rows to collect for a histogram is controlled by multiple parameters. It is the larger value between `statistic_sample_collect_rows` and table row count * `histogram_sample_ratio`. The number cannot exceed the value specified by `histogram_max_sample_row_count`. If the value is exceeded, `histogram_max_sample_row_count` takes precedence.
 
@@ -346,6 +348,12 @@ ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1,v2 WITH 32 BUCKETS
 PROPERTIES(
    "histogram_mcv_size" = "32",
    "histogram_sample_ratio" = "0.5"
+);
+
+-- Collect histograms on v3 using the 'hll' mode for accurate distinct count estimation per bucket.
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v3
+PROPERTIES(
+   "histogram_collect_bucket_ndv_mode" = "hll"
 );
 ```
 

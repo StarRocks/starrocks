@@ -190,7 +190,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     public TabletScheduler(TabletSchedulerStat stat) {
-        super("tablet scheduler", SCHEDULE_INTERVAL_MS);
+        super("tablet-scheduler", SCHEDULE_INTERVAL_MS);
         this.stat = stat;
         this.rebalancer = new DiskAndTabletLoadReBalancer();
     }
@@ -400,15 +400,19 @@ public class TabletScheduler extends FrontendDaemon {
      */
     public static void resetDecommStatForSingleReplicaTabletUnlocked(long tabletId, List<Replica> replicas) {
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        if (tabletScheduler == null) {
+            return;
+        }
         TabletSchedCtx tabletSchedCtx = tabletScheduler.getTabletSchedCtx(tabletId);
         if (tabletSchedCtx != null) {
             Replica decommissionedReplica = tabletSchedCtx.getDecommissionedReplica();
             for (Replica replica : replicas) {
                 if (replica.getState() == Replica.ReplicaState.DECOMMISSION && replica.getLastFailedVersion() < 0
                         && decommissionedReplica != null && replica.getId() == decommissionedReplica.getId()) {
+                    String replicaInfo = tabletSchedCtx.getTablet() != null ?
+                            tabletSchedCtx.getTablet().getReplicaInfos() : "tablet is null";
                     tabletScheduler.finalizeTabletCtx(tabletSchedCtx, TabletSchedCtx.State.CANCELLED,
-                            "src replica of rebalance need to reset state, replicas: " +
-                                    tabletSchedCtx.getTablet().getReplicaInfos());
+                            "src replica of rebalance need to reset state, replicas: " + replicaInfo);
                     break;
                 }
             }

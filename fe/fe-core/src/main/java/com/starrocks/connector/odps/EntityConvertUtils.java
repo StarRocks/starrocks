@@ -22,12 +22,18 @@ import com.aliyun.odps.type.MapTypeInfo;
 import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.aliyun.odps.type.VarcharTypeInfo;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,43 +44,43 @@ public class EntityConvertUtils {
     public static Type convertType(TypeInfo typeInfo) {
         switch (typeInfo.getOdpsType()) {
             case BIGINT:
-                return Type.BIGINT;
+                return IntegerType.BIGINT;
             case INT:
-                return Type.INT;
+                return IntegerType.INT;
             case SMALLINT:
-                return Type.SMALLINT;
+                return IntegerType.SMALLINT;
             case TINYINT:
-                return Type.TINYINT;
+                return IntegerType.TINYINT;
             case FLOAT:
-                return Type.FLOAT;
+                return FloatType.FLOAT;
             case DECIMAL:
                 DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
                 //In odps 2.0, the maximum length of decimal is 38, while in 1.0 it is 54. You need to convert it to String type for processing.
                 //https://help.aliyun.com/zh/maxcompute/user-guide/maxcompute-v2-0-data-type-edition?spm=a2c4g.11186623.help-menu-27797.d_2_15_0_2.1c01123dDL8rEV
                 if (decimalTypeInfo.getPrecision() > 38) {
-                    return ScalarType.createDefaultCatalogString();
+                    return TypeFactory.createDefaultCatalogString();
                 }
-                return ScalarType.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
+                return TypeFactory.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
             case DOUBLE:
-                return Type.DOUBLE;
+                return FloatType.DOUBLE;
             case CHAR:
                 CharTypeInfo charTypeInfo = (CharTypeInfo) typeInfo;
-                return ScalarType.createCharType(charTypeInfo.getLength());
+                return TypeFactory.createCharType(charTypeInfo.getLength());
             case VARCHAR:
                 VarcharTypeInfo varcharTypeInfo = (VarcharTypeInfo) typeInfo;
-                return ScalarType.createVarcharType(varcharTypeInfo.getLength());
+                return TypeFactory.createVarcharType(varcharTypeInfo.getLength());
             case STRING:
             case JSON:
-                return ScalarType.createDefaultCatalogString();
+                return TypeFactory.createDefaultCatalogString();
             case BINARY:
-                return Type.VARBINARY;
+                return VarbinaryType.VARBINARY;
             case BOOLEAN:
-                return Type.BOOLEAN;
+                return BooleanType.BOOLEAN;
             case DATE:
-                return Type.DATE;
+                return DateType.DATE;
             case TIMESTAMP:
             case DATETIME:
-                return Type.DATETIME;
+                return DateType.DATETIME;
             case MAP:
                 MapTypeInfo mapTypeInfo = (MapTypeInfo) typeInfo;
                 return new MapType(convertType(mapTypeInfo.getKeyTypeInfo()),
@@ -89,7 +95,7 @@ public class EntityConvertUtils {
                                 .collect(Collectors.toList());
                 return new StructType(fieldTypeList);
             default:
-                return Type.VARCHAR;
+                return VarcharType.VARCHAR;
         }
     }
 

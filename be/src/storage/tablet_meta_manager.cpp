@@ -455,6 +455,23 @@ Status TabletMetaManager::walk_until_timeout(
     return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func, timeout_sec);
 }
 
+Status TabletMetaManager::walk_with_compact_on_timeout(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
+        int64_t timeout_sec) {
+    auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> StatusOr<bool> {
+        TTabletId tablet_id;
+        TSchemaHash schema_hash;
+        if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
+            LOG(WARNING) << "invalid tablet_meta key:" << key;
+            return true;
+        }
+        return func(tablet_id, schema_hash, value);
+    };
+    return meta->iterate_with_compact_on_timeout(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func,
+                                                 timeout_sec);
+}
+
 std::string json_to_string(const rapidjson::Value& val_obj) {
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
@@ -771,8 +788,11 @@ void decode_delta_column_group_key(std::string_view enc_key, TTabletId* tablet_i
     *version = INT64_MAX - BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 80));
 }
 
+DEFINE_FAIL_POINT(tablet_meta_manager_rowset_commit_internal_error);
 Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key) {
+    FAIL_POINT_TRIGGER_RETURN(tablet_meta_manager_rowset_commit_internal_error,
+                              Status::InternalError("inject tablet_meta_manager_rowset_commit_internal_error"));
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);

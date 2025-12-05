@@ -26,11 +26,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -43,7 +43,7 @@ public class PartitionsProcDirTest {
     public void testFetchResultForCloudNativeTable() throws AnalysisException {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         DataCacheInfo dataCache = new DataCacheInfo(true, false);
         long partitionId = 1025;
@@ -73,7 +73,7 @@ public class PartitionsProcDirTest {
     public void testFetchResultForOlapTable() throws AnalysisException {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
-        List<Column> col = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
         long partitionId = 1025;
         listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);

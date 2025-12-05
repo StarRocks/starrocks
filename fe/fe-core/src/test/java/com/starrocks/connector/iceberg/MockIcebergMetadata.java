@@ -23,7 +23,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -39,6 +38,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -86,8 +89,10 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_YEAR_TABLE_NAME = "t0_year";
     public static final String MOCKED_PARTITIONED_MONTH_TABLE_NAME = "t0_month";
     public static final String MOCKED_PARTITIONED_DAY_TABLE_NAME = "t0_day";
+    public static final String MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME = "t0_day_with_null_partition";
     public static final String MOCKED_PARTITIONED_HOUR_TABLE_NAME = "t0_hour";
     public static final String MOCKED_PARTITIONED_BUCKET_TABLE_NAME = "t0_bucket";
+    public static final String MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME = "t0_truncate";
     // partition table with transforms and partition column type is timestamp with timezone
     public static final String MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME = "t0_year_tz";
     public static final String MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME = "t0_month_tz";
@@ -104,8 +109,11 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private static final List<String> PARTITION_TRANSFORM_TABLE_NAMES =
             ImmutableList.of(MOCKED_PARTITIONED_YEAR_TABLE_NAME, MOCKED_PARTITIONED_MONTH_TABLE_NAME,
-                    MOCKED_PARTITIONED_DAY_TABLE_NAME, MOCKED_PARTITIONED_HOUR_TABLE_NAME,
+                    MOCKED_PARTITIONED_DAY_TABLE_NAME,
+                    MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME,
+                    MOCKED_PARTITIONED_HOUR_TABLE_NAME,
                     MOCKED_PARTITIONED_BUCKET_TABLE_NAME,
+                    MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME,
                     MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME, MOCKED_PARTITIONED_MONTH_TZ_TABLE_NAME,
                     MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME, MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME,
                     MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME);
@@ -143,9 +151,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_UNPARTITIONED_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, IcebergTableInfo> icebergTableInfoMap = MOCK_TABLE_MAP.get(MOCKED_UNPARTITIONED_DB_NAME);
 
-        List<Column> schemas = ImmutableList.of(new Column("id", Type.INT, true),
-                new Column("data", Type.STRING, true),
-                new Column("date", Type.STRING, true));
+        List<Column> schemas = ImmutableList.of(new Column("id", IntegerType.INT, true),
+                new Column("data", StringType.STRING, true),
+                new Column("date", StringType.STRING, true));
 
         Schema schema =
                 new Schema(required(3, "id", Types.IntegerType.get()),
@@ -218,23 +226,23 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private static List<Column> getPartitionedTableSchema(String tblName) {
         if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
-            return ImmutableList.of(new Column("id", Type.INT, true),
-                    new Column("data", Type.STRING, true),
-                    new Column("date", Type.STRING, true));
+            return ImmutableList.of(new Column("id", IntegerType.INT, true),
+                    new Column("data", StringType.STRING, true),
+                    new Column("date", StringType.STRING, true));
         } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
-            return ImmutableList.of(new Column("id", Type.INT, true),
-                    new Column("data", Type.STRING, true),
-                    new Column("date", Type.DATE, true));
+            return ImmutableList.of(new Column("id", IntegerType.INT, true),
+                    new Column("data", StringType.STRING, true),
+                    new Column("date", DateType.DATE, true));
         } else {
-            return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
-                    new Column("c", Type.INT), new Column("d", Type.VARCHAR));
+            return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
+                    new Column("c", IntegerType.INT), new Column("d", VarcharType.VARCHAR));
         }
     }
 
     private static List<Column> getPartitionedTransformTableSchema(String tblName) {
-        return ImmutableList.of(new Column("id", Type.INT, true),
-                new Column("data", Type.STRING, true),
-                new Column("ts", Type.DATETIME, true));
+        return ImmutableList.of(new Column("id", IntegerType.INT, true),
+                new Column("data", StringType.STRING, true),
+                new Column("ts", DateType.DATETIME, true));
     }
 
     private static Schema getIcebergPartitionSchema(String tblName) {
@@ -317,6 +325,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                                 + MOCKED_PARTITIONED_DAY_TABLE_NAME), MOCKED_PARTITIONED_DAY_TABLE_NAME,
                         schema, spec, 1);
             }
+            case MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).day("ts").build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME),
+                        MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME,
+                        schema, spec, 1);
+            }
             case MOCKED_PARTITIONED_HOUR_TABLE_NAME: {
                 PartitionSpec spec =
                         PartitionSpec.builderFor(schema).hour("ts").build();
@@ -331,6 +348,14 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 return TestTables.create(
                         new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
                                 + MOCKED_PARTITIONED_BUCKET_TABLE_NAME), MOCKED_PARTITIONED_BUCKET_TABLE_NAME,
+                        schema, spec, 1);
+            }
+            case MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME: {
+                PartitionSpec spec =
+                        PartitionSpec.builderFor(schema).truncate("data", 5).build();
+                return TestTables.create(
+                        new File(getStarRocksHome() + "/" + MOCKED_PARTITIONED_TRANSFORMS_DB_NAME + "/"
+                                + MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME), MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME,
                         schema, spec, 1);
             }
             case MOCKED_PARTITIONED_YEAR_TZ_TABLE_NAME: {
@@ -406,6 +431,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             case MOCKED_PARTITIONED_DAY_TZ_TABLE_NAME:
                 return Lists.newArrayList("ts_day=2022-01-01", "ts_day=2022-01-02",
                         "ts_day=2022-01-03", "ts_day=2022-01-04", "ts_day=2022-01-05");
+            case MOCKED_PARTITIONED_DAY_WITH_NULL_PARTITION_TABLE_NAME:
+                return Lists.newArrayList("ts_day=2022-01-01", "ts_day=2022-01-02",
+                        "ts_day=2022-01-03", "ts_day=2022-01-04", "ts_day=2022-01-05", "ts_day=null");
             case MOCKED_PARTITIONED_HOUR_TABLE_NAME:
             case MOCKED_PARTITIONED_HOUR_TZ_TABLE_NAME:
                 return Lists.newArrayList("ts_hour=2022-01-01-00", "ts_hour=2022-01-01-01",
@@ -413,6 +441,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             case MOCKED_PARTITIONED_BUCKET_TABLE_NAME:
                 return Lists.newArrayList("ts_bucket=0", "ts_bucket=1",
                         "ts_bucket=2", "ts_bucket=3", "ts_bucket=4");
+            case MOCKED_PARTITIONED_TRUNCATE_TABLE_NAME:
+                return Lists.newArrayList("data_trunc=aaaaa", "data_trunc=bbbbb",
+                        "data_trunc=ccccc", "data_trunc=ddddd", "data_trunc=eeeee");
             case MOCKED_PARTITIONED_EVOLUTION_DATE_MONTH_IDENTITY_TABLE_NAME:
                 return Lists.newArrayList("ts=2024-01-01", "ts_month=2024-01",
                         "ts=2024-02", "ts=2024-03");

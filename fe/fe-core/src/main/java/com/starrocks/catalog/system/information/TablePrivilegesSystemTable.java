@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -32,12 +32,12 @@ public class TablePrivilegesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_TABLE_PRIVILEGES);
     }
 }

@@ -41,7 +41,9 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#ifndef __APPLE__
 #include "runtime/file_result_writer.h"
+#endif
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
@@ -65,12 +67,18 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
         _format_type = sink.format;
     }
 
+#ifndef __APPLE__
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
         _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);
     }
+#endif
 
     _is_binary_format = sink.is_binary_row;
+
+    if (sink.__isset.output_column_names) {
+        _output_column_names = sink.output_column_names;
+    }
 }
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {
@@ -103,10 +111,12 @@ Status ResultSink::prepare(RuntimeState* state) {
         _writer.reset(new (std::nothrow)
                               MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
         break;
+#ifndef __APPLE__
     case TResultSinkType::FILE:
         CHECK(_file_opts.get() != nullptr);
         _writer.reset(new (std::nothrow) FileResultWriter(_file_opts.get(), _output_expr_ctxs, _profile));
         break;
+#endif
     case TResultSinkType::STATISTIC:
         _writer.reset(new (std::nothrow) StatisticResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;

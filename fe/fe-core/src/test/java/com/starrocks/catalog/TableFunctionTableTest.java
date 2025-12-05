@@ -31,6 +31,9 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -70,11 +73,11 @@ public class TableFunctionTableTest {
             TableFunctionTable table = new TableFunctionTable(newProperties());
             List<Column> schema = table.getFullSchema();
             Assertions.assertEquals(5, schema.size());
-            Assertions.assertEquals(new Column("col_int", Type.INT), schema.get(0));
-            Assertions.assertEquals(new Column("col_string", Type.VARCHAR), schema.get(1));
-            Assertions.assertEquals(new Column("col_path1", ScalarType.createDefaultString(), true), schema.get(2));
-            Assertions.assertEquals(new Column("col_path2", ScalarType.createDefaultString(), true), schema.get(3));
-            Assertions.assertEquals(new Column("col_path3", ScalarType.createDefaultString(), true), schema.get(4));
+            Assertions.assertEquals(new Column("col_int", IntegerType.INT), schema.get(0));
+            Assertions.assertEquals(new Column("col_string", VarcharType.VARCHAR), schema.get(1));
+            Assertions.assertEquals(new Column("col_path1", TypeFactory.createDefaultString(), true), schema.get(2));
+            Assertions.assertEquals(new Column("col_path2", TypeFactory.createDefaultString(), true), schema.get(3));
+            Assertions.assertEquals(new Column("col_path3", TypeFactory.createDefaultString(), true), schema.get(4));
         });
     }
 
@@ -213,7 +216,8 @@ public class TableFunctionTableTest {
     public void testNoFilesFound() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
-            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir) throws StarRocksException {
+            public static List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir)
+                    throws StarRocksException {
                 return Lists.newArrayList();
             }
         };

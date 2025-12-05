@@ -54,6 +54,21 @@ public:
     // Returns 'value' rounded up to the nearest multiple of 'factor'
     static inline int64_t round_up(int64_t value, int64_t factor) { return (value + (factor - 1)) / factor * factor; }
 
+    // Safe wrapper for std::aligned_alloc that handles platform-specific requirements
+    // On macOS: ensures alignment >= sizeof(void*) and size is non-zero
+    // On all platforms: ensures size is a multiple of alignment
+    static inline void* safe_aligned_alloc(size_t alignment, size_t size) {
+#ifdef __APPLE__
+        // macOS specific: aligned_alloc requires alignment >= sizeof(void*) (8 bytes)
+        alignment = std::max(alignment, sizeof(void*));
+        // macOS specific: size must not be zero
+        if (size == 0) size = alignment;
+#endif
+        // Ensure size is a multiple of alignment (required on macOS, safe on all platforms)
+        size = round_up(size, alignment);
+        return std::aligned_alloc(alignment, size);
+    }
+
     // Returns the smallest power of two that contains v. Taken from
     // http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
     // TODO: Pick a better name, as it is not clear what happens when the input is

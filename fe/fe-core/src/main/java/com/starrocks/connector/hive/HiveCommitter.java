@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
@@ -29,7 +30,6 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
@@ -203,17 +203,21 @@ public class HiveCommitter {
     private void prepareOverwriteTable(PartitionUpdate pu, HivePartitionStats updateStats) {
         Path writePath = pu.getWritePath();
         Path targetPath = pu.getTargetPath();
+        if (pu.isS3Url()) {
+            String queryId = ConnectContext.get().getQueryId().toString();
+            fileOps.removeNotCurrentQueryFiles(targetPath, queryId);
+        } else {
+            Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
+                    ConnectContext.get().getQueryId().toString());
+            fileOps.renameDirectory(targetPath, oldTableStagingPath,
+                    () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
+            clearPathsForFinish.add(oldTableStagingPath);
+
+            fileOps.renameDirectory(writePath, targetPath,
+                    () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
+
+        }
         remoteFilesCacheToRefresh.add(targetPath);
-
-        Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
-                ConnectContext.get().getQueryId().toString());
-        fileOps.renameDirectory(targetPath, oldTableStagingPath,
-                () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
-        clearPathsForFinish.add(oldTableStagingPath);
-
-        fileOps.renameDirectory(writePath, targetPath,
-                () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
-
         UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.empty(), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);

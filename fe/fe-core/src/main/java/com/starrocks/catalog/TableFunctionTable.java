@@ -58,6 +58,14 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.logging.log4j.LogManager;
@@ -98,10 +106,10 @@ public class TableFunctionTable extends Table {
     }
 
     private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
-            .column("PATH", Type.STRING)
-            .column("SIZE", Type.BIGINT)
-            .column("IS_DIR", Type.BOOLEAN)
-            .column("MODIFICATION_TIME", Type.DATETIME)
+            .column("PATH", StringType.STRING)
+            .column("SIZE", IntegerType.BIGINT)
+            .column("IS_DIR", BooleanType.BOOLEAN)
+            .column("MODIFICATION_TIME", DateType.DATETIME)
             .build();
 
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 2;
@@ -247,8 +255,8 @@ public class TableFunctionTable extends Table {
         // infer schema from files
         List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
-            columns.add(new Column("col_int", Type.INT));
-            columns.add(new Column("col_string", Type.VARCHAR));
+            columns.add(new Column("col_int", IntegerType.INT));
+            columns.add(new Column("col_string", VarcharType.VARCHAR));
         } else {
             columns = getFileSchema();
         }
@@ -690,7 +698,7 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            columns.add(new Column(slot.colName, Type.fromProtobuf(slot.slotType), true));
+            columns.add(new Column(slot.colName, TypeDeserializer.fromProtobuf(slot.slotType), true));
         }
         return columns;
     }
@@ -698,7 +706,7 @@ public class TableFunctionTable extends Table {
     private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
         for (String colName : columnsFromPath) {
-            columns.add(new Column(colName, ScalarType.createDefaultString(), true));
+            columns.add(new Column(colName, TypeFactory.createDefaultString(), true));
         }
         return columns;
     }

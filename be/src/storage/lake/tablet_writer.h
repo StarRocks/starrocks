@@ -30,6 +30,7 @@ class Chunk;
 class Column;
 class TabletSchema;
 class ThreadPool;
+class SegmentWriter;
 
 struct OlapWriterStatistics;
 
@@ -151,6 +152,8 @@ public:
     void try_enable_pk_parallel_execution();
 
     bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
+
+    void check_global_dict(SegmentWriter* segment_writer);
 
 protected:
     TabletManager* _tablet_mgr;

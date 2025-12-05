@@ -39,10 +39,12 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLateMaterializeMode;
@@ -88,6 +90,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     private List<SlotId> preAggOutputColumnId;
 
+    private boolean perPipeline;
+
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
     }
@@ -97,6 +101,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     private DataPartition inputPartition;
+
+    private boolean useParallelMerge = true;
 
     public SortNode(PlanNodeId id, PlanNode input, SortInfo info, boolean useTopN,
                     boolean isDefaultLimit, long offset) {
@@ -142,8 +148,24 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         this.preAggFnCalls = preAggFnCalls;
     }
 
+    public boolean isPerPipeline() {
+        return perPipeline;
+    }
+
+    public void setPerPipeline(boolean perPipeline) {
+        this.perPipeline = perPipeline;
+    }
+
     @Override
     protected void computeStats() {
+    }
+
+    public void setUseParallelMerge(boolean useParallelMerge) {
+        this.useParallelMerge = useParallelMerge;
+    }
+
+    public boolean isUseParallelMerge() {
+        return useParallelMerge;
     }
 
     @Override
@@ -207,10 +229,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SORT_NODE;
         TSortInfo sortInfo = new TSortInfo(
-                Expr.treesToThrift(info.getOrderingExprs()),
+                ExprToThrift.treesToThrift(info.getOrderingExprs()),
                 info.getIsAscOrder(),
                 info.getNullsFirst());
-        sortInfo.setSort_tuple_slot_exprs(Expr.treesToThrift(resolvedTupleExprs));
+        sortInfo.setSort_tuple_slot_exprs(ExprToThrift.treesToThrift(resolvedTupleExprs));
 
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
@@ -224,23 +246,23 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         }
 
         msg.sort_node.setLate_materialization(sessionVariable.isFullSortLateMaterialization());
-        msg.sort_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
+        msg.sort_node.setEnable_parallel_merge(isUseParallelMerge());
         TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sessionVariable.getParallelMergeLateMaterializationMode().toUpperCase());
         msg.sort_node.setParallel_merge_late_materialize_mode(mode);
 
         if (info.getPartitionExprs() != null) {
-            msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));
+            msg.sort_node.setPartition_exprs(ExprToThrift.treesToThrift(info.getPartitionExprs()));
             msg.sort_node.setPartition_limit(info.getPartitionLimit());
         }
         msg.sort_node.setTopn_type(topNType.toThrift());
         // TODO(lingbin): remove blew codes, because it is duplicate with TSortInfo
-        msg.sort_node.setOrdering_exprs(Expr.treesToThrift(info.getOrderingExprs()));
+        msg.sort_node.setOrdering_exprs(ExprToThrift.treesToThrift(info.getOrderingExprs()));
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
         msg.sort_node.setNulls_first(info.getNullsFirst());
-        msg.sort_node.setAnalytic_partition_exprs(Expr.treesToThrift(analyticPartitionExprs));
+        msg.sort_node.setAnalytic_partition_exprs(ExprToThrift.treesToThrift(analyticPartitionExprs));
         msg.sort_node.setAnalytic_partition_skewed(analyticPartitionSkewed);
         if (info.getSortTupleSlotExprs() != null) {
-            msg.sort_node.setSort_tuple_slot_exprs(Expr.treesToThrift(info.getSortTupleSlotExprs()));
+            msg.sort_node.setSort_tuple_slot_exprs(ExprToThrift.treesToThrift(info.getSortTupleSlotExprs()));
         }
         msg.sort_node.setHas_outer_join_child(hasNullableGenerateChild);
         // For profile printing `SortKeys`
@@ -251,7 +273,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             if (sqlSortKeysBuilder.length() > 0) {
                 sqlSortKeysBuilder.append(", ");
             }
-            sqlSortKeysBuilder.append(expr.next().toSql().replaceAll("<slot\\s[0-9]+>\\s+", "")).append(" ");
+            sqlSortKeysBuilder.append(ExprToSql.toSql(expr.next()).replaceAll("<slot\\s[0-9]+>\\s+", "")).append(" ");
             sqlSortKeysBuilder.append(direction.next() ? "ASC" : "DESC");
         }
         if (sqlSortKeysBuilder.length() > 0) {
@@ -265,7 +287,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         }
 
         if (preAggFnCalls != null && !preAggFnCalls.isEmpty()) {
-            msg.sort_node.setPre_agg_exprs(Expr.treesToThrift(preAggFnCalls));
+            msg.sort_node.setPre_agg_exprs(ExprToThrift.treesToThrift(preAggFnCalls));
             msg.sort_node.setPre_agg_insert_local_shuffle(
                     ConnectContext.get().getSessionVariable().isInsertLocalShuffleForWindowPreAgg());
         }
@@ -274,6 +296,8 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     Collectors.toList());
             msg.sort_node.setPre_agg_output_slot_id(outputColumnsId);
         }
+
+        msg.sort_node.setPer_pipeline(perPipeline);
     }
 
     @Override
@@ -327,9 +351,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
             for (Expr fnCall : preAggFnCalls) {
                 strings.add("[");
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    strings.add(fnCall.toSql());
+                    strings.add(ExprToSql.toSql(fnCall));
                 } else {
-                    strings.add(fnCall.explain());
+                    strings.add(ExprToSql.explain(fnCall));
                 }
                 strings.add("]");
             }
@@ -347,9 +371,9 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
                     output.append(", ");
                 }
                 if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                    output.append(expr.toSql());
+                    output.append(ExprToSql.toSql(expr));
                 } else {
-                    output.append(expr.explain());
+                    output.append(ExprToSql.explain(expr));
                 }
             }
             output.append("\n");

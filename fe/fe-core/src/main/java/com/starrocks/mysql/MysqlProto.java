@@ -46,10 +46,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -246,6 +249,7 @@ public class MysqlProto {
         }
         // set database
         String db = changeUserPacket.getDb();
+        String originalDb = context.getDatabase();
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 context.changeCatalogDb(db);
@@ -263,6 +267,30 @@ public class MysqlProto {
                 return false;
             }
         }
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        Pair<Boolean, String> userChangeResult = connectScheduler.onUserChanged(
+                context, previousQualifiedUser, context.getQualifiedUser());
+        if (!userChangeResult.first) {
+            context.getState().setErrorCode(ErrorCode.ERR_TOO_MANY_USER_CONNECTIONS);
+            context.getState().setError(userChangeResult.second);
+            sendResponsePacket(context);
+            context.getSerializer().setCapability(context.getCapability());
+            context.getSessionVariable().setResourceGroup(previousResourceGroup);
+            context.setCurrentUserIdentity(previousUserIdentity);
+            context.setCurrentRoleIds(previousRoleIds);
+            context.setQualifiedUser(previousQualifiedUser);
+
+            if (!context.getDatabase().equals(originalDb)) {
+                try {
+                    context.changeCatalogDb(originalDb);
+                } catch (DdlException e) {
+                    LOG.error("recover original database fail", e);
+                    return false;
+                }
+            }
+            return false;
+        }
+
         LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", previousQualifiedUser,
                 context.getQualifiedUser());
         return true;

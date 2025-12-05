@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -32,17 +32,17 @@ public class ReferentialConstraintsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("CONSTRAINT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("UNIQUE_CONSTRAINT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("UNIQUE_CONSTRAINT_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("UNIQUE_CONSTRAINT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("MATCH_OPTION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("UPDATE_RULE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DELETE_RULE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REFERENCED_TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("CONSTRAINT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("UNIQUE_CONSTRAINT_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("UNIQUE_CONSTRAINT_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("UNIQUE_CONSTRAINT_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("MATCH_OPTION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("UPDATE_RULE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("DELETE_RULE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("REFERENCED_TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_REFERENTIAL_CONSTRAINTS);
     }
 }

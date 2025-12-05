@@ -20,10 +20,10 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.type.DateType;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -52,7 +52,6 @@ import java.util.NavigableMap;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
@@ -77,10 +76,10 @@ public class SyncPartitionBench {
 
     private static final Date START_DATETIME = TimeUtils.getTimeAsDate("2000-01-01 00:00:00");
     private static final SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    private static final Column PARTITION_COLUMN = new Column("k1", ScalarType.DATETIME);
+    private static final Column PARTITION_COLUMN = new Column("k1", DateType.DATETIME);
 
-    private final Map<String, Range<PartitionKey>> srcRangeMap = Maps.newHashMap();
-    private final Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
+    private final PCellSortedSet srcRangeMap = PCellSortedSet.of();
+    private final PCellSortedSet dstRangeMap = PCellSortedSet.of();
 
     static class RangeComparator implements Comparator<Range<PartitionKey>> {
         @Override
@@ -134,10 +133,10 @@ public class SyncPartitionBench {
         for (int i = 0; i < times; i++) {
             String curDateFormat = dateToString(curDate);
             String nextDateFormat = dateToString(nextDate);
-            srcRangeMap.put(curDateFormat, createRange(curDateFormat, nextDateFormat));
+            srcRangeMap.add(curDateFormat, PRangeCell.of(createRange(curDateFormat, nextDateFormat)));
             sortedSrcRangeMap.put(createRange(curDateFormat, nextDateFormat), curDateFormat);
             if (((double) i / times) < diffRatio) {
-                dstRangeMap.put(curDateFormat, createRange(curDateFormat, nextDateFormat));
+                dstRangeMap.add(curDateFormat, PRangeCell.of(createRange(curDateFormat, nextDateFormat)));
                 sortedDstRangeMap.put(createRange(curDateFormat, nextDateFormat), curDateFormat);
             }
 
@@ -205,33 +204,32 @@ public class SyncPartitionBench {
         generatePartitionRefMapV2(sortedSrcRangeMap, sortedDstRangeMap);
     }
     @Benchmark
-    public void generatePartitionRefMapBenchV3() {
-        generatePartitionRefMapV3(srcRangeMap, dstRangeMap);
-    }
-    @Benchmark
     public void generatePartitionRefMapBenchV4() {
         generatePartitionRefMapV4(srcRangeMap, dstRangeMap);
     }
 
-    public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                   Map<String, Range<PartitionKey>> dstRangeMap) {
+    public static Map<String, Set<String>> generatePartitionRefMap(PCellSortedSet srcRangeMap,
+                                                                   PCellSortedSet dstRangeMap) {
         Map<String, Set<String>> result = Maps.newHashMap();
-        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
-            Iterator<Map.Entry<String, Range<PartitionKey>>> dstIter = dstRangeMap.entrySet().iterator();
-            result.put(srcEntry.getKey(), Sets.newHashSet());
+        for (PCellWithName srcEntry : srcRangeMap.getPartitions()) {
+            Iterator<PCellWithName> dstIter = dstRangeMap.iterator();
+            result.put(srcEntry.name(), Sets.newHashSet());
             while (dstIter.hasNext()) {
-                Map.Entry<String, Range<PartitionKey>> dstEntry = dstIter.next();
-                Range<PartitionKey> dstRange = dstEntry.getValue();
-                int upperLowerCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.lowerEndpoint());
+                PCellWithName dstEntry = dstIter.next();
+                PRangeCell dstCell = dstEntry.cell().cast();
+                Range<PartitionKey> dstRange = dstCell.getRange();
+                PRangeCell srcCell = srcEntry.cell().cast();
+                Range<PartitionKey> srcRange = srcCell.getRange();
+                int upperLowerCmp = srcRange.upperEndpoint().compareTo(dstRange.lowerEndpoint());
                 if (upperLowerCmp <= 0) {
                     continue;
                 }
-                int lowerUpperCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.upperEndpoint());
+                int lowerUpperCmp = srcRange.lowerEndpoint().compareTo(dstRange.upperEndpoint());
                 if (lowerUpperCmp >= 0) {
                     continue;
                 }
-                Set<String> dstNames = result.get(srcEntry.getKey());
-                dstNames.add(dstEntry.getKey());
+                Set<String> dstNames = result.get(srcEntry.name());
+                dstNames.add(dstEntry.name());
             }
         }
         return result;
@@ -282,43 +280,34 @@ public class SyncPartitionBench {
         return result;
     }
 
-    public static Map<String, Set<String>> generatePartitionRefMapV3(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                     Map<String, Range<PartitionKey>> dstRangeMap) {
-        NavigableMap<Range<PartitionKey>, String> sortedSrcRangeMap = Maps.newTreeMap(RANGE_COMPARATOR);
-        NavigableMap<Range<PartitionKey>, String> sortedDstRangeMap = Maps.newTreeMap(RANGE_COMPARATOR);
-        for (Map.Entry<String, Range<PartitionKey>> e : srcRangeMap.entrySet()) {
-            sortedSrcRangeMap.put(e.getValue(), e.getKey());
-        }
-        for (Map.Entry<String, Range<PartitionKey>> e : dstRangeMap.entrySet()) {
-            sortedDstRangeMap.put(e.getValue(), e.getKey());
-        }
-        return generatePartitionRefMapV2(sortedSrcRangeMap, sortedDstRangeMap);
-    }
-
-    public static Map<String, Set<String>> generatePartitionRefMapV4(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                                     Map<String, Range<PartitionKey>> dstRangeMap) {
+    public static Map<String, Set<String>> generatePartitionRefMapV4(PCellSortedSet srcRangeMap,
+                                                                     PCellSortedSet dstRangeMap) {
         Map<String, Set<String>> result = Maps.newHashMap();
-        srcRangeMap.keySet().stream().forEach(x -> result.put(x, Sets.newHashSet()));
+        srcRangeMap.stream().forEach(x -> result.put(x.name(), Sets.newHashSet()));
         if (dstRangeMap.isEmpty()) {
             return result;
         }
 
         // TODO: Callers may use `List<PartitionRange>` directly.
-        List<PRangeCellPlus> srcRanges = srcRangeMap.keySet().stream().map(name -> new PRangeCellPlus(name,
-                srcRangeMap.get(name))).collect(Collectors.toList());
-        List<PRangeCellPlus> dstRanges = dstRangeMap.keySet().stream().map(name -> new PRangeCellPlus(name,
-                dstRangeMap.get(name))).collect(Collectors.toList());
-        Collections.sort(srcRanges, PRangeCellPlus::compareTo);
-        Collections.sort(dstRanges, PRangeCellPlus::compareTo);
+        List<PCellWithName> srcRanges = srcRangeMap.getPartitions().stream().toList();
+        List<PCellWithName> dstRanges = dstRangeMap.getPartitions().stream().toList();
+        Collections.sort(srcRanges, PCellWithName::compareTo);
+        Collections.sort(dstRanges, PCellWithName::compareTo);
 
-        List<PartitionKey> lowerPoints = dstRanges.stream().map(
-                dstRange -> dstRange.getCell().getRange().lowerEndpoint()).toList();
-        List<PartitionKey> upperPoints = dstRanges.stream().map(
-                dstRange -> dstRange.getCell().getRange().upperEndpoint()).toList();
+        List<PartitionKey> lowerPoints = dstRanges
+                .stream()
+                .map(pCell -> (PRangeCell) pCell.cell())
+                .map(dstRange -> dstRange.getRange().lowerEndpoint())
+                .toList();
+        List<PartitionKey> upperPoints = dstRanges
+                .stream()
+                .map(pCell -> (PRangeCell) pCell.cell())
+                .map(dstRange -> dstRange.getRange().upperEndpoint())
+                .toList();
 
-        for (PRangeCellPlus srcRange : srcRanges) {
-            PartitionKey lower = srcRange.getCell().getRange().lowerEndpoint();
-            PartitionKey upper = srcRange.getCell().getRange().upperEndpoint();
+        for (PCellWithName srcRange : srcRanges) {
+            PartitionKey lower = ((PRangeCell) srcRange.cell()).getRange().lowerEndpoint();
+            PartitionKey upper = ((PRangeCell) srcRange.cell()).getRange().upperEndpoint();
 
             // For an interval [l, r], if there exists another interval [li, ri] that intersects with it, this interval
             // must satisfy l ≤ ri and r ≥ li. Therefore, if there exists a pos_a such that for all k < pos_a,
@@ -327,10 +316,10 @@ public class SyncPartitionBench {
             int posA = PartitionKey.findLastLessEqualInOrderedList(lower, upperPoints);
             int posB = PartitionKey.findLastLessEqualInOrderedList(upper, lowerPoints);
 
-            Set<String> addedSet = result.get(srcRange.getPartitionName());
+            Set<String> addedSet = result.get(srcRange.name());
             for (int i = posA; i <= posB; ++i) {
-                if (dstRanges.get(i).isIntersected(srcRange)) {
-                    addedSet.add(dstRanges.get(i).getPartitionName());
+                if ((dstRanges.get(i).cell()).isIntersected(srcRange.cell())) {
+                    addedSet.add(dstRanges.get(i).name());
                 }
             }
         }

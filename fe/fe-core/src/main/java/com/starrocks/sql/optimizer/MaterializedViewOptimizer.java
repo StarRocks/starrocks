@@ -66,6 +66,7 @@ public class MaterializedViewOptimizer {
         optimizerOptions.disableRule(RuleType.TF_ELIMINATE_AGG_FUNCTION);
         optimizerOptions.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
         optimizerOptions.disableRule(RuleType.TF_JSON_PATH_REWRITE);
+        optimizerOptions.disableRule(RuleType.TF_REWRITE_SIMPLE_AGG);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerOptions.disableRule(RuleType.TF_MATERIALIZED_VIEW);
@@ -108,6 +109,10 @@ public class MaterializedViewOptimizer {
         if (originalSemiJoinDeduplicateMode != -1) {
             connectContext.getSessionVariable().setSemiJoinDeduplicateMode(-1);
         }
+        final boolean originalEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        if (originalEnableLocalShuffleAgg) {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        }
 
         MVTransformerContext mvTransformerContext = new MVTransformerContext(connectContext, inlineView);
         try {
@@ -131,6 +136,7 @@ public class MaterializedViewOptimizer {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(originDisableFunctionFoldConstants);
             connectContext.getSessionVariable().setEnableInnerJoinToSemi(originalEnableInnerToSemi);
             connectContext.getSessionVariable().setSemiJoinDeduplicateMode(originalSemiJoinDeduplicateMode);
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(originalEnableLocalShuffleAgg);
         }
     }
 }

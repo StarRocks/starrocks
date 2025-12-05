@@ -1223,7 +1223,7 @@ public class AggregateTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=3.0\n"));
+                "     avgRowSize=3.0\n"), plan);
 
         sql = "select v1,abs(v1) + 1 from t0 group by v2 order by v3";
         plan = getFragmentPlan(sql);
@@ -1875,6 +1875,27 @@ public class AggregateTest extends PlanTestBase {
                 "     <id 18> : min_id_datetime\n" +
                 "     <id 19> : count_t1b");
 
+        sql = "select count(*) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type_not_null\n" +
+                "     <id 14> : rows_t1b");
+
+        sql = "select count(*) from part_t1 partitions(p1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_v4)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: part_t1\n" +
+                "     <id 7> : rows_v4\n" +
+                "     Partitions: [p1]");
+
         // The following cases will not use MetaScan because some conditions are not met
         // with group by key
         sql = "select t1b,max(id_datetime) from test_all_type_not_null group by t1b";
@@ -2405,7 +2426,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1)\n" +
-                "  |  group by: 1: v1, 5: case, 4: uuid, 6: expr");
+                "  |  group by: 1: v1, 5: case, 4: UUID, 6: expr");
     }
 
     @Test
@@ -2505,17 +2526,170 @@ public class AggregateTest extends PlanTestBase {
             String testSql = "with cc as (select 1 as a, v1 from t0) select percentile_approx(1, cc.a, cc.v1) from cc;";
             getFragmentPlan(testSql);
         });
-        Assertions.assertTrue(exception.getMessage().contains("the third parameter's type is numeric constant type"));
+        Assertions.assertTrue(exception.getMessage().contains("Type check failed. want constant arg in " +
+                "percentile_approx (compression), but input is cast(1: v1 as double)"));
 
-        Throwable exception2 = assertThrows(SemanticException.class, () -> {
+        Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
             getCostExplain("select percentile_approx(1, cast(1.3 as DOUBLE));");
         });
-        assertThat(exception2.getMessage(), containsString("Getting analyzing error. " +
-                "Detail message: percentile_approx second parameter'value must be between 0 and 1."));
+        assertThat(exception2.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx, but got: 1.3"));
 
         // should success
         getCostExplain("select percentile_cont(1, cast(0.4 as DOUBLE));");
         getCostExplain("select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));");
+    }
+
+    @Test
+    public void testPercentileApproxWeightedValidation() throws Exception {
+        // Test valid cases
+        String sql = "select percentile_approx_weighted(v1, v2, 0.5) from t0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, v2, 0.5, 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, 1, 0.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, 1, 1.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        // Test percentile parameter out of range (single value)
+        Throwable exception1 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, 1.5) from t0;");
+        });
+        assertThat(exception1.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx_weighted, but got: 1.5"));
+
+        Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, -0.1) from t0;");
+        });
+        assertThat(exception2.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx_weighted, but got: -0.1"));
+
+        // Test percentile array with invalid element
+        Throwable exception3 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, [0.5, 1.5]) from t0;");
+        });
+        assertThat(exception3.getMessage(), containsString("Type check failed. " +
+                "percentile array element[1] must be between 0 and 1 in percentile_approx_weighted, but got: 1.5"));
+
+        Throwable exception4 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, array<double>[-0.1, 0.5]) from t0;");
+        });
+        assertThat(exception4.getMessage(), containsString("Type check failed. " +
+                "percentile array element[0] must be between 0 and 1 in percentile_approx_weighted, but got: -0.1"));
+
+        // Test empty percentile array
+        Throwable exception5 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, []) from t0;");
+        });
+        assertThat(exception5.getMessage(), containsString("Getting analyzing error from line 1, " +
+                "column 7 to line 1, column 44. Detail message: percentile_approx_weighted requires " +
+                "the third parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<NULL_TYPE>."));
+
+        // Test compression parameter validation
+        Throwable exception6 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, 0.5, 0) from t0;");
+        });
+        assertThat(exception6.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx_weighted, but got: 0.0"));
+
+        Throwable exception7 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx_weighted(v1, v2, 0.5, -100) from t0;");
+        });
+        assertThat(exception7.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx_weighted, but got: -100.0"));
+
+        // Test valid array percentile
+        sql = "select percentile_approx_weighted(v1, v2, [0.0, 0.5, 1.0]) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+
+        sql = "select percentile_approx_weighted(v1, v2, [0.25, 0.5, 0.75], 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx_weighted");
+    }
+
+    @Test
+    public void testPercentileApproxValidation() throws Exception {
+        // Test valid cases
+        String sql = "select percentile_approx(v1, 0.5) from t0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, 0.5, 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, 0.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, 1.0) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        // Test percentile parameter out of range (single value)
+        Throwable exception1 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, 1.5) from t0;");
+        });
+        assertThat(exception1.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx, but got: 1.5"));
+
+        Throwable exception2 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, -0.1) from t0;");
+        });
+        assertThat(exception2.getMessage(), containsString("Type check failed. " +
+                "percentile parameter must be between 0 and 1 in percentile_approx, but got: -0.1"));
+
+        // Test percentile array with invalid element
+        Throwable exception3 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, array<double>[0.5, 1.5]) from t0;");
+        });
+        assertThat(exception3.getMessage(), containsString("Type check failed. " +
+                "percentile array element[1] must be between 0 and 1 in percentile_approx, but got: 1.5"));
+
+        Throwable exception4 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, [-0.1, 0.5]) from t0;");
+        });
+        assertThat(exception4.getMessage(), containsString("Type check failed. " +
+                "percentile array element[0] must be between 0 and 1 in percentile_approx, but got: -0.1"));
+
+        // Test empty percentile array
+        Throwable exception5 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, []) from t0;");
+        });
+        assertThat(exception5.getMessage(), containsString("Getting analyzing error from line 1, " +
+                "column 7 to line 1, column 31. Detail message: " +
+                "percentile_approx requires the second parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<NULL_TYPE>."));
+
+        // Test compression parameter validation
+        Throwable exception6 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, 0.5, 0) from t0;");
+        });
+        assertThat(exception6.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx, but got: 0.0"));
+
+        Throwable exception7 = assertThrows(StarRocksPlannerException.class, () -> {
+            getCostExplain("select percentile_approx(v1, 0.5, -100) from t0;");
+        });
+        assertThat(exception7.getMessage(), containsString("Type check failed. " +
+                "compression parameter must be positive in percentile_approx, but got: -100.0"));
+
+        // Test valid array percentile
+        sql = "select percentile_approx(v1, [0.0, 0.5, 1.0]) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
+
+        sql = "select percentile_approx(v1, array<double>[0.25, 0.5, 0.75], 1000) from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "percentile_approx");
     }
 
     @Test
@@ -2995,6 +3169,12 @@ public class AggregateTest extends PlanTestBase {
                 "  |  STREAMING\n" +
                 "  |  group by: 4: expr\n" +
                 "  |  limit: 10");
+        assertNotContains(plan, "  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: expr\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10");
         FeConstants.runningUnitTest = false;
     }
 
@@ -3192,5 +3372,118 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testSplitTopNAgg() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            // Test basic case - should apply the rule
+            String plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)\n"
+                    + "  |  colocate: false, reason: \n"
+                    + "  |  equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY\n"
+                    + "  |  equal join conjunct: 2: L_PARTKEY = 22: L_PARTKEY");
+
+            // Test case 1: duplicatedColumns.size() > 3 - should not apply the rule
+            // This query has 4 columns in first scan: L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_LINENUMBER
+            plan = getFragmentPlan(
+                    "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                            + "FROM lineitem_partition "
+                            + "WHERE L_LINENUMBER <> 123 "
+                            + "GROUP BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY "
+                            + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 2: conjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 AND L_DISCOUNT < 1 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 3: disconjuncts.size() > 2 - should not apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 OR L_DISCOUNT = 3 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            // Test case 4: conjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 AND L_QUANTITY > 0 "
+                    + "GROUP BY L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 5: disconjuncts.size() = 2 - should apply the rule
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER = 1 OR L_LINENUMBER = 2 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 6: duplicatedColumns.size() = 3 - should apply the rule (boundary case)
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_LINENUMBER <> 123 "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+
+            // Test case 7: long string column (averageRowSize > 5) - should not apply the rule
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_COMMENT <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should not contain HASH JOIN, meaning the rule was not applied due to long string
+            assertNotContains(plan, "equal join conjunct: 1: L_ORDERKEY = 21: L_ORDERKEY");
+
+            plan = getFragmentPlan("SELECT L_ORDERKEY, L_PARTKEY, COUNT(*) AS c, SUM(L_EXTENDEDPRICE), AVG(L_QUANTITY) "
+                    + "FROM lineitem_partition "
+                    + "WHERE L_RETURNFLAG <> '' "
+                    + "GROUP BY L_ORDERKEY, L_PARTKEY "
+                    + "ORDER BY c DESC LIMIT 10;");
+            // Should contain HASH JOIN, meaning the rule was applied for short string
+            assertContains(plan, "HASH JOIN\n"
+                    + "  |  join op: INNER JOIN (BROADCAST)");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testAvoidMergeNonGroupByAgg() throws Exception {
+        String plan = getFragmentPlan("SELECT /*+SET_VAR(disable_join_reorder=true)*/ COUNT(*) " +
+                "FROM t0 RIGHT JOIN t1 ON v1 < v4");
+        assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(7: count)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  6:AGGREGATE (update serialize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: ");
     }
 }

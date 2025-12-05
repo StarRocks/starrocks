@@ -704,11 +704,10 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
+    // 4 tablets opened: 10086/10087/10088/10089
     ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
 
-    constexpr int kChunkSize = 128;
-    constexpr int kChunkSizePerTablet = kChunkSize / 4;
-    auto chunk = generate_data(kChunkSize);
+    constexpr int num_rows = 128;
     PTabletWriterAddChunkRequest add_chunk_request;
     PTabletWriterAddBatchResult add_chunk_response;
     add_chunk_request.set_index_id(kIndexId);
@@ -717,24 +716,25 @@ TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
     add_chunk_request.set_packet_seq(0);
     add_chunk_request.set_timeout_ms(60000);
 
-    for (int i = 0; i < kChunkSize; i++) {
-        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+    for (int i = 0; i < num_rows; i++) {
+        // generate tablet_id: [10086,10087,10088,10089,10090], 10090 not opened in open_request
+        int64_t tablet_id = 10086 + i % 5;
         add_chunk_request.add_tablet_ids(tablet_id);
         add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
     }
 
-    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
-    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
-
-    add_chunk_request.add_tablet_ids(10000); // Not existed tablet id
-
-    bool close_channel;
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
-    ASSERT_NE(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
-    ASSERT_FALSE(close_channel);
+    {
+        // `chunk` is only available inside the scope, will be released out of the scope to simulate resource release after RPC done.
+        auto chunk = generate_data(num_rows);
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+        bool close_channel;
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+        ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
 
     _tablets_channel->abort();
-
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10086, kTxnId)));
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10087, kTxnId)));
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10088, kTxnId)));
@@ -953,18 +953,25 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
     ASSERT_TRUE(close_channel);
-    _tablets_channel->update_profile();
 
-    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
-    ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
-    ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
-    auto* replicas_profile = profile->get_child("PeerReplicas");
-    ASSERT_NE(nullptr, replicas_profile);
-    ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
+    // profile should be same if there is no new data no matter how many times we update the profile
+    for (int i = 0; i < 3; i++) {
+        _tablets_channel->update_profile();
+        auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
+        ASSERT_NE(nullptr, profile);
+        ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+        ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
+        ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
+        ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
+        ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+        auto* replicas_profile = profile->get_child("PeerReplicas");
+        ASSERT_NE(nullptr, replicas_profile);
+        ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
+        ASSERT_EQ(8, replicas_profile->get_counter("WriterTaskCount")->value());
+        ASSERT_EQ(chunk.num_rows(), replicas_profile->get_counter("RowCount")->value());
+        ASSERT_EQ(4, replicas_profile->get_counter("MemtableInsertCount")->value());
+        ASSERT_EQ(4, replicas_profile->get_counter("MemtableFlushedCount")->value());
+    }
 }
 
 TEST_F(LakeTabletsChannelTest, test_missing_timeout_ms) {

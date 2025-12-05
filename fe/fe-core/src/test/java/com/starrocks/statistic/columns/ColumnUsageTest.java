@@ -17,6 +17,7 @@ package com.starrocks.statistic.columns;
 import com.google.common.base.Splitter;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
@@ -25,7 +26,6 @@ import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -249,12 +249,12 @@ class ColumnUsageTest extends PlanTestBase {
     }
 
     @Test
-    public void testColumnUsagePersist() {
+    public void testColumnUsagePersist() throws MetaNotFoundException {
         // invalid column
         {
             String json = "{\"data\": [\"fe_id\", 1, 1, 1, \"NORMAL\", \"2025-01-01 00:00:00\", \"2025-01-01 " +
                     "00:00:00\"]}";
-            Assertions.assertThrows(IllegalStateException.class,
+            Assertions.assertThrows(MetaNotFoundException.class,
                     () -> PredicateColumnsStorage.ColumnUsageJsonRecord.fromJson(json));
         }
 

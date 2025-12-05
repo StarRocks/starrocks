@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -31,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -60,7 +60,7 @@ public class ColumnRefFactory {
         if (expression instanceof SlotRef) {
             nameHint = ((SlotRef) expression).getColumnName();
         } else if (expression instanceof FunctionCallExpr) {
-            nameHint = ((FunctionCallExpr) expression).getFnName().toString();
+            nameHint = ((FunctionCallExpr) expression).getFnRef().getFnName().toString();
         } else if (expression instanceof CaseExpr) {
             nameHint = "case";
         } else if (expression instanceof CastExpr) {

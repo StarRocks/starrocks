@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.16.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -75,7 +75,7 @@ set(EXEC_FILES
     hash_join_components.cpp
     join/join_hash_table_descriptor.cpp
     join/join_key_constructor.cpp
-    join/join_hash_map.cpp
+    join/join_hash_table.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
@@ -84,6 +84,7 @@ set(EXEC_FILES
     spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
+    raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
     arrow_to_starrocks_converter.cpp
@@ -110,6 +111,7 @@ set(EXEC_FILES
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_json.cpp
     hdfs_scanner/hdfs_scanner_partition.cpp
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
@@ -152,6 +154,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
     schema_scanner/schema_fe_metrics_scanner.cpp
+    schema_scanner/schema_fe_threads_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
@@ -175,7 +178,7 @@ set(EXEC_FILES
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
-    schema_scanner/schema_dynamic_tablet_jobs_scanner.cpp
+    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp
@@ -204,11 +207,10 @@ set(EXEC_FILES
     pipeline/operator.cpp
     pipeline/source_operator.cpp
     pipeline/limit_operator.cpp
+    pipeline/offset_operator.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
-    pipeline/result_sink_operator.cpp
-    pipeline/olap_table_sink_operator.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -228,6 +230,8 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/connector_sink_operator.cpp
+    pipeline/sink/olap_table_sink_operator.cpp
+    pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
@@ -273,6 +277,7 @@ set(EXEC_FILES
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
+    pipeline/set/raw_values_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
@@ -310,6 +315,7 @@ set(EXEC_FILES
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
+    workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
     query_cache/multilane_operator.cpp
@@ -340,6 +346,26 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)
 
-add_library(Exec STATIC
+add_library(join_hash_map_inst_objs OBJECT
+    join/join_hash_map_mapping_inst.cpp
+    join/join_hash_map_linear_chained_inst.cpp
+    join/join_hash_map_linear_chained_set_inst.cpp
+    join/join_hash_map_bucket_chained_inst.cpp
+    join/join_hash_map_asof_inst.cpp
+)
+
+IF(ENABLE_MULTI_DYNAMIC_LIBS)
+    set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
+ENDIF()
+
+target_precompile_headers(join_hash_map_inst_objs
+    PRIVATE
+    join/join_hash_map.h
+    join/join_hash_map.hpp
+    join/join_hash_map_method.hpp
+)
+
+ADD_BE_LIB(Exec
     ${EXEC_FILES}
+    $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )

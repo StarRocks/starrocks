@@ -17,6 +17,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +28,16 @@ public class AstToSQLBuilderTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
+    }
+    
+    // Helper method to format SQL with pretty format enabled
+    private static String toPrettySQL(StatementBase stmt) {
+        return AST2SQLVisitor.withOptions(
+                FormatOptions.allEnable()
+                        .setColumnSimplifyTableName(false)
+                        .setEnableDigest(false)
+                        .setEnablePrettyFormat(true))
+                .visit(stmt);
     }
 
     @Test
@@ -91,5 +103,99 @@ public class AstToSQLBuilderTest {
         stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         Assertions.assertEquals("SELECT *\nFROM `t0` , generate_series(`v1`,`v2`,1) t(`x`) ",
                 AstToSQLBuilder.toSQL(stmt));
+    }
+
+
+    @Test
+    public void testCaseWhenFormatting() {
+        String sql = "SELECT CASE WHEN v1 < 10 THEN 'low' WHEN v1 >= 10 AND v1 < 20 THEN 'medium' ELSE 'high' END FROM t0";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String expected = "SELECT \n" +
+                "  CASE\n" +
+                "    WHEN (`v1` < 10) THEN 'low'\n" +
+                "    WHEN ((`v1` >= 10) AND (`v1` < 20)) THEN 'medium'\n" +
+                "    ELSE 'high'\n" +
+                "  END\n" +
+                "FROM `t0`";
+        Assertions.assertEquals(expected, toPrettySQL(stmt));
+    }
+
+    @Test
+    public void testComplexCTEFormatting() {
+        String sql = "WITH cte1 AS (SELECT v1, v2 FROM t0), " +
+                "cte2 AS (SELECT v1, v3 FROM t1) " +
+                "SELECT * FROM cte1 JOIN cte2 ON cte1.v1 = cte2.v1";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String expected = "WITH `cte1` AS (\n" +
+                "  SELECT \n" +
+                "    `v1`,\n" +
+                "    `v2`\n" +
+                "FROM `t0`\n" +
+                "),\n" +
+                "`cte2` AS (\n" +
+                "  SELECT \n" +
+                "    `v1`,\n" +
+                "    `v3`\n" +
+                "FROM `t1`\n" +
+                ")\n" +
+                "SELECT \n" +
+                "  *\n" +
+                "FROM `cte1` INNER JOIN `cte2` ON `cte1`.`v1` = `cte2`.`v1`";
+        Assertions.assertEquals(expected, toPrettySQL(stmt));
+    }
+
+    @Test
+    public void testComplexNestedCTEWithCaseWhen() {
+        // This is a complex query from issue #64056
+        String sql = "WITH cte01 (id, region, len_bucket) AS " +
+                "(SELECT cw.tbl01.id, cw.tbl01.region, " +
+                "CASE WHEN (array_length(cw.tbl01.col_arr) < 2) THEN 'bucket1' " +
+                "WHEN ((array_length(cw.tbl01.col_arr) >= 2) AND (array_length(cw.tbl01.col_arr) < 4)) THEN 'bucket2-3' " +
+                "ELSE NULL END AS len_bucket " +
+                "FROM cw.tbl01), " +
+                "cte02 (id, region, priority) AS " +
+                "(SELECT cte01.id, cte01.region, " +
+                "CASE WHEN ((cte01.len_bucket = 'bucket1') AND (cte01.region = 'EMEA')) THEN 'priority1' " +
+                "WHEN ((cte01.len_bucket = 'bucket1') AND (cte01.region = 'APAC')) THEN 'priority2' " +
+                "WHEN ((cte01.len_bucket = 'bucket1') AND (cte01.region = 'NORAM')) THEN 'priority3' " +
+                "WHEN ((cte01.len_bucket = 'bucket1') AND (cte01.region = 'LATAM')) THEN 'priority4' " +
+                "ELSE NULL END AS priority " +
+                "FROM cte01) " +
+                "SELECT cte02.id, cte02.region, cte02.priority " +
+                "FROM cte02 " +
+                "WHERE cte02.priority IS NOT NULL";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String expected = "WITH `cte01` (`id`, `region`, `len_bucket`) AS (\n" +
+                "  SELECT \n" +
+                "    `cw`.`tbl01`.`id`,\n" +
+                "    `cw`.`tbl01`.`region`,\n" +
+                "    CASE\n" +
+                "      WHEN ((array_length(`cw`.`tbl01`.`col_arr`)) < 2) THEN 'bucket1'\n" +
+                "      WHEN (((array_length(`cw`.`tbl01`.`col_arr`)) >= 2) AND " +
+                "((array_length(`cw`.`tbl01`.`col_arr`)) < 4)) THEN 'bucket2-3'\n" +
+                "      ELSE NULL\n" +
+                "    END AS `len_bucket`\n" +
+                "FROM `cw`.`tbl01`\n" +
+                "),\n" +
+                "`cte02` (`id`, `region`, `priority`) AS (\n" +
+                "  SELECT \n" +
+                "    `cte01`.`id`,\n" +
+                "    `cte01`.`region`,\n" +
+                "    CASE\n" +
+                "      WHEN ((`cte01`.`len_bucket` = 'bucket1') AND (`cte01`.`region` = 'EMEA')) THEN 'priority1'\n" +
+                "      WHEN ((`cte01`.`len_bucket` = 'bucket1') AND (`cte01`.`region` = 'APAC')) THEN 'priority2'\n" +
+                "      WHEN ((`cte01`.`len_bucket` = 'bucket1') AND (`cte01`.`region` = 'NORAM')) THEN 'priority3'\n" +
+                "      WHEN ((`cte01`.`len_bucket` = 'bucket1') AND (`cte01`.`region` = 'LATAM')) THEN 'priority4'\n" +
+                "      ELSE NULL\n" +
+                "    END AS `priority`\n" +
+                "FROM `cte01`\n" +
+                ")\n" +
+                "SELECT \n" +
+                "  `cte02`.`id`,\n" +
+                "  `cte02`.`region`,\n" +
+                "  `cte02`.`priority`\n" +
+                "FROM `cte02`\n" +
+                "WHERE `cte02`.`priority` IS NOT NULL";
+        Assertions.assertEquals(expected, toPrettySQL(stmt));
     }
 }

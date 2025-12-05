@@ -71,6 +71,10 @@ public class ResourceGroupBuilder {
             throw new SemanticException("property 'mem_limit' is absent");
         }
 
+        if (resourceGroup.getMemPool() == null) {
+            resourceGroup.setMemPool(ResourceGroup.DEFAULT_MEM_POOL);
+        }
+
         return resourceGroup;
     }
 

@@ -199,8 +199,8 @@ None
 -- !result
 select group_concat(distinct name, score order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
 -- result:
-None	None	[null]
 None	英语外语美誉	["英语外语美誉"]
+None	None	[null]
 Ti98	数学大不列颠,English	[null,"数学大不列颠","English"]
 Ti99	物理Phy	[null,"物理Phy"]
 Tom80,Tom90	Math,English	["Math","English"]
@@ -617,8 +617,8 @@ None
 -- !result
 select group_concat(distinct name, score order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
 -- result:
-None	None	[null]
 None	英语外语美誉	["英语外语美誉"]
+None	None	[null]
 Ti98	数学大不列颠,English	[null,"数学大不列颠","English"]
 Ti99	物理Phy	[null,"物理Phy"]
 Tom80,Tom90	Math,English	["Math","English"]
@@ -1035,8 +1035,8 @@ None
 -- !result
 select group_concat(distinct name, score order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
 -- result:
-None	None	[null]
 None	英语外语美誉	["英语外语美誉"]
+None	None	[null]
 Ti98	数学大不列颠,English	[null,"数学大不列颠","English"]
 Ti99	物理Phy	[null,"物理Phy"]
 Tom80,Tom90	Math,English	["Math","English"]
@@ -1506,9 +1506,9 @@ select group_concat("中国",name order by 2, "第一", id separator '\n') from 
 中国欧阳诸葛方程
 中国王武程咬金
 -- !result
-select group_concat("中国",name order by 2, "第一", id separator subject) from ss;
+select group_concat("中国",name order by 2, "第一", subject,id separator subject) from ss;
 -- result:
-中国May中国Ti物理Phy中国TiEnglish中国TomEnglish中国TomMath中国TomEnglish中国Tom中国张三掩耳盗铃Math数学欧拉方程中国张三此地无银三百两英文English中国李四大闹天空英语外语美誉中国欧阳诸葛方程数学大不列颠中国王武程咬金
+中国May中国TiEnglish中国Ti物理Phy中国Tom中国TomEnglish中国TomEnglish中国TomMath中国张三掩耳盗铃Math数学欧拉方程中国张三此地无银三百两英文English中国李四大闹天空英语外语美誉中国欧阳诸葛方程数学大不列颠中国王武程咬金
 -- !result
 select group_concat("中国" order by "第一" separator 1) from ss;
 -- result:

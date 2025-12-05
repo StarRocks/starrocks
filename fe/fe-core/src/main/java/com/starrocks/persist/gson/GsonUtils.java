@@ -71,10 +71,10 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
-import com.starrocks.alter.dynamictablet.DynamicTablet;
-import com.starrocks.alter.dynamictablet.IdenticalTablet;
-import com.starrocks.alter.dynamictablet.MergingTablet;
-import com.starrocks.alter.dynamictablet.SplittingTablet;
+import com.starrocks.alter.reshard.IdenticalTablet;
+import com.starrocks.alter.reshard.MergingTablet;
+import com.starrocks.alter.reshard.ReshardingTablet;
+import com.starrocks.alter.reshard.SplittingTablet;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.JWTSecurityIntegration;
@@ -103,10 +103,9 @@ import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.AnyArrayType;
-import com.starrocks.catalog.AnyElementType;
-import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.BoolVariant;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.DateVariant;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -121,19 +120,19 @@ import com.starrocks.catalog.HudiResource;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergResource;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IntVariant;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.LargeIntVariant;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OdbcCatalogResource;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
@@ -141,14 +140,15 @@ import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.StringVariant;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Variant;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -205,6 +205,15 @@ import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.type.AnyArrayType;
+import com.starrocks.type.AnyElementType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.PseudoType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -216,6 +225,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -238,10 +248,10 @@ import java.util.Map;
 public class GsonUtils {
 
     // runtime adapter for class "Type"
-    private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Type> COLUMN_TYPE_ADAPTER_FACTORY =
+    private static final RuntimeTypeAdapterFactory<com.starrocks.type.Type> COLUMN_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory
-                    .of(com.starrocks.catalog.Type.class, "clazz")
-                    .registerSubtype(ScalarType.class, "ScalarType")
+                    .of(com.starrocks.type.Type.class, "clazz")
+                    .registerSubtype(ScalarType.class, "ScalarType", true)
                     .registerSubtype(ArrayType.class, "ArrayType")
                     .registerSubtype(MapType.class, "MapType")
                     .registerSubtype(StructType.class, "StructType")
@@ -254,7 +264,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory
                     .of(DistributionInfo.class, "clazz")
                     .registerSubtype(HashDistributionInfo.class, "HashDistributionInfo")
-                    .registerSubtype(RandomDistributionInfo.class, "RandomDistributionInfo");
+                    .registerSubtype(RandomDistributionInfo.class, "RandomDistributionInfo")
+                    .registerSubtype(RangeDistributionInfo.class, "RangeDistributionInfo");
 
     private static final RuntimeTypeAdapterFactory<PartitionInfo> PARTITION_INFO_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory
@@ -437,11 +448,19 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(ComputeResource.class, "clazz")
                     .registerSubtype(WarehouseComputeResource.class, "WarehouseComputeResource", true);
 
-    public static final RuntimeTypeAdapterFactory<DynamicTablet> DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY =
-            RuntimeTypeAdapterFactory.of(DynamicTablet.class, "clazz")
+    public static final RuntimeTypeAdapterFactory<ReshardingTablet> TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(ReshardingTablet.class, "clazz")
                     .registerSubtype(SplittingTablet.class, "SplittingTablet")
                     .registerSubtype(MergingTablet.class, "MergingTablet")
                     .registerSubtype(IdenticalTablet.class, "IdenticalTablet");
+    
+    public static final RuntimeTypeAdapterFactory<Variant> VARIANT_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(Variant.class, "clazz")
+                    .registerSubtype(BoolVariant.class, "BoolVariant")
+                    .registerSubtype(IntVariant.class, "IntVariant")
+                    .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
+                    .registerSubtype(StringVariant.class, "StringVariant")
+                    .registerSubtype(DateVariant.class, "DateVariant");
 
     public static final RuntimeTypeAdapterFactory<TvrVersionRange> TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(TvrVersionRange.class, "clazz")
@@ -483,10 +502,11 @@ public class GsonUtils {
                 .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
                 .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
                 .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
+                .registerTypeHierarchyAdapter(Range.class, new RangeAdapter())
                 .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
                 // For call constructor with selectedFields
-                .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
-                .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
+                .registerTypeAdapter(MapType.class, new MapTypeDeserializer())
+                .registerTypeAdapter(StructType.class, new StructTypeDeserializer())
                 .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
@@ -513,8 +533,9 @@ public class GsonUtils {
                 .registerTypeAdapterFactory(ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(ANALYZE_JOB_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(COMPUTE_RESOURCE_RUNTIME_TYPE_ADAPTER_FACTORY)
-                .registerTypeAdapterFactory(DYNAMIC_TABLET_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(TABLET_RESHARD_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapterFactory(TVR_DELTA_RUNTIME_TYPE_ADAPTER_FACTORY)
+                .registerTypeAdapterFactory(VARIANT_RUNTIME_TYPE_ADAPTER_FACTORY)
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
                 .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
                 .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
@@ -744,6 +765,77 @@ public class GsonUtils {
         }
     }
 
+    /*
+     * The json adapter for Range with generic type support.
+     */
+    private static class RangeAdapter<T extends Comparable<T>>
+            implements JsonSerializer<Range<T>>, JsonDeserializer<Range<T>> {
+
+        @Override
+        public JsonElement serialize(Range<T> src, Type typeOfSrc, JsonSerializationContext context) {
+            JsonObject jsonObject = new JsonObject();
+
+            // Serialize bounds using context to preserve generic type
+            if (src.getLowerBound() != null) {
+                jsonObject.add("lowerBound", context.serialize(src.getLowerBound()));
+            }
+            if (src.getUpperBound() != null) {
+                jsonObject.add("upperBound", context.serialize(src.getUpperBound()));
+            }
+            if (src.isLowerBoundIncluded()) {
+                jsonObject.add("lowerBoundIncluded", new JsonPrimitive(true));
+            }
+            if (src.isUpperBoundIncluded()) {
+                jsonObject.add("upperBoundIncluded", new JsonPrimitive(true));
+            }
+
+            return jsonObject;
+        }
+
+        @Override
+        public Range<T> deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            JsonObject jsonObject = json.getAsJsonObject();
+
+            // Extract generic type information
+            Type elementType;
+            if (typeOfT instanceof ParameterizedType) {
+                ParameterizedType parameterizedType = (ParameterizedType) typeOfT;
+                Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
+                elementType = actualTypeArguments[0];
+            } else {
+                // Cannot deserialize Range without generic type information
+                throw new JsonParseException("Cannot deserialize Range without generic type information.");
+            }
+
+            T lowerBound = null;
+            JsonElement lowerBoundElement = jsonObject.get("lowerBound");
+            if (lowerBoundElement != null) {
+                lowerBound = context.deserialize(lowerBoundElement, elementType);
+            }
+
+            T upperBound = null;
+            JsonElement upperBoundElement = jsonObject.get("upperBound");
+            if (upperBoundElement != null) {
+                upperBound = context.deserialize(upperBoundElement, elementType);
+            }
+
+            boolean lowerBoundIncluded = false;
+            JsonElement lowerBoundIncludedElement = jsonObject.get("lowerBoundIncluded");
+            if (lowerBoundIncludedElement != null) {
+                lowerBoundIncluded = lowerBoundIncludedElement.getAsBoolean();
+            }
+
+            boolean upperBoundIncluded = false;
+            JsonElement upperBoundIncludedElement = jsonObject.get("upperBoundIncluded");
+            if (upperBoundIncludedElement != null) {
+                upperBoundIncluded = upperBoundIncludedElement.getAsBoolean();
+            }
+
+            return Range.of(lowerBound, upperBound, lowerBoundIncluded, upperBoundIncluded);
+        }
+    }
+
     public static class ProcessHookTypeAdapterFactory implements TypeAdapterFactory {
 
         public ProcessHookTypeAdapterFactory() {
@@ -788,6 +880,41 @@ public class GsonUtils {
             } catch (Throwable t) {
                 return PrimitiveType.INVALID_TYPE;
             }
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    private static class MapTypeDeserializer implements JsonDeserializer<MapType> {
+        @Override
+        public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonObject key = dumpJsonObject.getAsJsonObject("keyType");
+            com.starrocks.type.Type keyType = GsonUtils.GSON.fromJson(key, com.starrocks.type.Type.class);
+            JsonObject value = dumpJsonObject.getAsJsonObject("valueType");
+            com.starrocks.type.Type valueType = GsonUtils.GSON.fromJson(value, com.starrocks.type.Type.class);
+            return new MapType(keyType, valueType);
+        }
+    }
+
+    // Todo: remove it after remove selectedFields
+    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
+        @Override
+        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                      JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            boolean isNamed = false;
+            if (dumpJsonObject.get("named") != null) {
+                isNamed = dumpJsonObject.get("named").getAsBoolean();
+            }
+            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
+            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+            for (JsonElement field : fields) {
+                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
+            }
+            return new StructType(structFields, isNamed);
         }
     }
 }

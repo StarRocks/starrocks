@@ -71,6 +71,8 @@ public:
 
     DEFINE_VECTORIZED_FN(repeat);
 
+    DEFINE_VECTORIZED_FN(array_top_n);
+
     template <LogicalType type>
     static StatusOr<ColumnPtr> array_overlap(FunctionContext* context, const Columns& columns) {
         return ArrayOverlap<type>::process(context, columns);
@@ -143,7 +145,19 @@ public:
         return ArrayGenerate<type>::process(context, columns);
     }
 
+    template <LogicalType type>
+    static Status array_generate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayGenerate<type>::prepare(context, scope);
+    }
+
+    template <LogicalType type>
+    static Status array_generate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayGenerate<type>::close(context, scope);
+    }
+
     DEFINE_VECTORIZED_FN(concat);
+
+    DEFINE_VECTORIZED_FN(arrays_zip);
 
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
     DEFINE_VECTORIZED_FN(array_cum_sum_double);

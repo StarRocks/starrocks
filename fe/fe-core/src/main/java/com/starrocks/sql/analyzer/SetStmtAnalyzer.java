@@ -16,13 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.IndexParams;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -54,16 +52,22 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -95,6 +99,12 @@ public class SetStmtAnalyzer {
             throw new SemanticException("No variable name in set statement.");
         }
 
+        // Validate that the variable exists
+        if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(variable)) {
+            String similarVars = GlobalStateMgr.getCurrentState().getVariableMgr().findSimilarVarNames(variable);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable, similarVars);
+        }
+
         Expr unResolvedExpression = var.getUnResolvedExpression();
         LiteralExpr resolvedExpression;
 
@@ -105,7 +115,7 @@ public class SetStmtAnalyzer {
         } else if (unResolvedExpression instanceof SlotRef) {
             resolvedExpression = new StringLiteral(((SlotRef) unResolvedExpression).getColumnName());
         } else {
-            Expr e = Expr.analyzeAndCastFold(unResolvedExpression);
+            Expr e = ExprUtils.analyzeAndCastFold(unResolvedExpression);
             if (!e.isConstant()) {
                 throw new SemanticException("Set statement only support constant expr.");
             }
@@ -122,6 +132,16 @@ public class SetStmtAnalyzer {
             String value = resolvedExpression.getStringValue();
             if (!value.equalsIgnoreCase("broadcast") && !value.equalsIgnoreCase("shuffle")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, "prefer_join_method", value);
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_DISABLED_RULES)) {
+            String value = resolvedExpression.getStringValue();
+            if (!Strings.isNullOrEmpty(value)) {
+                String errorMsg = validateCboDisabledRules(value);
+                if (errorMsg != null) {
+                    throw new SemanticException(errorMsg);
+                }
             }
         }
 
@@ -360,6 +380,48 @@ public class SetStmtAnalyzer {
         var.setResolvedExpression(resolvedExpression);
     }
 
+    /**
+     * Validate cbo_disabled_rules value - ensures all rule names are valid TF_/GP_ rules
+     * 
+     * @param value comma-separated rule names
+     * @return error message if validation fails, null if valid
+     */
+    private static String validateCboDisabledRules(String value) {
+        try {
+            Splitter splitter = Splitter.on(',').trimResults().omitEmptyStrings();
+            List<String> ruleNames = splitter.splitToList(value);
+            
+            List<String> invalidRules = new ArrayList<>();
+            List<String> nonTfGpRules = new ArrayList<>();
+            
+            for (String ruleName : ruleNames) {
+                try {
+                    RuleType ruleType = RuleType.valueOf(ruleName);
+                    // Only TF_ (Transformation) and GP_ (Group combination) rules can be disabled
+                    if (!ruleType.name().startsWith("TF_") && !ruleType.name().startsWith("GP_")) {
+                        nonTfGpRules.add(ruleName);
+                    }
+                } catch (IllegalArgumentException e) {
+                    invalidRules.add(ruleName);
+                }
+            }
+            
+            // Report all invalid rules at once for better user experience
+            if (!invalidRules.isEmpty()) {
+                return "Unknown rule name(s): " + String.join(", ", invalidRules);
+            }
+            
+            if (!nonTfGpRules.isEmpty()) {
+                return "Only TF_ (Transformation) and GP_ (Group combination) rules can be disabled, invalid: " + 
+                       String.join(", ", nonTfGpRules);
+            }
+            
+            return null;
+        } catch (Exception e) {
+            return "Failed to parse rule names: " + e.getMessage();
+        }
+    }
+
     private static void checkRangeLongVariable(LiteralExpr resolvedExpression, String field, Long min, Long max) {
         String value = resolvedExpression.getStringValue();
         try {
@@ -492,18 +554,18 @@ public class SetStmtAnalyzer {
     public static void calcuteUserVariable(UserVariable userVariable) {
         Expr expression = userVariable.getUnevaluatedExpression();
         if (expression instanceof NullLiteral) {
-            userVariable.setEvaluatedExpression(NullLiteral.create(Type.STRING));
+            userVariable.setEvaluatedExpression(NullLiteral.create(StringType.STRING));
         } else {
             Expr foldedExpression;
-            foldedExpression = Expr.analyzeAndCastFold(expression);
+            foldedExpression = ExprUtils.analyzeAndCastFold(expression);
 
-            if (foldedExpression.isLiteral()) {
+            if (ExprUtils.isLiteral(foldedExpression)) {
                 userVariable.setEvaluatedExpression(foldedExpression);
             } else {
                 SelectList selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(userVariable.getUnevaluatedExpression(), null)), false);
 
-                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.STRING));
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(StringType.STRING));
                 List<List<Expr>> rows = new ArrayList<>();
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));

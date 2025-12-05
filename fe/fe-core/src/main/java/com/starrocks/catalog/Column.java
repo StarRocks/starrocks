@@ -38,7 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
@@ -49,9 +48,11 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -59,6 +60,12 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
 import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
 
@@ -130,8 +137,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private DefaultExpr defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
-    @SerializedName(value = "stats")
-    private ColumnStats stats;     // cardinality and selectivity etc.
     // Define expr may exist in two forms, one is analyzed, and the other is not analyzed.
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be
     // analyzed.
@@ -153,10 +158,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Only for persist
     public Column() {
         this.name = "";
-        this.type = Type.NULL;
+        this.type = NullType.NULL;
         this.isAggregationTypeImplicit = false;
         this.isKey = false;
-        this.stats = new ColumnStats();
         this.uniqueId = -1;
     }
 
@@ -210,7 +214,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.columnId = ColumnId.create(this.name);
         this.type = type;
         if (this.type == null) {
-            this.type = Type.NULL;
+            this.type = NullType.NULL;
         }
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
@@ -233,12 +237,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
             } else {
-                this.defaultExpr = new DefaultExpr(defaultValueDef.expr.toSql(), defaultValueDef.hasArguments);
+                this.defaultExpr = new DefaultExpr(ExprToSql.toSql(defaultValueDef.expr), defaultValueDef.hasArguments);
             }
         }
         this.isAutoIncrement = false;
         this.comment = comment;
-        this.stats = new ColumnStats();
         this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
         this.physicalName = physicalName;
@@ -256,7 +259,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = column.isAllowNull();
         this.defaultValue = column.getDefaultValue();
         this.comment = column.getComment();
-        this.stats = column.getStats();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
         Preconditions.checkArgument(this.type.isComplexType() ||
@@ -401,14 +403,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.defaultValue;
     }
 
-    public void setStats(ColumnStats stats) {
-        this.stats = stats;
-    }
-
-    public ColumnStats getStats() {
-        return this.stats;
-    }
-
     public void setComment(String comment) {
         this.comment = comment;
     }
@@ -456,12 +450,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.columnId.getId());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
-        tColumn.setType_desc(this.type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(this.type));
         if (null != this.aggregationType) {
             tColumn.setAggregation_type(toThrift(aggregationType));
         }
         if (null != this.aggStateDesc) {
-            TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
+            TAggStateDesc tAggStateDesc = TypeSerializer.toThrift(this.aggStateDesc);
             tColumn.setAgg_state_desc(tAggStateDesc);
         }
         tColumn.setIs_key(this.isKey);
@@ -474,7 +468,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
         // scalar type or nested type
         // If this field is set, column_type will be ignored.
-        tColumn.setType_desc(type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(type));
         tColumn.setCol_unique_id(uniqueId);
 
         return tColumn;
@@ -813,7 +807,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
-                generatedColumnSql = generatedColumnExpr.convertToColumnNameExpr(idToColumn).toSql();
+                generatedColumnSql = ExprToSql.toSql(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
             } else {
                 generatedColumnSql = generatedColumnExpr.toSql();
             }
@@ -980,26 +974,4 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.aggStateDesc;
     }
 
-    public static Column fromColumnDef(Table table, ColumnDef columnDef) {
-        Column col = new Column(columnDef.getName(),
-                columnDef.getTypeDef().getType(),
-                columnDef.isKey(),
-                columnDef.getAggregateType(),
-                columnDef.getAggStateDesc(),
-                columnDef.isAllowNull(),
-                columnDef.getDefaultValueDef(),
-                columnDef.getComment(),
-                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
-        col.setIsAutoIncrement(columnDef.isAutoIncrement());
-
-        Expr generatedColumnExpr = columnDef.getGeneratedColumnExpr();
-        if (generatedColumnExpr != null) {
-            if (table != null) {
-                col.setGeneratedColumnExpr(ColumnIdExpr.create(table.getNameToColumn(), generatedColumnExpr));
-            } else {
-                col.setGeneratedColumnExpr(ColumnIdExpr.create(generatedColumnExpr));
-            }
-        }
-        return col;
-    }
 }

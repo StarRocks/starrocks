@@ -43,7 +43,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -56,8 +55,8 @@ import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -78,6 +77,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -85,7 +85,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rewrite.TimeDriftConstraint;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
@@ -98,6 +97,8 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
@@ -107,6 +108,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.threeten.extra.PeriodDuration;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
@@ -257,6 +259,12 @@ public class PropertyAnalyzer {
     // fast schema evolution
     public static final String PROPERTIES_USE_FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+ 
+    /**
+     * Configuration for the v2 implementation of fast schema evolution for cloud-native table.
+     * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
+     */
+    public static final String PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2 = "cloud_native_fast_schema_evolution_v2";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -264,9 +272,9 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
-    public static final String PROPERTIES_ENABLE_DYNAMIC_TABLET = "enable_dynamic_tablet";
+    public static final String PROPERTIES_TABLET_RESHARD_SPLIT_SIZE = "tablet_reshard_split_size";
 
-    public static final String PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE = "dynamic_tablet_split_size";
+    public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -325,7 +333,8 @@ public class PropertyAnalyzer {
                 }
             } else if (!hasCooldownTime && key.equalsIgnoreCase(coolDownTimeKey)) {
                 hasCooldownTime = true;
-                DateLiteral dateLiteral = new DateLiteral(value, Type.DATETIME);
+                LocalDateTime dateTime = DateUtils.parseStrictDateTime(value);
+                DateLiteral dateLiteral = new DateLiteral(dateTime, DateType.DATETIME);
                 coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
             } else if (!hasCoolDownTTL && key.equalsIgnoreCase(coolDownTTLKey)) {
                 hasCoolDownTTL = true;
@@ -585,6 +594,14 @@ public class PropertyAnalyzer {
             enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
         }
         return enableLoadProfile;
+    }
+
+    public static boolean analyzeEnableStatisticCollectOnFirstLoad(Map<String, String> properties) {
+        boolean enable = true;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+            enable = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+        }
+        return enable;
     }
 
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
@@ -1593,40 +1610,22 @@ public class PropertyAnalyzer {
         return TCompactionStrategy.DEFAULT;
     }
 
-    public static Boolean analyzeEnableDynamicTablet(Map<String, String> properties, boolean removeProperties)
+    public static long analyzeTabletReshardSplitSize(Map<String, String> properties, boolean removeProperties)
             throws AnalysisException {
-        Boolean enableDynamicTablet = Config.enable_dynamic_tablet;
+        long tabletReshardSplitSize = Config.tablet_reshard_split_size;
         if (properties != null) {
-            String value = removeProperties ? properties.remove(PROPERTIES_ENABLE_DYNAMIC_TABLET)
-                    : properties.get(PROPERTIES_ENABLE_DYNAMIC_TABLET);
+            String value = removeProperties ? properties.remove(PROPERTIES_TABLET_RESHARD_SPLIT_SIZE)
+                    : properties.get(PROPERTIES_TABLET_RESHARD_SPLIT_SIZE);
             if (value != null) {
                 try {
-                    enableDynamicTablet = parseBoolean(value);
+                    tabletReshardSplitSize = Long.parseLong(value);
                 } catch (Exception e) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
-                            PROPERTIES_ENABLE_DYNAMIC_TABLET, value, "`true` or `false`");
+                            PROPERTIES_TABLET_RESHARD_SPLIT_SIZE, value, "a positive integer");
                 }
             }
         }
-        return enableDynamicTablet;
-    }
-
-    public static long analyzeDynamicTabletSplitSize(Map<String, String> properties, boolean removeProperties)
-            throws AnalysisException {
-        long dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
-        if (properties != null) {
-            String value = removeProperties ? properties.remove(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE)
-                    : properties.get(PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE);
-            if (value != null) {
-                try {
-                    dynamicTabletSplitSize = Long.parseLong(value);
-                } catch (Exception e) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_VALUE,
-                            PROPERTIES_DYNAMIC_TABLET_SPLIT_SIZE, value, "a positive integer");
-                }
-            }
-        }
-        return dynamicTabletSplitSize;
+        return tabletReshardSplitSize;
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
@@ -1662,7 +1661,11 @@ public class PropertyAnalyzer {
             // replication_num
             short replicationNum = RunMode.defaultReplicationNum();
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                if (FeConstants.isReplayFromQueryDump) {
+                    replicationNum = 1;
+                } else {
+                    replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+                }
                 materializedView.setReplicationNum(replicationNum);
             }
             // bloom_filter_columns
@@ -1940,12 +1943,35 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
-            if (materializedView.isCloudNativeMaterializedView()) {
-                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                        .unbindTableToStorageVolume(materializedView.getId());
+            if (FeConstants.isReplayFromQueryDump) {
+                LOG.warn("Ignore MV properties analysis error during replay from query dump: ", e);
+            } else {
+                if (materializedView.isCloudNativeMaterializedView()) {
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                            .unbindTableToStorageVolume(materializedView.getId());
+                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
             }
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, e.getMessage());
         }
+    }
+
+    public static boolean analyzeCloudNativeFastSchemaEvolutionV2(Table.TableType tableType,
+            Map<String, String> properties, boolean removeFromProperties) throws SemanticException {
+        if (tableType != Table.TableType.CLOUD_NATIVE) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    String.format("Property %s only supports cloud-native tables, but table type is %s",
+                            PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, tableType.name()));
+        }
+        boolean cloudNativeFastSchemaEvolutionV2 = true;
+        String value = properties.get(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2);
+        if (value != null) {
+            cloudNativeFastSchemaEvolutionV2 = parseBooleanStrictly(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                    value);
+        }
+        if (removeFromProperties) {
+            properties.remove(PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2);
+        }
+        return cloudNativeFastSchemaEvolutionV2;
     }
 
     @NotNull
@@ -2024,13 +2050,15 @@ public class PropertyAnalyzer {
         return sb.toString();
     }
 
-    public static boolean parseBoolean(String value) {
-        if (value.equalsIgnoreCase("true")) {
-            return true;
+    public static boolean parseBooleanStrictly(String property, String value) throws SemanticException {
+        boolean ret = false;
+        if ("true".equalsIgnoreCase(value)) {
+            ret = true;
+        } else if ("false".equalsIgnoreCase(value)) {
+            ret = false;
+        } else {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE, property, value, "'true' or 'false'");
         }
-        if (value.equalsIgnoreCase("false")) {
-            return false;
-        }
-        throw new IllegalArgumentException("Illegal boolean value: " + value);
+        return ret;
     }
 }

@@ -218,6 +218,38 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+#### JOIN USING 子句
+
+除了使用 `ON` 指定 Join 条件外，StarRocks 还支持使用 `USING` 子句来简化具有相同列名的等值 Join。例如：`SELECT * FROM t1 JOIN t2 USING (id)`。
+
+**版本差异说明：**
+
+- **4.0.2 之前的版本**
+  
+  `USING` 仅作为语法糖，会在内部转换为 `ON` 条件。返回结果会包含左右两侧表的 USING 列（作为独立的列），并且支持在查询时使用表别名限定符（例如 `t1.id`）来引用 USING 列。
+  
+  ```SQL
+  -- 4.0.2 之前的版本支持
+  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- 返回两个独立的 id 列
+  ```
+
+- **4.0.2 及之后的版本**
+  
+  StarRocks 实现了符合 SQL 标准的 `USING` 语义。主要变化包括：
+  
+  - 支持所有类型的 Join，包括 `FULL OUTER JOIN`
+  - USING 列在结果中表示为单个合并列（对于 FULL OUTER JOIN，使用 `COALESCE(left.col, right.col)` 语义）
+  - 不再支持使用表别名限定符（例如 `t1.id`）引用 USING 列，必须使用非限定的列名（例如 `id`）
+  - 在 `SELECT *` 时，列顺序为：`[USING 列, 左表非 USING 列, 右表非 USING 列]`
+  
+  ```SQL
+  -- 4.0.2 及之后的版本
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ 正确：返回单个合并的 id 列
+  SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ 错误：列 'id' 存在歧义
+  SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ 支持 FULL OUTER JOIN
+  ```
+
+
 ## ASOF Join
 
 ASOF Join 是一种常用于时序分析的时间型或范围型 Join 方式。它允许在 Join 两个表时，既使用某些键的等值条件，又使用时间或序列字段上的非等值条件（例如 `t1.time >= t2.time`）。在执行时，ASOF Join 会为左表中的每一行选择右表中最接近且不超过指定时间（或序列值）的匹配行。自 v4.0 起支持。

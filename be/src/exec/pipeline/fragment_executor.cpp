@@ -24,19 +24,15 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
-#include "exec/multi_olap_table_sink.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
@@ -178,7 +174,11 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 
     if (request.common().__isset.pred_tree_params) {
         const auto& tpred_tree_params = request.common().pred_tree_params;
-        _fragment_ctx->set_pred_tree_params({tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile});
+        const int32_t max_pushdown_or_predicates = tpred_tree_params.__isset.max_pushdown_or_predicates
+                                                           ? tpred_tree_params.max_pushdown_or_predicates
+                                                           : PredicateTreeParams::DEFAULT_MAX_PUSHDOWN_OR_PREDICATES;
+        _fragment_ctx->set_pred_tree_params(
+                {tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile, max_pushdown_or_predicates});
     }
 
     return Status::OK();
@@ -959,6 +959,9 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
+
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_fragment_prepared(true);
 
     return Status::OK();
 }

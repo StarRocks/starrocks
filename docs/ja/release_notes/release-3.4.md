@@ -4,6 +4,38 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.9
+
+リリース日：2025年11月24日
+
+### 動作変更
+
+- Trino 方言において、`json_extract` の戻り値の型を STRING から JSON に変更しました。これにより、CAST、UNNEST、型チェックロジックとの互換性問題が発生する可能性があります。[#59718](https://github.com/StarRocks/starrocks/pull/59718)
+- `/metrics` における「ユーザーごとの接続数」を報告するメトリクスは、管理者認証が必須となりました。認証なしの場合は総接続数のみが公開され、メトリクス経由でユーザー名が漏洩するリスクを防止します。[#64635](https://github.com/StarRocks/starrocks/pull/64635)
+- 非推奨となっていたシステム変数 `analyze_mv` を削除しました。マテリアライズド・ビューのリフレッシュは ANALYZE ジョブを自動実行しなくなり、大量のバックグラウンド統計タスクが発生する状況を回避します。既存の動作に依存していたユーザーは注意が必要です。[#64863](https://github.com/StarRocks/starrocks/pull/64863)
+- x86 上で LARGEINT から DECIMAL128 へのキャスト時のオーバーフロー検知ロジックを変更しました。`INT128_MIN * 1` はもはやオーバーフローと見なされず、極値におけるキャストセマンティクスの一貫性を確保します。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- `finishTransaction` にテーブル単位のロックタイムアウト設定を追加しました。タイムアウト内にテーブルロックを取得できない場合、そのラウンドのトランザクション完了は失敗し、後で再試行されます。無限にブロックされることがなくなり、ロック動作がより明確になります。最終的な結果に変更はありません。[#63981](https://github.com/StarRocks/starrocks/pull/63981)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- BE 起動時、RocksDB からタブレットメタデータを読み込む際にタイムアウトが発生すると、RocksDB が最初から読み込み直すことで古いタブレットエントリを誤って取り込み、データバージョンが失われる可能性がありました。[#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- Lake プライマリキー表の delete-vector に対する CRC32C チェックサムに関連するデータ破損問題。[#65006](https://github.com/StarRocks/starrocks/pull/65006) [#65354](https://github.com/StarRocks/starrocks/pull/65354) [#65442](https://github.com/StarRocks/starrocks/pull/65442) [#65354](https://github.com/StarRocks/starrocks/pull/65354)
+- JSON ハイパー抽出パスが `$`、またはすべてのパスがスキップされることで `flat_path` が空文字列になると、`substr` 呼び出しで例外が発生し、BE がクラッシュする問題を修正しました。[#65260](https://github.com/StarRocks/starrocks/pull/65260)
+- 大きな文字列をディスクへスピルする際、長さチェック不足、32 ビット添付サイズの使用、BlockReader の問題によりクラッシュが発生する可能性がありました。[#65373](https://github.com/StarRocks/starrocks/pull/65373)
+- 複数の HTTP リクエストが同一 TCP 接続を再利用する場合、ExecuteSQL リクエストの後に非 ExecuteSQL リクエストが到着すると、チャネルクローズ時に `HttpConnectContext` が解除されず、HTTP コンテキストリークが発生していました。[#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- JSON flatten 中に、特定の状況下でプリミティブ値が失われる問題を修正しました。[#64939](https://github.com/StarRocks/starrocks/pull/64939) [#64703](https://github.com/StarRocks/starrocks/pull/64703)
+- JSON スキーマが不整合なチャンクを追加すると `ChunkAccumulator` がクラッシュする問題を修正しました。[#64894](https://github.com/StarRocks/starrocks/pull/64894)
+- `AsyncFlushOutputStream` において、非同期 I/O タスクが破棄済みの `MemTracker` にアクセスし、use-after-free クラッシュにつながる問題を修正しました。[#64735](https://github.com/StarRocks/starrocks/pull/64735)
+- 同一 Lake プライマリキー表に対する複数の Compaction が並行実行される場合、整合性チェックが不足しており、publish 失敗後にメタデータが不整合状態のまま残る可能性がありました。[#65005](https://github.com/StarRocks/starrocks/pull/65005)
+- Hash Join のスピル処理で、ビルド側の `set_finishing` タスクが失敗した場合、その状態が spiller にのみ記録され、プローブ側が実行を継続した結果、クラッシュまたは無限ループが発生する可能性がありました。[#65027](https://github.com/StarRocks/starrocks/pull/65027)
+- タブレット移行中、唯一最新のレプリカが DECOMMISSION とマークされている場合、ターゲットレプリカのバージョンが古いまま VERSION_INCOMPLETE に固定される問題。[#62942](https://github.com/StarRocks/starrocks/pull/62942)
+- `PartitionedSpillerWriter` がパーティションを削除する際、対応する Block Group が解放されず、use-after-free が発生する問題。[#63903](https://github.com/StarRocks/starrocks/pull/63903) [#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- MorselQueue が split を取得できない場合に BE がクラッシュする問題。[#62753](https://github.com/StarRocks/starrocks/pull/62753)
+- shared-data クラスタにおいて、Sorted-by-key スキャンが複数 I/O タスクで実行されると、ソートベース集約の結果が誤る可能性がありました。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- ARM 環境で、特定の Hive 外部テーブルの Parquet 列を読み取る際、NULL ビットマップをコピーする処理で乱序実行により NULL バッファのポインタが古い状態となり、LZ4 変換時にクラッシュすることがありました。[#63294](https://github.com/StarRocks/starrocks/pull/63294)
+
 ## 3.4.8
 
 リリース日：2025年9月30日

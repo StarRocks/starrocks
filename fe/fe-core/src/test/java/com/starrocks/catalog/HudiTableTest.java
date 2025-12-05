@@ -33,6 +33,14 @@ import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -77,13 +85,13 @@ public class HudiTableTest {
     public void testCreateExternalTable(@Mocked MetadataMgr metadataMgr) {
         assertThrows(HoodieIOException.class, () -> {
             List<Column> columns = Lists.newArrayList();
-            columns.add(new Column("col1", Type.INT, true));
-            columns.add(new Column("col2", Type.INT, true));
-            columns.add(new Column("_hoodie_commit_time", Type.STRING, true));
-            columns.add(new Column("_hoodie_commit_seqno", Type.STRING, true));
-            columns.add(new Column("_hoodie_record_key", Type.STRING, true));
-            columns.add(new Column("_hoodie_partition_path", Type.STRING, true));
-            columns.add(new Column("_hoodie_file_name", Type.STRING, true));
+            columns.add(new Column("col1", IntegerType.INT, true));
+            columns.add(new Column("col2", IntegerType.INT, true));
+            columns.add(new Column("_hoodie_commit_time", StringType.STRING, true));
+            columns.add(new Column("_hoodie_commit_seqno", StringType.STRING, true));
+            columns.add(new Column("_hoodie_record_key", StringType.STRING, true));
+            columns.add(new Column("_hoodie_partition_path", StringType.STRING, true));
+            columns.add(new Column("_hoodie_file_name", StringType.STRING, true));
             long createTime = System.currentTimeMillis();
             List<String> dataColumns = Lists.newArrayList("col2", "_hoodie_commit_time", "_hoodie_commit_seqno",
                     "_hoodie_record_key", "_hoodie_partition_path", "_hoodie_file_name");
@@ -106,7 +114,7 @@ public class HudiTableTest {
 
             Assertions.assertEquals("db0", oTable.getCatalogDBName());
             Assertions.assertEquals("table0", oTable.getCatalogTableName());
-            Assertions.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
+            Assertions.assertEquals(new Column("col1", IntegerType.INT, true), oTable.getColumn("col1"));
             Assertions.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
             Assertions.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +
                     "hiveDbName='db0', hiveTableName='table0', id=2, name='table0', type=HUDI"));
@@ -197,27 +205,27 @@ public class HudiTableTest {
     @Test
     public void testColumnTypeConvert() {
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.BOOLEAN)),
-                ScalarType.createType(PrimitiveType.BOOLEAN));
+                BooleanType.BOOLEAN);
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.INT)),
-                ScalarType.createType(PrimitiveType.INT));
+                IntegerType.INT);
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.FLOAT)),
-                ScalarType.createType(PrimitiveType.FLOAT));
+                FloatType.FLOAT);
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.DOUBLE)),
-                ScalarType.createType(PrimitiveType.DOUBLE));
+                FloatType.DOUBLE);
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
-                ScalarType.createDefaultCatalogString());
+                TypeFactory.createDefaultCatalogString());
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createArray(Schema.create(Schema.Type.INT))),
-                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+                new ArrayType(IntegerType.INT));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createFixed("FIXED", "FIXED", "F", 1)),
-                ScalarType.createType(PrimitiveType.VARCHAR));
+                VarcharType.VARCHAR);
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createMap(Schema.create(Schema.Type.INT))),
-                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(TypeFactory.createDefaultCatalogString(), IntegerType.INT));
         Assertions.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
-                ScalarType.createType(PrimitiveType.INT));
+                IntegerType.INT);
     }
 
     @Test
@@ -245,8 +253,8 @@ public class HudiTableTest {
         };
 
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("col1", Type.INT, true));
-        columns.add(new Column("col2", Type.INT, true));
+        columns.add(new Column("col1", IntegerType.INT, true));
+        columns.add(new Column("col2", IntegerType.INT, true));
         long createTime = System.currentTimeMillis();
 
         Map<String, String> properties = Maps.newHashMap();

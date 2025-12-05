@@ -241,7 +241,9 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
     }
     if (create_status.ok()) {
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+#ifndef __APPLE__
             create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+#endif
         } else {
             create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
         }

@@ -62,6 +62,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // flag for this aggregate operator's parent had been pruned
     private boolean mergedLocalAgg;
 
+    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
+    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
+    private boolean topNLocalAgg;
+
     private boolean useSortAgg = false;
 
     private boolean usePerBucketOptmize = false;
@@ -71,6 +75,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private DataSkewInfo distinctColumnDataSkew = null;
 
     private boolean forcePreAggregation = false;
+
+    private boolean withLocalShuffle = false;
+
+    private long localLimit = DEFAULT_LIMIT;
 
     private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
 
@@ -103,11 +111,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                 aggregateOperator.getPredicate(),
                 aggregateOperator.getProjection());
         this.mergedLocalAgg = aggregateOperator.mergedLocalAgg;
+        this.topNLocalAgg = aggregateOperator.topNLocalAgg;
         this.useSortAgg = aggregateOperator.useSortAgg;
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
         this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
         this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
+        this.withLocalShuffle = aggregateOperator.withLocalShuffle;
+        this.localLimit = aggregateOperator.localLimit;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -144,6 +155,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.mergedLocalAgg = mergedLocalAgg;
     }
 
+    public boolean isTopNLocalAgg() {
+        return topNLocalAgg;
+    }
+
+    public void setTopNLocalAgg(boolean topNLocalAgg) {
+        this.topNLocalAgg = topNLocalAgg;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
@@ -172,7 +191,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc() || forcePreAggregation)) {
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc() || isTopNLocalAgg() ||
+                forcePreAggregation)) {
             mode = SessionVariableConstants.FORCE_PREAGGREGATION;
         }
         return mode;
@@ -194,8 +214,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return withoutColocateRequirement;
     }
 
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
     public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
         this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {
@@ -222,6 +250,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.forcePreAggregation = forcePreAggregation;
     }
 
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
+    }
+
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
+    }
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
@@ -233,7 +269,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet(), partitionByColumns);
+        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet(), partitionByColumns, topNLocalAgg);
     }
 
     @Override
@@ -248,7 +284,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
         return type == that.type && Objects.equals(aggregations, that.aggregations) &&
-                Objects.equals(groupBys, that.groupBys) && Objects.equals(partitionByColumns, that.partitionByColumns);
+                Objects.equals(groupBys, that.groupBys) && Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                topNLocalAgg == that.topNLocalAgg;
     }
 
     @Override

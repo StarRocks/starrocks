@@ -22,11 +22,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -47,12 +49,19 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.sql.optimizer.statistics.StatsVersion;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+
 
 // for a simple min/max/count aggregation query like
 // 'select min(c1),max(c2),count(*),count(not-null column) from olap_table',
@@ -61,6 +70,19 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
     public RewriteSimpleAggToMetaScanRule() {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.LOGICAL_OLAP_SCAN)));
+    }
+
+    private List<String> calculatePartitionNames(LogicalOlapScanOperator scanOperator) {
+        Set<String> partitionNames = scanOperator.getPartitionNames() != null ?
+                new HashSet<>(scanOperator.getPartitionNames().getPartitionNames()) : new HashSet<>();
+        List<Long> selectedPartitionIds = scanOperator.getSelectedPartitionId() != null ?
+                scanOperator.getSelectedPartitionId() : new ArrayList<>();
+        Table table = scanOperator.getTable();
+        for (Long selectedPartitionId : selectedPartitionIds) {
+            String partitionName = table.getPartition(selectedPartitionId).getName();
+            partitionNames.add(partitionName);
+        }
+        return new ArrayList<>(partitionNames);
     }
 
     private OptExpression buildAggMetaScanOperator(OptExpression input, OptimizerContext context) {
@@ -84,16 +106,23 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
             CallOperator aggCall = kv.getValue();
             ColumnRefOperator usedColumn;
+            String metaColumnName;
             if (!aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
+                metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             } else {
-                // for count, just use the first output column as a placeholder, BE won't read this column.
                 usedColumn = scanOperator.getOutputColumns().get(0);
+                // for count, distinguish between count(*) and count(column)
+                if (aggCall.getUsedColumns().isEmpty()) {
+                    // count(*) - should count all rows including NULLs, use "rows" as field name
+                    metaColumnName = "rows_" + usedColumn.getName();
+                } else {
+                    // count(column) - should count non-NULL values, use "count" as field name
+                    metaColumnName = "count_" + usedColumn.getName();
+                }
             }
-
-            String metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             Type columnType = aggCall.getType();
 
             ColumnRefOperator metaColumn;
@@ -115,7 +144,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
             Column copiedColumn = new Column(c);
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                copiedColumn.setType(Type.BIGINT);
+                copiedColumn.setType(IntegerType.BIGINT);
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);
@@ -126,17 +155,21 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
-                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
-                        new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
+                aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
+                        new Type[] {IntegerType.BIGINT}, Function.CompareMode.IS_IDENTICAL);
                 newAggFnName = FunctionSet.SUM;
-                newAggReturnType = Type.BIGINT;
+                newAggReturnType = IntegerType.BIGINT;
             }
             CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);
         }
+
+        List<String> selectedPartitionNames = calculatePartitionNames(scanOperator);
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
+                .setSelectPartitionNames(selectedPartitionNames)
+                .setSelectedIndexId(scanOperator.getSelectedIndexId())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToNames(aggColumnIdToNames).build();
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
@@ -190,6 +223,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
+        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
                 aggregator -> {
@@ -200,12 +235,22 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         if (usedColumns.size() != 1) {
                             return false;
                         }
+                        // fast schema evolution won't rewrite data when processing DDL,
+                        // in this case, if column's type has been changed, zonemap index can't be used.
+                        // But we can't distinguish which type of schema change happened from metadata,
+                        // so we choose to disable min/max rewrite to make sure correctness
+                        // fast schema evolution don't support changing column type in shared-nothing mode,
+                        // we only need to disable it in shared-data mode
+                        if (RunMode.isSharedDataMode() && hasSchemaChange) {
+                            return false;
+                        }
                         ColumnRefOperator usedColumn =
                                 context.getColumnRefFactory().getColumnRef(usedColumns.getFirstId());
                         Column column = scanOperator.getColRefToColumnMetaMap().get(usedColumn);
                         if (column == null) {
                             return false;
                         }
+
                         // min/max column should have zonemap index
                         Type type = aggregator.getType();
                         return !(type.isStringType() || type.isComplexType());
@@ -236,9 +281,16 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         return allValid;
     }
 
-    public Optional<OptExpression> tryReplaceByMetaData(OptExpression input, ColumnRefFactory factory) {
+    public Optional<OptExpression> tryReplaceByMetaData(OptExpression input,
+                                                        OptimizerContext context, ColumnRefFactory factory) {
+        if (context.getSessionVariable().getScanOlapPartitionNumLimit() != 0) {
+            return Optional.empty();
+        }
         LogicalAggregationOperator aggregationOperator = input.getOp().cast();
         LogicalOlapScanOperator scanOperator = input.inputAt(0).inputAt(0).getOp().cast();
+        if (!scanOperator.getSelectedPartitionId().isEmpty()) {
+            return Optional.empty();
+        }
 
         OlapTable table = (OlapTable) scanOperator.getTable();
         LocalDateTime lastUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
@@ -274,14 +326,15 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         .getStats(new ColumnIdentifier(table.getId(), c.getColumnId()),
                                 new StatsVersion(-1, lastUpdateTimestamp));
                 if (minMax.isEmpty()) {
+                    newAggCalls.put(entry.getKey(), entry.getValue());
                     continue;
                 }
 
                 ConstantOperator mm;
                 if (call.getFnName().equals(FunctionSet.MAX)) {
-                    mm = new ConstantOperator(minMax.get().maxValue(), Type.VARCHAR);
+                    mm = new ConstantOperator(minMax.get().maxValue(), VarcharType.VARCHAR);
                 } else {
-                    mm = new ConstantOperator(minMax.get().minValue(), Type.VARCHAR);
+                    mm = new ConstantOperator(minMax.get().minValue(), VarcharType.VARCHAR);
                 }
                 Optional<ConstantOperator> re = mm.castTo(call.getType());
                 re.ifPresent(cc -> constantMap.put(entry.getKey(), cc));
@@ -306,7 +359,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
             LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
-                    List.of(List.of(ConstantOperator.createNull(Type.BIGINT))));
+                    List.of(List.of(ConstantOperator.createNull(IntegerType.BIGINT))));
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
 
@@ -321,7 +374,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        Optional<OptExpression> plan = tryReplaceByMetaData(input, context.getColumnRefFactory());
+        Optional<OptExpression> plan = tryReplaceByMetaData(input, context, context.getColumnRefFactory());
         OptExpression result = plan.map(opt -> buildAggMetaScanOperator(opt, context))
                 .orElseGet(() -> buildAggMetaScanOperator(input, context));
         return Lists.newArrayList(result);

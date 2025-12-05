@@ -123,8 +123,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
             }
         }
     }
-    span->SetAttribute("num_partition", num_partition);
-    span->SetAttribute("num_tablet", num_active_tablet);
+    span->SetAttribute("num_partition", static_cast<uint64_t>(num_partition));
+    span->SetAttribute("num_tablet", static_cast<uint64_t>(num_active_tablet));
 
     std::mutex affected_dirs_lock;
     CountDownLatch latch(static_cast<int>(tablet_tasks.size()));

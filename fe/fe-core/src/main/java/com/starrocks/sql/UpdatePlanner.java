@@ -21,7 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -37,7 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -227,7 +227,7 @@ public class UpdatePlanner {
                     targetTable.getName());
             if (!column.getType().matchesType(outputColumn.getType())) {
                 // This should be always true but add a check here to avoid updating the wrong column type.
-                if (!Type.canCastTo(outputColumn.getType(), column.getType())) {
+                if (!TypeManager.canCastTo(outputColumn.getType(), column.getType())) {
                     throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
                             outputColumn.getType(), column.getType()));
                 }

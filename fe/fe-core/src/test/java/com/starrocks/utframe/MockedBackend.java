@@ -141,6 +141,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -260,6 +261,10 @@ public class MockedBackend {
         return starletPort;
     }
 
+    public MockBeThriftClient getMockBeThriftClient() {
+        return thriftClient;
+    }
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
@@ -278,6 +283,7 @@ public class MockedBackend {
         public THeartbeatResult heartbeat(TMasterInfo masterInfo) {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
+            backendInfo.setStarlet_port(starletPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
 
@@ -294,7 +300,7 @@ public class MockedBackend {
         }
     }
 
-    private static class MockBeThriftClient extends BackendService.Client {
+    public static class MockBeThriftClient extends BackendService.Client {
         // Shared static resources across all MockBeThriftClient instances
         private static BlockingQueue<TaskWrapper> sharedTaskQueue = Queues.newLinkedBlockingQueue();
         private static LeaderImpl sharedMaster = new LeaderImpl();
@@ -316,6 +322,9 @@ public class MockedBackend {
 
         private final TBackend tBackend;
         private long reportVersion = 0;
+
+        private volatile boolean captureAgentTask = false;
+        private final ConcurrentLinkedQueue<TAgentTaskRequest> capturedAgentTasks = new ConcurrentLinkedQueue<>();
 
         public MockBeThriftClient(MockedBackend backend) {
             super(null);
@@ -375,8 +384,23 @@ public class MockedBackend {
         public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
             for (TAgentTaskRequest task : tasks) {
                 sharedTaskQueue.add(new TaskWrapper(task, tBackend, ++reportVersion));
+                if (captureAgentTask) {
+                    capturedAgentTasks.add(task);
+                }
             }
             return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        public void setCaptureAgentTask(boolean captureAgentTask) {
+            this.captureAgentTask = captureAgentTask;
+        }
+
+        public List<TAgentTaskRequest> getCapturedAgentTasks() {
+            return new ArrayList<>(capturedAgentTasks);
+        }
+
+        public void clearCapturedAgentTasks() {
+            capturedAgentTasks.clear();
         }
 
         @Override

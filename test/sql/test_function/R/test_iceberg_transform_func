@@ -1,0 +1,23 @@
+-- name: test_iceberg_transform_func
+create table t0 (c1 decimal(4,2)) PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+insert into t0 values(10.65);
+-- result:
+-- !result
+select __iceberg_transform_truncate(c1, 50) from t0;
+-- result:
+10.50
+-- !result
+select __iceberg_transform_truncate(10.65, 50) from t0;
+-- result:
+10.50
+-- !result
+select __iceberg_transform_bucket(c1, 8) from t0;
+-- result:
+4
+-- !result
+select __iceberg_transform_bucket(10.65, 8) from t0;
+-- result:
+4
+-- !result

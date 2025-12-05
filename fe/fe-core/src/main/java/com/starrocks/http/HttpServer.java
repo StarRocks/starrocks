@@ -41,6 +41,8 @@ import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
+import com.starrocks.http.action.ProcProfileAction;
+import com.starrocks.http.action.ProcProfileFileAction;
 import com.starrocks.http.action.QueryAction;
 import com.starrocks.http.action.QueryProfileAction;
 import com.starrocks.http.action.SessionAction;
@@ -58,6 +60,7 @@ import com.starrocks.http.meta.MetaService.InfoAction;
 import com.starrocks.http.meta.MetaService.JournalIdAction;
 import com.starrocks.http.meta.MetaService.PutAction;
 import com.starrocks.http.meta.MetaService.RoleAction;
+import com.starrocks.http.meta.MetaService.ServiceIdAction;
 import com.starrocks.http.meta.MetaService.VersionAction;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.CancelStreamLoadAction;
@@ -242,6 +245,10 @@ public class HttpServer {
         BackendActionV2.registerAction(controller);
         ComputeNodeActionV2.registerAction(controller);
 
+        // proc profile actions
+        ProcProfileAction.registerAction(controller);
+        ProcProfileFileAction.registerAction(controller);
+
         // meta service action
         ImageAction.registerAction(controller);
         InfoAction.registerAction(controller);
@@ -251,6 +258,7 @@ public class HttpServer {
         CheckAction.registerAction(controller);
         DumpAction.registerAction(controller);
         DumpStarMgrAction.registerAction(controller);
+        ServiceIdAction.registerAction(controller);
         RoleAction.registerAction(controller);
 
         // external usage

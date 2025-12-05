@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 #### type
 
 データソースのタイプです。値を `iceberg` に設定します。
+
+#### SecurityParams
+
+StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
+
+Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
+
+##### catalog.access.control
+
+データアクセス制御ポリシー。有効な値：
+
+- `native` (デフォルト): StarRocks 組み込みのデータアクセス制御システムを使用します。
+- `allowall`: すべてのデータアクセスチェックをカタログ自体に委譲します。
+- `ranger`: データアクセスチェックを Apache Ranger に委譲します。
 
 #### MetastoreParams
 
@@ -290,6 +305,10 @@ REST catalog 用の `MetastoreParams`:
 - `iceberg.catalog.rest.nested-namespace-enabled`
   - 必須: いいえ
   - 説明: 入れ子になった Namespace の下にあるオブジェクトのクエリをサポートするかどうか。デフォルト： `false`。
+
+- `iceberg.catalog.rest.view-endpoints-enabled`
+  - 必須: いいえ
+  - 説明: ビュー関連の操作をサポートするためにビューエンドポイントを有効にするかどうか。`false`に設定すると、`getView`などのビュー操作が無効になります。デフォルト：`true`。
 
 次の例は、Tabular をメタストアとして使用する Iceberg catalog `tabular` を作成します。
 

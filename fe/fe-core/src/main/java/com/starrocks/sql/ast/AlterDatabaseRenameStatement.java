@@ -30,8 +30,8 @@ public class AlterDatabaseRenameStatement extends DdlStmt {
 
     public AlterDatabaseRenameStatement(String dbName, String newDbName, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
-        this.newDbName = normalizeName(newDbName);
+        this.dbName = dbName;
+        this.newDbName = newDbName;
     }
 
     public String getCatalogName() {

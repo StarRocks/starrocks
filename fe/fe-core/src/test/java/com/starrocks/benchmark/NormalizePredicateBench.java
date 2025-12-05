@@ -16,7 +16,6 @@ package com.starrocks.benchmark;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -27,6 +26,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -94,7 +97,7 @@ public class NormalizePredicateBench {
         final List<String> columns = IntStream.range(1, 10)
                 .mapToObj(x -> RandomStringUtils.randomAlphabetic(2))
                 .collect(Collectors.toList());
-        final List<Type> types = ImmutableList.of(Type.INT, Type.VARCHAR, Type.DATETIME);
+        final List<Type> types = ImmutableList.of(IntegerType.INT, VarcharType.VARCHAR, DateType.DATETIME);
         int x = ThreadLocalRandom.current().nextInt(columns.size());
         String name = columns.get(x);
         x = ThreadLocalRandom.current().nextInt(types.size());
@@ -104,11 +107,11 @@ public class NormalizePredicateBench {
 
     private ConstantOperator randomConstant(Type type) {
         int x = ThreadLocalRandom.current().nextInt(1024);
-        if (type.equals(Type.INT)) {
+        if (type.equals(IntegerType.INT)) {
             return ConstantOperator.createInt(x);
-        } else if (type.equals(Type.DATETIME)) {
+        } else if (type.equals(DateType.DATETIME)) {
             return ConstantOperator.createDatetime(LocalDateTime.now().plusDays(x));
-        } else if (type.equals(Type.VARCHAR)) {
+        } else if (type.equals(VarcharType.VARCHAR)) {
             return ConstantOperator.createVarchar(RandomStringUtils.randomAlphabetic(10));
         }
         throw new NotImplementedException("not supported");

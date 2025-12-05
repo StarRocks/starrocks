@@ -58,9 +58,14 @@ Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
         writer->set_commit_callback(commit_callback);
         writer->set_error_handler(error_handler);
         writer->set_io_poller(_io_poller);
-        RETURN_IF_ERROR(writer->init());
-        RETURN_IF_ERROR(writer->write(chunk));
+        auto st = writer->init();
+        if (!st.ok()) {
+            set_status(st);
+            return st;
+        }
+        // save the writer to the map, so errors from subsequent write() can be correctly handled.
         _partition_chunk_writers[partition_key] = writer;
+        RETURN_IF_ERROR(writer->write(chunk));
     }
     return Status::OK();
 }

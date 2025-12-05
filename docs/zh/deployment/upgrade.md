@@ -116,6 +116,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # 如在旧版本中使用了自定义函数(UDF)，需复制旧版本 udf 目录到新 lib 目录下
+   cp -r lib.bak/udf lib/
    ```
 
 3. 启动该 BE 节点。
@@ -149,6 +151,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # 如在旧版本中使用了自定义函数(UDF)，需复制旧版本 udf 目录到新 lib 目录下
+   cp -r lib.bak/udf lib/
    ```
 
 3. 启动该 CN 节点。

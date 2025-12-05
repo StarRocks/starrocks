@@ -90,7 +90,7 @@ protected:
         partition.partitions[0].id = 0;
         partition.partitions[0].indexes.resize(1);
         partition.partitions[0].indexes[0].index_id = 0;
-        partition.partitions[0].indexes[0].tablets.push_back(0);
+        partition.partitions[0].indexes[0].tablet_ids.push_back(0);
 
         TOlapTableLocationParam& location = table_sink.location;
         location.db_id = _db_id;

@@ -56,8 +56,8 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
@@ -79,10 +79,11 @@ import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -121,8 +122,8 @@ public class ShowExecutorTest {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -226,7 +227,7 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 
-                mv.getOrderedOutputColumns();
+                mv.getOrderedOutputColumns(anyBoolean);
                 minTimes = 0;
                 result = Lists.newArrayList(column1, column2);
 

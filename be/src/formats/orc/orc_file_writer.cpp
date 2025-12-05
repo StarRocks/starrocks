@@ -29,49 +29,6 @@
 
 namespace starrocks::formats {
 
-OrcOutputStream::OrcOutputStream(std::unique_ptr<starrocks::WritableFile> wfile) : _wfile(std::move(wfile)) {}
-
-OrcOutputStream::~OrcOutputStream() {
-    if (!_is_closed) {
-        close();
-    }
-}
-
-uint64_t OrcOutputStream::getLength() const {
-    return _wfile->size();
-}
-
-uint64_t OrcOutputStream::getNaturalWriteSize() const {
-    return config::vector_chunk_size;
-}
-
-const std::string& OrcOutputStream::getName() const {
-    return _wfile->filename();
-}
-
-void OrcOutputStream::write(const void* buf, size_t length) {
-    if (_is_closed) {
-        throw std::runtime_error("The output stream is closed but there are still inputs");
-    }
-    const char* ch = reinterpret_cast<const char*>(buf);
-    Status st = _wfile->append(Slice(ch, length));
-    if (!st.ok()) {
-        throw std::runtime_error("write to orc failed: " + st.to_string());
-    }
-    return;
-}
-
-void OrcOutputStream::close() {
-    if (_is_closed) {
-        return;
-    }
-    _is_closed = true;
-
-    if (auto st = _wfile->close(); !st.ok()) {
-        throw std::runtime_error("close orc output stream failed: " + st.to_string());
-    }
-}
-
 AsyncOrcOutputStream::AsyncOrcOutputStream(io::AsyncFlushOutputStream* stream) : _stream(stream) {}
 
 uint64_t AsyncOrcOutputStream::getLength() const {
@@ -158,7 +115,9 @@ FileWriter::CommitResult ORCFileWriter::commit() {
     FileWriter::CommitResult result{
             .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
     try {
-        _writer->close();
+        if (_writer != nullptr) {
+            _writer->close();
+        }
     } catch (const std::exception& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
@@ -240,6 +199,9 @@ Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPt
     }
     case TYPE_DATETIME: {
         return _write_datetime(orc_column, column);
+    }
+    case TYPE_MAP: {
+        return _write_map(type_desc, orc_column, column);
     }
     default: {
         return Status::NotSupported(
@@ -374,6 +336,28 @@ Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, Column
     return Status::OK();
 }
 
+Status ORCFileWriter::_write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column, ColumnPtr& column) {
+    auto& map_column = dynamic_cast<orc::MapVectorBatch&>(orc_column);
+    auto column_size = column->size();
+
+    map_column.resize(column_size);
+    map_column.numElements = column_size;
+
+    auto* null_col = get_raw_null_column(column);
+    auto* data_col = down_cast<RunTimeColumnType<TYPE_MAP>*>(ColumnHelper::get_data_column(column.get()));
+
+    _populate_orc_notnull(orc_column, null_col, column_size);
+
+    auto& offsets = data_col->offsets_column()->get_data();
+    for (size_t i = 0; i < offsets.size(); i++) {
+        map_column.offsets[i] = static_cast<int64_t>(offsets[i]);
+    }
+
+    RETURN_IF_ERROR(_write_column(*map_column.keys, data_col->keys_column(), type.children[0]));
+    RETURN_IF_ERROR(_write_column(*map_column.elements, data_col->values_column(), type.children[1]));
+    return Status::OK();
+}
+
 StatusOr<orc::CompressionKind> ORCFileWriter::_convert_compression_type(TCompressionType::type type) {
     orc::CompressionKind converted_type;
     switch (type) {
@@ -457,6 +441,11 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
     case TYPE_DATETIME: {
         return orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
+    }
+    case TYPE_MAP: {
+        ASSIGN_OR_RETURN(auto key, _make_schema_node(type_desc.children[0]));
+        ASSIGN_OR_RETURN(auto value, _make_schema_node(type_desc.children[1]));
+        return orc::createMapType(std::move(key), std::move(value));
     }
     // TODO(letian-jiang): support nested type
     default: {

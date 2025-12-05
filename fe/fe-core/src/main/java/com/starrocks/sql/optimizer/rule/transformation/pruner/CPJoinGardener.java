@@ -21,10 +21,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -40,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.type.IntegerType;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.util.Collection;
@@ -986,7 +986,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 }
             });
             if (newColRefMap.isEmpty()) {
-                newColRefMap.put(columnRefFactory.create("auto_fill_col", Type.TINYINT, false),
+                newColRefMap.put(columnRefFactory.create("auto_fill_col", IntegerType.TINYINT, false),
                         ConstantOperator.createTinyInt((byte) 1));
             }
             LogicalProjectOperator newOperator = LogicalProjectOperator.builder()

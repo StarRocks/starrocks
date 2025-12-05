@@ -26,6 +26,7 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "runtime/agg_state_desc.h"
+#include "util/bit_util.h"
 
 namespace starrocks {
 
@@ -55,9 +56,6 @@ public:
         return Status::InternalError("StateCombinator execute is not implemented");
     }
 
-    // align the size to the align
-    static size_t align_to(size_t size, size_t align) noexcept { return (size + align - 1) / align * align; }
-
 protected:
     // AlignedMemoryGuard is a helper class to allocate aligned memory.
     // It is used to allocate memory for aggregate state.
@@ -71,7 +69,7 @@ protected:
             }
         }
         Status allocate() {
-            _ptr = reinterpret_cast<AggDataPtr>(std::aligned_alloc(_alignment, _size));
+            _ptr = reinterpret_cast<AggDataPtr>(BitUtil::safe_aligned_alloc(_alignment, _size));
             if (_ptr == nullptr) {
                 return Status::MemoryAllocFailed("Failed to allocate aligned memory");
             }
@@ -96,6 +94,12 @@ protected:
     // convert the column to the nullable column if the arg is nullable and the column is not nullable
     StatusOr<ColumnPtr> _convert_to_nullable_column(const ColumnPtr& column, bool arg_nullable,
                                                     bool is_unpack_column) const {
+        // For constant columns, if we don't need to unpack, return directly to keep efficiency
+        // e.g.: StateFunction with constant parameters like [0.2,0.5,0.75]
+        if (!is_unpack_column && column->is_constant()) {
+            return column;
+        }
+
         auto unpack_column =
                 is_unpack_column ? ColumnHelper::unpack_and_duplicate_const_column(column->size(), column) : column;
         if (!arg_nullable && unpack_column->is_nullable()) {

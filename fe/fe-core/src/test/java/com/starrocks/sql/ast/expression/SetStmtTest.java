@@ -36,7 +36,6 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -55,6 +54,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.Assertions;
@@ -86,7 +86,7 @@ public class SetStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assertions.assertEquals("times", ((UserVariable) stmt.getSetListItems().get(0)).getVariable());
-        Assertions.assertEquals("100", ((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression().toSql());
+        Assertions.assertEquals("100", ExprToSql.toSql(((UserVariable) stmt.getSetListItems().get(0)).getEvaluatedExpression()));
         Assertions.assertTrue(stmt.getSetListItems().get(1) instanceof SetNamesVar);
         Assertions.assertEquals("utf8", ((SetNamesVar) stmt.getSetListItems().get(1)).getCharset());
     }
@@ -103,7 +103,7 @@ public class SetStmtTest {
     @Test
     public void testNonConstantExpr() {
         SlotDescriptor descriptor = new SlotDescriptor(new SlotId(1), "x",
-                Type.INT, false);
+                IntegerType.INT, false);
         Expr lhsExpr = new SlotRef(descriptor);
         Expr rhsExpr = new IntLiteral(100L);
         ArithmeticExpr addExpr = new ArithmeticExpr(
@@ -401,4 +401,116 @@ public class SetStmtTest {
             ;
         }
     }
+
+    @Test
+    public void testNonExistentVariable() {
+        SystemVariable setVar = new SystemVariable(SetType.SESSION, "no_exist", new StringLiteral("true"));
+        Throwable exception = assertThrows(SemanticException.class, () ->
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx));
+        assertThat(exception.getMessage(),
+                containsString("Unknown system variable 'no_exist', the most similar variables"));
+    }
+
+    @Test
+    public void testCboDisabledRules() {
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TF_JOIN_COMMUTATIVITY"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("TF_JOIN_COMMUTATIVITY", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("GP_PRUNE_COLUMNS"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("GP_PRUNE_COLUMNS", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS,TF_PARTITION_PRUNE"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("TF_JOIN_COMMUTATIVITY,GP_PRUNE_COLUMNS,TF_PARTITION_PRUNE",
+                    setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral(""));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral(" TF_JOIN_COMMUTATIVITY , GP_PRUNE_COLUMNS "));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals(" TF_JOIN_COMMUTATIVITY , GP_PRUNE_COLUMNS ",
+                    setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("INVALID_RULE_NAME"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for unknown rule name");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unknown rule name(s): INVALID_RULE_NAME"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("IMP_OLAP_LSCAN_TO_PSCAN"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for non-TF/GP rule");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Only TF_ (Transformation) and GP_ (Group combination)" +
+                        " rules can be disabled"));
+                assertThat(e.getMessage(), containsString("IMP_OLAP_LSCAN_TO_PSCAN"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TRANSFORMATION_RULES"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for category marker");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Only TF_ (Transformation) and GP_ (Group combination)" +
+                        " rules can be disabled"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("TF_JOIN_COMMUTATIVITY,INVALID_RULE,GP_PRUNE_COLUMNS"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail when any rule is invalid");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unknown rule name(s): INVALID_RULE"));
+            }
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CBO_DISABLED_RULES,
+                    new StringLiteral("INVALID1,INVALID2,INVALID3"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for multiple invalid rules");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unknown rule name(s)"));
+                assertThat(e.getMessage(), containsString("INVALID1"));
+                assertThat(e.getMessage(), containsString("INVALID2"));
+                assertThat(e.getMessage(), containsString("INVALID3"));
+            }
+        }
+    }
+
+    
 }

@@ -154,7 +154,29 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        size_t num_rows = column.size();
+        if (!_first_column->empty()) {
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
+        } else {
+            _cmp_vector[0] |= 1;
+        }
+
+        if (!_null_masks.empty()) {
+            DCHECK_EQ(_null_masks.size(), num_rows);
+            for (size_t i = 1; i < num_rows; ++i) {
+                if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
+                    _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+                } else {
+                    _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
+                }
+            }
+        } else {
+            for (size_t i = 1; i < num_rows; ++i) {
+                _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+            }
+        }
+
+        return Status::OK();
     }
 
 private:
@@ -251,7 +273,15 @@ public:
     }
 
     Status do_visit(StructColumn* column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        auto col = down_cast<StructColumn*>(_column);
+
+        for (size_t i = 0; i < _sel_mask.size(); ++i) {
+            if (_sel_mask[i] == 0) {
+                column->append(*col, i, 1);
+            }
+        }
+
+        return Status::OK();
     }
 
 private:

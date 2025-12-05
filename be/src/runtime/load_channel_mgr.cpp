@@ -126,7 +126,7 @@ void LoadChannelMgr::close() {
     _async_rpc_pool->shutdown();
     std::lock_guard l(_lock);
     for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
-        iter->second->cancel();
+        iter->second->cancel("load channel manager closed");
         iter->second->abort();
         iter = _load_channels.erase(iter);
     }
@@ -277,7 +277,7 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
-            channel->cancel();
+            channel->cancel(request.reason());
             channel->abort();
         }
     }
@@ -317,7 +317,7 @@ void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRe
         }
     } else {
         std::string remote_ip = butil::ip2str(cntl->remote_side().ip).c_str();
-        LOG(INFO) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id()
+        LOG(INFO) << "receive load diagnose, load_id: " << print_id(load_id) << ", txn_id: " << request->txn_id()
                   << ", remote: " << remote_ip;
         channel->diagnose(remote_ip, request, response);
     }
@@ -367,11 +367,12 @@ void LoadChannelMgr::_start_load_channels_clean() {
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
-        channel->cancel();
+        channel->cancel("load channel timeout");
     }
     for (auto& channel : timeout_channels) {
         channel->abort();
-        LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
+        LOG(INFO) << "Deleted timeout channel. load id=" << print_id(channel->load_id())
+                  << " timeout=" << channel->timeout();
     }
 
     // clean load in writing data size
@@ -407,9 +408,9 @@ std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId&
 void LoadChannelMgr::abort_txn(int64_t txn_id) {
     auto channel = _find_load_channel(txn_id);
     if (channel != nullptr) {
-        LOG(INFO) << "Aborting load channel because transaction was aborted. load_id=" << channel->load_id()
+        LOG(INFO) << "Aborting load channel because transaction was aborted. load_id=" << print_id(channel->load_id())
                   << " txn_id=" << txn_id;
-        channel->cancel();
+        channel->cancel("transaction aborted");
         channel->abort();
     }
 }

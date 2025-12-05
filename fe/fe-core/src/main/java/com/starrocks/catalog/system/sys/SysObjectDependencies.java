@@ -20,7 +20,6 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -35,6 +34,8 @@ import com.starrocks.thrift.TObjectDependencyItem;
 import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,17 +51,17 @@ public class SysObjectDependencies {
     public static SystemTable create() {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("object_id", ScalarType.BIGINT)
-                        .column("object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_type", ScalarType.createVarcharType(64))
+                        .column("object_id", IntegerType.BIGINT)
+                        .column("object_name", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_database", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_catalog", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_type", TypeFactory.createVarcharType(64))
 
-                        .column("ref_object_id", ScalarType.BIGINT)
-                        .column("ref_object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_type", ScalarType.createVarcharType(64))
+                        .column("ref_object_id", IntegerType.BIGINT)
+                        .column("ref_object_name", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_database", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_catalog", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_type", TypeFactory.createVarcharType(64))
                         .build(),
                 TSchemaTableType.STARROCKS_OBJECT_DEPENDENCIES);
     }

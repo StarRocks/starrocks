@@ -38,9 +38,12 @@
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "util/failpoint/fail_point.h"
 #include "util/time.h"
 
 namespace starrocks {
+DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
+
 RuntimeFilter* RuntimeFilterHelper::transmit_to_runtime_empty_filter(ObjectPool* pool, RuntimeFilter* rf) {
     const auto* min_max_filter = rf->get_min_max_filter();
     const auto* membership_filter = rf->get_membership_filter();
@@ -82,13 +85,8 @@ RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool
 }
 
 RuntimeFilter* RuntimeFilterHelper::create_agg_runtime_in_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
-    return scalar_type_dispatch(type, [pool]<LogicalType ltype>() -> RuntimeFilter* {
-        auto rf = new InRuntimeFilter<ltype>();
-        if (pool != nullptr) {
-            return pool->add(rf);
-        }
-        return rf;
-    });
+    return scalar_type_dispatch(
+            type, [pool]<LogicalType ltype>() -> RuntimeFilter* { return InRuntimeFilter<ltype>::create(pool); });
 }
 
 RuntimeFilter* RuntimeFilterHelper::create_runtime_bitset_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
@@ -317,8 +315,8 @@ size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcas
     return size;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
-                                                                             uint8_t* data) {
+StatusOr<size_t> RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column,
+                                                                                       bool eq_null, uint8_t* data) {
     size_t offset = 0;
 #define JRF_COPY_FIELD_TO(field)                  \
     memcpy(data + offset, &field, sizeof(field)); \
@@ -334,17 +332,16 @@ size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(con
     JRF_COPY_FIELD_TO(is_const);
 
     uint8_t* cur = data + offset;
-    cur = serde::ColumnArraySerde::serialize(*column, cur);
+    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(*column, cur));
     offset += (cur - (data + offset));
 
     return offset;
 }
 
 // |version|eq_null|num_rows|is_null|is_const|type|column_data|
-int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool,
-                                                                            SkewBroadcastRfMaterial** material,
-                                                                            const uint8_t* data, size_t size,
-                                                                            const PTypeDesc& ptype) {
+StatusOr<int> RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
+        ObjectPool* pool, SkewBroadcastRfMaterial** material, const uint8_t* data, size_t size,
+        const PTypeDesc& ptype) {
     *material = nullptr;
     SkewBroadcastRfMaterial* rf_material = pool->add(new SkewBroadcastRfMaterial());
     size_t offset = 0;
@@ -380,7 +377,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(Obje
     auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
 
     const uint8_t* cur = data + offset;
-    cur = serde::ColumnArraySerde::deserialize(cur, columnPtr.get());
+    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, columnPtr.get()));
     offset += (cur - (data + offset));
 
     DCHECK(offset == size);
@@ -595,6 +592,7 @@ Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_
 }
 
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile* p) {
+    _runtime_state = state;
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
@@ -1095,7 +1093,12 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
 }
 
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
-    auto notify = DeferOp([this]() { _observable.notify_source_observers(); });
+    auto notify = DeferOp([this]() {
+        FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
+        if (_runtime_state && _runtime_state->fragment_prepared()) {
+            _observable.notify_source_observers();
+        }
+    });
     const RuntimeFilter* expected = nullptr;
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {

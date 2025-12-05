@@ -17,9 +17,8 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -27,10 +26,11 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -55,11 +55,11 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName,
                 ImmutableList.of(
-                        new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                        new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                        new ColumnDef("column_name", new TypeDef(ScalarType.createVarcharType(65530))),
-                        new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                        new ColumnDef("table_name", new TypeDef(ScalarType.createVarcharType(65530)))),
+                        new ColumnDef("table_id", new TypeDef(IntegerType.BIGINT)),
+                        new ColumnDef("partition_id", new TypeDef(IntegerType.BIGINT)),
+                        new ColumnDef("column_name", new TypeDef(TypeFactory.createVarcharType(65530))),
+                        new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
+                        new ColumnDef("table_name", new TypeDef(TypeFactory.createVarcharType(65530)))),
                 EngineType.defaultEngine().name(),
                 new KeysDesc(KeysType.UNIQUE_KEYS, ImmutableList.of("table_id", "partition_id", "column_name")),
                 null,

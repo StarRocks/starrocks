@@ -17,14 +17,12 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -32,16 +30,23 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -89,11 +94,11 @@ public class LoadTest {
     public void testInitColumnsPathColumns() throws StarRocksException {
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c1Name, null));
 
         // column mappings
@@ -127,7 +132,7 @@ public class LoadTest {
         System.out.println(slotDescByName);
         Assertions.assertEquals(2, slotDescByName.size());
         SlotDescriptor c1SlotDesc = slotDescByName.get(c1Name);
-        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
     }
 
     @Test
@@ -137,22 +142,22 @@ public class LoadTest {
 
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c1Name, null));
 
         String c2Name = "c2";
-        columns.add(new Column(c2Name, Type.BITMAP, false, AggregateType.BITMAP_UNION, true, null, ""));
+        columns.add(new Column(c2Name, BitmapType.BITMAP, false, AggregateType.BITMAP_UNION, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c2Name, null));
 
         String c3Name = "c3";
-        columns.add(new Column(c3Name, Type.VARCHAR, false, AggregateType.REPLACE, true, null, ""));
+        columns.add(new Column(c3Name, VarcharType.VARCHAR, false, AggregateType.REPLACE, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c3Name, null));
         String c31Name = "c31";
-        columns.add(new Column(c31Name, Type.INT, true, AggregateType.SUM, true, null, ""));
+        columns.add(new Column(c31Name, IntegerType.INT, true, AggregateType.SUM, true, null, ""));
 
         // column mappings
         // c1 = year(c1)
@@ -169,7 +174,7 @@ public class LoadTest {
 
         // c31 = c3 + 1
         Expr mapping3 = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, c3Name),
-                new IntLiteral(1, Type.INT));
+                new IntLiteral(1, IntegerType.INT));
         columnExprs.add(new ImportColumnDesc(c31Name, mapping3));
 
         new Expectations() {
@@ -196,11 +201,11 @@ public class LoadTest {
         System.out.println(slotDescByName);
         Assertions.assertEquals(4, slotDescByName.size());
         SlotDescriptor c1SlotDesc = slotDescByName.get(c1Name);
-        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
         SlotDescriptor c2SlotDesc = slotDescByName.get(c2Name);
-        Assertions.assertTrue(c2SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c2SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
         SlotDescriptor c3SlotDesc = slotDescByName.get(c3Name);
-        Assertions.assertTrue(c3SlotDesc.getColumn().getType().equals(Type.VARCHAR));
+        Assertions.assertTrue(c3SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
     }
 
     /**
@@ -211,11 +216,11 @@ public class LoadTest {
     public void testSourceColumnCaseSensitive() throws StarRocksException {
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "C1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
         // column name in source file is c1
         String c1NameInSource = "c1";
         columnExprs.add(new ImportColumnDesc(c1NameInSource, null));
@@ -255,11 +260,11 @@ public class LoadTest {
     public void testMappingExprInvalid() {
         // columns
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         columnExprs.add(new ImportColumnDesc(c0Name, null));
 
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c1Name, IntegerType.INT, true, null, true, null, ""));
 
         // column mappings
         // c1 = year()
@@ -304,13 +309,13 @@ public class LoadTest {
     @Test
     public void testLambda() throws Exception {
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.STRING, false, null, true, null, ""));
+        columns.add(new Column(c1Name, StringType.STRING, false, null, true, null, ""));
         String c2Name = "c2";
-        columns.add(new Column(c2Name, Type.STRING, false, null, true, null, ""));
+        columns.add(new Column(c2Name, StringType.STRING, false, null, true, null, ""));
         String c3Name = "c3";
-        columns.add(new Column(c3Name, Type.STRING, false, null, true, null, ""));
+        columns.add(new Column(c3Name, StringType.STRING, false, null, true, null, ""));
 
         new Expectations() {
             {
@@ -377,7 +382,7 @@ public class LoadTest {
                         + "result: ARRAY<JSON>; args nullable: true; result nullable: true][1], '$.id'); "
                         + "args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]",
                     t0SlotId, eSlotId, eSlotId, t0SlotId);
-        Assertions.assertEquals(c2ExprExplain, exprsByName.get("c2").explain());
+        Assertions.assertEquals(c2ExprExplain, ExprToSql.explain(exprsByName.get("c2")));
 
         int t1SlotId = slotDescByName.get("t1").getId().asInt();
         int kSlotId = slotDescByName.get("k").getId().asInt();
@@ -395,17 +400,17 @@ public class LoadTest {
                         + "nullable: true][1], '$.id'); args: JSON,VARCHAR; result: VARCHAR; args nullable: true; result "
                         + "nullable: true]",
                 t1SlotId, kSlotId, vSlotId, kSlotId, vSlotId, t1SlotId);
-        Assertions.assertEquals(c3ExprExplain, exprsByName.get("c3").explain());
+        Assertions.assertEquals(c3ExprExplain, ExprToSql.explain(exprsByName.get("c3")));
     }
     
     @Test
     public void testNowPrecision() throws Exception {
         String c0Name = "c0";
-        columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
         String c1Name = "c1";
-        columns.add(new Column(c1Name, Type.DATETIME, false, null, true, null, ""));
+        columns.add(new Column(c1Name, DateType.DATETIME, false, null, true, null, ""));
         String c2Name = "c2";
-        columns.add(new Column(c2Name, Type.DATETIME, false, null, true, null, ""));
+        columns.add(new Column(c2Name, DateType.DATETIME, false, null, true, null, ""));
         new Expectations() {
             {
                 table.getBaseSchema();
@@ -428,11 +433,11 @@ public class LoadTest {
         Expr c1Expr = exprsByName.get("c1");
         Assertions.assertNotNull(c1Expr);
         Assertions.assertEquals(
-                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", c1Expr.explain());
+                "now[(); args: ; result: DATETIME; args nullable: false; result nullable: false]", ExprToSql.explain(c1Expr));
 
         Expr c2Expr = exprsByName.get("c2");
         Assertions.assertNotNull(c2Expr);
         Assertions.assertEquals(
-                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", c2Expr.explain());
+                "now[(6); args: INT; result: DATETIME; args nullable: false; result nullable: false]", ExprToSql.explain(c2Expr));
     }
 }

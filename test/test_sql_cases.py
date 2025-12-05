@@ -47,6 +47,7 @@ from lib import *
 #    - r: run sql and compare result with r
 record_mode = os.environ.get("record_mode", "false") == "true"
 arrow_mode = os.environ.get("arrow_mode", "false") == "true"
+case_time = int(os.environ.get("case_timeout", 600))
 
 case_list = choose_cases.choose_cases(record_mode).case_list
 
@@ -125,10 +126,6 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         super().tearDown()
 
         log.info("[TearDown begin]: %s" % self.case_info.name)
-
-        # reset the scheduler interval
-        sql = "ADMIN SET FRONTEND CONFIG 'dynamic_partition_check_interval_seconds' = '600'"
-        self.execute_sql(sql)
 
         # run custom cleanup (always)
         try:
@@ -378,7 +375,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     #         [CASE]
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
-    @sql_annotation.timeout()
+    @sql_annotation.timeout(case_time)
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester

@@ -123,7 +123,12 @@ public class StatisticsCollectionTrigger {
     }
 
     private void process() {
-        // check if this feature is disabled
+        if (table instanceof OlapTable) {
+            if (!((OlapTable) table).enableStatisticCollectOnFirstLoad()) {
+                return;
+            }
+        }
+
         if (!Config.enable_statistic_collect_on_first_load) {
             return;
         }
@@ -223,6 +228,10 @@ public class StatisticsCollectionTrigger {
 
                 statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
                         true /* resetWarehouse */);
+                if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
+                    AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+                    overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                }
             };
 
             CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
@@ -282,6 +291,12 @@ public class StatisticsCollectionTrigger {
                 if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                    if (table.isNativeTableOrMaterializedView()) {
+                        OlapTable olapTable = (OlapTable) table;
+                        if (olapTable.isTempPartition(partitionId)) {
+                            continue;
+                        }
+                    }
                     partitionIds.add(partitionId);
                     tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
                 }
@@ -305,6 +320,12 @@ public class StatisticsCollectionTrigger {
     private void prepareAnalyzeForOverwrite() {
         partitionIds.addAll(overwriteJobStats.getTargetPartitionIds());
         analyzeType = decideAnalyzeTypeForOverwrite();
+        
+        // Set partition tablet row counts for sample-based statistics collection
+        if (analyzeType == StatsConstants.AnalyzeType.SAMPLE &&
+                !overwriteJobStats.getPartitionTabletRowCounts().isEmpty()) {
+            partitionTabletRowCounts.putAll(overwriteJobStats.getPartitionTabletRowCounts());
+        }
     }
 
     private StatsConstants.AnalyzeType decideAnalyzeTypeForOverwrite() {

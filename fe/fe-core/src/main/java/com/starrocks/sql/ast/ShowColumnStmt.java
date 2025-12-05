@@ -16,24 +16,12 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // SHOW COLUMNS
-public class ShowColumnStmt extends EnhancedShowStmt {
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "COLUMNS");
-
+public class ShowColumnStmt extends ShowStmt {
     private final TableName tableName;
     private final String db;
     private final String pattern;
@@ -52,7 +40,7 @@ public class ShowColumnStmt extends EnhancedShowStmt {
                           Expr where, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
-        this.db = normalizeName(db);
+        this.db = db;
         this.pattern = pattern;
         this.isVerbose = isVerbose;
         this.where = where;
@@ -88,66 +76,8 @@ public class ShowColumnStmt extends EnhancedShowStmt {
         }
     }
 
-    @Override
-    public QueryStatement toSelectStmt() throws AnalysisException {
-        if (where == null) {
-            return null;
-        }
-
-        // Columns
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
-        // Field
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "COLUMN_NAME"), "Field");
-        selectList.addItem(item);
-        // TODO: Fix analyze error: Rhs expr must be analyzed.
-        aliasMap.put(new SlotRef(null, "Field"), item.getExpr().clone(null));
-        // Type
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "DATA_TYPE"), "Type");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Type"), item.getExpr().clone(null));
-        // Collation
-        if (isVerbose) {
-            item = new SelectListItem(new SlotRef(TABLE_NAME, "COLLATION_NAME"), "Collation");
-            selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, "Collation"), item.getExpr().clone(null));
-        }
-        // Null
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "IS_NULLABLE"), "Null");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Null"), item.getExpr().clone(null));
-        // Key
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "COLUMN_KEY"), "Key");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Key"), item.getExpr().clone(null));
-        // Default
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "COLUMN_DEFAULT"), "Default");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Default"), item.getExpr().clone(null));
-        // Extra
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "EXTRA"), "Extra");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Extra"), item.getExpr().clone(null));
-        if (isVerbose) {
-            // Privileges
-            item = new SelectListItem(new SlotRef(TABLE_NAME, "PRIVILEGES"), "Privileges");
-            selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, "Privileges"), item.getExpr().clone(null));
-            // Comment
-            item = new SelectListItem(new SlotRef(TABLE_NAME, "COLUMN_COMMENT"), "Comment");
-            selectList.addItem(item);
-            aliasMap.put(new SlotRef(null, "Comment"), item.getExpr().clone(null));
-        }
-
-        where = where.substitute(aliasMap);
-        where = new CompoundPredicate(CompoundPredicate.Operator.AND, where,
-                new CompoundPredicate(CompoundPredicate.Operator.AND,
-                        new BinaryPredicate(BinaryType.EQ, new SlotRef(TABLE_NAME, "TABLE_NAME"),
-                                new StringLiteral(tableName.getTbl())),
-                        new BinaryPredicate(BinaryType.EQ, new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
-                                new StringLiteral(tableName.getDb()))));
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null), this.origStmt);
+    public Expr getWhereClause() {
+        return where;
     }
 
     @Override

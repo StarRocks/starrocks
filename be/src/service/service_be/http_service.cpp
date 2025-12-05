@@ -52,6 +52,8 @@
 #include "http/action/metrics_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
 #include "http/action/pprof_actions.h"
+#include "http/action/proc_profile_action.h"
+#include "http/action/proc_profile_file_action.h"
 #include "http/action/query_cache_action.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
@@ -179,7 +181,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/cmdline", cmdline_action);
     _http_handlers.emplace_back(cmdline_action);
 
-    auto* symbol_action = new SymbolAction(_env->bfd_parser());
+    auto* symbol_action = new SymbolAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
@@ -273,9 +275,11 @@ Status HttpServiceBE::start() {
     _http_handlers.emplace_back(jit_cache_action);
 #endif
 
+#ifndef __APPLE__
     auto* datacache_action = new DataCacheAction(_cache_env->local_disk_cache(), _cache_env->local_mem_cache());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/datacache/{action}", datacache_action);
     _http_handlers.emplace_back(datacache_action);
+#endif
 
     auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
@@ -285,6 +289,16 @@ Status HttpServiceBE::start() {
     auto* greplog_action = new GrepLogAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/greplog", greplog_action);
     _http_handlers.emplace_back(greplog_action);
+
+    // Register proc profile list action (for JSON API)
+    auto* proc_profile_action = new ProcProfileAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/proc_profile/{action}", proc_profile_action);
+    _http_handlers.emplace_back(proc_profile_action);
+
+    // Register proc profile file action (for serving individual files)
+    auto* proc_profile_file_action = new ProcProfileFileAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/proc_profile/file", proc_profile_file_action);
+    _http_handlers.emplace_back(proc_profile_file_action);
 
 #ifdef USE_STAROS
     auto* lake_dump_metadata_action = new lake::DumpTabletMetadataAction(_env);

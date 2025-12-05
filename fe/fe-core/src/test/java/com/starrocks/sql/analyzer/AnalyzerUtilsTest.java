@@ -16,8 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.LakeMaterializedView;
@@ -31,6 +29,9 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -80,8 +81,8 @@ public class AnalyzerUtilsTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Expr expr = queryStatement.getQueryRelation().getOutputExpression().get(0);
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "bill_code", false);
-        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, VarcharType.VARCHAR, "bill_code", false);
+        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", VarcharType.VARCHAR);
         boolean success = ColumnFilterConverter.rewritePredicate(expr, columnRefOperator, constantOperator);
         Assertions.assertTrue(success);
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
@@ -90,9 +91,9 @@ public class AnalyzerUtilsTest {
 
     @Test
     public void testConvertCatalogMaxStringToOlapMaxString() {
-        ScalarType catalogString = ScalarType.createDefaultCatalogString();
+        ScalarType catalogString = TypeFactory.createDefaultCatalogString();
         ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assertions.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), convertedString.getLength());
     }
 
     @Test

@@ -247,10 +247,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-16.1.0.tar.gz"
-ARROW_NAME="arrow-apache-arrow-16.1.0.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-16.1.0"
-ARROW_MD5SUM="d9d019aaef586bd1a7493416d78954b9"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-19.0.1.tar.gz"
+ARROW_NAME="arrow-apache-arrow-19.0.1.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-19.0.1"
+ARROW_MD5SUM="8c5091da0f8fb41a47d7f4dad7b712df"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
@@ -440,12 +440,6 @@ SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
 SIMDUTF_SOURCE="simdutf-5.2.8"
 SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
 
-# tenann
-TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.4.2-RELEASE/tenann-v0.4.2-RELEASE.tar.gz"
-TENANN_NAME="tenann-v0.4.2-RELEASE.tar.gz"
-TENANN_SOURCE="tenann-v0.4.2-RELEASE"
-TENANN_MD5SUM="40a00643d953982845901ae60766aad4"
-
 # icu
 ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
 ICU_NAME="icu4c-76_1-src.zip"
@@ -476,9 +470,20 @@ LIBDIVIDE_NAME="libdivide-v5.2.0.tar.gz"
 LIBDIVIDE_SOURCE="libdivide-v5.2.0"
 LIBDIVIDE_MD5SUM="4ba77777192c295d6de2b86d88f3239a"
 
+# flamegraph
+FLAMEGRAPH_DOWNLOAD="https://github.com/murphyatwork/FlameGraph/archive/refs/tags/20251015.tar.gz"
+FLAMEGRAPH_NAME="FlameGraph-20251015.tar.gz"
+FLAMEGRAPH_SOURCE="FlameGraph"
+FLAMEGRAPH_MD5SUM="bddefda5f1271a3dd5324b02ad61d4a5"
+
+HADOOPSRC_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.2/hadoop-3.4.2-src.tar.gz"
+HADOOPSRC_NAME="hadoop-3.4.2-src.tar.gz"
+HADOOPSRC_SOURCE="hadoop-3.4.2-src"
+HADOOPSRC_MD5SUM="7fa559909899a2e45bcd2e192358d93b"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
-            JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
+            JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
-            ASYNC_PROFILER FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE"
+            FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH"

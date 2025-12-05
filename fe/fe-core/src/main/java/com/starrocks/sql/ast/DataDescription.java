@@ -40,6 +40,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -56,7 +57,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.util.Util.normalizeName;
 // used to describe data info which is needed to import.
 //
 //      data_desc:
@@ -182,7 +182,7 @@ public class DataDescription implements ParseNode {
                            Expr whereExpr,
                            CsvFormat csvFormat, NodePosition pos) {
         this.pos = pos;
-        this.tableName = normalizeName(tableName);
+        this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = filePaths;
         this.fileFieldNames = columns;
@@ -214,7 +214,7 @@ public class DataDescription implements ParseNode {
                            List<Expr> columnMappingList,
                            Expr whereExpr, NodePosition pos) {
         this.pos = pos;
-        this.tableName = normalizeName(tableName);
+        this.tableName = tableName;
         this.partitionNames = partitionNames;
         this.filePaths = null;
         this.fileFieldNames = null;
@@ -225,7 +225,7 @@ public class DataDescription implements ParseNode {
         this.isNegative = isNegative;
         this.columnMappingList = columnMappingList;
         this.whereExpr = whereExpr;
-        this.srcTableName = normalizeName(srcTableName);
+        this.srcTableName = srcTableName;
     }
 
     public String getTableName() {
@@ -381,7 +381,7 @@ public class DataDescription implements ParseNode {
         for (Expr columnExpr : columnMappingList) {
             if (!(columnExpr instanceof BinaryPredicate)) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
-                        + "Expr: " + columnExpr.toSql());
+                        + "Expr: " + ExprToSql.toSql(columnExpr));
             }
             BinaryPredicate predicate = (BinaryPredicate) columnExpr;
             if (predicate.getOp() != BinaryType.EQ) {
@@ -391,7 +391,7 @@ public class DataDescription implements ParseNode {
             Expr child0 = predicate.getChild(0);
             if (!(child0 instanceof SlotRef)) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
-                        + "The mapping column error. column: " + child0.toSql());
+                        + "The mapping column error. column: " + ExprToSql.toSql(child0));
             }
             String column = ((SlotRef) child0).getColumnName();
             if (!columnMappingNames.add(column)) {
@@ -401,7 +401,7 @@ public class DataDescription implements ParseNode {
             Expr child1 = predicate.getChild(1);
             if (isHadoopLoad && !(child1 instanceof FunctionCallExpr)) {
                 throw new AnalysisException("Hadoop load only supports the designated function. "
-                        + "The error mapping function is:" + child1.toSql());
+                        + "The error mapping function is:" + ExprToSql.toSql(child1));
             }
             ImportColumnDesc importColumnDesc = new ImportColumnDesc(column, child1);
             parsedColumnExprList.add(importColumnDesc);
@@ -414,7 +414,7 @@ public class DataDescription implements ParseNode {
     private void analyzeColumnToHadoopFunction(String columnName, Expr child1) throws AnalysisException {
         Preconditions.checkState(child1 instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) child1;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         if (!HADOOP_SUPPORT_FUNCTION_NAMES.contains(functionName.toLowerCase())) {
             return;
         }
@@ -433,7 +433,7 @@ public class DataDescription implements ParseNode {
             } else {
                 if (isHadoopLoad) {
                     // hadoop function only support slot, string and null parameters
-                    throw new AnalysisException("Mapping function args error, arg: " + paramExpr.toSql());
+                    throw new AnalysisException("Mapping function args error, arg: " + ExprToSql.toSql(paramExpr));
                 }
             }
         }

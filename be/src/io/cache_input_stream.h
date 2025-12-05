@@ -26,19 +26,19 @@ namespace starrocks::io {
 class CacheInputStream : public SeekableInputStreamWrapper {
 public:
     struct Stats {
-        int64_t read_cache_ns = 0;
-        int64_t write_cache_ns = 0;
-        int64_t read_cache_count = 0;
-        int64_t write_cache_count = 0;
+        int64_t read_block_cache_ns = 0;
+        int64_t write_block_cache_ns = 0;
+        int64_t read_block_cache_count = 0;
+        int64_t write_block_cache_count = 0;
         int64_t write_mem_cache_bytes = 0;
         int64_t write_disk_cache_bytes = 0;
-        int64_t read_cache_bytes = 0;
+        int64_t read_block_cache_bytes = 0;
         int64_t read_mem_cache_bytes = 0;
         int64_t read_disk_cache_bytes = 0;
         int64_t read_peer_cache_bytes = 0;
         int64_t read_peer_cache_count = 0;
         int64_t read_peer_cache_ns = 0;
-        int64_t write_cache_bytes = 0;
+        int64_t write_block_cache_bytes = 0;
         int64_t skip_read_cache_count = 0;
         int64_t skip_read_cache_bytes = 0;
         int64_t skip_read_peer_cache_count = 0;

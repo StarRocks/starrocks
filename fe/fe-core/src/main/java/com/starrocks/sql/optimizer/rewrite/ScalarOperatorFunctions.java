@@ -38,8 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -49,6 +47,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import net.openhft.hashing.LongHashFunction;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
@@ -86,28 +91,28 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.PrimitiveType.BIGINT;
-import static com.starrocks.catalog.PrimitiveType.BITMAP;
-import static com.starrocks.catalog.PrimitiveType.BOOLEAN;
-import static com.starrocks.catalog.PrimitiveType.DATE;
-import static com.starrocks.catalog.PrimitiveType.DATETIME;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL256;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
-import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
-import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
-import static com.starrocks.catalog.PrimitiveType.DOUBLE;
-import static com.starrocks.catalog.PrimitiveType.FLOAT;
-import static com.starrocks.catalog.PrimitiveType.HLL;
-import static com.starrocks.catalog.PrimitiveType.INT;
-import static com.starrocks.catalog.PrimitiveType.JSON;
-import static com.starrocks.catalog.PrimitiveType.LARGEINT;
-import static com.starrocks.catalog.PrimitiveType.PERCENTILE;
-import static com.starrocks.catalog.PrimitiveType.SMALLINT;
-import static com.starrocks.catalog.PrimitiveType.TIME;
-import static com.starrocks.catalog.PrimitiveType.TINYINT;
-import static com.starrocks.catalog.PrimitiveType.VARCHAR;
 import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
+import static com.starrocks.type.PrimitiveType.BIGINT;
+import static com.starrocks.type.PrimitiveType.BITMAP;
+import static com.starrocks.type.PrimitiveType.BOOLEAN;
+import static com.starrocks.type.PrimitiveType.DATE;
+import static com.starrocks.type.PrimitiveType.DATETIME;
+import static com.starrocks.type.PrimitiveType.DECIMAL128;
+import static com.starrocks.type.PrimitiveType.DECIMAL256;
+import static com.starrocks.type.PrimitiveType.DECIMAL32;
+import static com.starrocks.type.PrimitiveType.DECIMAL64;
+import static com.starrocks.type.PrimitiveType.DECIMALV2;
+import static com.starrocks.type.PrimitiveType.DOUBLE;
+import static com.starrocks.type.PrimitiveType.FLOAT;
+import static com.starrocks.type.PrimitiveType.HLL;
+import static com.starrocks.type.PrimitiveType.INT;
+import static com.starrocks.type.PrimitiveType.JSON;
+import static com.starrocks.type.PrimitiveType.LARGEINT;
+import static com.starrocks.type.PrimitiveType.PERCENTILE;
+import static com.starrocks.type.PrimitiveType.SMALLINT;
+import static com.starrocks.type.PrimitiveType.TIME;
+import static com.starrocks.type.PrimitiveType.TINYINT;
+import static com.starrocks.type.PrimitiveType.VARCHAR;
 
 /**
  * Constant Functions List
@@ -251,7 +256,7 @@ public class ScalarOperatorFunctions {
         long hashValue = HashFunctions.XX_HASH3_64_SEED;
         for (ConstantOperator constantOperator : input) {
             if (constantOperator.isNull()) {
-                return ConstantOperator.createNull(Type.BIGINT);
+                return ConstantOperator.createNull(IntegerType.BIGINT);
             }
             hashValue = HashFunctions.hash64(constantOperator.getVarchar(), hashValue);
         }
@@ -431,7 +436,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
         if (format.isEmpty()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         // unix style
         if (!SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(format.trim())) {
@@ -452,7 +457,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator jodatimeFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
         if (format.isEmpty()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         org.joda.time.format.DateTimeFormatter formatter = DateTimeFormat.forPattern(format);
         DateTime jodaDateTime = new DateTime(date.getDatetime()
@@ -545,7 +550,7 @@ public class ScalarOperatorFunctions {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
-        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+        return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), DateType.DATE);
     }
 
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
@@ -693,6 +698,11 @@ public class ScalarOperatorFunctions {
         ZoneId newZone = ZoneId.of(toTz.getVarchar());
         LocalDateTime newDateTime = dt.atZone(oldZone).withZoneSameInstant(newZone).toLocalDateTime();
         return ConstantOperator.createDatetime(newDateTime);
+    }
+
+    @ConstantFunction(name = "current_timezone", argTypes = {}, returnType = VARCHAR)
+    public static ConstantOperator current_timezone() {
+        return ConstantOperator.createVarchar(TimeUtils.getTimeZone().getID());
     }
 
     @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
@@ -989,24 +999,24 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "makedate", argTypes = {INT, INT}, returnType = DATETIME)
     public static ConstantOperator makeDate(ConstantOperator year, ConstantOperator dayOfYear) {
         if (year.isNull() || dayOfYear.isNull()) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(DateType.DATE);
         }
 
         int yearInt = year.getInt();
         if (yearInt < YEAR_MIN || yearInt > YEAR_MAX) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(DateType.DATE);
         }
 
         int dayOfYearInt = dayOfYear.getInt();
         if (dayOfYearInt < DAY_OF_YEAR_MIN || dayOfYearInt > DAY_OF_YEAR_MAX) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(DateType.DATE);
         }
 
         LocalDate ld = LocalDate.of(yearInt, 1, 1)
                 .plusDays(dayOfYearInt - 1);
 
         if (ld.getYear() != year.getInt()) {
-            return ConstantOperator.createNull(Type.DATE);
+            return ConstantOperator.createNull(DateType.DATE);
         }
 
         return ConstantOperator.createDateOrNull(ld.atTime(0, 0, 0));
@@ -1178,7 +1188,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "divide", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator divideDouble(ConstantOperator first, ConstantOperator second) {
         if (second.getDouble() == 0.0) {
-            return ConstantOperator.createNull(Type.DOUBLE);
+            return ConstantOperator.createNull(FloatType.DOUBLE);
         }
         return ConstantOperator.createDouble(first.getDouble() / second.getDouble());
     }
@@ -1225,7 +1235,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator modTinyInt(ConstantOperator first, ConstantOperator second) {
         if (second.getTinyInt() == 0) {
-            return ConstantOperator.createNull(Type.TINYINT);
+            return ConstantOperator.createNull(IntegerType.TINYINT);
         }
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() % second.getTinyInt()));
     }
@@ -1233,7 +1243,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator modSMALLINT(ConstantOperator first, ConstantOperator second) {
         if (second.getSmallint() == 0) {
-            return ConstantOperator.createNull(Type.SMALLINT);
+            return ConstantOperator.createNull(IntegerType.SMALLINT);
         }
         return ConstantOperator.createSmallInt((short) (first.getSmallint() % second.getSmallint()));
     }
@@ -1241,7 +1251,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator modInt(ConstantOperator first, ConstantOperator second) {
         if (second.getInt() == 0) {
-            return ConstantOperator.createNull(Type.INT);
+            return ConstantOperator.createNull(IntegerType.INT);
         }
         return ConstantOperator.createInt(first.getInt() % second.getInt());
     }
@@ -1249,7 +1259,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator modBigInt(ConstantOperator first, ConstantOperator second) {
         if (second.getBigint() == 0) {
-            return ConstantOperator.createNull(Type.BIGINT);
+            return ConstantOperator.createNull(IntegerType.BIGINT);
         }
         return ConstantOperator.createBigint(first.getBigint() % second.getBigint());
     }
@@ -1257,7 +1267,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "mod", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
         if (second.getLargeInt().equals(new BigInteger("0"))) {
-            return ConstantOperator.createNull(Type.LARGEINT);
+            return ConstantOperator.createNull(IntegerType.LARGEINT);
         }
         return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
@@ -1449,7 +1459,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator concat_ws(ConstantOperator split, ConstantOperator... values) {
         Preconditions.checkArgument(values.length > 0);
         if (split.isNull()) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         String separator = split.getVarchar();
         return ConstantOperator.createVarchar(
@@ -1509,11 +1519,11 @@ public class ScalarOperatorFunctions {
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
-            type = ScalarType.DECIMALV2;
+            type = DecimalType.DECIMALV2;
         } else {
             int precision = DecimalLiteral.getRealPrecision(result);
             int scale = DecimalLiteral.getRealScale(result);
-            type = ScalarType.createDecimalV3NarrowestType(precision, scale);
+            type = TypeFactory.createDecimalV3NarrowestType(precision, scale);
         }
 
         return ConstantOperator.createDecimal(result, type);
@@ -1577,9 +1587,9 @@ public class ScalarOperatorFunctions {
                 }
             }
         } catch (URISyntaxException e) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
-        return ConstantOperator.createNull(Type.VARCHAR);
+        return ConstantOperator.createNull(VarcharType.VARCHAR);
     }
 
     @ConstantFunction(name = "is_role_in_session", argTypes = {VARCHAR}, returnType = BOOLEAN)
@@ -1600,5 +1610,28 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(value.getVarchar());
     }
 
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "hour", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "hour", argTypes = {DATE}, returnType = TINYINT)
+    })
+    public static ConstantOperator hour(ConstantOperator value) {
+        return ConstantOperator.createTinyInt((byte) value.getDatetime().getHour());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "minute", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "minute", argTypes = {DATE}, returnType = TINYINT)
+    })
+    public static ConstantOperator minute(ConstantOperator value) {
+        return ConstantOperator.createTinyInt((byte) value.getDatetime().getMinute());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "second", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "second", argTypes = {DATE}, returnType = TINYINT)
+    })
+    public static ConstantOperator second(ConstantOperator value) {
+        return ConstantOperator.createTinyInt((byte) value.getDatetime().getSecond());
+    }
 }
 

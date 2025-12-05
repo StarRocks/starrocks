@@ -41,13 +41,17 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.TreeNode;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -415,13 +419,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public void setOutputExprs(List<Expr> outputExprs) {
-        this.outputExprs = Expr.cloneList(outputExprs, null);
+        this.outputExprs = ExprUtils.cloneList(outputExprs, null);
     }
 
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
-    public void createDataSink(TResultSinkType resultSinkType) {
+    public void createDataSink(TResultSinkType resultSinkType, ExecPlan execPlan) {
         if (sink != null) {
             return;
         }
@@ -440,8 +444,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             // add ResultSink
             // we're streaming to an result sink
-            sink = new ResultSink(planRoot.getId(), resultSinkType);
+
+            if (resultSinkType == TResultSinkType.ARROW_FLIGHT_PROTOCAL) {
+                sink = new ResultSink(planRoot.getId(), resultSinkType, execPlan.getColNames());
+            } else {
+                sink = new ResultSink(planRoot.getId(), resultSinkType);
+            }
         }
+    }
+
+    public void createDataSink(TResultSinkType resultSinkType) {
+        createDataSink(resultSinkType, null);
     }
 
     public int getParallelExecNum() {
@@ -462,7 +475,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setPlan(planRoot.treeToThrift());
         }
         if (outputExprs != null) {
-            result.setOutput_exprs(Expr.treesToThrift(outputExprs));
+            result.setOutput_exprs(ExprToThrift.treesToThrift(outputExprs));
         }
         if (sink != null) {
             result.setOutput_sink(sink.toThrift());
@@ -475,7 +488,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             Preconditions.checkState(!queryGlobalDicts.isEmpty(), "Global dict expression error!");
             Map<Integer, TExpr> exprs = Maps.newHashMap();
-            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, v.treeToThrift()));
+            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, ExprToThrift.treeToThrift(v)));
             result.setQuery_global_dict_exprs(exprs);
         }
         if (!loadGlobalDicts.isEmpty()) {
@@ -565,7 +578,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
 
         }
@@ -603,7 +616,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            str.append(outputExprs.stream().map(Expr::toSql)
+            str.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append("\n");
@@ -614,7 +627,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             str.append("  Global Dict Exprs:\n");
             queryGlobalDictExprs.entrySet().stream()
-                    .map(p -> "    " + p.getKey() + ": " + p.getValue().toMySql() + "\n").forEach(str::append);
+                    .map(p -> "    " + p.getKey() + ": " + ExprToSql.toMySql(p.getValue()) + "\n").forEach(str::append);
             str.append("\n");
         }
         if (planRoot != null) {
@@ -629,7 +642,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         StringBuilder outputBuilder = new StringBuilder();
         if (CollectionUtils.isNotEmpty(outputExprs)) {
             str.append("  Output Exprs:");
-            outputBuilder.append(outputExprs.stream().map(Expr::toSql)
+            outputBuilder.append(outputExprs.stream().map(ExprToSql::toSql)
                     .collect(Collectors.joining(" | ")));
         }
         str.append(outputBuilder.toString());
@@ -744,7 +757,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!(root instanceof ExchangeNode)) {
             root.getChildren().forEach(child -> collectNodesImpl(child, nodes));
         }
-        
+
         if (root instanceof HashJoinNode) {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             if (hashJoinNode.isSkewBroadJoin()) {
@@ -1026,7 +1039,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private void removeDictMappingProbeRuntimeFilters(PlanNode root) {
         root.getProbeRuntimeFilters().removeIf(filter -> {
             Expr probExpr = filter.getNodeIdToProbeExpr().get(root.getId().asInt());
-            return probExpr.containsDictMappingExpr();
+            return ExprUtils.containsDictMappingExpr(probExpr);
         });
 
         for (PlanNode child : root.getChildren()) {

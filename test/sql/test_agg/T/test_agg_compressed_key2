@@ -1,4 +1,4 @@
--- name: test_agg_compressed_key2
+-- name: test_agg_compressed_key2 @mac
 
 -- test compress to int128
 CREATE TABLE t3 (

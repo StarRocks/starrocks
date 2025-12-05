@@ -60,8 +60,8 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                 uint16_t selection = validate_select_idx[j];
                 const auto* partition = partitions[selection];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
-                _tablet_ids[selection] = virtual_buckets[record_hashes[selection] % virtual_buckets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _tablet_ids[selection] = tablet_ids[record_hashes[selection] % tablet_ids.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -72,8 +72,8 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
             for (size_t j = 0; j < num_rows; ++j) {
                 const auto* partition = partitions[j];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
-                _tablet_ids[j] = virtual_buckets[record_hashes[j] % virtual_buckets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _tablet_ids[j] = tablet_ids[record_hashes[j] % tablet_ids.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -180,7 +180,7 @@ Status TabletSinkSender::open_wait() {
         });
 
         if (index_channel->has_intolerable_failure()) {
-            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
             return err_st;
         }
     }

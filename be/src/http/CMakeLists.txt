@@ -39,6 +39,9 @@ set(WEB_SERVER_FILES
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/pprof_actions.cpp
+  action/proc_profile_action.cpp
+  action/proc_profile_file_action.cpp
+  action/profile_utils.cpp
   action/memory_metrics_action.cpp
   action/metrics_action.cpp
   action/stream_load.cpp
@@ -58,7 +61,7 @@ if(STARROCKS_JIT_ENABLE)
     set(WEB_SERVER_FILES ${WEB_SERVER_FILES} action/jit_cache_action.cpp)
 endif()
 
-add_library(Webserver STATIC ${WEB_SERVER_FILES})
+ADD_BE_LIB(Webserver ${WEB_SERVER_FILES})
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)

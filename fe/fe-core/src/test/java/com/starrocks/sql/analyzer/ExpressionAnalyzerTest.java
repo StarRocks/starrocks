@@ -14,15 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.CollectionElementExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -33,6 +30,13 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -52,8 +56,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     public void testMapElementAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        Type keyType = ScalarType.createType(PrimitiveType.INT);
-        Type valueType = ScalarType.createCharType(10);
+        Type keyType = IntegerType.INT;
+        Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
         slot.setType(mapType);
 
@@ -82,8 +86,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
-        Type keyTypeChar = ScalarType.createCharType(10);
-        Type valueTypeInt = ScalarType.createType(PrimitiveType.INT);
+        Type keyTypeChar = TypeFactory.createCharType(10);
+        Type valueTypeInt = IntegerType.INT;
         mapType = new MapType(keyTypeChar, valueTypeInt);
         slot.setType(mapType);
         StringLiteral subString = new StringLiteral("aaa");
@@ -96,14 +100,15 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         Assertions.assertEquals(TExprNodeType.MAP_ELEMENT_EXPR,
-                collectionElementExpr3.treeToThrift().getNodes().get(0).getNode_type());
+                ExprToThrift
+                        .treeToThrift(collectionElementExpr3).getNodes().get(0).getNode_type());
     }
 
     @Test
     public void testArraySubscriptAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        Type elementType = ScalarType.createCharType(10);
+        Type elementType = TypeFactory.createCharType(10);
         Type arrayType = new ArrayType(elementType);
         slot.setType(arrayType);
 
@@ -130,14 +135,15 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         Assertions.assertEquals(TExprNodeType.ARRAY_ELEMENT_EXPR,
-                collectionElementExpr2.treeToThrift().getNodes().get(0).getNode_type());
+                ExprToThrift
+                        .treeToThrift(collectionElementExpr2).getNodes().get(0).getNode_type());
     }
 
     @Test
     public void testNoSubscriptAnalyzer() {
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         SlotRef slot = new SlotRef(null, "col", "col");
-        slot.setType(ScalarType.createType(PrimitiveType.INT));
+        slot.setType(IntegerType.INT);
 
         IntLiteral sub = new IntLiteral(10);
 
@@ -149,8 +155,8 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
     @Test
     public void testMapFunctionsAnalyzer() {
-        Type keyType = ScalarType.createType(PrimitiveType.INT);
-        Type valueType = ScalarType.createCharType(10);
+        Type keyType = IntegerType.INT;
+        Type valueType = TypeFactory.createCharType(10);
         Type mapType = new MapType(keyType, valueType);
 
         String mapKeys = "map_keys";
@@ -159,53 +165,53 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         Type[] argumentTypes = {mapType};
 
         Function fnMapKeys =
-                Expr.getBuiltinFunction(mapKeys, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                ExprUtils.getBuiltinFunction(mapKeys, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapKeys.functionName(), "map_keys");
         Assertions.assertTrue(fnMapKeys.getReturnType().isArrayType());
         Assertions.assertEquals(((ArrayType) fnMapKeys.getReturnType()).getItemType(), keyType);
 
         Function fnMapValues =
-                Expr.getBuiltinFunction(mapValues, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                ExprUtils.getBuiltinFunction(mapValues, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapValues.functionName(), "map_values");
         Assertions.assertTrue(fnMapValues.getReturnType().isArrayType());
         Assertions.assertEquals(((ArrayType) fnMapValues.getReturnType()).getItemType(), valueType);
 
         Function fnMapSize =
-                Expr.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                ExprUtils.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertEquals(fnMapSize.functionName(), "map_size");
-        Assertions.assertEquals(fnMapSize.getReturnType(), Type.INT);
+        Assertions.assertEquals(fnMapSize.getReturnType(), IntegerType.INT);
 
         Type[] argumentTypesErrorNum = {mapType, keyType};
-        Function fnKeysErrorNum = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
+        Function fnKeysErrorNum = ExprUtils.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorNum);
-        Expr.getBuiltinFunction(mapValues, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        ExprUtils.getBuiltinFunction(mapValues, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorNum);
-        Expr.getBuiltinFunction(mapSize, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        ExprUtils.getBuiltinFunction(mapSize, argumentTypesErrorNum, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorNum);
 
         Type[] argumentTypesErrorType = {keyType};
-        Function fnKeysErrorType = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorType,
+        Function fnKeysErrorType = ExprUtils.getBuiltinFunction(mapKeys, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnKeysErrorType);
-        Function fnValuesErrorType = Expr.getBuiltinFunction(mapValues, argumentTypesErrorType,
+        Function fnValuesErrorType = ExprUtils.getBuiltinFunction(mapValues, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnValuesErrorType);
-        Function fnSizeErrorType = Expr.getBuiltinFunction(mapSize, argumentTypesErrorType,
+        Function fnSizeErrorType = ExprUtils.getBuiltinFunction(mapSize, argumentTypesErrorType,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNull(fnSizeErrorType);
     }
 
     @Test
     public void testDateCoalesceAnalyzer() {
-        Type dateType = ScalarType.createType(PrimitiveType.DATE);
-        Type dateTimeType = ScalarType.createType(PrimitiveType.DATETIME);
+        Type dateType = DateType.DATE;
+        Type dateTimeType = DateType.DATETIME;
 
         {
             Type[] argumentTypes = {dateType, dateTimeType};
             String coalesce = "coalesce";
             Function fnCoalesce =
-                    Expr.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                    ExprUtils.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assertions.assertEquals(fnCoalesce.functionName(), "coalesce");
             Assertions.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
@@ -213,7 +219,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
             Type[] argumentTypes = {dateTimeType, dateType};
             String coalesce = "coalesce";
             Function fnCoalesce =
-                    Expr.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                    ExprUtils.getBuiltinFunction(coalesce, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Assertions.assertEquals(fnCoalesce.functionName(), "coalesce");
             Assertions.assertEquals(fnCoalesce.getReturnType(), dateTimeType);
         }
@@ -231,12 +237,61 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
     @Test
     public void testLikePatternSyntaxException() {
         StringLiteral e1 = new StringLiteral("a");
-        e1.setType(Type.VARCHAR);
+        e1.setType(VarcharType.VARCHAR);
         StringLiteral e2 = new StringLiteral("([A-Za-z0-9]+[\\u4e00-\\u9fa5]{2}[A-Za-z0-9]+)");
-        e2.setType(Type.VARCHAR);
+        e2.setType(VarcharType.VARCHAR);
         LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, e1, e2);
         ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
         Assertions.assertThrows(SemanticException.class, () -> visitor.visitLikePredicate(likePredicate,
                 new Scope(RelationId.anonymous(), new RelationFields())));
+    }
+
+    @Test
+    public void testDatePartAnalyzer() {
+        ConnectContext session = new ConnectContext();
+        ExpressionAnalyzer analyzer = new ExpressionAnalyzer(session);
+        AnalyzeState analyzeState = new AnalyzeState();
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+
+        java.util.function.Consumer<String> verifySuccess = (sql) -> {
+            Expr expr = SqlParser.parseSqlToExpr(sql, session.getSessionVariable().getSqlMode());
+            analyzer.analyze(expr, analyzeState, scope);
+        };
+
+        java.util.function.BiConsumer<String, String> verifyFail = (sql, errorMsg) -> {
+            Expr expr = SqlParser.parseSqlToExpr(sql, session.getSessionVariable().getSqlMode());
+            try {
+                analyzer.analyze(expr, analyzeState, scope);
+                Assertions.fail("Should have failed: " + sql);
+            } catch (SemanticException e) {
+                Assertions.assertTrue(e.getMessage().contains(errorMsg), "Error message mismatch: " + e.getMessage());
+            }
+        };
+
+        verifySuccess.accept("date_part('year', '2023-01-01')");
+        verifySuccess.accept("date_part('quarter', '2023-01-01')");
+        verifySuccess.accept("date_part('month', '2023-01-01')");
+        verifySuccess.accept("date_part('week', '2023-01-01')");
+        verifySuccess.accept("date_part('day', '2023-01-01')");
+        
+        verifySuccess.accept("date_part('hour', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('minute', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('second', '2023-01-01 12:00:00')");
+
+        verifySuccess.accept("date_part('yy', '2023-01-01')");
+        verifySuccess.accept("date_part('qq', '2023-01-01')");
+        verifySuccess.accept("date_part('mm', '2023-01-01')"); 
+        verifySuccess.accept("date_part('wk', '2023-01-01')");
+        verifySuccess.accept("date_part('dd', '2023-01-01')");
+        verifySuccess.accept("date_part('hh', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('mi', '2023-01-01 12:00:00')");
+        verifySuccess.accept("date_part('ss', '2023-01-01 12:00:00')");
+        
+        verifySuccess.accept("date_part('dow', '2023-01-01')");
+        verifySuccess.accept("date_part('doy', '2023-01-01')");
+
+        verifyFail.accept("date_part('year')", "DATE_PART requires 2 arguments");
+        verifyFail.accept("date_part(123, '2023-01-01')", "must be a constant string literal");
+        verifyFail.accept("date_part('invalid_unit', '2023-01-01')", "Unsupported unit for DATE_PART");
     }
 }

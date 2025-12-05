@@ -16,10 +16,12 @@ package com.starrocks.catalog.combinator;
 
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,14 +50,15 @@ public final class AggStateIf extends AggregateFunction {
             FunctionName functionName = new FunctionName(aggFunc.functionName() + FunctionSet.AGG_STATE_IF_SUFFIX);
             List<Type> argTypes = new ArrayList<>();
             argTypes.addAll(Arrays.asList(aggFunc.getArgs()));
-            argTypes.add(Type.BOOLEAN);
+            argTypes.add(BooleanType.BOOLEAN);
             AggStateIf aggStateIf = new AggStateIf(functionName, argTypes, aggFunc.getReturnType(),
                     aggFunc.getIntermediateTypeOrReturnType());
             aggStateIf.setBinaryType(TFunctionBinaryType.BUILTIN);
             aggStateIf.setPolymorphic(aggFunc.isPolymorphic());
 
             // agg_if's result should always be nullable, so BE can use nullable agg function
-            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc, true);
+            AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType(),
+                    Arrays.asList(aggFunc.getArgs()), true);
             aggStateIf.setAggStateDesc(aggStateDesc);
             aggStateIf.setIsNullable(aggStateDesc.getResultNullable());
             return Optional.of(aggStateIf);

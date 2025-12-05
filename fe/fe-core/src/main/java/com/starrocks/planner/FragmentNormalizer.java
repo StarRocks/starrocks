@@ -27,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.planner.expression.ExprToNormalFormVisitor;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -35,6 +36,7 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -231,10 +233,10 @@ public class FragmentNormalizer {
 
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
-        TExpr texpr = expr.normalize(this);
+        TExpr tExpr = ExprToNormalFormVisitor.treeToNormalForm(expr, this);
         try {
             TSerializer ser = ConfigurableSerDesFactory.getTSerializer(SIMPLE_JSON.name());
-            return ByteBuffer.wrap(ser.serialize(texpr));
+            return ByteBuffer.wrap(ser.serialize(tExpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
         }
@@ -525,7 +527,7 @@ public class FragmentNormalizer {
         List<Expr> boundSimpleRegionExprs = Lists.newArrayList();
         List<Expr> boundOtherExprs = Lists.newArrayList();
         for (Expr e : exprs) {
-            if (!e.isBound(partitionSlotId)) {
+            if (!ExprUtils.isBound(e, partitionSlotId)) {
                 unboundExprs.add(e);
                 continue;
             }

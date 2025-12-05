@@ -18,7 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.velocity.VelocityContext;
@@ -168,6 +168,11 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames, List<Type> columnTypes) {
+        return buildQueryFullStatisticsSQL(tableId, columnNames, columnTypes, null);
+    }
+
+    public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames, List<Type> columnTypes,
+                                                     List<Long> partitionIds) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, false);
 
         List<String> querySQL = new ArrayList<>();
@@ -175,8 +180,19 @@ public class StatisticSQLBuilder {
             VelocityContext context = new VelocityContext();
             context.put("updateTime", "now()");
             context.put("type", type);
-            context.put("predicate", "table_id = " + tableId + " and column_name in (" +
-                    names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
+            
+            // Build predicate with partition_id filter to exclude temp partitions
+            StringBuilder predicateBuilder = new StringBuilder();
+            predicateBuilder.append("table_id = ").append(tableId);
+            predicateBuilder.append(" and column_name in (")
+                    .append(names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")))
+                    .append(")");
+            if (partitionIds != null && !partitionIds.isEmpty()) {
+                predicateBuilder.append(" and partition_id in (")
+                        .append(partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")))
+                        .append(")");
+            }
+            context.put("predicate", predicateBuilder.toString());
 
             if (type.startsWith("array") || type.startsWith("map")) {
                 querySQL.add(build(context, QUERY_COLLECTION_FULL_STATISTIC_TEMPLATE));

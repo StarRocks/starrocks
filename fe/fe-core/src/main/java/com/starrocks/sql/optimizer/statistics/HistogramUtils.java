@@ -19,9 +19,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,10 +65,18 @@ public class HistogramUtils {
                     high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
                 }
 
-                Bucket bucket = new Bucket(low, high,
-                        Long.parseLong(bucketJsonArray.get(2).getAsString()),
-                        Long.parseLong(bucketJsonArray.get(3).getAsString()));
-                buckets.add(bucket);
+                if (bucketJsonArray.size() == 5) {
+                    Bucket bucket = new Bucket(low, high,
+                            Long.parseLong(bucketJsonArray.get(2).getAsString()),
+                            Long.parseLong(bucketJsonArray.get(3).getAsString()),
+                            Long.parseLong(bucketJsonArray.get(4).getAsString()));
+                    buckets.add(bucket);
+                } else {
+                    Bucket bucket = new Bucket(low, high,
+                            Long.parseLong(bucketJsonArray.get(2).getAsString()),
+                            Long.parseLong(bucketJsonArray.get(3).getAsString()));
+                    buckets.add(bucket);
+                }
             } catch (Exception e) {
                 LOG.warn("Failed to parse histogram bucket: {}", bucketJsonArray, e);
             }

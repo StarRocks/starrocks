@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -31,7 +30,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -504,9 +506,9 @@ public class ListPartitionPruner implements PartitionPruner {
             value = String.valueOf(literalExpr.getLongValue() / 1000000);
         }
         try {
-            result = LiteralExpr.create(value, type);
+            result = LiteralExprFactory.create(value, type);
         } catch (Exception e) {
-            LOG.warn("Failed to execute LiteralExpr.create", e);
+            LOG.warn("Failed to execute LiteralExprFactory.create", e);
             throw new StarRocksConnectorException("can not cast literal value " + literalExpr.getStringValue() +
                     " to target type " + type.prettyPrint());
         }
@@ -596,7 +598,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 return matches;
             case EQ_FOR_NULL:
                 // SlotRef <=> Literal
-                if (Expr.IS_NULL_LITERAL.apply(literal)) {
+                if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
                     // null
                     matches.addAll(nullPartitions);
                 } else {

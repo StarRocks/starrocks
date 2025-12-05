@@ -150,8 +150,7 @@ Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& 
                               bool is_shadow) {
     auto scoped =
             trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
-    return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
-                      tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery, is_shadow);
+    return commit_txn(tablet, partition_id, transaction_id, load_id, rowset_ptr, is_recovery, is_shadow);
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
@@ -216,10 +215,17 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     return Status::OK();
 }
 
-Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                              TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
+Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partition_id, TTransactionId transaction_id,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery,
                               bool is_shadow) {
+    if (tablet == nullptr) {
+        return Status::InternalError("tablet not exist during commit txn");
+    }
+    auto meta = tablet->data_dir()->get_meta();
+    auto tablet_id = tablet->tablet_id();
+    auto schema_hash = tablet->schema_hash();
+    auto tablet_uid = tablet->tablet_uid();
+
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "Invalid commit req "
                    << " partition_id=" << partition_id << " txn_id: " << transaction_id << " tablet_id=" << tablet_id;
@@ -270,10 +276,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // if not in recovery mode, then should persist the meta to meta env
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
     // it is under a single txn lock
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-    if (tablet == nullptr) {
-        return Status::InternalError("tablet not exist during commit txn");
-    }
     if (!is_recovery) {
         Status st;
         RowsetMetaPB rowset_meta_pb;

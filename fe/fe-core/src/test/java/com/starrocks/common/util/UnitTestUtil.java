@@ -35,7 +35,6 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -54,13 +53,15 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Method;
@@ -132,19 +133,19 @@ public class UnitTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -209,19 +210,19 @@ public class UnitTestUtil {
 
         // columns
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         columns.add(temp);
-        columns.add(new Column("v", Type.DOUBLE, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
 
         List<Column> keysColumn = new ArrayList<Column>();
-        temp = new Column("k1", Type.INT);
+        temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(true);
         keysColumn.add(temp);
 
@@ -323,10 +324,10 @@ public class UnitTestUtil {
 
     public static View createTestView(long tableId) {
         List<Column> columns = new ArrayList<Column>();
-        Column temp = new Column("k1", Type.INT);
+        Column temp = new Column("k1", IntegerType.INT);
         temp.setIsKey(false);
         columns.add(temp);
-        temp = new Column("k2", Type.INT);
+        temp = new Column("k2", IntegerType.INT);
         temp.setIsKey(false);
         columns.add(temp);
 

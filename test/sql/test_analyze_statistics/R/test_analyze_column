@@ -38,11 +38,17 @@ INSERT INTO t1 VALUES
     (null,'2020-10-27 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 -- result:
 -- !result
+drop stats t1;
+-- result:
+-- !result
 analyze sample table t1;
 -- result:
 test_analyze_column.t1	sample	status	OK
 -- !result
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+-- !result
+drop stats t1;
 -- result:
 -- !result
 analyze full table t1(k1,k2);
@@ -54,16 +60,20 @@ select column_name, row_count from _statistics_.column_statistics where table_na
 k1	5
 k2	5
 -- !result
+drop stats t1;
+-- result:
+-- !result
 analyze full table t1(k3,k4);
 -- result:
 test_analyze_column.t1	analyze	status	OK
 -- !result
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 -- result:
-k1	5
-k2	5
 k3	5
 k4	5
+-- !result
+drop stats t1;
+-- result:
 -- !result
 analyze sample table t1(k3,k4);
 -- result:
@@ -71,10 +81,9 @@ test_analyze_column.t1	sample	status	OK
 -- !result
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 -- result:
-k1	5
-k2	5
-k3	5
-k4	5
+-- !result
+drop stats t1;
+-- result:
 -- !result
 analyze sample table t1;
 -- result:
@@ -82,10 +91,9 @@ test_analyze_column.t1	sample	status	OK
 -- !result
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
 -- result:
-k1	5
-k2	5
-k3	5
-k4	5
+-- !result
+drop stats t1;
+-- result:
 -- !result
 analyze full table t1;
 -- result:
@@ -111,6 +119,9 @@ drop stats t1;
 -- result:
 -- !result
 select column_name, row_count from _statistics_.column_statistics where table_name = 'test_analyze_column.t1' order by column_name ;
+-- result:
+-- !result
+drop stats t1;
 -- result:
 -- !result
 analyze sample table t1;

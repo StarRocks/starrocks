@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -32,12 +32,12 @@ public class CollationsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("COLLATION_NAME", ScalarType.createVarchar(512))
-                        .column("CHARACTER_SET_NAME", ScalarType.createVarchar(64))
-                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("IS_DEFAULT", ScalarType.createVarchar(64))
-                        .column("IS_COMPILED", ScalarType.createVarchar(64))
-                        .column("SORTLEN", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("COLLATION_NAME", TypeFactory.createVarchar(512))
+                        .column("CHARACTER_SET_NAME", TypeFactory.createVarchar(64))
+                        .column("ID", IntegerType.BIGINT)
+                        .column("IS_DEFAULT", TypeFactory.createVarchar(64))
+                        .column("IS_COMPILED", TypeFactory.createVarchar(64))
+                        .column("SORTLEN", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_COLLATIONS);
     }
 }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
@@ -29,7 +30,6 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -90,7 +90,7 @@ public class OptExpressionDuplicator {
         this.columnMapping = Maps.newHashMap();
         this.rewriter = new ReplaceColumnRefRewriter(columnMapping);
         this.mvRefBaseTableColumns = materializationContext.getMv().getRefBaseTablePartitionColumns();
-        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMvToRefreshPartitionNames().isEmpty();
+        this.partialPartitionRewrite = !materializationContext.getMvUpdateInfo().getMVToRefreshPCells().isEmpty();
         this.optimizerContext = materializationContext.getOptimizerContext();
     }
 
@@ -189,6 +189,10 @@ public class OptExpressionDuplicator {
             Operator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
             opBuilder.withOperator(scanOperator);
+            // Use scan operator's table instead of columnRefFactory's table
+            // This fixes the issue where transparent MV rewrite rewrites MV scan to base table scan,
+            // but columnRefFactory still maps column refs to MV table
+            Table scanTable = scanOperator.getTable();
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = scanOperator.getColRefToColumnMetaMap();
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
             Map<Integer, Integer> relationIdMapping = Maps.newHashMap();
@@ -197,8 +201,9 @@ public class OptExpressionDuplicator {
                 ColumnRefOperator newColumnRef = columnRefFactory.create(key, key.getType(), key.isNullable());
                 columnRefColumnMapBuilder.put(newColumnRef, entry.getValue());
                 columnMapping.put(entry.getKey(), newColumnRef);
-                columnRefFactory.updateColumnRefToColumns(newColumnRef, columnRefFactory.getColumn(key),
-                        columnRefFactory.getColumnRefToTable().get(key));
+                // Use scan operator's table instead of columnRefFactory's table
+                Column column = entry.getValue();
+                columnRefFactory.updateColumnRefToColumns(newColumnRef, column, scanTable);
                 Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
                         k -> columnRefFactory.getNextRelationId());
                 columnRefFactory.updateColumnToRelationIds(newColumnRef.getId(), newRelationId);
@@ -211,8 +216,9 @@ public class OptExpressionDuplicator {
                 ColumnRefOperator key = entry.getValue();
                 ColumnRefOperator mapped = columnMapping.computeIfAbsent(key,
                         k -> columnRefFactory.create(k, k.getType(), k.isNullable()));
-                columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
-                        columnRefFactory.getColumnRefToTable().get(key));
+                // Use scan operator's table and column instead of columnRefFactory's
+                Column column = entry.getKey();
+                columnRefFactory.updateColumnRefToColumns(mapped, column, scanTable);
                 Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
                         k -> columnRefFactory.getNextRelationId());
                 columnRefFactory.updateColumnToRelationIds(mapped.getId(), newRelationId);

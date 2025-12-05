@@ -1,0 +1,96 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast.expression;
+
+import com.google.common.base.Preconditions;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.BooleanType;
+
+import java.util.Objects;
+
+public class MatchExpr extends Expr {
+    public MatchExpr(Expr e1, Expr e2) {
+        this(e1, e2, NodePosition.ZERO);
+    }
+
+    public MatchExpr(MatchOperator matchOperator, Expr e1, Expr e2) {
+        this(matchOperator, e1, e2, NodePosition.ZERO);
+    }
+
+    public MatchExpr(Expr e1, Expr e2, NodePosition position) {
+        this(MatchOperator.MATCH, e1, e2, position);
+    }
+
+    public MatchExpr(MatchOperator operator, Expr e1, Expr e2, NodePosition pos) {
+        super(pos);
+        Preconditions.checkNotNull(operator);
+        this.matchOperator = operator;
+        Preconditions.checkNotNull(e1);
+        children.add(e1);
+        Preconditions.checkNotNull(e2);
+        children.add(e2);
+        setType(BooleanType.BOOLEAN);
+    }
+
+    protected MatchExpr(MatchExpr other) {
+        super(other);
+        this.matchOperator = other.matchOperator;
+        this.children.clear();
+        for (Expr child : other.getChildren()) {
+            Preconditions.checkNotNull(child);
+            this.children.add(child.clone());
+        }
+        setType(BooleanType.BOOLEAN);
+    }
+
+    public enum MatchOperator {
+        MATCH("MATCH"),
+        MATCH_ANY("MATCH_ANY"),
+        MATCH_ALL("MATCH_ALL");
+
+        private final String name;
+
+        MatchOperator(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+    }
+
+    public MatchOperator getMatchOperator() {
+        return matchOperator;
+    }
+
+    private final MatchOperator matchOperator;
+
+    @Override
+    public Expr clone() {
+        return new MatchExpr(this);
+    }
+
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode());
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context)  {
+        return visitor.visitMatchExpr(this, context);
+    }
+}

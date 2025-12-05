@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -52,10 +53,10 @@ import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TimerTask;
 import java.util.UUID;
@@ -96,25 +97,22 @@ public class ConnectScheduler {
             try {
                 long now = System.currentTimeMillis();
                 synchronized (ConnectScheduler.this) {
-                    //Because unregisterConnection will be callback in NMysqlChannel's close,
-                    //unregisterConnection will remove connectionMap (in the same thread)
-                    //This will result in a concurrentModifyException.
-                    //So here we copied the connectionIds to avoid removing iterator during operate iterator
-                    ArrayList<Long> connectionIds = new ArrayList<>(connectionMap.keySet());
-                    for (Long connectId : connectionIds) {
-                        ConnectContext connectContext = connectionMap.get(connectId);
-                        try (var guard = connectContext.bindScope()) {
-                            connectContext.checkTimeout(now);
+                    // ConcurrentHashMap's iterator is weakly consistent, safe to iterate directly
+                    // even when modifications occur during iteration
+                    for (ConnectContext connectContext : connectionMap.values()) {
+                        if (connectContext != null) {
+                            try (var guard = connectContext.bindScope()) {
+                                connectContext.checkTimeout(now);
+                            }
                         }
                     }
 
                     // remove arrow flight sql timeout connect
-                    ArrayList<String> arrowFlightSqlConnections =
-                            new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
-                    for (String token : arrowFlightSqlConnections) {
-                        ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
-                        try (var guard = connectContext.bindScope()) {
-                            connectContext.checkTimeout(now);
+                    for (ConnectContext connectContext : arrowFlightSqlConnectContextMap.values()) {
+                        if (connectContext != null) {
+                            try (var guard = connectContext.bindScope()) {
+                                connectContext.checkTimeout(now);
+                            }
                         }
                     }
                 }
@@ -169,6 +167,58 @@ public class ConnectScheduler {
         }
     }
 
+    public Pair<Boolean, String> onUserChanged(ConnectContext ctx, String oldQualifiedUser, String newQualifiedUser) {
+        if (Objects.equals(oldQualifiedUser, newQualifiedUser)) {
+            return new Pair<>(true, null);
+        }
+
+        if (newQualifiedUser == null) {
+            return new Pair<>(false, "new qualifiedUser is null");
+        }
+
+        try {
+            connStatsLock.lock();
+            AtomicInteger newCounter = connCountByUser.computeIfAbsent(newQualifiedUser, k -> new AtomicInteger(0));
+            int currentNewCount = newCounter.get();
+            long currentUserMaxConn = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getMaxConn(newQualifiedUser);
+
+            if (currentNewCount >= currentUserMaxConn) {
+                int totalConn = connCountByUser.values().stream().mapToInt(AtomicInteger::get).sum();
+                String userErrMsg = "Reach user-level(qualifiedUser: " + newQualifiedUser
+                        + ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, "
+                        + "currentUserMaxConn=" + currentUserMaxConn + ", connectionMap.size="
+                        + connectionMap.size() + ", connByUser.totConn=" + totalConn
+                        + ", user.currConn=" + currentNewCount;
+                LOG.info("{}, details: connectionId={}, connByUser={}", userErrMsg, ctx.getConnectionId(), connCountByUser);
+                return new Pair<>(false, userErrMsg);
+            }
+
+            newCounter.incrementAndGet();
+
+            if (oldQualifiedUser != null) {
+                AtomicInteger oldCounter = connCountByUser.get(oldQualifiedUser);
+                if (oldCounter != null) {
+                    int oldCountAfterDecrement = oldCounter.decrementAndGet();
+                    if (oldCountAfterDecrement < 0) {
+                        LOG.warn("Negative connection count detected for user {} during user change of connection {}",
+                                oldQualifiedUser, ctx.getConnectionId());
+                        oldCounter.set(0);
+                        oldCountAfterDecrement = 0;
+                    }
+                    if (oldCountAfterDecrement == 0) {
+                        connCountByUser.remove(oldQualifiedUser, oldCounter);
+                    }
+                } else {
+                    LOG.warn("Missing connection counter for user {} during user change of connection {}",
+                            oldQualifiedUser, ctx.getConnectionId());
+                }
+            }
+            return new Pair<>(true, null);
+        } finally {
+            connStatsLock.unlock();
+        }
+    }
+
     public void unregisterConnection(ConnectContext ctx) {
         boolean removed;
         try {
@@ -178,7 +228,9 @@ public class ConnectScheduler {
                 numberConnection.decrementAndGet();
                 AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
                 if (conns != null) {
-                    conns.decrementAndGet();
+                    if (conns.decrementAndGet() <= 0) {
+                        connCountByUser.remove(ctx.getQualifiedUser());
+                    }
                 }
                 LOG.info("Connection closed. remote={}, connectionId={}, qualifiedUser={}, user.currConn={}",
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
@@ -218,6 +270,10 @@ public class ConnectScheduler {
     public ConnectContext findContextByCustomQueryId(String customQueryId) {
         return connectionMap.values().stream().filter(
                 (Predicate<ConnectContext>) c -> customQueryId.equals(c.getCustomQueryId())).findFirst().orElse(null);
+    }
+
+    public int getConnectionNum() {
+        return numberConnection.get();
     }
 
     public Map<String, AtomicInteger> getUserConnectionMap() {
@@ -309,6 +365,11 @@ public class ConnectScheduler {
         return (frontend.getFid() & 0xFF) << 24 | (connectionIdGenerator.incrementAndGet() & 0xFFFFFF);
     }
 
+    @VisibleForTesting
+    public void setNextConnectionId(int connectionId) {
+        connectionIdGenerator.counter.set(connectionId);
+    }
+
     public static class ConnectionIdGenerator {
         // Atomic counter to ensure thread-safe increments
         private final AtomicInteger counter;
@@ -331,8 +392,7 @@ public class ConnectScheduler {
          * @return the updated counter value after incrementing
          */
         public int incrementAndGet() {
-            return counter.updateAndGet(currentValue -> (currentValue + 1 >= threshold) ? 0 : currentValue + 1
-            );
+            return counter.updateAndGet(currentValue -> (currentValue + 1 >= threshold) ? 0 : currentValue + 1);
         }
     }
 }

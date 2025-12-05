@@ -50,7 +50,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.expression.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -215,7 +215,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 }
                 // change job state to running
                 if (result.size() != 0) {
-                    unprotectUpdateState(JobState.RUNNING, null, false);
+                    unprotectUpdateState(JobState.RUNNING, null);
                 }
             } else {
                 LOG.debug("Ignore to divide routine load job while job state {}", state);
@@ -350,8 +350,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                             .build(), e);
                     if (this.state == JobState.NEED_SCHEDULE) {
                         unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
+                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                     }
                     return false;
                 }
@@ -468,7 +467,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // check file
                 if (!smallFileMgr.containsFile(dbId, PULSAR_FILE_CATALOG, file)) {
                     throw new DdlException("File " + file + " does not exist in db "
-                            + dbId + " with globalStateMgr: " + PULSAR_FILE_CATALOG);
+                            + dbId + " with catalog: " + PULSAR_FILE_CATALOG);
                 }
             }
         }
@@ -525,10 +524,49 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(customProperties);
     }
 
+    @Override
+    protected void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
+        if (!dataSourceProperties.hasAnalyzedProperties()) {
+            return;
+        }
+        Map<String, String> properties = dataSourceProperties.getCustomPulsarProperties();
+        List<Pair<String, Long>> positions = dataSourceProperties.getPulsarPartitionInitialPositions();
 
+        // check file existence
+        if (!properties.isEmpty()) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getValue().startsWith("FILE:")) {
+                    String file = entry.getValue().substring(entry.getValue().indexOf(":") + 1);
+                    SmallFileMgr smallFileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
+                    // check file
+                    if (!smallFileMgr.containsFile(dbId, PULSAR_FILE_CATALOG, file)) {
+                        throw new DdlException("File " + file + " does not exist in db "
+                                + dbId + " with catalog: " + PULSAR_FILE_CATALOG);
+                    }
+                }
+            }
+        }
 
+        // check defaultInitialPosition
+        if (properties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
+            try {
+                CreateRoutineLoadStmt.getPulsarPosition(
+                        properties.get(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
 
-
+        // check partition positions
+        if (positions != null && !positions.isEmpty()) {
+            for (Pair<String, Long> pair : positions) {
+                if (!customPulsarPartitions.contains(pair.first)) {
+                    throw new DdlException("The partition " +
+                            pair.first + " is not specified in the create statement");
+                }
+            }
+        }
+    }
 
     @Override
     public void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {

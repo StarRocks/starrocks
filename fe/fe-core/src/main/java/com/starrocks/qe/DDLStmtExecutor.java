@@ -20,6 +20,8 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -33,12 +35,12 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.load.EtlJobType;
-import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -141,7 +143,6 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -220,7 +221,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
@@ -265,7 +266,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateFunctionStatement(CreateFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                FunctionName name = stmt.getFunctionName();
+                String defaultDb = stmt.getFunctionRef().isGlobalFunction()
+                        ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                        : context.getDatabase();
+                FunctionSearchDesc desc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                        stmt.getFunctionRef(), stmt.getArgsDef(), defaultDb);
+                FunctionName name = desc.getName();
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr()
                             .getGlobalFunctionMgr()
@@ -284,16 +290,21 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropFunctionStatement(DropFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                FunctionName name = stmt.getFunctionName();
+                String defaultDb = stmt.getFunctionRef().isGlobalFunction()
+                        ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                        : context.getDatabase();
+                FunctionSearchDesc functionSearchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                        stmt.getFunctionRef(), stmt.getArgsDef(), defaultDb);
+                FunctionName name = functionSearchDesc.getName();
                 if (name.isGlobalFunction()) {
                     context.getGlobalStateMgr().getGlobalFunctionMgr()
-                            .userDropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
+                            .userDropFunction(functionSearchDesc, stmt.dropIfExists());
                 } else {
                     Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(name.getDb());
                     if (db == null) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                     }
-                    db.dropFunction(stmt.getFunctionSearchDesc(), stmt.dropIfExists());
+                    db.dropFunction(functionSearchDesc, stmt.dropIfExists());
                 }
             });
             return null;
@@ -743,7 +754,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -751,7 +762,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getBackupHandler().process(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(context, stmt);
             });
             return null;
         }
@@ -790,7 +801,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt, context);
+                context.getGlobalStateMgr().getMetadataMgr().truncateTable(context, stmt);
             });
             return null;
         }
@@ -798,16 +809,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().repairTable(context, stmt);
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt,
-                                                                  ConnectContext context) {
+        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTabletChecker().cancelRepairTable(stmt);
+                GlobalStateMgr.getCurrentState().getTabletChecker().cancelRepairTable(context, stmt);
             });
             return null;
         }
@@ -858,12 +868,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    PluginInfo info = context.getGlobalStateMgr().getPluginMgr().uninstallPlugin(stmt.getPluginName());
-                    if (null != info) {
-                        GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(info);
-                    }
-                    LOG.info("uninstall plugin = " + stmt.getPluginName());
-
+                    context.getGlobalStateMgr().getPluginMgr().uninstallPluginFromStmt(stmt);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -1082,7 +1087,7 @@ public class DDLStmtExecutor {
                         "DROP MATERIALIZED VIEW to drop task, when the materialized view is deleted, " +
                         "the related task will be deleted automatically.");
             }
-            taskManager.dropTasks(Collections.singletonList(task.getId()), false);
+            taskManager.dropTasks(Collections.singletonList(task.getId()));
             return null;
         }
 

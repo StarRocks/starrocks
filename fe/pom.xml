@@ -30,6 +30,7 @@ under the License.
 
     <modules>
         <module>fe-grammar</module>
+        <module>fe-type</module>
         <module>fe-parser</module>
         <module>fe-spi</module>
         <module>fe-utils</module>
@@ -52,7 +53,7 @@ under the License.
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.15.2</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
-        <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
+        <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>1.0.2</hudi.version>
@@ -66,17 +67,17 @@ under the License.
         <kafka-clients.version>3.4.0</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.125.Final</io.netty.version>
+        <io.netty.version>4.1.128.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
-        <paimon.version>1.0.1</paimon.version>
+        <paimon.version>1.2.0</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>3.5-rc4</staros.version>
+        <staros.version>4.0.0</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.57.v20241219</jetty.version>
@@ -87,6 +88,7 @@ under the License.
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
         <async-profiler.version>4.0</async-profiler.version>
+        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
     </properties>
 
     <profiles>
@@ -183,6 +185,11 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-grammar</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-type</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

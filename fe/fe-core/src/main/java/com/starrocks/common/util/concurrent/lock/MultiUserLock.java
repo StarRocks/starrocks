@@ -184,7 +184,8 @@ public class MultiUserLock extends Lock {
         }
 
         if (!hasOwner) {
-            throw new IllegalMonitorStateException("Attempt to unlock lock, not locked by current locker");
+            throw new IllegalMonitorStateException(String.format("Attempt to unlock lock, not locked by current locker, " +
+                    "firstOwner:%s, otherOwners:%s", firstOwner, otherOwners));
         }
 
         if (reentrantLock) {

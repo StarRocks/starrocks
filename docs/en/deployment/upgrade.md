@@ -114,6 +114,8 @@ Having passed the upgrade availability test, you can first upgrade the BE nodes 
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # If a custom function (UDF) was used in the old version, you need to copy the old version's UDF directory to the new lib directory.
+   cp -r lib.bak/udf lib/
    ```
 
 3. Start the BE node.
@@ -147,6 +149,8 @@ Having passed the upgrade availability test, you can first upgrade the BE nodes 
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # If a custom function (UDF) was used in the old version, you need to copy the old version's UDF directory to the new lib directory.
+   cp -r lib.bak/udf lib/
    ```
 
 3. Start the CN node.

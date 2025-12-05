@@ -27,11 +27,12 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.type.DateType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -53,7 +54,7 @@ public class TablesProcDirTest {
         indexNameToId.put("index1", 1000L);
 
         List<Partition> p1 = Lists.newArrayList(new Partition(1001L, 1011L, "p", null, null));
-        List<Column> col1 = Lists.newArrayList(new Column("province", Type.VARCHAR));
+        List<Column> col1 = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo pt1 = new ListPartitionInfo(PartitionType.LIST, col1);
         OlapTable tb1 = new OlapTable(1000L, "tb1", col1, null, pt1, null);
         new Expectations(tb1) {
@@ -73,7 +74,7 @@ public class TablesProcDirTest {
         };
 
         List<Partition> p2 = Lists.newArrayList(new Partition(20001L, 20011L, "p", null, null));
-        List<Column> col2 = Lists.newArrayList(new Column("dt", Type.DATE));
+        List<Column> col2 = Lists.newArrayList(new Column("dt", DateType.DATE));
         PartitionInfo pt2 = new RangePartitionInfo(col2);
         OlapTable tb2 = new OlapTable(2000L, "tb2", col2, null, pt2, null);
         new Expectations(tb2) {

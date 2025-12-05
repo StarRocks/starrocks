@@ -20,6 +20,7 @@
 #include "connector/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
@@ -245,9 +246,14 @@ Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
     if (partition_desc == nullptr) {
+        const auto& full_path = _scan_range.full_path;
+        const auto& relative_path = _scan_range.relative_path;
+        const auto& table_name =
+                _provider->_hdfs_scan_node.__isset.table_name ? _provider->_hdfs_scan_node.table_name : "unknown";
         return Status::InternalError(
-                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
-                            _scan_range.partition_id));
+                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map. "
+                            "full_path = {}, relative_path = {}, table_name = {}.",
+                            _scan_range.partition_id, full_path, relative_path, table_name));
     }
 
     const auto& partition_values = partition_desc->partition_key_value_evals();
@@ -812,11 +818,29 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = new HdfsTextScanner();
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
+        const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
+        const auto* file_desc = dynamic_cast<const FileTableDescriptor*>(_hive_table);
+        if (hdfs_desc != nullptr || file_desc != nullptr) {
+            std::string serde_lib;
+            if (hdfs_desc != nullptr) {
+                serde_lib = hdfs_desc->get_serde_lib();
+            } else {
+                serde_lib = file_desc->get_serde_lib();
+            }
+            if (serde_lib == OPENXJSON_SERDE_LIB) {
+                scanner = new HdfsJsonScanner();
+            } else {
+                scanner = new HdfsTextScanner();
+            }
+        } else {
+            scanner = new HdfsTextScanner();
+        }
+    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
                 dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
+        // THdfsFileFormat::RC_TEXT is deprecated. RCText and RCBinary are both mapped to RC_FILE in the frontend.
+        // The RC_TEXT check is retained here for backward compatibility with older FE versions.
         scanner = create_hive_jni_scanner(jni_scanner_create_options).release();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", to_string(format));
@@ -878,8 +902,8 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
 
-    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
     return Status::OK();
 }
 

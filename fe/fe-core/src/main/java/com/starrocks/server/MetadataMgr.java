@@ -34,6 +34,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -66,7 +67,9 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CallProcedureStatement;
@@ -77,7 +80,7 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -403,6 +406,15 @@ public class MetadataMgr {
         }
     }
 
+    public void truncateTable(ConnectContext context, TruncateTableStmt stmt) throws StarRocksException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().truncateTable(stmt, context);
+        }
+    }
+
     public void dropTable(String catalogName, String dbName, String tblName) {
         TableName tableName = new TableName(catalogName, dbName, tblName);
         DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
@@ -671,7 +683,17 @@ public class MetadataMgr {
     }
 
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
-        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
+        Statistics.Builder statistics = Statistics.builder();
+
+        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>();
+        for (ColumnRefOperator colRef : columns.keySet()) {
+            if (FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(colRef.getName())) {
+                statistics.addColumnStatistic(colRef, ColumnStatistic.unknown());
+                continue;
+            }
+            requiredColumnRefs.add(colRef);
+        }
+
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
                 Collectors.toList());
         List<ConnectorTableColumnStats> columnStatisticList =
@@ -680,7 +702,6 @@ public class MetadataMgr {
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
 
-        Statistics.Builder statistics = Statistics.builder();
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnRefOperator columnRef = requiredColumnRefs.get(i);
             ConnectorTableColumnStats connectorTableColumnStats;
@@ -725,6 +746,9 @@ public class MetadataMgr {
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
+            } else if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
+                    session.getSourceTablesCount() == 1) {
+                return StatisticsUtils.buildDefaultStatistics(columns.keySet());
             } else {
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
                 Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(

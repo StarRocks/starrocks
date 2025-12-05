@@ -25,27 +25,35 @@ from functools import wraps
 
 from nose.plugins.multiprocess import TimedOutException
 from cup import log
+import signal
 
 
-def timeout():
-    """
-    timeout exception
-    """
+def timeout(seconds):
 
     def receive(func):
-        """init decorator"""
-
         @wraps(func)
         def wrapper(*args, **kwargs):
-            """wrapper"""
 
+            def _handler(signum, frame):
+                raise TimeoutError(f"Timed out after {seconds}s")
+
+            old_handler = signal.getsignal(signal.SIGALRM)
             try:
+                signal.signal(signal.SIGALRM, _handler)
+                signal.alarm(seconds)
                 res = func(*args, **kwargs)
                 return res
+            except TimeoutError as e:
+                log.error(e)
+                raise e
             except TimedOutException as e:
+                log.error(f"TimedOutException: exceed the process-timeout limit! {e}")
                 raise AssertionError("TimedOutException: exceed the process-timeout limit!")
             except Exception as e:
                 raise e
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
 
         return wrapper
 

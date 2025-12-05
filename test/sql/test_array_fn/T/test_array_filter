@@ -1,4 +1,4 @@
--- name: test_array_filter
+-- name: test_array_filter @mac
 CREATE TABLE `t` (
   `k` bigint(20) NOT NULL COMMENT "",
   `arr_0` array<bigint(20)> NOT NULL COMMENT "",

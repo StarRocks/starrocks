@@ -35,13 +35,12 @@ import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CatalogRef;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.sql.ast.expression.TableRefPersist;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,7 +94,7 @@ public class BackupRestoreAnalyzer {
                             "No external catalog can be backed up");
                 }
 
-                backupStmt.getExternalCatalogRefs().stream().forEach(x -> x.analyzeForBackup());
+                validateExternalCatalogsForBackup(backupStmt.getExternalCatalogRefs());
                 return null;
             }
 
@@ -109,8 +108,8 @@ public class BackupRestoreAnalyzer {
             boolean allMV = backupStmt.allMV();
             boolean allView = backupStmt.allView();
 
-            Map<String, TableRefPersist> tblPartsMap = Maps.newTreeMap();
-            List<TableRefPersist> tableRefs = backupStmt.getTableRefs();
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
+            List<TableRef> tableRefs = backupStmt.getTableRefs();
             // There are several cases:
             // 1. Backup all table/mv/view without `ON` clause.
             // 2. Backup all table if specify `ALL` for table.
@@ -132,21 +131,19 @@ public class BackupRestoreAnalyzer {
                         continue;
                     }
 
-                    if (tableRefs.stream().anyMatch(tableRef -> tableRef.getName().getTbl().equalsIgnoreCase(tbl.getName()))) {
+                    if (tableRefs.stream().anyMatch(tableRef -> tableRef.getTableName().equalsIgnoreCase(tbl.getName()))) {
                         continue;
                     }
 
-                    TableName tableName = new TableName(dbName, tbl.getName());
-                    TableRefPersist tableRef = new TableRefPersist(tableName, null, null);
+                    TableRef tableRef = new TableRef(QualifiedName.of(List.of(dbName, tbl.getName())), null, null);
                     tableRefs.add(tableRef);
                 }
             }
 
-            Map<Long, TableRefPersist> tableIdToTableRefMap = Maps.newHashMap();
+            Map<Long, TableRef> tableIdToTableRefMap = Maps.newHashMap();
             Map<String, MaterializedView> mvNameMVMap = Maps.newHashMap();
-            for (TableRefPersist tableRef : tableRefs) {
-                analyzeTableRef(tableRef, dbName, database, tblPartsMap, context.getCurrentCatalog(),
-                        mvNameMVMap, tableIdToTableRefMap);
+            for (TableRef tableRef : tableRefs) {
+                analyzeTableRef(tableRef, database, tblPartsMap, mvNameMVMap, tableIdToTableRefMap);
                 if (tableRef.hasExplicitAlias()) {
                     throw new SemanticException("Can not set alias for table in Backup Stmt: " + tableRef,
                             tableRef.getPos());
@@ -167,7 +164,7 @@ public class BackupRestoreAnalyzer {
                 }
 
                 // reorder the tableRefs to ensure ref tables of materialized views are ahead of the materialized view
-                Map<String, TableRefPersist> newTableRefs =
+                Map<String, TableRef> newTableRefs =
                         reorderTableRefsWithMaterializedView(database, tblPartsMap, mvNameMVMap, tableIdToTableRefMap);
                 tableRefs.clear();
                 tableRefs.addAll(newTableRefs.values());
@@ -186,6 +183,21 @@ public class BackupRestoreAnalyzer {
             analyzeBackupProperties(backupStmt);
 
             return null;
+        }
+
+        private void validateExternalCatalogsForBackup(List<CatalogRef> catalogRefs) {
+            for (CatalogRef catalogRef : catalogRefs) {
+                String catalogName = catalogRef.getCatalogName();
+                if (catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Do not support Backup/Restore the entire default catalog");
+                }
+
+                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "external catalog " + catalogName + " does not existed.");
+                }
+            }
         }
 
         private void analyzeBackupProperties(BackupStmt backupStmt) {
@@ -226,13 +238,13 @@ public class BackupRestoreAnalyzer {
             }
         }
 
-        private Map<String, TableRefPersist> reorderTableRefsWithMaterializedView(
+        private Map<String, TableRef> reorderTableRefsWithMaterializedView(
                 Database database,
-                Map<String, TableRefPersist> tblPartsMap,
+                Map<String, TableRef> tblPartsMap,
                 Map<String, MaterializedView> mvPartsMap,
-                Map<Long, TableRefPersist> tableIdToTableRefMap) {
-            Map<String, TableRefPersist> orderedTableNameRefMap = Maps.newLinkedHashMap();
-            for (Map.Entry<String, TableRefPersist> e : tblPartsMap.entrySet()) {
+                Map<Long, TableRef> tableIdToTableRefMap) {
+            Map<String, TableRef> orderedTableNameRefMap = Maps.newLinkedHashMap();
+            for (Map.Entry<String, TableRef> e : tblPartsMap.entrySet()) {
                 collectTableRefAndDependencies(database, e.getKey(), e.getValue(), mvPartsMap, tableIdToTableRefMap,
                         orderedTableNameRefMap);
             }
@@ -241,10 +253,10 @@ public class BackupRestoreAnalyzer {
 
         private void collectTableRefAndDependencies(Database database,
                                                     String tableName,
-                                                    TableRefPersist tableRef,
+                                                    TableRef tableRef,
                                                     Map<String, MaterializedView> mvPartsMap,
-                                                    Map<Long, TableRefPersist> tableIdToTableRefMap,
-                                                    Map<String, TableRefPersist> result) {
+                                                    Map<Long, TableRef> tableIdToTableRefMap,
+                                                    Map<String, TableRef> result) {
             // table is already collected.
             if (result.containsKey(tableName)) {
                 return;
@@ -264,7 +276,7 @@ public class BackupRestoreAnalyzer {
                     if (dbOpt.get().getId() != database.getId()) {
                         // if the referred base table is not the same with the current database, skip it.
                         LOG.warn("The referred base table {} 's database is different from the materialized view {}, " +
-                                "skip backup it", baseTableInfo.getTableName(), tableRef.getName());
+                                "skip backup it", baseTableInfo.getTableName(), tableRef.getTableName());
                         continue;
                     }
                     Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
@@ -309,22 +321,22 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext context) {
-            List<TableRefPersist> tableRefs = restoreStmt.getTableRefs();
+            List<TableRef> tableRefs = restoreStmt.getTableRefs();
             Set<String> aliasSet = Sets.newHashSet();
-            Map<String, TableRefPersist> tblPartsMap = Maps.newTreeMap();
-            for (TableRefPersist tableRef : tableRefs) {
-                TableName tableName = tableRef.getName();
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap();
+            for (TableRef tableRef : tableRefs) {
+                String tableName = tableRef.getTableName();
 
-                if (!tblPartsMap.containsKey(tableName.getTbl())) {
-                    tblPartsMap.put(tableName.getTbl(), tableRef);
+                if (!tblPartsMap.containsKey(tableName)) {
+                    tblPartsMap.put(tableName, tableRef);
                 } else {
-                    throw new SemanticException("Duplicated table: " + tableName.getTbl(), tableRef.getPos());
+                    throw new SemanticException("Duplicated table: " + tableName, tableRef.getPos());
                 }
 
-                aliasSet.add(tableRef.getName().getTbl());
+                aliasSet.add(tableName);
             }
 
-            for (TableRefPersist tblRef : tableRefs) {
+            for (TableRef tblRef : tableRefs) {
                 if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
                     throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias(), tblRef.getPos());
                 }
@@ -363,7 +375,7 @@ public class BackupRestoreAnalyzer {
                         iterator.remove();
                         break;
                     case PROP_REPLICATION_NUM:
-                        replicationNum = parseInt(value);
+                        parseInt(value);
                         iterator.remove();
                         break;
                     case PROP_BACKUP_TIMESTAMP:
@@ -385,7 +397,6 @@ public class BackupRestoreAnalyzer {
             }
             restoreStmt.setTimeoutMs(timeoutMs);
             restoreStmt.setAllowLoad(allowLoad);
-            restoreStmt.setReplicationNum(replicationNum);
             restoreStmt.setMetaVersion(metaVersion);
             restoreStmt.setStarrocksMetaVersion(starrocksMetaVersion);
             if (null == backupTimestamp) {
@@ -446,22 +457,20 @@ public class BackupRestoreAnalyzer {
         }
     }
 
-    public static void analyzeTableRef(TableRefPersist tableRef, String dbName, Database db,
-                                       Map<String, TableRefPersist> tblPartsMap, String catalog,
+    public static void analyzeTableRef(TableRef tableRef, Database db,
+                                       Map<String, TableRef> tblPartsMap,
                                        Map<String, MaterializedView> tblMaterializedViewMap,
-                                       Map<Long, TableRefPersist> tableIdToTableRefMap) {
-        TableName tableName = tableRef.getName();
-        tableName.setCatalog(catalog);
-        tableName.setDb(dbName);
+                                       Map<Long, TableRef> tableIdToTableRefMap) {
 
-        PartitionNames partitionNames = tableRef.getPartitionNames();
-        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
+        String tableName = tableRef.getTableName();
+
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         if (null == tbl) {
-            throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName.getTbl()));
+            throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName));
         }
 
         String alias = tableRef.getAlias();
-        if (!tableName.getTbl().equalsIgnoreCase(alias)) {
+        if (!tableName.equalsIgnoreCase(alias)) {
             Table tblAlias = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), alias);
             if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -484,25 +493,26 @@ public class BackupRestoreAnalyzer {
             }
         }
 
-        if (partitionNames != null) {
+        if (tableRef.getPartitionRef() != null) {
+            List<String> partitionNames = tableRef.getPartitionRef().getPartitionNames();
             if (!tbl.isNativeTableOrMaterializedView()) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
             }
             OlapTable olapTbl = (OlapTable) tbl;
-            for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
+            for (String partName : partitionNames) {
                 Partition partition = olapTbl.getPartition(partName);
                 if (partition == null) {
                     throw new SemanticException(
-                            "partition[" + partName + "] does not exist  in table" + tableName.getTbl(),
-                            tableRef.getPartitionNames().getPos());
+                            "partition[" + partName + "] does not exist  in table" + tableName,
+                            tableRef.getPartitionRef().getPos());
                 }
             }
         }
 
-        if (!tblPartsMap.containsKey(tableName.getTbl())) {
-            tblPartsMap.put(tableName.getTbl(), tableRef);
+        if (!tblPartsMap.containsKey(tableName)) {
+            tblPartsMap.put(tableName, tableRef);
         } else {
-            throw new SemanticException("Duplicated table: " + tableName.getTbl(), tableName.getPos());
+            throw new SemanticException("Duplicated table: " + tableName, tableRef.getPos());
         }
     }
 

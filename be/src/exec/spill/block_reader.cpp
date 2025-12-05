@@ -25,18 +25,31 @@ namespace starrocks::spill {
 // if at_least_length is not set and the actual length read is not equal to expected_length, an error will be returned.
 StatusOr<int64_t> try_to_read_from_file(io::InputStreamWrapper* readable, void* dst, int64_t expected_length,
                                         int64_t at_least_length = 0) {
-    ASSIGN_OR_RETURN(auto read_len, readable->read(dst, expected_length));
-    RETURN_IF(read_len == 0, Status::EndOfFile("no more data to read"));
-    if (at_least_length > 0) {
-        RETURN_IF(read_len < at_least_length,
-                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], at least[{}]", read_len,
-                                                    at_least_length)));
-    } else {
-        RETURN_IF(read_len != expected_length,
-                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], expected[{}]", read_len,
-                                                    expected_length)));
+    char* ptr = static_cast<char*>(dst);
+    int64_t left = expected_length;
+    int64_t total_read = 0;
+
+    while (left > 0) {
+        ASSIGN_OR_RETURN(auto read_len, readable->read(ptr, left));
+        if (read_len == 0) {
+            break;
+        }
+        ptr += read_len;
+        total_read += read_len;
+        left -= read_len;
     }
-    return read_len;
+
+    RETURN_IF(total_read == 0, Status::EndOfFile("no more data to read"));
+    if (at_least_length > 0) {
+        RETURN_IF(total_read < at_least_length,
+                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], at least[{}]",
+                                                    total_read, at_least_length)));
+    } else {
+        RETURN_IF(total_read != expected_length,
+                  Status::InternalError(fmt::format("block's length is mismatched, actual[{}], expected[{}]",
+                                                    total_read, expected_length)));
+    }
+    return total_read;
 }
 
 Status BlockReader::read_fully(void* data, int64_t count) {

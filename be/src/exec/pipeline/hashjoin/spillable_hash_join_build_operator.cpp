@@ -18,12 +18,11 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/hash_join_node.h"
 #include "exec/hash_joiner.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
@@ -33,10 +32,12 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
-#include "util/bit_util.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
+
+DEFINE_FAIL_POINT(spill_flush_set_invalid_status);
 
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
@@ -106,6 +107,10 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
+                    FAIL_POINT_TRIGGER_EXECUTE(spill_flush_set_invalid_status, {
+                        _join_builder->spiller()->update_spilled_task_status(
+                                Status::InternalError("spill flush failed"));
+                    });
                     return Status::OK();
                 },
                 state, TRACKER_WITH_SPILLER_GUARD(state, spiller));

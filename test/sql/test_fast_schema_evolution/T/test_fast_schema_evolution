@@ -250,6 +250,7 @@ CREATE MATERIALIZED VIEW mv1
             k2
         FROM tab1;
 function: wait_alter_table_finish("ROLLUP", 8)
+function: wait_table_state_normal("test_fast_schema_evolution_and_mv", "tab1")
 
 ALTER TABLE tab1 DROP COLUMN v5;
 function: wait_alter_table_finish()
@@ -266,6 +267,7 @@ CREATE MATERIALIZED VIEW mv2
             k2
         FROM tab1;
 function: wait_alter_table_finish("ROLLUP", 8)
+function: wait_table_state_normal("test_fast_schema_evolution_and_mv", "tab1")
 
 select * from tab1;
 
@@ -351,13 +353,17 @@ select * from tab1;
 
 alter table tab1 add rollup r1 (k2,v2,v1);
 function: wait_alter_table_finish("ROLLUP", 8)
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
 
 alter table tab1 add column v6 bigint default "1";
 function: wait_alter_table_finish()
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
+
 select * from tab1;
 
 alter table tab1 drop column v2;
 function: wait_alter_table_finish("ROLLUP", 8)
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
 
 select * from tab1;
 

@@ -20,8 +20,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -31,6 +35,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
@@ -42,7 +47,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 public class LakeRollupJobTest {
     private static final String DB = "db_for_lake_mv";
@@ -60,6 +64,12 @@ public class LakeRollupJobTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
+        new MockUp<MaterializedViewHandler>() {
+            @Mock protected void runAfterCatalogReady() {
+                System.out.println("Mocked MaterializedViewHandler.runAfterCatalogReady() called");
+            }
+        };
+
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
 
@@ -144,12 +154,11 @@ public class LakeRollupJobTest {
         CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
         GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
         Map<Long, AlterJobV2> alterJobV2Map = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
-        Assertions.assertEquals(1, alterJobV2Map.size());
-        List<AlterJobV2> alterJobV2List = alterJobV2Map.values().stream().collect(Collectors.toList());
-        LakeRollupJob job = (LakeRollupJob) alterJobV2List.get(0);
+        List<AlterJobV2> alterJobV2List = new ArrayList<>(alterJobV2Map.values());
         // Disable the execution of job in background thread
         GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
-        return job;
+        Assertions.assertEquals(1, alterJobV2List.size());
+        return (LakeRollupJob) alterJobV2List.get(0);
     }
 
     @AfterAll
@@ -194,6 +203,19 @@ public class LakeRollupJobTest {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
                 batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        // Mock Utils.sendAggregatePublishVersionRequest to avoid RPC calls in test
+        // environment
+        new MockUp<Utils>() {
+            @Mock
+            public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource,
+                    Map<Long, Double> compactionScores,
+                    Map<Long, Long> tabletRowNum)
+                    throws NoAliveBackendException, RpcException {
+                // Do nothing, just return successfully
             }
         };
 

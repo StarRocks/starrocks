@@ -36,6 +36,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -84,6 +85,7 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionMetricRegistry;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -97,7 +99,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -172,6 +173,34 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+    /**
+     * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
+     * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
+     * NOTE:
+     * This metric may not accurately reflect the lock held time under high contention, because the metric will
+     * be updated once the wait time exceeds the threshold, but the held time may continue to increase until the
+     * owner completes its operation and releases the lock.
+     * The good thing is that this metric can still be updated even deadlock happens.
+     * Sample Prometheus alert rules in runbook:
+     * - alert: SlowLockHeldTimeHigh
+     *   expr: starrocks_fe_slow_lock_held_time_ms{quantile="0.99"} > 300000
+     *   for: 5m
+     */
+    public static final Histogram HISTO_SLOW_LOCK_HELD_TIME_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_held_time_ms"),
+                    SlideWindowHistogramCreator.INSTANCE);
+    /**
+     * Histogram tracking the lock wait time (in milliseconds) when slow locks are detected.
+     * Uses a 1-minute sliding time window reservoir to track recent slow lock behavior.
+     * Updated when lock wait time exceeds the slow_lock_threshold_ms configuration.
+     * NOTE:
+     * This metric can accurately track the lock wait time. However, this metric can't be updated
+     * when deadlock happens, hence it can't be used to detect deadlock situations.
+     */
+    public static final Histogram HISTO_SLOW_LOCK_WAIT_TIME_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_wait_time_ms"),
+                    SlideWindowHistogramCreator.INSTANCE);
+
     public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
@@ -211,10 +240,6 @@ public final class MetricRepo {
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
 
-    public static Histogram HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY;
-    public static Histogram HISTO_TXN_FINISH_PUBLISH_LATENCY;
-    public static Histogram HISTO_TXN_PUBLISH_TOTAL_LATENCY;
-
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
     public static GaugeMetricImpl<Double> GAUGE_REQUEST_PER_SECOND;
@@ -241,12 +266,30 @@ public final class MetricRepo {
     public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
     public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
 
+    public static Histogram HISTO_CACHE_MISS_RATIO;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_AVERAGE;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P50;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P90;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P99;
+
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
+
+    /**
+     * A creator for SlideWindowHistogram, which uses SlidingTimeWindowArrayReservoir as reservoir.
+     */
+    private static class SlideWindowHistogramCreator implements MetricRegistry.MetricSupplier<Histogram> {
+        private static final SlideWindowHistogramCreator INSTANCE = new SlideWindowHistogramCreator();
+
+        @Override
+        public Histogram newMetric() {
+            return new Histogram(new SlidingTimeWindowArrayReservoir(1, TimeUnit.MINUTES));
+        }
+    }
 
     public static synchronized void init() {
         if (hasInit) {
@@ -467,6 +510,32 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
 
+        HISTO_CACHE_MISS_RATIO = METRIC_REGISTER.histogram(MetricRegistry.name("query", "cache_miss_ratio", "permille"));
+
+        GAUGE_CACHE_MISS_RATIO_AVERAGE =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "average of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_AVERAGE.addLabel(new MetricLabel("type", "average"));
+        GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_AVERAGE);
+
+        GAUGE_CACHE_MISS_RATIO_P50 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p50 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P50.addLabel(new MetricLabel("type", "50_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P50.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P50);
+
+        GAUGE_CACHE_MISS_RATIO_P90 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p90 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P90.addLabel(new MetricLabel("type", "90_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P90.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P90);
+
+        GAUGE_CACHE_MISS_RATIO_P99 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p99 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P99.addLabel(new MetricLabel("type", "99_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P99.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P99);
+
         GAUGE_SAFE_MODE = new GaugeMetricImpl<>("safe_mode", MetricUnit.NOUNIT, "safe mode flag");
         GAUGE_SAFE_MODE.addLabel(new MetricLabel("type", "safe_mode"));
         GAUGE_SAFE_MODE.setValue(0);
@@ -644,13 +713,6 @@ public final class MetricRepo {
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
-
-        HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "wait_for_publish", "latency", "ms"));
-        HISTO_TXN_FINISH_PUBLISH_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "finish_publish", "latency", "ms"));
-        HISTO_TXN_PUBLISH_TOTAL_LATENCY = METRIC_REGISTER.histogram(
-                MetricRegistry.name("txn", "publish_total", "latency", "ms"));
 
         // init system metrics
         initSystemMetrics();
@@ -1038,8 +1100,8 @@ public final class MetricRepo {
         HttpMetricRegistry.getInstance().visit(visitor);
 
 
-        //collect connections for per user
-        collectUserConnMetrics(visitor);
+        // collect connection metrics
+        collectConnectionMetrics(visitor, requestParams.isCollectUserConnMetrics());
 
         // collect runnning txns of per db
         collectDbRunningTxnMetrics(visitor);
@@ -1052,6 +1114,8 @@ public final class MetricRepo {
 
         // collect merge commit metrics
         MergeCommitMetricRegistry.getInstance().visit(visitor);
+
+        TransactionMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();
@@ -1114,13 +1178,17 @@ public final class MetricRepo {
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
+        GaugeMetricImpl<Long> totalSize = new GaugeMetricImpl<>(
+                "total_data_size_bytes", MetricUnit.BYTES, "total size of all databases approximately in bytes");
         int dbNum = 0;
+        long dbDataSizeTotal = 0;
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }
             dbNum++;
+            dbDataSizeTotal += db.usedDataQuotaBytes.get();
             GaugeMetricImpl<Integer> tableNum = new GaugeMetricImpl<>(
                     "table_num", MetricUnit.OPERATIONS, "count of table");
             tableNum.setValue(db.getTableNumber());
@@ -1138,7 +1206,9 @@ public final class MetricRepo {
             visitor.visit(dbSizeBytesTotal);
         }
         databaseNum.setValue(dbNum);
+        totalSize.setValue(dbDataSizeTotal);
         visitor.visit(databaseNum);
+        visitor.visit(totalSize);
     }
 
     private static void collectBrpcMetrics(MetricVisitor visitor) {
@@ -1199,19 +1269,21 @@ public final class MetricRepo {
         }
     }
 
-    // collect connections of per user
-    private static void collectUserConnMetrics(MetricVisitor visitor) {
-
-        Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
-
-        userConnectionMap.forEach((username, connValue) -> {
-            GaugeMetricImpl<Integer> metricConnect =
-                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
-                        "total connection");
-            metricConnect.addLabel(new MetricLabel("user", username));
-            metricConnect.setValue(connValue.get());
-            visitor.visit(metricConnect);
-        });
+    private static void collectConnectionMetrics(MetricVisitor visitor, boolean collectUserConnMetrics) {
+        if (collectUserConnMetrics) {
+            ExecuteEnv.getInstance().getScheduler().getUserConnectionMap().forEach((user, count) -> {
+                GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                        MetricUnit.CONNECTIONS, "total connection");
+                metric.addLabel(new MetricLabel("user", user));
+                metric.setValue(count.get());
+                visitor.visit(metric);
+            });
+        } else {
+            GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                    MetricUnit.CONNECTIONS, "total connections");
+            metric.setValue(ExecuteEnv.getInstance().getScheduler().getConnectionNum());
+            visitor.visit(metric);
+        }
     }
 
     // collect running txns of per db

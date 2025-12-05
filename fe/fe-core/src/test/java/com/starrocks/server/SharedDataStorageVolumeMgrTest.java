@@ -17,7 +17,6 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.gson.stream.JsonReader;
 import com.staros.proto.FileStoreInfo;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -29,7 +28,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -52,8 +50,10 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -852,10 +852,10 @@ public class SharedDataStorageVolumeMgrTest {
 
                 // Schema
                 List<Column> columns = Lists.newArrayList();
-                Column k1 = new Column("k1", Type.INT, true, null, "", "");
+                Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
                 columns.add(k1);
-                columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-                columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+                columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+                columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
                 // Tablet
                 Tablet tablet1 = new LakeTablet(tablet1Id);

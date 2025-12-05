@@ -19,7 +19,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -34,6 +33,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.DefaultColumnStats;
 import com.starrocks.statistic.base.MultiColumnStats;
+import com.starrocks.type.DateType;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
@@ -147,7 +147,7 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testColumnStats() {
-        DefaultColumnStats defaultColumnStats = new DefaultColumnStats("c1", Type.DATE, 1);
+        DefaultColumnStats defaultColumnStats = new DefaultColumnStats("c1", DateType.DATE, 1);
         Assertions.assertEquals(1, defaultColumnStats.getColumnId());
         Assertions.assertEquals("", defaultColumnStats.getMax());
         Assertions.assertEquals("", defaultColumnStats.getMin());

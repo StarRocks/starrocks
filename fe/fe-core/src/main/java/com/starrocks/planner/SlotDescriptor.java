@@ -39,13 +39,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnStats;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TSlotDescriptor;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.TypeSerializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -85,7 +88,6 @@ public class SlotDescriptor {
     private int nullIndicatorBit; // index within byte
     private int slotIdx;          // index within tuple struct
 
-    private ColumnStats stats;  // only set if 'column' isn't set
     // used for load to get more information of varchar and decimal
     // and for query result set metadata
     private Type originType;
@@ -119,7 +121,6 @@ public class SlotDescriptor {
         this.column = src.column;
         this.isNullable = src.isNullable;
         this.byteSize = src.byteSize;
-        this.stats = src.stats;
         this.type = src.type;
     }
 
@@ -163,14 +164,14 @@ public class SlotDescriptor {
         if (this.originType.isScalarType()) {
             ScalarType scalarType = (ScalarType) this.originType;
             if (this.originType.isDecimalV3()) {
-                this.type = ScalarType.createDecimalV3Type(
+                this.type = TypeFactory.createDecimalV3Type(
                         scalarType.getPrimitiveType(),
                         scalarType.getScalarPrecision(),
                         scalarType.getScalarScale());
             } else if (this.originType.isVarchar() && FeConstants.setLengthForVarchar) {
-                this.type = ScalarType.createVarcharType(scalarType.getLength());
+                this.type = TypeFactory.createVarcharType(scalarType.getLength());
             } else {
-                this.type = ScalarType.createType(this.originType.getPrimitiveType());
+                this.type = TypeFactory.createType(this.originType.getPrimitiveType());
             }
         } else {
             this.type = this.originType.clone();
@@ -207,21 +208,6 @@ public class SlotDescriptor {
         }
     }
 
-    public void setStats(ColumnStats stats) {
-        this.stats = stats;
-    }
-
-    public ColumnStats getStats() {
-        if (stats == null) {
-            if (column != null) {
-                stats = column.getStats();
-            } else {
-                stats = new ColumnStats();
-            }
-        }
-        return stats;
-    }
-
     public String getLabel() {
         return label_;
     }
@@ -242,10 +228,9 @@ public class SlotDescriptor {
      * Initializes a slot by setting its source expression information
      */
     public void initFromExpr(Expr expr) {
-        setLabel(expr.toSql());
+        setLabel(ExprToSql.toSql(expr));
         Preconditions.checkState(sourceExprs_.isEmpty());
         setSourceExpr(expr);
-        setStats(ColumnStats.fromExpr(expr));
         Preconditions.checkState(expr.getType().isValid());
         setType(expr.getType());
         // Vector query engine need the nullable info
@@ -264,10 +249,10 @@ public class SlotDescriptor {
         tSlotDescriptor.setId(id.asInt());
         tSlotDescriptor.setParent(parent.getId().asInt());
         if (originType != null) {
-            tSlotDescriptor.setSlotType(originType.toThrift());
+            tSlotDescriptor.setSlotType(TypeSerializer.toThrift(originType));
         } else {
-            type = type.isNull() ? ScalarType.BOOLEAN : type;
-            tSlotDescriptor.setSlotType(type.toThrift());
+            type = type.isNull() ? BooleanType.BOOLEAN : type;
+            tSlotDescriptor.setSlotType(TypeSerializer.toThrift(type));
             if (column != null) {
                 LOG.debug("column id:{}, column unique id:{}",
                         column.getColumnId(), column.getUniqueId());

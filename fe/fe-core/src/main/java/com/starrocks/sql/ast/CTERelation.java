@@ -14,12 +14,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 public class CTERelation extends Relation {
     private final int cteMouldId;
@@ -37,7 +35,7 @@ public class CTERelation extends Relation {
                        QueryStatement cteQueryStatement, NodePosition pos) {
         super(pos);
         this.cteMouldId = cteMouldId;
-        this.name = normalizeName(name);
+        this.name = name;
         this.explicitColumnNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
         this.refs = 0;

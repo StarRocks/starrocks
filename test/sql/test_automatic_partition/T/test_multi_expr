@@ -5,6 +5,7 @@ show partitions from t;
 select * from t;
 
 -- name: test_multi_list_function
+ADMIN SET FRONTEND CONFIG ("query_detail_explain_level" = "NORMAL");
 create table t(k1 int, k2 datetime, v int) partition by k1,date_trunc('day', k2);
 insert into t values(1,'2020-01-01',1);
 insert into t values(1,'2020-01-02',1);

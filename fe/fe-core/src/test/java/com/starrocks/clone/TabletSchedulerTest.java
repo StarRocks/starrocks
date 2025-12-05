@@ -36,7 +36,6 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
@@ -64,6 +63,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -432,7 +432,7 @@ public class TabletSchedulerTest {
                 .setShortKeyColumnCount((short) 1)
                 .setSchemaHash(-1)
                 .setStorageType(TStorageType.COLUMN)
-                .addColumn(new Column("k1", Type.INT))
+                .addColumn(new Column("k1", IntegerType.INT))
                 .build().toTabletSchema();
 
         CreateReplicaTask createReplicaTask = CreateReplicaTask.newBuilder()
@@ -625,5 +625,60 @@ public class TabletSchedulerTest {
         ExceptionChecker.expectThrowsWithMsg(SchedException.class,
                 "unable to delete any colocate redundant replicas. replicas: 10001:-1/-1/-1/0:NORMAL:NIL,, backend set: [10001]",
                 () -> Deencapsulation.invoke(tabletScheduler, "handleColocateRedundant", ctx));
+    }
+
+    @Test
+    public void testResetDecommStatForSingleReplicaTabletWithNullTablet() {
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        long beId = 10001L;
+
+        // Create a replica with DECOMMISSION state
+        Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
+        List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
+
+        // Create a TabletSchedCtx but don't set the tablet (getTablet() will return null)
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
+                10002L, 10003L, 10004L, 10005L, tabletId, System.currentTimeMillis());
+        ctx.setDecommissionedReplica(decommissionedReplica);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return tabletScheduler;
+            }
+        };
+
+        // Add the context to scheduler so getTabletSchedCtx can find it
+        Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+
+        // This should not throw NullPointerException even though ctx.getTablet() returns null
+        TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+    }
+
+    @Test
+    public void testResetDecommStatForSingleReplicaTabletWithNullTabletScheduler() {
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        long beId = 10001L;
+
+        // Create a replica with DECOMMISSION state
+        Replica decommissionedReplica = new Replica(replicaId, beId, -1, Replica.ReplicaState.DECOMMISSION);
+        List<Replica> replicas = Lists.newArrayList(decommissionedReplica);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletScheduler getTabletScheduler() {
+                return null;
+            }
+        };
+
+        // This should not throw NullPointerException even though getTabletScheduler() returns null
+        TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+
+        // If we reach here without exception, the test passes
+        Assertions.assertTrue(true);
     }
 }

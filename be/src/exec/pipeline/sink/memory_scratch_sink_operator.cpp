@@ -59,7 +59,7 @@ bool MemoryScratchSinkOperator::pending_finish() const {
     // After set_finishing, there may be data that has not been sent.
     // We need to ensure that all remaining data are put into the queue.
     const_cast<MemoryScratchSinkOperator*>(this)->try_to_put_sentinel();
-    return !(_is_finished && _pending_result == nullptr && _has_put_sentinel);
+    return !(_is_finished && ((_pending_result == nullptr && _has_put_sentinel) || _queue->is_shutdown()));
 }
 
 Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {

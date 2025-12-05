@@ -346,6 +346,7 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testProjectFilterRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String queryStr = "select 1 as b, MIN(v1) from t0 having (b + 1) != b;";
         String explainString = getFragmentPlan(queryStr);
         Assertions.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
@@ -387,6 +388,16 @@ public class ScanTest extends PlanTestBase {
         ExecPlan plan = getExecPlan(sql);
         Assertions.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaDb().equals("information_schema"));
         Assertions.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaTable().equals("columns"));
+    }
+
+    @Test
+    public void testSchemaScanWithLikePattern() throws Exception {
+        String sql = "select column_name from information_schema.columns " +
+                "where table_schema like 'test_%' and table_name like 'my_table%'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("test_%", scanNode.getSchemaDb());
+        Assertions.assertEquals("my_table%", scanNode.getSchemaTable());
     }
 
     @Test
@@ -481,6 +492,7 @@ public class ScanTest extends PlanTestBase {
     @Test
     public void testPruneColumnTest() throws Exception {
         connectContext.getSessionVariable().setEnableCountStarOptimization(true);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String[] sqlString = {
                 "select count(*) from lineitem_partition",
                 // for olap, partition key is not partition column.
@@ -525,5 +537,53 @@ public class ScanTest extends PlanTestBase {
                 "     <id 9> : min_v2\n" +
                 "     <id 10> : count_v3\n" +
                 "     <id 11> : rows_v1");
+    }
+
+    @Test
+    public void testPruneCTE() throws Exception {
+        String sql = "select \n"
+                + "*\n"
+                + "from t0 a \n"
+                + "where 1=1\n"
+                + "and v1='2025-10-21'\n"
+                + "and (\n"
+                + "        a.v2 IN (SELECT '123')\n"
+                + "        or\n"
+                + "        a.v3 IN (SELECT '123')\n"
+                + ");\n";
+
+        try {
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+            FeConstants.enablePruneEmptyOutputScan = true;
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "0:EMPTYSET");
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = false;
+        }
+    }
+
+    @Test  
+    public void testMetaScanWithCount1() throws Exception {
+        String sql = "select count(1) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: sum(rows_v1)");
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id");
+    }
+
+    @Test
+    public void testMetaScanCountStarWithPartition() throws Exception {
+        {
+            String sql = "select cast(count(1) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
+        }
+
+        {
+            String sql = "select cast(count(*) as bigint) from lineitem_partition partitions(p1993)[_META_]";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "rows_L_ORDERKEY", "sum(rows_L_ORDERKEY)");
+        }
     }
 }

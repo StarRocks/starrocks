@@ -48,7 +48,6 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
@@ -80,6 +79,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -214,9 +214,9 @@ public class SparkLoadJobTest {
             Assertions.assertEquals(-1L, sparkLoadJob.getEtlStartTimestamp());
 
             // check update spark resource properties
-            Assertions.assertEquals(broker, bulkLoadJob.brokerDesc.getName());
-            Assertions.assertEquals("user0", bulkLoadJob.brokerDesc.getProperties().get("username"));
-            Assertions.assertEquals("password0", bulkLoadJob.brokerDesc.getProperties().get("password"));
+            Assertions.assertEquals(broker, bulkLoadJob.brokerPersistInfo.getName());
+            Assertions.assertEquals("user0", bulkLoadJob.brokerPersistInfo.getProperties().get("username"));
+            Assertions.assertEquals("password0", bulkLoadJob.brokerPersistInfo.getProperties().get("password"));
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
             Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
             Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
@@ -287,7 +287,8 @@ public class SparkLoadJobTest {
         Deencapsulation.setField(job, "etlOutputPath", etlOutputPath);
         Deencapsulation.setField(job, "sparkResource", resource);
         BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
-        job.brokerDesc = brokerDesc;
+        job.brokerPersistInfo =
+                new com.starrocks.persist.BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties());
         return job;
     }
 
@@ -398,7 +399,7 @@ public class SparkLoadJobTest {
                 result = partitionInfo;
 
                 table.getSchemaByIndexId(Long.valueOf(12));
-                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
@@ -501,7 +502,7 @@ public class SparkLoadJobTest {
                 result = partitionInfo;
 
                 table.getSchemaByIndexId(Long.valueOf(12));
-                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);

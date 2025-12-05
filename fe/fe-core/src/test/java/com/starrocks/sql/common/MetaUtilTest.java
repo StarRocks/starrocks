@@ -21,13 +21,14 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -103,9 +104,9 @@ public class MetaUtilTest {
 
     @Test
     public void testGetColumnsByColumnIds() {
-        Column columnA = new Column("a", Type.INT);
-        Column columnB = new Column("b", Type.STRING);
-        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
+        Column columnA = new Column("a", IntegerType.INT);
+        Column columnB = new Column("b", StringType.STRING);
+        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", IntegerType.INT))));
         Map<ColumnId, Column> schema = MetaUtils.buildIdToColumn(Lists.newArrayList(columnA, columnB, columnC));
 
         Assertions.assertEquals(columnA,
@@ -118,9 +119,9 @@ public class MetaUtilTest {
 
     @Test
     public void testGetColumnNamesByColumnIds() {
-        Column columnA = new Column("a", Type.INT);
-        Column columnB = new Column("b", Type.STRING);
-        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
+        Column columnA = new Column("a", IntegerType.INT);
+        Column columnB = new Column("b", StringType.STRING);
+        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", IntegerType.INT))));
         Map<ColumnId, Column> schema = MetaUtils.buildIdToColumn(Lists.newArrayList(columnA, columnB, columnC));
 
         Assertions.assertEquals("a",
@@ -133,9 +134,9 @@ public class MetaUtilTest {
 
     @Test
     public void testGetColumnIdsByColumnNames() {
-        Column columnA = new Column("a", Type.INT);
-        Column columnB = new Column("b", Type.STRING);
-        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", Type.INT))));
+        Column columnA = new Column("a", IntegerType.INT);
+        Column columnB = new Column("b", StringType.STRING);
+        Column columnC = new Column("c", new StructType(Lists.newArrayList(new StructField("f1", IntegerType.INT))));
 
         OlapTable olapTable = new OlapTable(1111L, "t1", Lists.newArrayList(columnA, columnB, columnC),
                 KeysType.AGG_KEYS, null, null);

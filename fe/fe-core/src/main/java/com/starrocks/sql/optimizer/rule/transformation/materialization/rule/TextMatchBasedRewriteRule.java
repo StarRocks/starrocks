@@ -34,6 +34,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -257,9 +259,9 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
                 // if mv is partitioned, and some partitions are outdated, then compensate it
-                final Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+                final PCellSortedSet partitionNamesToRefresh = mvUpdateInfo.getMVToRefreshPCells();
                 OptExpression mvCompensatePlan = null;
-                if (CollectionUtils.isEmpty(partitionNamesToRefresh)) {
+                if (PCellUtils.isEmpty(partitionNamesToRefresh)) {
                     mvCompensatePlan = OptExpression.create(mvScanOperator);
                 } else {
                     // if mv's query rewrite consistency mode is FORCE_MV, then do not compensate it because its

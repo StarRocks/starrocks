@@ -34,8 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.catalog.Type.VARCHAR;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.VarcharType.VARCHAR;
 
 /**
  * Test cases for IcebergConnectorScanRangeSource focusing on initBucketInfo and extractBucketId methods
@@ -75,7 +75,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
 
         IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(bucketProperties),
-                PartitionIdGenerator.of());
+                PartitionIdGenerator.of(), false, false);
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles());
         Assertions.assertEquals(2, fileScanTasks.size());
@@ -106,7 +106,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
 
         IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(oneBucketProperties),
-                PartitionIdGenerator.of());
+                PartitionIdGenerator.of(), false, false);
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles());
         Assertions.assertEquals(2, fileScanTasks.size());
@@ -140,10 +140,10 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         PartitionIdGenerator partitionIdGenerator = PartitionIdGenerator.of();
         IcebergConnectorScanRangeSource scanRangeSource1 = new IcebergConnectorScanRangeSource(
                 icebergTable, RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor,
-                Optional.of(oneBucketProperties), partitionIdGenerator);
+                Optional.of(oneBucketProperties), partitionIdGenerator, false, false);
         IcebergConnectorScanRangeSource scanRangeSource2 = new IcebergConnectorScanRangeSource(
                 icebergTable, RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor,
-                Optional.of(oneBucketProperties), partitionIdGenerator);
+                Optional.of(oneBucketProperties), partitionIdGenerator, false, false);
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTable2Bucket.newScan().planFiles());
         Assertions.assertFalse(fileScanTasks.isEmpty());
         for (FileScanTask fileScanTask : fileScanTasks) {

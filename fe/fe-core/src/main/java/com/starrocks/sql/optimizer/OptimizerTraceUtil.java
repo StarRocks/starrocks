@@ -87,6 +87,14 @@ public class OptimizerTraceUtil {
         });
     }
 
+    public static void logMVRewrite1(ConnectContext connectContext, String mvName, String format, Object... objects) {
+        if (connectContext == null || connectContext.getSessionVariable() == null ||
+                connectContext.getSessionVariable().getTraceLogLevel() < 1) {
+            return;
+        }
+        logMVRewrite(mvName, format, objects);
+    }
+
     public static void logMVRewrite(String mvName, String format, Object... objects) {
         Tracers.log(Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, objects).getMessage();
@@ -120,13 +128,18 @@ public class OptimizerTraceUtil {
     }
 
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
+        logMVRewrite(mvContext, null, format, object);
+    }
+
+    public static void logMVRewrite(MaterializationContext mvContext, Rule rule, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
+                    rule == null ? "" : rule.type().name(),
                     mvContext.getOptimizerContext().isInMemoPhase(),
                     mvContext.getMv().getName(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE] [InMemo:{}] [{}] {}",
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] [{}] {}",
                     args).getMessage();
         });
     }
@@ -149,7 +162,7 @@ public class OptimizerTraceUtil {
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    rule.type().name(),
+                    rule == null ? "" : rule.type().name(),
                     optimizerContext.isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };

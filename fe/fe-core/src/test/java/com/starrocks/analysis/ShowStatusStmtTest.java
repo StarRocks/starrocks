@@ -19,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowStatusStmt;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -72,7 +73,7 @@ public class ShowStatusStmtTest {
         {
             ShowStatusStmt stmt = (ShowStatusStmt) SqlParser.parse("SHOW STATUS where abc=123", 32).get(0);
             Assertions.assertNull(stmt.getPattern());
-            Assertions.assertEquals("abc = 123", stmt.getWhere().toSql());
+            Assertions.assertEquals("abc = 123", ExprToSql.toSql(stmt.getWhere()));
         }
 
         {

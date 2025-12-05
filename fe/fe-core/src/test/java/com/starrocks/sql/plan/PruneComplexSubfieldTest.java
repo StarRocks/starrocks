@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -113,6 +114,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
+        FeConstants.runningUnitTest = false;
     }
 
     @BeforeEach
@@ -1256,10 +1258,10 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
 
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  9:Project\n" +
-                "  |  <slot 13> : 13: array_slice\n" +
+                "  |  <slot 13> : 13: ARRAY_SLICE\n" +
                 "  |  <slot 14> : date(20: expr)\n" +
                 "  |  <slot 16> : coalesce(array_map(<slot 15> -> [<slot 15>[1],<slot 15>[2]], " +
-                "13: array_slice), CAST([[]] AS ARRAY<ARRAY<VARCHAR(65533)>>))\n" +
+                "13: ARRAY_SLICE), CAST([[]] AS ARRAY<ARRAY<VARCHAR(65533)>>))\n" +
                 "  |  <slot 17> : 20: expr\n" +
                 "  |  \n" +
                 "  8:HASH JOIN");

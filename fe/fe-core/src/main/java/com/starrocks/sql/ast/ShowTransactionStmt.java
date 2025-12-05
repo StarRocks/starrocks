@@ -34,7 +34,7 @@ public class ShowTransactionStmt extends ShowStmt {
 
     public ShowTransactionStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
         this.whereClause = whereClause;
     }
 

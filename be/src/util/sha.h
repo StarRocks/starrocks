@@ -27,11 +27,16 @@ public:
     void update(const void* data, size_t length);
     void digest();
 
-    const std::string& hex() const { return _hex; }
+    // Get hex-encoded result (56 characters for SHA224)
+    std::string hex() const;
+
+    // Get raw binary result (28 bytes for SHA224)
+    const unsigned char* binary() const { return _hash; }
+    size_t binary_size() const { return SHA224_DIGEST_LENGTH; }
 
 private:
     SHA256_CTX _sha224_ctx;
-    std::string _hex;
+    unsigned char _hash[SHA224_DIGEST_LENGTH];
 };
 
 class SHA256Digest {
@@ -41,11 +46,16 @@ public:
     void update(const void* data, size_t length);
     void digest();
 
-    const std::string& hex() const { return _hex; }
+    // Get hex-encoded result (64 characters for SHA256)
+    std::string hex() const;
+
+    // Get raw binary result (32 bytes for SHA256)
+    const unsigned char* binary() const { return _hash; }
+    size_t binary_size() const { return SHA256_DIGEST_LENGTH; }
 
 private:
     SHA256_CTX _sha256_ctx;
-    std::string _hex;
+    unsigned char _hash[SHA256_DIGEST_LENGTH];
 };
 
 class SHA384Digest {
@@ -55,11 +65,16 @@ public:
     void update(const void* data, size_t length);
     void digest();
 
-    const std::string& hex() const { return _hex; }
+    // Get hex-encoded result (96 characters for SHA384)
+    std::string hex() const;
+
+    // Get raw binary result (48 bytes for SHA384)
+    const unsigned char* binary() const { return _hash; }
+    size_t binary_size() const { return SHA384_DIGEST_LENGTH; }
 
 private:
     SHA512_CTX _sha384_ctx;
-    std::string _hex;
+    unsigned char _hash[SHA384_DIGEST_LENGTH];
 };
 
 class SHA512Digest {
@@ -69,10 +84,15 @@ public:
     void update(const void* data, size_t length);
     void digest();
 
-    const std::string& hex() const { return _hex; }
+    // Get hex-encoded result (128 characters for SHA512)
+    std::string hex() const;
+
+    // Get raw binary result (64 bytes for SHA512)
+    const unsigned char* binary() const { return _hash; }
+    size_t binary_size() const { return SHA512_DIGEST_LENGTH; }
 
 private:
     SHA512_CTX _sha512_ctx;
-    std::string _hex;
+    unsigned char _hash[SHA512_DIGEST_LENGTH];
 };
 } // namespace starrocks

@@ -15,7 +15,7 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
@@ -29,11 +29,12 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.spm.ControlBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -71,9 +72,9 @@ public class SPMStmtExecutor {
             String digest = builder.build(p);
             long hash = builder.buildHash();
             SlotRef ref1 = new SlotRef(new TableName(), "bindsqldigest");
-            ref1.setType(Type.VARCHAR);
+            ref1.setType(VarcharType.VARCHAR);
             SlotRef ref2 = new SlotRef(new TableName(), "bindsqlhash");
-            ref2.setType(Type.BIGINT);
+            ref2.setType(IntegerType.BIGINT);
             where = new CompoundPredicate(CompoundPredicate.Operator.AND,
                     new BinaryPredicate(BinaryType.EQ, ref1, new StringLiteral(digest)),
                     new BinaryPredicate(BinaryType.EQ, ref2, new IntLiteral(hash)));

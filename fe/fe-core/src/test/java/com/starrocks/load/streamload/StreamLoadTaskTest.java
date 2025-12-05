@@ -23,6 +23,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -30,14 +31,19 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +51,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Map;
+import java.util.TimeZone;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
 import static org.mockito.ArgumentMatchers.any;
@@ -65,7 +72,7 @@ public class StreamLoadTaskTest {
     public void setUp() {
         long id = 123L;
         String label = "label_abc";
-        long timeoutMs = 10000L;
+        long timeoutMs = 100000L;
         long createTimeMs = System.currentTimeMillis();
         boolean isRoutineLoad = false;
         streamLoadTask =
@@ -143,8 +150,6 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
-                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
@@ -451,5 +456,102 @@ public class StreamLoadTaskTest {
         Deencapsulation.setField(task, "loadId", null);
         task.gsonPostProcess();
         Assertions.assertEquals(id.getHi(), task.getTUniqueId().getHi());
+    }
+
+    @Test
+    public void testToThriftWarehouseFieldInSharedDataMode(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Mocked WarehouseManager warehouseManager,
+                                                            @Mocked Warehouse warehouse) {
+        StreamLoadTask task = new StreamLoadTask(1017, new Database(), new OlapTable(), "t_label18", "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getDefault();
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+
+                warehouse.getName();
+                result = "test_warehouse";
+            }
+        };
+
+        TLoadInfo loadInfo = task.toThrift().get(0);
+        Assertions.assertTrue(loadInfo.isSetWarehouse());
+        Assertions.assertEquals("test_warehouse", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThriftWarehouseFieldInNonSharedDataMode() {
+        StreamLoadTask task = new StreamLoadTask(1018, new Database(), new OlapTable(), "t_label19", "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        TLoadInfo loadInfo = task.toThrift().get(0);
+        Assertions.assertTrue(loadInfo.isSetWarehouse());
+        Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThriftWarehouseFieldWhenWarehouseNotFound(@Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked WarehouseManager warehouseManager) {
+        StreamLoadTask task = new StreamLoadTask(1019, new Database(), new OlapTable(), "t_label20", "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getDefault();
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                result = new RuntimeException("Warehouse not found");
+            }
+        };
+
+        TLoadInfo loadInfo = task.toThrift().get(0);
+        Assertions.assertTrue(loadInfo.isSetWarehouse());
+        Assertions.assertEquals("", loadInfo.getWarehouse());
     }
 }

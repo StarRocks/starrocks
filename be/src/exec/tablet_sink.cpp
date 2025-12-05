@@ -336,7 +336,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
         auto* index = _schema->indexes()[i];
         auto& tablet_to_be = index_id_to_tablet_be_map[index->index_id];
         for (auto& [id, part] : partitions) {
-            for (auto tablet_id : part->indexes[i].tablets) {
+            for (auto tablet_id : part->indexes[i].tablet_ids) {
                 auto& tablet_info = tablets.emplace_back();
                 tablet_info.set_tablet_id(tablet_id);
                 tablet_info.set_partition_id(part->id);
@@ -538,7 +538,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
             auto& tablets = index_tablets_map[index.index_id];
             auto& tablet_to_be = index_tablet_bes_map[index.index_id];
             // setup new partitions's tablets
-            for (auto tablet_id : index.tablets) {
+            for (auto tablet_id : index.tablet_ids) {
                 auto& tablet_info = tablets.emplace_back();
                 tablet_info.set_tablet_id(tablet_id);
                 // TODO: support logical materialized views;
@@ -600,7 +600,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
         });
 
         if (channel->has_intolerable_failure()) {
-            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
             return err_st;
         }
     }

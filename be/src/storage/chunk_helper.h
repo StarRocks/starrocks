@@ -14,17 +14,12 @@
 
 #pragma once
 
+// NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <memory>
-#include <mutex>
-#include <queue>
 
-#include "column/column_visitor.h"
-#include "column/column_visitor_adapter.h"
-#include "column/datum.h"
-#include "column/fixed_length_column_base.h"
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/olap_type_infra.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
@@ -75,6 +70,13 @@ public:
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
     static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+
+    // a wrapper of new_chunk_pooled with memory check
+    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
+    // a wrapper of new_chunk with memory check
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.

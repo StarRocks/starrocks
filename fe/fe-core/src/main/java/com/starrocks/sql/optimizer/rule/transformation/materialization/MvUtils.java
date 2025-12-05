@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -31,6 +31,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -44,10 +46,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -57,8 +61,8 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PRangeCell;
@@ -129,6 +133,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -139,13 +144,19 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
-                                                             int maxLevel,
-                                                             Set<Table> tablesToCheck) {
+    /**
+     * @param connectContext connect context
+     * @param maxLevel max level to collect
+     * @param tablesToCheck input tables to check
+     * @return a sorted related mvs by level result.
+     */
+    public static SortedSet<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
+                                                                   int maxLevel,
+                                                                   Set<Table> tablesToCheck) {
         if (tablesToCheck.isEmpty()) {
-            return Sets.newHashSet();
+            return Sets.newTreeSet();
         }
-        Set<MaterializedViewWrapper> mvs = Sets.newHashSet();
+        SortedSet<MaterializedViewWrapper> mvs = Sets.newTreeSet();
         getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
@@ -160,13 +171,14 @@ public class MvUtils {
         Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
             Set<MvId> mvIds = table.getRelatedMaterializedViews();
+            String tableOrMaterializedView = table.isMaterializedView() ? "MaterializedView" : "Table";
             if (mvIds != null && !mvIds.isEmpty()) {
-                logMVPrepare("Table/MaterializedView {} has related materialized views: {}",
-                        table.getName(), mvIds);
+                logMVPrepare("{} {} has related materialized views: {}",
+                        tableOrMaterializedView, table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
             } else if (currentLevel == 0) {
-                logMVPrepare("Table/MaterializedView {} has no related materialized views, " +
-                        "identifier:{}", table.getName(), table.getTableIdentifier());
+                logMVPrepare("{} {} has no related materialized views, " +
+                        "identifier:{}", tableOrMaterializedView, table.getName(), table.getTableIdentifier());
             }
         }
         if (newMvIds.isEmpty()) {
@@ -574,7 +586,8 @@ public class MvUtils {
     public static Set<ScalarOperator> getAllValidPredicatesFromScans(OptExpression root) {
         List<LogicalScanOperator> scanOperators = getScanOperator(root);
         Set<ScalarOperator> predicates = Sets.newHashSet();
-        scanOperators.stream().forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
+        scanOperators.stream()
+                .forEach(scanOperator -> predicates.addAll(Utils.extractConjuncts(scanOperator.getPredicate())));
         return predicates.stream().filter(MvUtils::isValidPredicate).collect(Collectors.toSet());
     }
 
@@ -691,7 +704,8 @@ public class MvUtils {
                         IsNullPredicateOperator isNullPredicateOperator = conjunct.cast();
                         if (isNullPredicateOperator.isNotNull() && context != null
                                 && context.containsAll(isNullPredicateOperator.getUsedColumns())) {
-                            // if column ref is join key and column ref is not null can be ignored for inner and semi join
+                            // if column ref is join key and column ref is not null can be ignored for inner and semi
+                            // join
                             continue;
                         }
                     }
@@ -918,7 +932,7 @@ public class MvUtils {
     }
 
     public static Set<ColumnRefOperator> collectScanColumn(OptExpression optExpression,
-                                                            Predicate<LogicalScanOperator> predicate) {
+                                                           Predicate<LogicalScanOperator> predicate) {
 
         Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
         OptExpressionVisitor visitor = new OptExpressionVisitor<Void, Void>() {
@@ -957,22 +971,26 @@ public class MvUtils {
                 continue;
             } else if (lowerExpr.isMinValue()) {
                 ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.upperEndpoint().getKeys().get(0));
                 BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
                         BinaryType.LT, partitionScalar, upperBound);
                 rangeParts.add(upperPredicate);
             } else if (range.upperEndpoint().isMaxValue()) {
                 ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.lowerEndpoint().getKeys().get(0));
                 BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
                         BinaryType.GE, partitionScalar, lowerBound);
                 rangeParts.add(lowerPredicate);
             } else {
                 // close, open range
                 ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.lowerEndpoint().getKeys().get(0));
                 ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(
+                                range.upperEndpoint().getKeys().get(0));
                 BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
                         BinaryType.GE, partitionScalar, lowerBound);
                 BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
@@ -1067,7 +1085,10 @@ public class MvUtils {
                 Range<PartitionKey> mergedRange = mergedRanges.get(j);
                 if (currentRange.isConnected(mergedRange)) {
                     // for partition range, the intersection must be empty
-                    Preconditions.checkState(currentRange.intersection(mergedRange).isEmpty());
+                    if (!currentRange.intersection(mergedRange).isEmpty()) {
+                        throw new IllegalStateException("Partition ranges overlap: " +
+                                currentRange + " and " + mergedRange);
+                    }
                     mergedRanges.set(j, mergedRange.span(currentRange));
                     merged = true;
                     break;
@@ -1155,7 +1176,6 @@ public class MvUtils {
         return partitionKey;
     }
 
-
     public static String toString(Object o) {
         if (o == null) {
             return "";
@@ -1179,7 +1199,8 @@ public class MvUtils {
      * Returns the maximum refresh timestamp from a single partition info map.
      * If no valid refresh time is found, returns the current system time.
      */
-    public static long getMaxTablePartitionInfoRefreshTime(Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
+    public static long getMaxTablePartitionInfoRefreshTime(
+            Map<String, MaterializedView.BasePartitionInfo> partitionInfos) {
         return partitionInfos.values().stream()
                 .map(MaterializedView.BasePartitionInfo::getLastRefreshTime)
                 .filter(Objects::nonNull)
@@ -1280,7 +1301,8 @@ public class MvUtils {
                 Operator.Builder builder = OperatorBuilderFactory.build(inlineViewOp);
                 builder.withOperator(inlineViewOp);
                 if (viewScanOperator.getPredicate() != null) {
-                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be lost.
+                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be
+                    // lost.
                     ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
                     builder.setPredicate(rewrittenPredicate);
                 }
@@ -1354,7 +1376,8 @@ public class MvUtils {
             return mvPlanContexts.get(0);
         }
         // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView, isCheckNonDeterministicFunction);
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView,
+                isCheckNonDeterministicFunction);
     }
 
     /**
@@ -1395,6 +1418,9 @@ public class MvUtils {
     }
 
     public static ParseNode getQueryAst(String query, ConnectContext connectContext) {
+        if (Strings.isNullOrEmpty(query)) {
+            return null;
+        }
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
@@ -1423,7 +1449,8 @@ public class MvUtils {
                                                         ColumnRefFactory queryColumnRefFactory,
                                                         ReplaceColumnRefRewriter queryColumnRefRewriter,
                                                         Rule rule) {
-        // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
+        // Cache partition predicate predicates because it's expensive time costing if there are too many
+        // materialized views or
         // query expressions are too complex.
         final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
                 mvContext, rule, queryColumnRefFactory, queryExpression);
@@ -1463,7 +1490,8 @@ public class MvUtils {
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
         try {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTableWithIdentifier(new ConnectContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1497,7 +1525,7 @@ public class MvUtils {
             return false;
         }
         return expr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+                && ((FunctionCallExpr) expr).getFunctionName().equalsIgnoreCase(expectFuncName);
     }
 
     public static boolean isStr2Date(Expr expr) {
@@ -1525,8 +1553,12 @@ public class MvUtils {
             List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
                     materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
             return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
-        } else {
+        } else if (distributionInfo instanceof RandomDistributionInfo) {
             return new RandomDistributionDesc();
+        } else if (distributionInfo instanceof RangeDistributionInfo) {
+            return new RangeDistributionDesc();
+        } else {
+            throw new RuntimeException("Unsupported distribution type: " + distributionInfo.getType());
         }
     }
 
@@ -1549,7 +1581,8 @@ public class MvUtils {
      */
     public static <K, V> Map<K, V> shrinkToSize(Map<K, V> map, int maxLength) {
         if (map != null && map.size() > maxLength) {
-            return map.entrySet().stream().limit(maxLength).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            return map.entrySet().stream().limit(maxLength)
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         }
         return map;
     }
@@ -1566,13 +1599,15 @@ public class MvUtils {
             return null;
         }
         return partitionExprMaps.entrySet().stream()
-                .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
+                .filter(entry -> SRStringUtils.areTableNamesEqual(table,
+                        entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
                 .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
                 .collect(Collectors.toList());
     }
 
     /**
      * Get the column by slot ref from table's columns.
+     *
      * @return the column if found, otherwise empty
      */
     public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
@@ -1593,81 +1628,103 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-    public static ScalarOperator convertPartitionKeyRangesToListPredicate(
+    /**
+     * Convert partition range cells to predicates
+     *
+     * @param partitionColRefs partition column refs
+     * @param pRangeCells      partition range cells to be converted
+     * @return the converted predicates
+     * @throws AnalysisException
+     */
+    public static ScalarOperator convertRangeCellsToPredicate(
             List<? extends ScalarOperator> partitionColRefs,
             Collection<PRangeCell> pRangeCells,
-            boolean areAllRangePartitionsSingleton) throws AnalysisException {
+            boolean canConvertToInPredicate) throws AnalysisException {
         final List<Range<PartitionKey>> partitionRanges = pRangeCells
                 .stream()
                 .map(PRangeCell::getRange)
                 .collect(Collectors.toList());
-
-        return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
+        return convertRangeKeysToPredicate(partitionColRefs, partitionRanges, canConvertToInPredicate);
     }
 
     private static ConstantOperator convertLiteralToConstantOperator(ScalarOperator partitionColRef,
                                                                      LiteralExpr literalExpr) throws AnalysisException {
         if (!partitionColRef.getType().equals(literalExpr.getType())) {
-            literalExpr = LiteralExpr.create(literalExpr.getStringValue(), partitionColRef.getType());
+            literalExpr = LiteralExprFactory.create(literalExpr.getStringValue(), partitionColRef.getType());
         }
         return (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
     }
 
-    public static ScalarOperator convertPartitionKeysToListPredicate(
+    /**
+     * Convert partition keys to IN predicate when range partitions are all singleton.
+     */
+    public static ScalarOperator convertPartitionKeysToInPredicate(
             List<? extends ScalarOperator> partitionColRefs,
-            Collection<PartitionKey> partitionRanges) throws AnalysisException {
-        final List<ScalarOperator> values = Lists.newArrayList();
+            List<PartitionKey> partitionRanges) throws AnalysisException {
+        final List<ScalarOperator> predicates = Lists.newArrayList();
         if (partitionColRefs.size() == 1) {
             ScalarOperator partitionColRef = partitionColRefs.get(0);
+            boolean isContainNull = false;
             for (PartitionKey key : partitionRanges) {
-                final List<LiteralExpr> literalExprs = key.getKeys();
-                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
-                final LiteralExpr literalExpr = literalExprs.get(0);
-                final ConstantOperator upperBound = convertLiteralToConstantOperator(partitionColRef, literalExpr);
-                values.add(upperBound);
+                LiteralExpr literalExpr = key.getKeys().get(0);
+                if (literalExpr.isMinValue()) {
+                    isContainNull = true;
+                } else {
+                    predicates.add(convertLiteralToConstantOperator(partitionColRef, literalExpr));
+                }
             }
-            return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
+            if (isContainNull) {
+                ScalarOperator inPredicate = MvUtils.convertToInPredicate(partitionColRef, predicates);
+                return Utils.compoundOr(inPredicate, new IsNullPredicateOperator(partitionColRef));
+            } else {
+                return MvUtils.convertToInPredicate(partitionColRef, predicates);
+            }
         } else {
             for (PartitionKey key : partitionRanges) {
                 List<LiteralExpr> literalExprs = key.getKeys();
-                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
                 // TODO: use row operator instead
-                List<ScalarOperator> predicates = Lists.newArrayList();
+                List<ScalarOperator> subPredicates = Lists.newArrayList();
                 for (int i = 0; i < literalExprs.size(); i++) {
                     ScalarOperator partitionColRef = partitionColRefs.get(i);
                     LiteralExpr literalExpr = literalExprs.get(i);
-                    ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
-                    ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound);
-                    predicates.add(eq);
+                    if (literalExpr.isMinValue()) {
+                        // add is null to represent min value
+                        subPredicates.add(new IsNullPredicateOperator(partitionColRef));
+                    } else {
+                        ConstantOperator upperBound =
+                                (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                        subPredicates.add(new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound));
+                    }
                 }
-                values.add(Utils.compoundAnd(predicates));
+                predicates.add(Utils.compoundAnd(subPredicates));
             }
-            return Utils.compoundOr(values);
+            return Utils.compoundOr(predicates);
         }
     }
 
-    private static ScalarOperator convertPartitionKeysToListPredicate(
+    private static ScalarOperator convertRangeKeysToPredicate(
             List<? extends ScalarOperator> partitionColRefs,
-            Collection<Range<PartitionKey>> partitionRanges,
-            boolean areAllRangePartitionsSingleton) throws AnalysisException {
-
-        if (areAllRangePartitionsSingleton) {
+            List<Range<PartitionKey>> partitionRanges,
+            boolean canConvertToInPredicate) throws AnalysisException {
+        // can convert to in predicate when all ranges are singletons or canConvertToInPredicate is true
+        canConvertToInPredicate = canConvertToInPredicate ? true : partitionRanges.stream()
+                .allMatch(range -> range.lowerEndpoint().equals(range.upperEndpoint()));
+        if (canConvertToInPredicate) {
             List<PartitionKey> partitionKeys = partitionRanges
                     .stream()
                     .map(Range::lowerEndpoint)
                     .collect(Collectors.toList());
-            return convertPartitionKeysToListPredicate(partitionColRefs, partitionKeys);
+            return convertPartitionKeysToInPredicate(partitionColRefs, partitionKeys);
         } else {
-            final List<ScalarOperator> values = Lists.newArrayList();
-            partitionRanges
+            List<ScalarOperator> values = partitionRanges
                     .stream()
-                    .map(range -> getPartitionKeyRangePredicate(partitionColRefs, range))
-                    .forEach(values::add);
+                    .map(range -> convertRangeToBinaryPredicate(partitionColRefs, range))
+                    .collect(Collectors.toList());
             return Utils.compoundOr(values);
         }
     }
 
-    private static ScalarOperator getPartitionKeyRangePredicate(List<? extends ScalarOperator> partitionColRefs,
+    private static ScalarOperator convertRangeToBinaryPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                 Range<PartitionKey> range) {
         final List<LiteralExpr> lowerLiteralExprs = range.lowerEndpoint().getKeys();
         final List<LiteralExpr> upperLiteralExprs = range.upperEndpoint().getKeys();
@@ -1678,22 +1735,28 @@ public class MvUtils {
             final ScalarOperator partitionColRef = partitionColRefs.get(i);
             final LiteralExpr lowerLiteralExpr = lowerLiteralExprs.get(i);
             final LiteralExpr upperLiteralExpr = upperLiteralExprs.get(i);
-            final ConstantOperator lowerBound =
-                    (ConstantOperator) SqlToScalarOperatorTranslator.translate(lowerLiteralExpr);
-            final ConstantOperator upperBound =
-                    (ConstantOperator) SqlToScalarOperatorTranslator.translate(upperLiteralExpr);
-            final ScalarOperator gt = new BinaryPredicateOperator(BinaryType.GE, partitionColRef, lowerBound);
-            final ScalarOperator ls = new BinaryPredicateOperator(BinaryType.LT, partitionColRef, upperBound);
-            predicates.add(Utils.compoundAnd(gt, ls));
+            if (lowerLiteralExpr.isMinValue()) {
+                // if the lower bound is min value, treat it as is null predicate
+                predicates.add(new IsNullPredicateOperator(partitionColRef));
+            } else {
+                final ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(lowerLiteralExpr);
+                final ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(upperLiteralExpr);
+                final ScalarOperator gt = new BinaryPredicateOperator(BinaryType.GE, partitionColRef, lowerBound);
+                final ScalarOperator ls = new BinaryPredicateOperator(BinaryType.LT, partitionColRef, upperBound);
+                predicates.add(Utils.compoundAnd(gt, ls));
+            }
         }
         return Utils.compoundAnd(predicates);
     }
 
     /**
      * Optimize the inlined view plan.
-     * @param logicalTree logical opt expression tree which has not been optimized
-     * @param connectContext connect context
-     * @param requiredColumns required columns
+     *
+     * @param logicalTree      logical opt expression tree which has not been optimized
+     * @param connectContext   connect context
+     * @param requiredColumns  required columns
      * @param columnRefFactory query column ref factory
      * @return optimized view plan which has been rule based optimized
      */
@@ -1713,7 +1776,8 @@ public class MvUtils {
 
     /**
      * Trim the input string if its length is larger than maxLength.
-     * @param input the input string
+     *
+     * @param input     the input string
      * @param maxLength the max length
      */
     public static String shrinkToSize(String input, int maxLength) {

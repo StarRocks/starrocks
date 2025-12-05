@@ -91,9 +91,13 @@ public class AnalyzeJoinTest {
         analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1",
                 "Getting syntax error at line 1, column 43. Detail message: Unexpected input 't', " +
                         "the most similar input is {<EOF>, ';'}.");
-        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
+        analyzeSuccess("select v1 from (t0 join tnotnull using(v1)), t1");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
         analyzeSuccess("select v1 from t0 join tnotnull using(v1)");
+        analyzeFail("select * from t0 full outer join test_using using(v2)",
+                "USING column 'v2' has incompatible types: bigint(20) and array<int(11)>");
+        analyzeFail("select * from t1 full outer join test_using using(v4)",
+                "Type (nested) percentile/hll/bitmap/json not support join");
     }
 
     @Test

@@ -22,14 +22,13 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionKeyDiscreteDomain;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -43,6 +42,8 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -168,7 +169,7 @@ public class PartitionColPredicateEvaluator {
             LiteralExpr literalExpr;
             try {
                 if (constantOperator.isNull()) {
-                    literalExpr = LiteralExpr.createInfinity(childType, false);
+                    literalExpr = LiteralExprFactory.createInfinity(childType, false);
                 } else {
                     literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
                 }
@@ -312,7 +313,7 @@ public class PartitionColPredicateEvaluator {
                     return Optional.of(Range.closed(conditionKey, conditionKey));
                 } else {
                     PartitionKey conditionKey = new PartitionKey();
-                    conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), columnType.getPrimitiveType());
+                    conditionKey.pushColumn(LiteralExprFactory.createInfinity(columnType, false), columnType.getPrimitiveType());
                     return Optional.of(Range.closed(conditionKey, conditionKey));
                 }
             } catch (AnalysisException e) {

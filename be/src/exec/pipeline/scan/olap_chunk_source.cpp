@@ -14,14 +14,17 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
 
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
@@ -619,7 +622,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
@@ -660,7 +665,12 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
+        Status status = _prj_iter->get_next(chunk);
+        // update counter when eof or error
+        if (UNLIKELY(!status.ok())) {
+            _update_realtime_counter(chunk);
+            return status;
+        }
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
@@ -712,7 +722,9 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
         _runtime_state->update_num_bytes_load_from_source(bytes_usage);
     }
 
-    _chunk_buffer.update_limiter(chunk);
+    if (chunk != nullptr && num_rows > 0) {
+        _chunk_buffer.update_limiter(chunk);
+    }
 }
 
 void OlapChunkSource::_update_counter() {
@@ -767,8 +779,11 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
     COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 
-    COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
-    COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
+    int64_t total_pages_num = _reader->stats().total_pages_num;
+    int64_t cached_pages_num = _reader->stats().cached_pages_num;
+    COUNTER_UPDATE(_read_pages_num_counter, total_pages_num);
+    COUNTER_UPDATE(_cached_pages_num_counter, cached_pages_num);
+    DataCacheHitRateCounter::instance()->update_page_cache_stat(cached_pages_num, total_pages_num);
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);

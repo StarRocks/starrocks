@@ -53,15 +53,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -84,8 +82,9 @@ import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.task.AgentBatchTask;
@@ -102,6 +101,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -451,14 +452,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (SlotRef slot : slots) {
             SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
             Preconditions.checkNotNull(slotDesc);
-            smap.getLhs().add(slot);
             SlotRef slotRef = new SlotRef(slotDesc);
             slotRef.setColumnName(slot.getColumnName());
-            smap.getRhs().add(slotRef);
+            smap.put(slot, slotRef);
         }
-        Expr newExpr = defineExpr.clone(smap);
+        Expr newExpr = ExprSubstitutionVisitor.rewrite(defineExpr, smap);
         newExpr = newExpr.accept(visitor, null);
-        newExpr = Expr.analyzeAndCastFold(newExpr);
+        newExpr = ExprUtils.analyzeAndCastFold(newExpr);
         Type newType = newExpr.getType();
         if (!type.isFullyCompatible(newType)) {
             newExpr = new CastExpr(type, newExpr);
@@ -544,7 +544,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         Expr whereExpr = null;
         if (whereClause != null) {
-            Type type = ScalarType.createType(PrimitiveType.BOOLEAN);
+            Type type = BooleanType.BOOLEAN;
             whereExpr = analyzeExpr(visitor, type, CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME,
                     whereClause, slotDescByName);
             List<SlotRef> slots = Lists.newArrayList();

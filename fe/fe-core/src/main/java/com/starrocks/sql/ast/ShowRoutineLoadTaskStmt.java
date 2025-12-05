@@ -70,7 +70,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr, NodePosition pos) {
         super(pos);
-        this.dbFullName = normalizeName(dbName);
+        this.dbFullName = dbName;
         this.jobNameExpr = jobNameExpr;
     }
 

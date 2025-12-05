@@ -16,6 +16,7 @@
 
 #include <cstring>
 
+#include "common/statusor.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
 #include "gen_cpp/types.pb.h"
@@ -136,12 +137,14 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
         column_stats.reserve(columns.size());
         // serialize to io buffer
         int padding_size = 0;
+        if (UNLIKELY(config::pipeline_enable_large_column_checker)) {
+            if (chunk->has_capacity_limit_reached()) {
+                return Status::CapacityLimitExceed(fmt::format("Large column detected in spill serialize phase "));
+            }
+        }
         for (size_t i = 0; i < columns.size(); i++) {
             uint8_t* begin = buf;
-            buf = serde::ColumnArraySerde::serialize(*columns[i], buf, false, encode_levels[i]);
-            if (UNLIKELY(buf == nullptr)) {
-                return Status::InternalError("unsupported column occurs in spill serialize phase");
-            }
+            ASSIGN_OR_RETURN(buf, serde::ColumnArraySerde::serialize(*columns[i], buf, false, encode_levels[i]));
             column_stats.emplace_back(columns[i]->byte_size(), buf - begin);
             if (serde::EncodeContext::enable_encode_integer(encode_levels[i])) {
                 padding_size = serde::EncodeContext::STREAMVBYTE_PADDING_SIZE;
@@ -166,7 +169,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
 
     int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);
-    int32_t attachment_size = UNALIGNED_LOAD32(header_buffer + ATTACHMENT_SIZE_OFFSET);
+    size_t attachment_size = UNALIGNED_LOAD64(header_buffer + ATTACHMENT_SIZE_OFFSET);
     if (sequence_id != SEQUENCE_MAGIC_ID) {
         return Status::InternalError(fmt::format("sequence id mismatch {} vs {}", sequence_id, SEQUENCE_MAGIC_ID));
     }
@@ -191,7 +194,8 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     read_cursor += columns.size() * sizeof(uint32_t);
     SCOPED_TIMER(_parent->metrics().deserialize_timer);
     for (size_t i = 0; i < columns.size(); i++) {
-        read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]);
+        ASSIGN_OR_RETURN(read_cursor,
+                         serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]));
     }
 
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()

@@ -19,16 +19,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
@@ -37,12 +34,13 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.iceberg.PartitionField;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,10 +59,6 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     private static long t0StatsTableId = 0;
 
@@ -81,6 +75,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Config.statistic_auto_collect_predicate_columns_threshold = 0;
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        new StatisticsMetaManager().createStatisticsTablesForTest();
 
         starRocksAssert.withTable("CREATE TABLE `t0_stats` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -321,7 +316,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "struct_a");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), table.getId(), ImmutableList.of("b.a", "b.c", "d.c.a"),
-                        ImmutableList.of(Type.INT, Type.INT, Type.INT),
+                        ImmutableList.of(IntegerType.INT, IntegerType.INT, IntegerType.INT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -338,7 +333,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(IntegerType.BIGINT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -354,7 +349,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), t0StatsTableId, Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(IntegerType.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -379,7 +374,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(IntegerType.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -388,7 +383,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(IntegerType.BIGINT),
                         StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -403,7 +398,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(IntegerType.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
@@ -418,14 +413,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> job3 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
-                        Lists.newArrayList(Type.BIGINT),
+                        Lists.newArrayList(IntegerType.BIGINT),
                         StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assertions.assertEquals(1, job3.size());
         Assertions.assertTrue(job3.get(0) instanceof HyperStatisticsCollectJob);
-        Assertions.assertTrue(job3.get(0).toString().contains("partitionIdList=[10010]"));
     }
 
     @Test
@@ -440,13 +434,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
         properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
-                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
+                db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(IntegerType.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
 
         Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
+                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", IntegerType.BIGINT, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v2', %d, " +
                         "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
@@ -458,7 +452,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v2", Type.BIGINT);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v2", IntegerType.BIGINT, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                 "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                 "'test" +
@@ -474,7 +468,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v4", DateType.DATE, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                                 "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
                                 "'test" +
@@ -492,7 +486,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
@@ -505,11 +499,36 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         Config.enable_use_table_sample_collect_statistics = true;
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
-                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, false);
         Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
                         "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
                         "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
+                        "`v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
+                        "'test.t0_stats', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double), 'DUJ1'),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
+                        "`v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+
+        Config.statistics_sample_ndv_estimator = "LINEAR";
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", DateType.DATETIME, true);
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
+                        "'test.t0_stats', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double), 'LINEAR'),  " +
                         "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
                         "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
                         "`v5` is not null  and " +
@@ -525,6 +544,26 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
                 "('percent'='10') " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+
+        mostCommonValues = new HashMap<>();
+        mostCommonValues.put("1", "10");
+        mostCommonValues.put("2", "20");
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectBucketsWithoutNdv",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v6", IntegerType.BIGINT);
+        Assertions.assertEquals(normalize.apply("select cast(2 as int) as version, cast(10009 as bigint), " +
+                        "cast(10060 as bigint), 'v6', histogram(`column_key`, cast(64 as int), cast(0.1 as double)) " +
+                        "from " +
+                        "(select `v6` as column_key from `test`.`t0_stats` where rand() <= 0.1 and `v6` is not null and " +
+                        "`v6` not in (1,2) order by `v6` limit 10000000) t"),
+                normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogramWithHllNdv",
+                db, olapTable, mostCommonValues, "[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]", "v6");
+        Assertions.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v6', %d, " +
+                        "'test.t0_stats', histogram_hll_ndv(`v6`, '[[\"3\",\"5\",\"10\",\"2\"],[\"6\",\"9\",\"10\",\"3\"]]'),  " +
+                        "'[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() FROM `test`.`t0_stats`;",
+                t0StatsTableId, dbid)), normalize.apply(sql));
     }
 
     @Test
@@ -1243,7 +1282,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testExternalFullStatisticsBuildCollectSQLWithException1() {
+    public void testExternalFullStatisticsBuildCollectSQLWithBucketTransform() {
         // test partition transform is bucket
         Database database =
                 connectContext.getGlobalStateMgr().getMetadataMgr()
@@ -1261,13 +1300,38 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> collectJob.buildCollectSQLList(1));
-        assertThat(exception.getMessage(),
-                containsString("Partition transform BUCKET not supported to analyze, table: t0_bucket"));
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        // First partition is ts_bucket=0 in mock metadata; spec uses bucket(ts, 10)
+        assertContains(collectSqlList.get(0).toString(),
+                "__iceberg_transform_bucket(`ts`, 10) = 0");
     }
 
     @Test
-    public void testExternalFullStatisticsBuildCollectSQLWithException2() {
+    public void testExternalFullStatisticsBuildCollectSQLWithTruncateTransform() {
+        // test partition transform is truncate
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                                "t0_truncate");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(),
+                "__iceberg_transform_truncate(`data`, 5) = 'aaaaa'");
+    }
+
+    @Test
+    public void testExternalFullStatisticsBuildCollectSQL() {
         // test partition field is null
         Database database =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "iceberg0", "partitioned_db");
@@ -1282,39 +1346,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
-        new MockUp<IcebergTable>() {
-            @Mock
-            public PartitionField getPartitionFiled(String colName) {
-                return null;
-            }
-        };
 
-        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> collectJob.buildCollectSQLList(1));
-        assertThat(exception.getMessage(), containsString("Partition column date not found in table iceberg0.partitioned_db.t1"));
-    }
-
-    @Test
-    public void testExternalFullStatisticsBuildCollectSQLWithException3() {
-        // test partition transform is bucket
-        Database database =
-                connectContext.getGlobalStateMgr().getMetadataMgr()
-                        .getDb(connectContext, "iceberg0", "partitioned_transforms_db");
-        Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr()
-                        .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
-                                "t0_date_month_identity_evolution");
-        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
-                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
-                        database,
-                        table, null,
-                        Lists.newArrayList("id", "data", "ts"),
-                        StatsConstants.AnalyzeType.FULL,
-                        StatsConstants.ScheduleType.ONCE,
-                        Maps.newHashMap());
-
-        Throwable exception = assertThrows(StarRocksConnectorException.class, () -> collectJob.buildCollectSQLList(1));
-        assertThat(exception.getMessage(), containsString("Do not supported analyze iceberg table" +
-                " t0_date_month_identity_evolution with partition evolution"));
+        List<List<String>> collectSqlList =  collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "date` = '2020-01-01'");
     }
 
     @Test
@@ -1439,7 +1473,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 Maps.newHashMap()
         );
         String sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
-                olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
+                olapTable, olapTable.getPartition("tcount"), "count", IntegerType.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
     }

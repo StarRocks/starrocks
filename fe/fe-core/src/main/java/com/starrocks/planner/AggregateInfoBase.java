@@ -38,6 +38,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 
 import java.util.ArrayList;
@@ -83,9 +84,9 @@ public abstract class AggregateInfoBase {
                                 ArrayList<FunctionCallExpr> aggExprs) {
         Preconditions.checkState(groupingExprs != null || aggExprs != null);
         groupingExprs_ =
-                groupingExprs != null ? Expr.cloneList(groupingExprs) : new ArrayList<Expr>();
+                groupingExprs != null ? ExprUtils.cloneList(groupingExprs) : new ArrayList<Expr>();
         aggregateExprs_ =
-                aggExprs != null ? Expr.cloneList(aggExprs) : new ArrayList<FunctionCallExpr>();
+                aggExprs != null ? ExprUtils.cloneList(aggExprs) : new ArrayList<FunctionCallExpr>();
     }
 
     /**
@@ -93,9 +94,9 @@ public abstract class AggregateInfoBase {
      */
     protected AggregateInfoBase(AggregateInfoBase other) {
         groupingExprs_ =
-                (other.groupingExprs_ != null) ? Expr.cloneList(other.groupingExprs_) : null;
+                (other.groupingExprs_ != null) ? ExprUtils.cloneList(other.groupingExprs_) : null;
         aggregateExprs_ =
-                (other.aggregateExprs_ != null) ? Expr.cloneList(other.aggregateExprs_) : null;
+                (other.aggregateExprs_ != null) ? ExprUtils.cloneList(other.aggregateExprs_) : null;
         intermediateTupleDesc_ = other.intermediateTupleDesc_;
         outputTupleDesc_ = other.outputTupleDesc_;
         materializedAggSlots = Lists.newArrayList(other.materializedAggSlots);

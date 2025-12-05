@@ -15,8 +15,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.sql.ast.expression.TableName;
-
 import java.util.Map;
 
 public class InternalCatalog extends Catalog {

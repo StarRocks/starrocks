@@ -135,6 +135,9 @@ void UpdateManager::stop() {
     if (_pindex_load_executor) {
         _pindex_load_executor->shutdown();
     }
+    if (_persistent_index_compaction_mgr) {
+        _persistent_index_compaction_mgr->stop();
+    }
 }
 
 int64_t UpdateManager::get_index_cache_expire_ms(const Tablet& tablet) const {

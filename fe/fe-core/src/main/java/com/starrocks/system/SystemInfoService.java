@@ -47,7 +47,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -94,6 +93,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
@@ -389,7 +389,7 @@ public class SystemInfoService implements GsonPostProcessable {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, backend.getHeartbeatPort(), fqdn);
         }
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Collections.singletonList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
@@ -407,7 +407,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("Message", ScalarType.createVarchar(1024)));
+        builder.addColumn(new Column("Message", TypeFactory.createVarchar(1024)));
         List<List<String>> messageResult = new ArrayList<>();
 
         // update backend based on properties
@@ -620,10 +620,21 @@ public class SystemInfoService implements GsonPostProcessable {
         // try to record the historical backend nodes
         tryUpdateHistoricalComputeNodes(dropComputeNode.getWarehouseId(), dropComputeNode.getWorkerGroupId());
 
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = dropComputeNode.getStarletPort();
+            // only need to remove worker after be reported its starletPort
+            if (starletPort != 0) {
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(dropComputeNode.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
+            }
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropComputeNode(
                 new DropComputeNodeLog(dropComputeNode.getId()),
-                wal -> replayDropComputeNode((DropComputeNodeLog) wal));
+                wal -> removeComputeNode((DropComputeNodeLog) wal));
         LOG.info("finished to drop {}", dropComputeNode);
     }
 
@@ -738,9 +749,20 @@ public class SystemInfoService implements GsonPostProcessable {
         // try to record the historical backend nodes
         tryUpdateHistoricalBackends(droppedBackend.getWarehouseId(), droppedBackend.getWorkerGroupId());
 
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = droppedBackend.getStarletPort();
+            // only need to remove worker after be reported its starletPort
+            if (starletPort != 0) {
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(droppedBackend.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
+            }
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(
-                new DropBackendInfo(droppedBackend.getId()), wal -> replayDropBackend((DropBackendInfo) wal));
+                new DropBackendInfo(droppedBackend.getId()), wal -> removeBackend((DropBackendInfo) wal));
         LOG.info("finished to drop {}", droppedBackend);
 
         // backends are changed, regenerated tablet number metrics
@@ -1270,16 +1292,29 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
     }
 
-    public void replayDropComputeNode(DropComputeNodeLog dropComputeNodeLog) {
-        LOG.debug("replayDropComputeNode: {}", dropComputeNodeLog);
-
+    private ComputeNode removeComputeNode(DropComputeNodeLog dropComputeNodeLog) {
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(dropComputeNodeLog.getComputeNodeId());
+        if (cn == null) {
+            LOG.error("compute node {} does not exist when remove compute node", dropComputeNodeLog.getComputeNodeId());
+            return null;
+        }
 
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
             BackendResourceStat.getInstance().removeBe(dropComputeNodeLog.getComputeNodeId());
+        }
+
+        return cn;
+    }
+
+    public void replayDropComputeNode(DropComputeNodeLog dropComputeNodeLog) {
+        LOG.debug("replayDropComputeNode: {}", dropComputeNodeLog);
+
+        ComputeNode cn = removeComputeNode(dropComputeNodeLog);
+        if (cn == null) {
+            return;
         }
 
         // clear map in starosAgent
@@ -1293,13 +1328,12 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
-    public void replayDropBackend(DropBackendInfo info) {
-        LOG.debug("replayDropBackend: {}", info.getId());
+    private Backend removeBackend(DropBackendInfo info) {
         // update idToBackend
         Backend backend = idToBackendRef.remove(info.getId());
         if (backend == null) {
-            LOG.error("backend {} does not exist when replay drop backend", info.getId());
-            return;
+            LOG.error("backend {} does not exist when remove backend", info.getId());
+            return null;
         }
 
         // update idToReportVersion
@@ -1311,6 +1345,16 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
             BackendResourceStat.getInstance().removeBe(backend.getId());
+        }
+        return backend;
+    }
+
+    public void replayDropBackend(DropBackendInfo info) {
+        LOG.debug("replayDropBackend: {}", info.getId());
+
+        Backend backend = removeBackend(info);
+        if (backend == null) {
+            return;
         }
 
         // clear map in starosAgent

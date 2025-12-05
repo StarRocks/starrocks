@@ -21,10 +21,12 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -42,8 +44,7 @@ import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
-import com.starrocks.sql.ast.expression.FunctionName;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +52,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class DropStmtAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DropStmtAnalyzer.class);
@@ -202,16 +203,16 @@ public class DropStmtAnalyzer {
 
         @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
-            // analyze function name
-            FunctionName functionName = statement.getFunctionName();
-            functionName.analyze(context.getDatabase());
+            FunctionRef functionRef = statement.getFunctionRef();
+            String defaultDb = functionRef.isGlobalFunction() ? FunctionRefAnalyzer.GLOBAL_UDF_DB : context.getDatabase();
+            FunctionRefAnalyzer.analyzeFunctionRef(functionRef, defaultDb);
+            FunctionName functionName = FunctionRefAnalyzer.resolveFunctionName(functionRef, defaultDb);
             // analyze arguments
             FunctionArgsDef argsDef = statement.getArgsDef();
-            argsDef.analyze();
+            FunctionRefAnalyzer.analyzeArgsDef(argsDef);
 
             FunctionSearchDesc funcDesc = new FunctionSearchDesc(functionName, argsDef.getArgTypes(),
                     argsDef.isVariadic());
-            statement.setFunctionSearchDesc(funcDesc);
 
             // check function existence
             Function func;
@@ -223,7 +224,7 @@ public class DropStmtAnalyzer {
             } else {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
                 if (db != null) {
-                    func = db.getFunction(statement.getFunctionSearchDesc());
+                    func = db.getFunction(funcDesc);
                     if (func == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                     }

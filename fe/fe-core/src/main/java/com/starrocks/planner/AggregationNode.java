@@ -38,18 +38,20 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -63,6 +65,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
@@ -93,6 +97,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
     private boolean usePerBucketOptimize = false;
 
     private boolean withLocalShuffle = false;
+
+    // direct set limit will introduce a limit on ExchangeNode
+    private long localLimit = -1;
 
     // identicallyDistributed meanings the PlanNode above OlapScanNode are cases as follows:
     // 1. bucket shuffle join,
@@ -170,6 +177,10 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         this.usePerBucketOptimize = usePerBucketOptimize;
     }
 
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
+    }
+
     public void setGroupByMinMaxStats(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStats) {
         this.groupByMinMaxStats = groupByMinMaxStats;
     }
@@ -224,11 +235,11 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
-            aggregateFunctions.add(e.treeToThrift());
+            aggregateFunctions.add(ExprToThrift.treeToThrift(e));
             if (sqlAggFuncBuilder.length() > 0) {
                 sqlAggFuncBuilder.append(", ");
             }
-            sqlAggFuncBuilder.append(e.toSql());
+            sqlAggFuncBuilder.append(ExprToSql.toSql(e));
         }
 
         msg.agg_node =
@@ -242,16 +253,20 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         }
         msg.agg_node.setUse_sort_agg(useSortAgg);
         msg.agg_node.setUse_per_bucket_optimize(usePerBucketOptimize);
+        if (localLimit > 0) {
+            Preconditions.checkState(!hasLimit());
+            msg.limit = localLimit;
+        }
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
-            msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
+            msg.agg_node.setGrouping_exprs(ExprToThrift.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {
                 if (sqlGroupingKeysBuilder.length() > 0) {
                     sqlGroupingKeysBuilder.append(", ");
                 }
-                sqlGroupingKeysBuilder.append(e.toSql());
+                sqlGroupingKeysBuilder.append(ExprToSql.toSql(e));
             }
             if (sqlGroupingKeysBuilder.length() > 0) {
                 msg.agg_node.setSql_grouping_keys(sqlGroupingKeysBuilder.toString());
@@ -267,12 +282,12 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
                     try {
                         Type type = expr.getType();
-                        LiteralExpr minExpr = LiteralExpr.create(min, type);
-                        LiteralExpr maxExpr = LiteralExpr.create(max, type);
+                        LiteralExpr minExpr = LiteralExprFactory.create(min, type);
+                        LiteralExpr maxExpr = LiteralExprFactory.create(max, type);
                         // cast decimal literal to matched precision type
                         if (minExpr instanceof DecimalLiteral) {
-                            minExpr = (LiteralExpr) minExpr.uncheckedCastTo(type);
-                            maxExpr = (LiteralExpr) maxExpr.uncheckedCastTo(type);
+                            minExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(minExpr, type);
+                            maxExpr = (LiteralExpr) ExprCastFunction.uncheckedCastTo(maxExpr, type);
                         } 
                         minMaxStats.add(minExpr);
                         minMaxStats.add(maxExpr);
@@ -283,13 +298,13 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
             }
 
             if (minMaxStats.size() == 2 * groupingExprs.size()) {
-                msg.agg_node.setGroup_by_min_max(Expr.treesToThrift(minMaxStats));
+                msg.agg_node.setGroup_by_min_max(ExprToThrift.treesToThrift(minMaxStats));
             }
         }
 
         List<Expr> intermediateAggrExprs = aggInfo.getIntermediateAggrExprs();
         if (intermediateAggrExprs != null && !intermediateAggrExprs.isEmpty()) {
-            msg.agg_node.setIntermediate_aggr_exprs(Expr.treesToThrift(intermediateAggrExprs));
+            msg.agg_node.setIntermediate_aggr_exprs(ExprToThrift.treesToThrift(intermediateAggrExprs));
         }
 
         if (!buildRuntimeFilters.isEmpty()) {
@@ -359,6 +374,9 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
         if (withLocalShuffle) {
             output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+        if (localLimit > 0) {
+            output.append(detailPrefix).append("limit: ").append(localLimit).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
@@ -450,7 +468,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         // is unacceptable.
         List<ColumnStatistic> stringColumnStatistics = slotRefs.stream()
                 .map(slot -> columnStatistics.get(new ColumnRefOperator(slot.getSlotId().asInt(),
-                        ScalarType.UNKNOWN_TYPE, "key", false)))
+                        UnknownType.UNKNOWN_TYPE, "key", false)))
                 .filter(stat -> stat != null && !stat.isUnknown() &&
                         stat.getAverageRowSize() * stat.getDistinctValuesCount() > 24 * cardinalityLimit)
                 .collect(Collectors.toList());

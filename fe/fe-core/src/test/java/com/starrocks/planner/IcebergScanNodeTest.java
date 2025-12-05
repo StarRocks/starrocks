@@ -2,7 +2,6 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.BucketProperty;
@@ -38,16 +37,20 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TBucketFunction;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TIcebergTable;
+import com.starrocks.thrift.TIcebergTableSink;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -67,6 +70,7 @@ import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
@@ -87,7 +91,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Stream;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 
 public class IcebergScanNodeTest {
     class TestableIcebergConnectorScanRangeSource extends IcebergConnectorScanRangeSource {
@@ -99,7 +107,8 @@ public class IcebergScanNodeTest {
                     Deencapsulation.getField(original, "desc"),
                     Deencapsulation.getField(original, "bucketProperties"),
                     Deencapsulation.getField(original, "partitionIdGenerator"),
-                    Deencapsulation.getField(original, "recordScanFiles")
+                    Deencapsulation.getField(original, "recordScanFiles"),
+                    Deencapsulation.getField(original, "useMinMaxOpt")
             );
         }
 
@@ -132,19 +141,35 @@ public class IcebergScanNodeTest {
         delFiles.add(mockEqDelFile);
         new Expectations() {{
             GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-            result = connector; minTimes = 0;
+            result = connector;
+            minTimes = 0;
             connector.getMetadata().getCloudConfiguration();
-            result = cc; minTimes = 0;
-            table.getCatalogName(); result = catalog; minTimes = 0;
-            table.getCatalogDBName(); result = "db1"; minTimes = 0;
-            table.getCatalogTableName(); result = "tbl1"; minTimes = 0;
+            result = cc;
+            minTimes = 0;
+            table.getCatalogName();
+            result = catalog;
+            minTimes = 0;
+            table.getCatalogDBName();
+            result = "db1";
+            minTimes = 0;
+            table.getCatalogTableName();
+            result = "tbl1";
+            minTimes = 0;
             // mockPosDelFile.content(); result = FileContent.POSITION_DELETES; minTimes = 0;
             // mockEqDelFile.content(); result = FileContent.EQUALITY_DELETES; minTimes = 0;
             // fileScanTask.deletes(); result = delFiles; minTimes = 0;
-            fileScanTask.file(); result = mockDataFile; minTimes = 0;
-            mockDataFile.fileSizeInBytes(); result = 10000000L; minTimes = 0;
-            mockDataFile.specId(); result = 1; minTimes = 0;
-            mockDataFile.partition(); result = null; minTimes = 0;
+            fileScanTask.file();
+            result = mockDataFile;
+            minTimes = 0;
+            mockDataFile.fileSizeInBytes();
+            result = 10000000L;
+            minTimes = 0;
+            mockDataFile.specId();
+            result = 1;
+            minTimes = 0;
+            mockDataFile.partition();
+            result = null;
+            minTimes = 0;
         }};
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
@@ -154,6 +179,7 @@ public class IcebergScanNodeTest {
                 new PlanNodeId(0), desc, catalog,
                 tableMORParams, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
         scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
 
         IcebergRemoteFileInfo remoteFileInfo = new IcebergRemoteFileInfo(fileScanTask);
         List<RemoteFileInfo> remoteFileInfos = List.of(remoteFileInfo);
@@ -195,22 +221,33 @@ public class IcebergScanNodeTest {
         IcebergRemoteFileInfo mockIcebergRemoteFileInfo = new IcebergRemoteFileInfo(mockScanTask);
 
         new Expectations() {{
-            mockSource.getOutput(); result = mockIcebergRemoteFileInfo; minTimes = 0;
-            mockScanTask.file(); result = mockDataFile; minTimes = 0;
-            mockScanTask.deletes(); result = deleteFiles; minTimes = 0;
-            mockPosDelFile.content(); result = FileContent.POSITION_DELETES; minTimes = 0;
-            mockEqDelFile.content(); result = FileContent.EQUALITY_DELETES; minTimes = 0;
+            mockSource.getOutput();
+            result = mockIcebergRemoteFileInfo;
+            minTimes = 0;
+            mockScanTask.file();
+            result = mockDataFile;
+            minTimes = 0;
+            mockScanTask.deletes();
+            result = deleteFiles;
+            minTimes = 0;
+            mockPosDelFile.content();
+            result = FileContent.POSITION_DELETES;
+            minTimes = 0;
+            mockEqDelFile.content();
+            result = FileContent.EQUALITY_DELETES;
+            minTimes = 0;
         }};
 
         IcebergConnectorScanRangeSource scanSource = new IcebergConnectorScanRangeSource(
                 null, mockSource, null, null, Optional.empty(),
-                PartitionIdGenerator.of(), true  // recordScanFiles = true
+                PartitionIdGenerator.of(), true,  // recordScanFiles = true
+                false
         ) {
             private int callCount = 0;
 
             @Override
             public boolean sourceHasMoreOutput() {
-                return callCount++ == 0;  
+                return callCount++ == 0;
             }
 
             @Override
@@ -242,19 +279,19 @@ public class IcebergScanNodeTest {
             result = Collections.emptyList();
             minTimes = 0;
 
-            mockTask.spec(); 
+            mockTask.spec();
             result = mockSpec;
             minTimes = 0;
-            mockSpec.partitionType(); 
+            mockSpec.partitionType();
             result = Types.StructType.of();
             minTimes = 0;
-            mockTask.file(); 
+            mockTask.file();
             result = mockDataFile;
             minTimes = 0;
-            mockDataFile.partition(); 
+            mockDataFile.partition();
             result = null;
             minTimes = 0;
-            mockDataFile.fileSizeInBytes(); 
+            mockDataFile.fileSizeInBytes();
             result = 1024L;
             minTimes = 0;
         }};
@@ -343,7 +380,7 @@ public class IcebergScanNodeTest {
 
 
         List<Column> schemaColumns = new ArrayList<>();
-        schemaColumns.add(new Column("col1", ScalarType.createVarchar(20)));
+        schemaColumns.add(new Column("col1", TypeFactory.createVarchar(20)));
 
         IcebergTable icebergTable = new IcebergTable.Builder()
                 .setId(1234)
@@ -459,7 +496,7 @@ public class IcebergScanNodeTest {
 
     @Test
     void testDynamicOverwrite() {
-        
+
         InMemoryCatalog catalog = new InMemoryCatalog();
         catalog.initialize("test", new HashMap<>());
 
@@ -512,46 +549,46 @@ public class IcebergScanNodeTest {
         // 1. Mock InsertStmt
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         Mockito.when(rewriteStmt.rewriteAll()).thenReturn(true);
-    
+
         // 2. Mock IcebergScanNode
         IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
-    
+
         DeleteFile pos1 = Mockito.mock(DeleteFile.class);
         DeleteFile pos2 = Mockito.mock(DeleteFile.class);
         DeleteFile eq1 = Mockito.mock(DeleteFile.class);
         DataFile data1 = Mockito.mock(DataFile.class);
         DataFile data2 = Mockito.mock(DataFile.class);
-    
+
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
         Mockito.when(scanNode.getPosAppliedDeleteFiles()).thenReturn(Set.of(pos1, pos2));
         Mockito.when(scanNode.getEqualAppliedDeleteFiles()).thenReturn(Set.of(eq1));
         Mockito.when(scanNode.getScannedDataFiles()).thenReturn(Set.of(data1, data2));
-    
+
         // 3. Mock PlanFragment
         PlanFragment fragment = Mockito.mock(PlanFragment.class);
         Mockito.when(fragment.collectScanNodes())
                 .thenReturn(Map.of(new PlanNodeId(0), scanNode));
-    
+
         // 4. Mock ExecPlan
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
         Mockito.when(execPlan.getFragments()).thenReturn(new ArrayList<>(List.of(fragment)));
-    
+
         // 5. Prepare commitInfos
         List<TSinkCommitInfo> commitInfos = new ArrayList<>();
         TSinkCommitInfo info1 = new TSinkCommitInfo();
         TSinkCommitInfo info2 = new TSinkCommitInfo();
         commitInfos.add(info1);
         commitInfos.add(info2);
-    
+
         // 6. Executor and extra
         StatementBase fakeStmt = Mockito.mock(StatementBase.class);
         ConnectContext ctx = new ConnectContext();
         StmtExecutor executor = new StmtExecutor(ctx, fakeStmt);
         IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
-    
+
         // 7. Call target method
         executor.fillRewriteFiles(rewriteStmt, execPlan, commitInfos, extra);
-    
+
         // 8. Assert
         Assertions.assertTrue(info1.isIs_rewrite());
         Assertions.assertTrue(info2.isIs_rewrite());
@@ -614,8 +651,8 @@ public class IcebergScanNodeTest {
                 morParams,
                 tupleDesc,
                 Optional.empty(),
-                PartitionIdGenerator.of()
-                );
+                PartitionIdGenerator.of(), false, false
+        );
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
                 10, // maxSize
@@ -699,6 +736,7 @@ public class IcebergScanNodeTest {
     @Test
     void executeShouldRunNormallyWhenPreparedStateAndTasksExist() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessVar = Mockito.mock(SessionVariable.class);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
@@ -711,13 +749,16 @@ public class IcebergScanNodeTest {
         fragments.add(fragment);
         Mockito.when(execPlan.getFragments()).thenReturn(fragments);
         Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
-        Mockito.when(rewriteData.hasMoreTaskGroup())
-                .thenReturn(true)
-                .thenReturn(false);
-        List<RemoteFileInfo> oneGroup = Collections.emptyList();
+        Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
+        List<RemoteFileInfo> oneGroup = new ArrayList<>();
+        RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
+        oneGroup.add(rfi);
         Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
         Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
-        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
+        Mockito.when(sessVar.clone()).thenReturn(sessVar);
+        Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
+
         // --- Mock DataFile ---
         DataFile dataFile = Mockito.mock(DataFile.class);
         Mockito.when(dataFile.fileSizeInBytes()).thenReturn(500L);
@@ -728,6 +769,7 @@ public class IcebergScanNodeTest {
         Mockito.when(fileScanTask.deletes()).thenReturn(Collections.emptyList());
 
         // --- Mock IcebergRemoteFileInfo ---
+        RemoteFileInfo remoteFileInfo = Mockito.mock(RemoteFileInfo.class);
         IcebergRemoteFileInfo icebergRemoteFileInfo = Mockito.mock(IcebergRemoteFileInfo.class);
         Mockito.when(icebergRemoteFileInfo.getFileScanTask()).thenReturn(fileScanTask);
         Mockito.when(remoteFileInfo.cast()).thenReturn(icebergRemoteFileInfo);
@@ -756,14 +798,20 @@ public class IcebergScanNodeTest {
                 morParams,
                 tupleDesc,
                 Optional.empty(),
-                PartitionIdGenerator.of()
-                );
+                PartitionIdGenerator.of(), false, false
+        );
         Mockito.when(scanNode.getSourceRange()).thenReturn(fakeSourceRange);
         StmtExecutor executor = Mockito.mock(StmtExecutor.class);
         new MockUp<StmtExecutor>() {
+            private static StmtExecutor HOLDER;
+
+            {
+                HOLDER = executor;
+            }
+
             @Mock
-            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
-                return executor;
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return HOLDER;
             }
         };
 
@@ -783,16 +831,7 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergScanNode>() {
             @Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) {
-                return;
-            }
-        };
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) {
-                return;
-            }
+            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
         };
         new MockUp<IcebergRewriteData>() {
             @Mock
@@ -809,63 +848,113 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, context, alter);
+                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "rewriteData", rewriteData);
+
+        ConcurrentLinkedQueue<IcebergRewriteDataJob.FinishArgs> finishArg = new ConcurrentLinkedQueue<>();
+        finishArg.add(job.new FinishArgs(
+                "c", "db", "t",
+                Arrays.asList(new TSinkCommitInfo(), new TSinkCommitInfo()),
+                "main",
+                new IcebergSinkExtra()
+        ));
+        Deencapsulation.setField(job, "collected", finishArg);
+        // ---- run ----
         job.execute();
 
         Mockito.verify(rewriteData, Mockito.times(2)).hasMoreTaskGroup();
         Mockito.verify(rewriteData, Mockito.times(1)).nextTaskGroup();
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(oneGroup);
-        Mockito.verify(executor, Mockito.times(1)).handleDMLStmt(execPlan, rewriteStmt);
+
+        Mockito.verify(executor, Mockito.times(1))
+                .handleDMLStmt(eq(execPlan), isA(IcebergRewriteStmt.class));
     }
 
     @Test
     void executeShouldSetErrorAndReturnWhenExecutorThrows() throws Exception {
         ConnectContext context = Mockito.mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessVar = Mockito.mock(SessionVariable.class);
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         ExecPlan execPlan = Mockito.mock(ExecPlan.class);
         IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
         IcebergRewriteData rewriteData = Mockito.mock(IcebergRewriteData.class);
+        List<RemoteFileInfo> oneGroup = new ArrayList<>();
+        RemoteFileInfo rfi = Mockito.mock(RemoteFileInfo.class);
+        oneGroup.add(rfi);
 
-        Mockito.when(rewriteData.hasMoreTaskGroup())
-                .thenReturn(true)
-                .thenReturn(false);
-        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(Collections.emptyList());
+        Mockito.when(rewriteData.hasMoreTaskGroup()).thenReturn(true).thenReturn(false);
+        Mockito.when(rewriteData.nextTaskGroup()).thenReturn(oneGroup);
+        Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
 
-        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
-        Mockito.doThrow(new RuntimeException("boom")).when(executor).handleDMLStmt(execPlan, rewriteStmt);
+        Mockito.when(context.getQueryId()).thenReturn(java.util.UUID.randomUUID());
+        Mockito.when(context.getSkipFinishSink()).thenReturn(true);
+        Mockito.when(context.getSessionVariable()).thenReturn(sessVar);
+        Mockito.when(sessVar.clone()).thenReturn(sessVar);
+        Mockito.doNothing().when(sessVar).setQueryTimeoutS(Mockito.anyInt());
 
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
-                return executor;
+
+        PlanFragment fragment = Mockito.mock(PlanFragment.class);
+        ArrayList<PlanFragment> fragments = new ArrayList<>();
+        fragments.add(fragment);
+
+        Map<PlanNodeId, ScanNode> scanMap = new HashMap<>();
+        scanMap.put(new PlanNodeId(1), scanNode);
+        Mockito.when(execPlan.getFragments()).thenReturn(fragments);
+        Mockito.when(fragment.collectScanNodes()).thenReturn(scanMap);
+
+        com.starrocks.sql.ast.InsertStmt parsedInsert = Mockito.mock(com.starrocks.sql.ast.InsertStmt.class);
+
+        new mockit.MockUp<StatementPlanner>() {
+            @mockit.Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) {
+                return execPlan;
             }
         };
+        new mockit.MockUp<IcebergRewriteStmt>() {
+            @mockit.Mock
+            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
+        };
+        new mockit.MockUp<IcebergScanNode>() {
+            @mockit.Mock
+            public void rebuildScanRange(List<RemoteFileInfo> splits) { /* no-op */ }
+        };
 
-        new MockUp<IcebergScanNode>() {
-            @Mock
-            public void rebuildScanRange(List<RemoteFileInfo> splits) {
-                return;
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.doThrow(new RuntimeException("boom"))
+                .when(executor)
+                .handleDMLStmt(Mockito.eq(execPlan), Mockito.isA(IcebergRewriteStmt.class));
+
+        new mockit.MockUp<StmtExecutor>() {
+            private static StmtExecutor HOLDER;
+
+            {
+                HOLDER = executor;
+            }
+
+            @mockit.Mock
+            public static StmtExecutor newInternalExecutor(ConnectContext c, StatementBase s) {
+                return HOLDER;
             }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, context, alter);
+                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
+        Deencapsulation.setField(job, "parsedStmt", parsedInsert);
         Deencapsulation.setField(job, "execPlan", execPlan);
         Deencapsulation.setField(job, "scanNodes", Arrays.asList(scanNode));
         Deencapsulation.setField(job, "rewriteData", rewriteData);
 
-        job.execute();
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class, () -> job.execute());
 
-        Mockito.verify(context.getState(), Mockito.times(1)).setError("boom");
+        Assertions.assertEquals("Failed to compact files", ex.getMessage());
         Mockito.verify(scanNode, Mockito.times(1)).rebuildScanRange(Mockito.anyList());
     }
 
@@ -880,10 +969,10 @@ public class IcebergScanNodeTest {
 
         // Create three bucket properties
         List<BucketProperty> bucketProperties = new ArrayList<>();
-        Column column1 = new Column("test_col1", ScalarType.INT);
-        Column column2 = new Column("test_col2", ScalarType.INT);
-        Column column3 = new Column("test_col3", ScalarType.INT);
-        Column column4 = new Column("test_col4", ScalarType.INT);
+        Column column1 = new Column("test_col1", IntegerType.INT);
+        Column column2 = new Column("test_col2", IntegerType.INT);
+        Column column3 = new Column("test_col3", IntegerType.INT);
+        Column column4 = new Column("test_col4", IntegerType.INT);
         BucketProperty bucketProperty1 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 2, column1);
         BucketProperty bucketProperty2 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 3, column2);
         BucketProperty bucketProperty3 = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, column3);
@@ -902,5 +991,40 @@ public class IcebergScanNodeTest {
         Assertions.assertEquals(360, result);
         // wrong method
         Assertions.assertEquals(876, Stream.of(2, 3, 4, 5).reduce(1, (a, b) -> (a + 1) * (b + 1)));
+    }
+
+    @Test
+    public void testIcebergTableSinkToThrift(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
+            @Mocked ConnectorMetadata connectorMetadata,
+            @Mocked IcebergTable icebergTable,
+            @Mocked Table icebergNativeTable) throws Exception {
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(icebergTable.getCatalogName());
+            result = connector;
+            minTimes = 0;
+            connector.getMetadata();
+            result = connectorMetadata;
+            minTimes = 0;
+            connectorMetadata.getCloudConfiguration();
+            result = new CloudConfiguration();
+            minTimes = 0;
+            icebergTable.getNativeTable();
+            result = icebergNativeTable;
+            minTimes = 0;
+            icebergNativeTable.location();
+            result = "s3://bucket/path/";
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(icebergTable);
+        SessionVariable sessionVariable = new SessionVariable();
+        IcebergTableSink sink = new IcebergTableSink(icebergTable, desc, false, sessionVariable, "main");
+        TDataSink tDataSink = Deencapsulation.invoke(sink, "toThrift");
+        TIcebergTableSink tIceberg = tDataSink.getIceberg_table_sink();
+        Assertions.assertEquals("main", sink.getTargetBranch());
+        Assertions.assertTrue(tIceberg.isSetCloud_configuration());
     }
 }

@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -31,11 +31,11 @@ public class SchemataSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CATALOG_NAME", ScalarType.createVarchar(512))
-                        .column("SCHEMA_NAME", ScalarType.createVarchar(32))
-                        .column("DEFAULT_CHARACTER_SET_NAME", ScalarType.createVarchar(32))
-                        .column("DEFAULT_COLLATION_NAME", ScalarType.createVarchar(32))
-                        .column("SQL_PATH", ScalarType.createVarchar(512))
+                        .column("CATALOG_NAME", TypeFactory.createVarchar(512))
+                        .column("SCHEMA_NAME", TypeFactory.createVarchar(32))
+                        .column("DEFAULT_CHARACTER_SET_NAME", TypeFactory.createVarchar(32))
+                        .column("DEFAULT_COLLATION_NAME", TypeFactory.createVarchar(32))
+                        .column("SQL_PATH", TypeFactory.createVarchar(512))
                         .build(), TSchemaTableType.SCH_SCHEMATA);
     }
 }

@@ -1,0 +1,22 @@
+-- name: test_write_orc_file
+
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+set catalog hive_sink_test_${uuid0};
+create database hive_db_${uuid0};
+use hive_db_${uuid0};
+
+-- test write map type: level 1 map
+create table t1(c1 int, c2 map<int, string>) properties("file_format"="orc");
+insert into t1 values (1, null), (2, map{22:"v22", 222:"v222"}), (3, map{33:"v33"}), (4, map{44:null, 444:"v444"});
+select * from t1;
+drop table t1 force;
+
+-- test write map type: level 2 map
+create table t2(c1 int, c2 map<int, map<int, string>>) properties("file_format"="orc");
+insert into t2 values (1, null), (2, map{22: map{"222": "v222"}}), (3, map{33: map{"333": null}});
+select * from t2;
+drop table t2 force;
+
+drop database hive_db_${uuid0};
+drop catalog hive_sink_test_${uuid0};
+set catalog default_catalog;

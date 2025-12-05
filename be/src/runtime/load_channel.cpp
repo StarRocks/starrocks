@@ -96,7 +96,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
 }
 
 LoadChannel::~LoadChannel() {
-    _span->SetAttribute("num_chunk", static_cast<unsigned long>(_num_chunk));
+    _span->SetAttribute("num_chunk", static_cast<uint64_t>(_num_chunk));
     _span->End();
 }
 
@@ -144,12 +144,19 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
             if (is_lake_tablet) {
+#ifdef __APPLE__
+                channel = nullptr;
+                st = Status::NotSupported("lake tablet is not supported on MacOS");
+#else
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+#endif
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
-            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
-                _tablets_channels.insert({key, std::move(channel)});
+            if (st.ok()) {
+                if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
+                    _tablets_channels.insert({key, std::move(channel)});
+                }
             }
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
@@ -281,11 +288,20 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
     closure_guard.release();
 }
 
-void LoadChannel::cancel() {
+void LoadChannel::cancel(const std::string& reason) {
+    bool print_cancel_msg = false;
+    DeferOp defer([&]() {
+        if (print_cancel_msg) {
+            LOG(INFO) << "Cancel load channel, txn_id=" << _txn_id << ", load_id=" << print_id(_load_id)
+                      << ", reason=" << reason;
+        }
+    });
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
     }
+    print_cancel_msg = !_cancelled.load(std::memory_order_acquire);
+    _cancelled.store(true, std::memory_order_release);
 }
 
 void LoadChannel::abort() {
@@ -499,13 +515,13 @@ Status LoadChannel::_update_and_serialize_profile(std::string* result, bool prin
     ThriftSerializer ser(false, 4096);
     Status st = ser.serialize(&thrift_profile, &len, &buf);
     if (!st.ok()) {
-        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
-                   << ", status: " << st;
+        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << print_id(_load_id)
+                   << ", txn_id: " << _txn_id << ", status: " << st;
         return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
     COUNTER_UPDATE(_profile_serialized_size, len);
     result->append((char*)buf, len);
-    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    VLOG(2) << "report profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id << ", size: " << len;
     return Status::OK();
 }
 

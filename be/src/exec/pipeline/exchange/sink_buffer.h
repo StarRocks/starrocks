@@ -16,23 +16,16 @@
 
 #include <bthread/mutex.h>
 
-#include <algorithm>
 #include <atomic>
-#include <future>
 #include <list>
 #include <memory>
-#include <mutex>
 #include <queue>
 #include <unordered_set>
 
-#include "column/chunk.h"
-#include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"
-#include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
-#include "runtime/query_statistics.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/disposable_closure.h"
 #include "util/internal_service_recoverable_stub.h"
@@ -55,7 +48,9 @@ struct TransmitChunkInfo {
     std::shared_ptr<PInternalService_RecoverableStub> brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
-    int64_t attachment_physical_bytes;
+    // The byte size of this request
+    // maybe passthrough or rpc request (physical attachment size)
+    size_t request_byte_size;
     const TNetworkAddress brpc_addr;
 };
 
@@ -202,6 +197,7 @@ private:
     std::atomic<int64_t> _rpc_count = 0;
     std::atomic<int64_t> _rpc_cumulative_time = 0;
 
+    std::unique_ptr<MemTracker> _buffered_mem_usage;
     // RuntimeProfile counters
     std::atomic<int64_t> _bytes_enqueued = 0;
     std::atomic<int64_t> _request_enqueued = 0;

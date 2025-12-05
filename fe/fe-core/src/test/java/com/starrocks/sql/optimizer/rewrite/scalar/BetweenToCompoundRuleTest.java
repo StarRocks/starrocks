@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -25,6 +24,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,14 +39,14 @@ public class BetweenToCompoundRuleTest {
         ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
 
         BetweenPredicateOperator bpo = new BetweenPredicateOperator(false,
-                new ColumnRefOperator(0, Type.INT, "test", true),
+                new ColumnRefOperator(0, IntegerType.INT, "test", true),
                 ConstantOperator.createInt(1),
-                new ColumnRefOperator(1, Type.INT, "value1", true));
+                new ColumnRefOperator(1, IntegerType.INT, "value1", true));
 
         ScalarOperator result = rule.apply(bpo, context);
 
         assertEquals(OperatorType.COMPOUND, result.getOpType());
-        assertEquals(Type.BOOLEAN, result.getType());
+        assertEquals(BooleanType.BOOLEAN, result.getType());
 
         assertTrue(result instanceof CompoundPredicateOperator);
         assertEquals(CompoundPredicateOperator.CompoundType.AND,
@@ -69,14 +70,14 @@ public class BetweenToCompoundRuleTest {
         ScalarOperatorRewriteContext context = new ScalarOperatorRewriteContext();
 
         BetweenPredicateOperator bpo = new BetweenPredicateOperator(true,
-                new ColumnRefOperator(0, Type.INT, "test", true),
+                new ColumnRefOperator(0, IntegerType.INT, "test", true),
                 ConstantOperator.createInt(1),
-                new ColumnRefOperator(1, Type.INT, "value1", true));
+                new ColumnRefOperator(1, IntegerType.INT, "value1", true));
 
         ScalarOperator result = rule.apply(bpo, context);
 
         assertEquals(OperatorType.COMPOUND, result.getOpType());
-        assertEquals(Type.BOOLEAN, result.getType());
+        assertEquals(BooleanType.BOOLEAN, result.getType());
 
         assertTrue(result instanceof CompoundPredicateOperator);
         assertEquals(CompoundPredicateOperator.CompoundType.OR,

@@ -11,6 +11,37 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.20
+
+发布日期：2025 年 11 月 18 日
+
+### 问题修复
+
+修复了以下问题：
+
+- CVE-2024-47561。[#64193](https://github.com/StarRocks/starrocks/pull/64193)
+- CVE-2025-59419。[#64142](https://github.com/StarRocks/starrocks/pull/64142)
+- Lake 主键表返回的行数不正确。[#64007](https://github.com/StarRocks/starrocks/pull/64007)
+- 带 IGNORE NULLS 标志的窗口函数无法与未带该标志的对应函数合并。[#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- `PartitionedSpillerWriter::_remove_partition` 中的 ASAN 错误。[#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- 共享数据集群中排序聚合（sorted aggregation）结果错误。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- 创建分区物化视图时发生 NPE。[#63830](https://github.com/StarRocks/starrocks/pull/63830)
+- 删除分区时 Partitioned Spill 崩溃。[#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- FE 在清理过期导入作业时发生 NPE。[#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- 初始化 `ExceptionStackContext` 时可能发生死锁。[#63776](https://github.com/StarRocks/starrocks/pull/63776)
+- 简化复杂函数的 CASE WHEN 表达式时出现无收益优化，导致扫描性能下降。[#63732](https://github.com/StarRocks/starrocks/pull/63732)
+- 类型不匹配导致物化视图改写失败。[#63659](https://github.com/StarRocks/starrocks/pull/63659)
+- 某些计划下，物化视图改写抛出 `IllegalStateException`。[#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- 无法感知 LZ4 压缩或解压错误。[#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- 在将 LARGEINT 转换为 DECIMAL128 时（例如 INT128_MIN 等符号边界情况）溢出检测错误导致稳定性问题。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- 使用组合谓词进行 `date_trunc` 分区裁剪时错误地产生 EMPTYSET。[#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- ARRAY 低基数优化导致 `Left Join` 结果不完整。[#63419](https://github.com/StarRocks/starrocks/pull/63419)
+- 聚合中间类型使用 `ARRAY<NULL_TYPE>` 导致问题。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- 基于自增列的部分更新出现元数据不一致。[#63370](https://github.com/StarRocks/starrocks/pull/63370)
+- 共享数据集群中 Fast Schema Evolution 使用的 Bitmap 索引复用不兼容。[#63315](https://github.com/StarRocks/starrocks/pull/63315)
+- Pod 重启或升级时 CN 被不必要地注销。[#63085](https://github.com/StarRocks/starrocks/pull/63085)
+- 执行 PREPARE/EXECUTE 语句时，Profile 中显示 SQL 为 `omit`。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
+
 ## 3.3.19
 
 发布日期: 2025年10月14日

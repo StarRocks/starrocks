@@ -14,9 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
@@ -25,19 +22,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithRange;
-import static com.starrocks.connector.PartitionUtil.getMVPartitionToCells;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -148,7 +141,7 @@ public class MvRefreshArbiter {
                     return Optional.empty();
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
-                return Optional.of(!mvUpdateInfo.getMvToRefreshPartitionNames().isEmpty());
+                return Optional.of(!mvUpdateInfo.getMVToRefreshPCells().isEmpty());
             }
             return Optional.of(false);
         } else {
@@ -178,7 +171,10 @@ public class MvRefreshArbiter {
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite);
-
+            if (baseUpdatedPartitionNames == null) {
+                return null;
+            }
+            PCellSortedSet updatedPCellSet = PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
             // recursive check its children
             if (withMv && baseTable.isMaterializedView()) {
                 MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, isQueryRewrite);
@@ -186,51 +182,18 @@ public class MvRefreshArbiter {
                     return null;
                 }
                 // NOTE: if base table is mv, check to refresh partition names as the base table's update info.
-                baseUpdatedPartitionNames.addAll(mvUpdateInfo.getMvToRefreshPartitionNames());
-                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getMvPartitionNameToCellMap());
+                updatedPCellSet.addAll(mvUpdateInfo.getMVToRefreshPCells());
+                baseTableUpdateInfo.addMVPartitionNameToCellMap(mvUpdateInfo.getRefBaseNestedMVPCells());
             }
             // update base table's partition info
-            baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
+            baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         } else {
             Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
-            Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
-            if (!refBaseTablePartitionColumns.containsKey(baseTable)) {
-                baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
-                return baseTableUpdateInfo;
-            }
-
-            try {
-                List<String> updatedPartitionNamesList = Lists.newArrayList(baseUpdatedPartitionNames);
-                List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
-                PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
-                if (mvPartitionInfo.isListPartition()) {
-                    Map<String, PCell> mvPartitionNameWithList = getMVPartitionToCells(baseTable,
-                            refPartitionColumns, updatedPartitionNamesList);
-                    baseTableUpdateInfo.addPartitionCells(mvPartitionNameWithList);
-                    baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.keySet());
-                } else if (mvPartitionInfo.isRangePartition()) {
-                    Preconditions.checkArgument(refPartitionColumns.size() == 1,
-                            "Range partition column size must be 1");
-                    Column partitionColumn = refPartitionColumns.get(0);
-                    Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
-                    Preconditions.checkArgument(partitionExprOpt.isPresent(),
-                            "Range partition expr must be present");
-                    Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
-                            partitionColumn, updatedPartitionNamesList, partitionExprOpt.get());
-                    for (Map.Entry<String, Range<PartitionKey>> e : partitionNameWithRange.entrySet()) {
-                        baseTableUpdateInfo.addRangePartitionKeys(e.getKey(), e.getValue());
-                    }
-                    baseTableUpdateInfo.addToRefreshPartitionNames(partitionNameWithRange.keySet());
-                } else {
-                    return null;
-                }
-            } catch (AnalysisException e) {
-                LOG.warn("Mv {}'s base table {} get partition name fail", mv.getName(), baseTable.getName(), e);
-                return null;
-            }
+            PCellSortedSet updatedPCellSet = PCellUtils.ofTable(mv, baseTable, baseUpdatedPartitionNames);
+            baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         }
         return baseTableUpdateInfo;
     }

@@ -39,17 +39,14 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -78,14 +75,23 @@ import com.starrocks.sql.analyzer.mvpattern.MVColumnPercentileUnionPattern;
 import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CaseWhenClause;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PercentileType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -245,7 +251,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             Expr expr;
             if (selectListItemExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
-                String functionName = functionCallExpr.getFnName().getFunction();
+                String functionName = functionCallExpr.getFunctionName();
                 switch (functionName.toLowerCase()) {
                     case "sum":
                     case "min":
@@ -350,7 +356,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
         if (selectRelation.hasHavingClause()) {
             throw new UnsupportedMVException("The having clause is not supported in add materialized view clause, expr:"
-                    + selectRelation.getHavingClause().toSql());
+                    + ExprToSql.toSql(selectRelation.getHavingClause()));
         }
         analyzeOrderByClause(selectRelation, beginIndexOfAggregation);
         if (selectRelation.hasLimit()) {
@@ -438,7 +444,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (!isReplay) {
                 if (slots.size() == 0) {
                     throw new UnsupportedMVException(String.format("The materialized view currently does not support " +
-                            "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
+                            "const expr in select " + "statement: {}", ExprToSql.toMySql(selectListItemExpr)));
                 }
             }
             MVColumnItem mvColumnItem;
@@ -446,11 +452,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     && ((FunctionCallExpr) selectListItemExpr).isAggregateFunction()) {
                 // Aggregate Function must match pattern.
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
-                String functionName = functionCallExpr.getFnName().getFunction().toLowerCase();
+                String functionName = functionCallExpr.getFunctionName().toLowerCase();
                 // current version not support count(distinct) function in creating materialized view
                 if (!isReplay && functionCallExpr.isDistinct()) {
                     throw new UnsupportedMVException(
-                            "Materialized view does not support distinct function " + functionCallExpr.toSql());
+                            "Materialized view does not support distinct function " + ExprToSql.toSql(functionCallExpr));
                 }
                 if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
                     // eg: avg_union(avg_state(xxx))
@@ -460,7 +466,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
                         throw new UnsupportedMVException(
                                 "Materialized view does not support function:%s, supported functions are: %s",
-                                functionCallExpr.toSql(), FN_NAME_TO_PATTERN.keySet());
+                                ExprToSql.toSql(functionCallExpr), FN_NAME_TO_PATTERN.keySet());
                     }
                     if (!mvColumnPattern.match(functionCallExpr)) {
                         throw new UnsupportedMVException(
@@ -480,12 +486,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             } else {
                 if (meetAggregate) {
                     throw new UnsupportedMVException("Any single column should be before agg column. " +
-                            "Column %s at wrong location", selectListItemExpr.toMySql());
+                            "Column %s at wrong location", ExprToSql.toMySql(selectListItemExpr));
                 }
                 // NOTE: If `selectListItemExpr` contains aggregate function, we can not support it.
-                if (selectListItemExpr.containsAggregate()) {
+                if (ExprUtils.containsAggregate(selectListItemExpr)) {
                     throw new UnsupportedMVException("Aggregate function with function expr is not supported yet",
-                            selectListItemExpr.toMySql());
+                            ExprToSql.toMySql(selectListItemExpr));
                 }
 
                 mvColumnItem = buildNonAggColumnItem(selectListItem, slots);
@@ -494,18 +500,18 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 }
 
                 mvColumnItemList.add(mvColumnItem);
-                joiner.add(selectListItemExpr.toSql());
+                joiner.add(ExprToSql.toSql(selectListItemExpr));
             }
             Set<String> fullSchemaColNames = table.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
             if (fullSchemaColNames.contains(mvColumnItem.getName())) {
                 Expr existedDefinedExpr = table.getColumn(mvColumnItem.getName()).getDefineExpr();
-                if (existedDefinedExpr != null && !existedDefinedExpr.toSqlWithoutTbl()
-                        .equalsIgnoreCase(mvColumnItem.getDefineExpr().toSqlWithoutTbl())) {
+                if (existedDefinedExpr != null && !ExprToSql.toSqlWithoutTbl(existedDefinedExpr)
+                        .equalsIgnoreCase(ExprToSql.toSqlWithoutTbl(mvColumnItem.getDefineExpr()))) {
                     throw new UnsupportedMVException(
                             String.format("The mv column %s has already existed in the table's full " +
                                             "schema, old expr: %s, new expr: %s", selectListItem.getAlias(),
-                                    existedDefinedExpr.toSqlWithoutTbl(),
-                                    mvColumnItem.getDefineExpr().toSqlWithoutTbl()));
+                                    ExprToSql.toSqlWithoutTbl(existedDefinedExpr),
+                                    ExprToSql.toSqlWithoutTbl(mvColumnItem.getDefineExpr())));
                 }
             }
         }
@@ -544,7 +550,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                                             SelectListItem selectListItem,
                                             List<SlotRef> baseSlotRefs) {
         FunctionCallExpr node = (FunctionCallExpr) selectListItem.getExpr();
-        String functionName = node.getFnName().getFunction();
+        String functionName = node.getFunctionName();
         Preconditions.checkState(node.getChildren().size() == 1, "Aggregate function only support one child");
 
         if (!FN_NAME_TO_PATTERN.containsKey(functionName)) {
@@ -595,7 +601,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private MVColumnItem buildAggColumnItemWithPattern(SelectListItem selectListItem,
                                                        List<SlotRef> baseSlotRefs) {
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItem.getExpr();
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         Expr defineExpr = functionCallExpr.getChild(0);
         AggregateType mvAggregateType = null;
         Type baseType = defineExpr.getType();
@@ -611,7 +617,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         } else {
             if (defineExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr argFunc = (FunctionCallExpr) defineExpr;
-                String argFuncName = argFunc.getFnName().getFunction();
+                String argFuncName = argFunc.getFunctionName();
                 switch (argFuncName) {
                     case FunctionSet.TO_BITMAP:
                     case FunctionSet.HLL_HASH:
@@ -644,9 +650,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 PrimitiveType argPrimitiveType = baseType.getPrimitiveType();
                 if (argPrimitiveType == PrimitiveType.TINYINT || argPrimitiveType == PrimitiveType.SMALLINT
                         || argPrimitiveType == PrimitiveType.INT) {
-                    type = Type.BIGINT;
+                    type = IntegerType.BIGINT;
                 } else if (argPrimitiveType == PrimitiveType.FLOAT) {
-                    type = Type.DOUBLE;
+                    type = FloatType.DOUBLE;
                 } else {
                     type = baseType;
                 }
@@ -656,34 +662,34 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 type = baseType;
                 break;
             case FunctionSet.BITMAP_UNION:
-                type = Type.BITMAP;
+                type = BitmapType.BITMAP;
                 break;
             case FunctionSet.BITMAP_AGG:
                 // Compatible aggregation models
                 if (FunctionSet.BITMAP_AGG_TYPE.contains(baseType)) {
-                    Function fn = Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
+                    Function fn = ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
                             Function.CompareMode.IS_IDENTICAL);
                     defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
-                    defineExpr.setFn(fn);
-                    defineExpr.setType(Type.BITMAP);
+                    ((FunctionCallExpr) defineExpr).setFn(fn);
+                    defineExpr.setType(BitmapType.BITMAP);
                 } else {
                     throw new SemanticException("Unsupported bitmap_agg type:" + baseType);
                 }
                 functionName = FunctionSet.BITMAP_UNION;
-                type = Type.BITMAP;
+                type = BitmapType.BITMAP;
                 break;
             case FunctionSet.HLL_UNION:
-                type = Type.HLL;
+                type = HLLType.HLL;
                 break;
             case FunctionSet.PERCENTILE_UNION:
-                type = Type.PERCENTILE;
+                type = PercentileType.PERCENTILE;
                 break;
             case FunctionSet.COUNT:
                 mvAggregateType = AggregateType.SUM;
                 defineExpr = new CaseExpr(null, Lists.newArrayList(new CaseWhenClause(
                         new IsNullPredicate(defineExpr, false),
-                        new IntLiteral(0, Type.BIGINT))), new IntLiteral(1, Type.BIGINT));
-                type = Type.BIGINT;
+                        new IntLiteral(0, IntegerType.BIGINT))), new IntLiteral(1, IntegerType.BIGINT));
+                type = IntegerType.BIGINT;
                 break;
             default:
                 throw new UnsupportedMVException("Unsupported function:" + functionName);
@@ -727,7 +733,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (!(orderByElement instanceof SlotRef)) {
                 throw new UnsupportedMVException(
                         "The column in order clause must be original column without calculation. "
-                                + "Error column: " + orderByElement.toSql());
+                                + "Error column: " + ExprToSql.toSql(orderByElement));
             }
             MVColumnItem mvColumnItem = mvColumnItemList.get(i);
             SlotRef slotRef = (SlotRef) orderByElement;

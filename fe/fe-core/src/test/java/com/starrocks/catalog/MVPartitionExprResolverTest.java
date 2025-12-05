@@ -24,16 +24,16 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
-import com.starrocks.scheduler.mv.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.type.DateType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -143,7 +143,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
     private SlotRef makeMvSlotRef(String tableName, String columnName) {
         SlotRef slotRef = new SlotRef(new TableName("test", tableName), columnName, columnName);
         slotRef.getTblNameWithoutAnalyzed().normalization(connectContext);
-        slotRef.setType(Type.DATE);
+        slotRef.setType(DateType.DATE);
         return slotRef;
     }
 
@@ -305,7 +305,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                     Assertions.assertEquals(Sets.newHashSet("p202202_202203"),
                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-                    Assertions.assertEquals("{tbl15=[p20220202, p20220201], tbl16=[p20220202, p20220201]}",
+                    Assertions.assertEquals("{tbl15=[p20220201, p20220202], tbl16=[p20220201, p20220202]}",
                             processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
                 });
     }
@@ -324,9 +324,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         "as select a.k1, b.k2 from test.tbl15 as a join test.tbl16 as b " +
                         "on a.k1 = date_trunc('month', b.k1);", () -> {
 
-                    MaterializedView materializedView =
-                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+                    MaterializedView materializedView = getMv(testDb.getFullName(), "mv_join_predicate");
                     Assertions.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -357,7 +355,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                         // 3. tbl15's associated partitions are p20220201 and p20220202
                         Assertions.assertEquals(Sets.newHashSet("p20220202", "p20220201"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-                        Assertions.assertEquals("{tbl15=[p20220202, p20220201], tbl16=[p20220202, p20220201]}",
+                        Assertions.assertEquals("{tbl15=[p20220201, p20220202], tbl16=[p20220201, p20220202]}",
                                 processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
                     }
                 });
@@ -458,7 +456,7 @@ public class MVPartitionExprResolverTest extends MVTestBase {
                     MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                     Assertions.assertEquals(Sets.newHashSet("p202202_202203"),
                             processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
-                    Assertions.assertEquals("{tbl15=[p20220202, p20220201]}",
+                    Assertions.assertEquals("{tbl15=[p20220201, p20220202]}",
                             processor.getMVTaskRunExtraMessage().getRefBasePartitionsToRefreshMap().toString());
                 });
     }

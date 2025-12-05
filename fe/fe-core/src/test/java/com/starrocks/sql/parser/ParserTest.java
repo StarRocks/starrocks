@@ -15,9 +15,6 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -28,6 +25,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -36,8 +34,11 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -235,7 +236,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
+            Assertions.assertEquals(type, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
             Assertions.fail(err.getMessage());
         }
@@ -246,7 +247,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assertions.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
+            Assertions.assertEquals(type, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
             Assertions.fail(err.getMessage());
         }
@@ -270,8 +271,8 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assertions.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
-        Assertions.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+        Assertions.assertEquals(type1, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
+        Assertions.assertEquals(type2, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
     @Test
@@ -336,9 +337,9 @@ class ParserTest {
         t2.start();
         latch.await(10, TimeUnit.SECONDS);
         Assertions.assertTrue(exprs[0] instanceof CompoundPredicate,
-                exprs[0].toSql() + "should be a compound or predicate");
+                ExprToSql.toSql(exprs[0]) + "should be a compound or predicate");
         Assertions.assertTrue(exprs[1] instanceof FunctionCallExpr,
-                exprs[1].toSql() + "should be a concat function call");
+                ExprToSql.toSql(exprs[1]) + "should be a concat function call");
     }
 
     @ParameterizedTest
@@ -609,7 +610,7 @@ class ParserTest {
             String sql = "ALTER TABLE test_db.test_table\n" + //
                     "SPLIT TABLET\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_split_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -626,7 +627,7 @@ class ParserTest {
                 SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
                 Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
                 Assertions.assertEquals(null, splitTabletClause.getTabletList());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_split_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -638,7 +639,7 @@ class ParserTest {
                     "SPLIT TABLET\n" + //
                     "    PARTITION (partiton_name1, partition_name2)\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_split_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -656,7 +657,7 @@ class ParserTest {
                 Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
                         splitTabletClause.getPartitionNames().getPartitionNames());
                 Assertions.assertEquals(null, splitTabletClause.getTabletList());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_split_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -667,7 +668,7 @@ class ParserTest {
             String sql = "ALTER TABLE test_db.test_table\n" + //
                     "SPLIT TABLET (1, 2, 3)\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_split_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -685,7 +686,7 @@ class ParserTest {
                 Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
                 Assertions.assertEquals(Lists.newArrayList(1L, 2L, 3L),
                         splitTabletClause.getTabletList().getTabletIds());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_split_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());

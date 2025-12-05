@@ -36,14 +36,7 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.http.WebUtils;
@@ -52,6 +45,13 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -112,6 +112,7 @@ public class Util {
         TYPE_STRING_MAP.put(PrimitiveType.PERCENTILE, "percentile");
         TYPE_STRING_MAP.put(PrimitiveType.JSON, "json");
         TYPE_STRING_MAP.put(PrimitiveType.VARBINARY, "varbinary(%d)");
+        TYPE_STRING_MAP.put(PrimitiveType.VARIANT, "variant");
     }
 
     private static class CmdWorker extends Thread {

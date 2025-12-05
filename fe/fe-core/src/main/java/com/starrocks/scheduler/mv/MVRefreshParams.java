@@ -40,6 +40,8 @@ public class MVRefreshParams {
     // whether the refresh is tentative, when it's true, it means the refresh is triggered temporarily and used for
     // find candidate partitions to refresh.
     private boolean isTentative = false;
+    // whether can generate next task runs, if false, the scheduler will not generate next task runs.
+    private boolean isCanGenerateNextTaskRun = true;
 
     public MVRefreshParams(MaterializedView mv,
                            Map<String, String> properties) {
@@ -106,6 +108,14 @@ public class MVRefreshParams {
 
     public Set<PListCell> getListValues() {
         return listValues;
+    }
+
+    public void setCanGenerateNextTaskRun(boolean canGenerateNextTaskRun) {
+        this.isCanGenerateNextTaskRun = canGenerateNextTaskRun;
+    }
+
+    public boolean isCanGenerateNextTaskRun() {
+        return isCanGenerateNextTaskRun;
     }
 
     @Override

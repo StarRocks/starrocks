@@ -20,12 +20,12 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
 #include "exprs/agg/java_udaf_function.h"
 #endif
 #include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
 #include "udf/java/java_udf.h"
 #endif
 #include "util/bloom_filter.h"
@@ -42,7 +42,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(MACOS_DISABLE_JAVA) && !defined(BUILD_FORMAT_LIB)
+#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
 #endif
     return ctx;
@@ -58,7 +58,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(MACOS_DISABLE_JAVA) && !defined(BUILD_FORMAT_LIB)
+#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
 #endif
     ctx->_is_distinct = is_distinct;
@@ -141,7 +141,7 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
 }
 
 void FunctionContext::release_mems() {
-#ifndef MACOS_DISABLE_JAVA
+#ifndef __APPLE__
     if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
         auto env = JVMFunctionHelper::getInstance().getEnv();
         _jvm_udaf_ctxs->states->clear(this, env);

@@ -651,6 +651,18 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：每个 BE 节点上最高的 Compaction Score。
 
+### starrocks_fe_slow_lock_held_time_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：检测到慢锁时追踪锁持有时间（毫秒）的直方图指标。当锁等待时间超过 `slow_lock_threshold_ms` 配置参数时更新此指标。它追踪检测到慢锁事件时所有锁持有者中的最大锁持有时间。每个指标包括分位数值（0.75、0.95、0.98、0.99、0.999）、`_sum` 和 `_count` 输出。注意：在高竞争情况下，此指标可能无法准确反映确切的锁持有时间，因为指标在等待时间超过阈值时更新，但持有时间可能会继续增加，直到持有者完成操作并释放锁。然而，即使发生死锁，此指标仍然可以更新。
+
+### starrocks_fe_slow_lock_wait_time_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：检测到慢锁时追踪锁等待时间（毫秒）的直方图指标。当锁等待时间超过 `slow_lock_threshold_ms` 配置参数时更新此指标。它准确追踪在锁竞争场景中线程等待获取锁的时间。每个指标包括分位数值（0.75、0.95、0.98、0.99、0.999）、`_sum` 和 `_count` 输出。此指标提供精确的等待时间测量。注意：当发生死锁时无法更新此指标，因此不能用于检测死锁情况。
+
 ### update_compaction_outputs_total
 
 - 单位：个
@@ -1788,3 +1800,54 @@ displayed_sidebar: docs
 - 单位：毫秒
 - 类型：累积值
 - 描述：BE 中 Clone 任务拷贝的总耗时，包括 INTER_NODE 和 INTRA_NODE 两种类型。
+
+### 事务延迟指标
+
+以下 `summary` 类型的指标提供了事务不同阶段的延迟分布。这些指标仅由 Leader FE 节点上报。
+
+每个指标都包含以下输出：
+
+- **Quantiles**：不同百分位边界的延迟值。这些通过 `quantile` 标签公开，其值可以是 `0.75`、`0.95`、`0.98`、`0.99` 和 `0.999`。
+- **`<metric_name>_sum`**：该阶段所有事务的总累积耗时。
+- **`<metric_name>_count`**：该阶段记录的事务总数。
+
+所有事务指标都共享以下标签：
+
+- `type`: 按导入作业的源类型对事务进行分类（例如 `all`、`stream_load`、`routine_load`）。这有助于监控整体事务性能以及特定导入类型的性能。可以通过 FE 参数 [`txn_latency_metric_report_groups`](../FE_configuration.md#txn_latency_metric_report_groups) 配置上报的组。
+- `is_leader`: 指示上报的 FE 节点是否为 Leader。只有 Leader FE (`is_leader="true"`) 会上报实际的指标值。Follower FE 的 `is_leader` 将为 `false` 并且不会上报任何数据。
+
+#### starrocks_fe_txn_total_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：跟踪事务完成的总延迟，从 `prepare` 时间到 `finish` 时间。这代表了事务的完整端到端持续时间。
+
+#### starrocks_fe_txn_write_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务在 `write` 阶段的延迟，从 `prepare` 时间到 `commit` 时间。此指标隔离了事务准备发布之前数据写入和准备阶段的性能。
+
+#### starrocks_fe_txn_publish_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute` 和 `ack` 三个子阶段的总和。
+
+#### starrocks_fe_txn_publish_schedule_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务在提交后等待发布的时间，从 `commit` 时间到发布任务被执行的时间。此延迟反映了 Publish Pipeline 中的调度延迟或排队时间。
+
+#### starrocks_fe_txn_publish_execute_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务 Publish 任务的活动执行时间，从任务被执行到完成，代表了用于使事务的更改变为可见而实际花费的时间。
+
+#### starrocks_fe_txn_publish_ack_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：事务最终确认的延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。

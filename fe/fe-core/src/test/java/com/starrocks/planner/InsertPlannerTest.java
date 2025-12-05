@@ -14,9 +14,9 @@
 
 package com.starrocks.planner;
 
-import com.google.common.base.Predicate;
-import com.google.common.base.Predicates;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -24,18 +24,14 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class InsertPlannerTest {
 
@@ -63,12 +59,14 @@ public class InsertPlannerTest {
             t2.getCatalogDBName(); result = "db2"; minTimes = 0;
             t2.isExternalTableWithFileSystem(); result = true; minTimes = 0;
 
-            AnalyzerUtils.collectSpecifyExternalTables(qs, (List<Table>) any, (Predicate<Table>) any);
+            AnalyzerUtils.collectAllTableWithAlias(qs);
             result = new Delegate<Void>() {
                 @SuppressWarnings("unused")
-                void delegate(QueryStatement _qs, List<Table> out, Predicate<Table> pred) {
-                if (pred == null || pred.test(t1)) out.add(t1);
-                if (pred == null || pred.test(t2)) out.add(t2);
+                Map<TableName, Table> delegate(QueryStatement qs) {
+                        Map<TableName, Table> out = Maps.newHashMap();
+                        out.put(new TableName("c1", "db1", "t1"), t1);
+                        out.put(new TableName("c2", "db2", "t2"), t2);
+                        return out;
                 }
             };
         }};
@@ -98,7 +96,7 @@ public class InsertPlannerTest {
         target.refreshExternalTable(qs, session);
 
         new Verifications() {{
-            AnalyzerUtils.collectSpecifyExternalTables(qs, (List<Table>) any, (Predicate<Table>) any); times = 0;
+            AnalyzerUtils.collectAllTableWithAlias(qs); times = 0;
             metadataMgr.refreshTable(anyString, anyString, (Table) any, (List<String>) any, anyBoolean); times = 0;
             session.getGlobalStateMgr(); times = 0; 
         }};
@@ -114,11 +112,11 @@ public class InsertPlannerTest {
         new Expectations() {{
                 session.getSessionVariable(); result = sessVar;
                 sessVar.isEnableInsertSelectExternalAutoRefresh(); result = true;
-                AnalyzerUtils.collectSpecifyExternalTables(qs, (List<Table>) any, (Predicate<Table>) any);
+                AnalyzerUtils.collectAllTableWithAlias(qs);
                 result = new Delegate<Void>() {
                     @SuppressWarnings("unused")
-                    void delegate(QueryStatement _qs, List<Table> out, Predicate<Table> pred) {
-                        // no-op
+                    Map<TableName, Table> delegate(QueryStatement _qs) {
+                        return Maps.newHashMap();
                     }
                 };
         }};

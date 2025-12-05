@@ -18,9 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
@@ -48,6 +46,12 @@ import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.thrift.protocol.TType;
@@ -89,11 +93,11 @@ public class SystemTable extends Table {
 
     private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
             ImmutableMap.<Byte, Type>builder()
-                    .put(TType.I16, Type.SMALLINT)
-                    .put(TType.I32, Type.INT)
-                    .put(TType.I64, Type.BIGINT)
-                    .put(TType.STRING, Type.STRING)
-                    .put(TType.BOOL, Type.BOOLEAN)
+                    .put(TType.I16, IntegerType.SMALLINT)
+                    .put(TType.I32, IntegerType.INT)
+                    .put(TType.I64, IntegerType.BIGINT)
+                    .put(TType.STRING, StringType.STRING)
+                    .put(TType.BOOL, BooleanType.BOOLEAN)
                     .build();
 
     private final TSchemaTableType schemaTableType;
@@ -278,6 +282,6 @@ public class SystemTable extends Table {
     }
 
     public static ScalarType createNameType() {
-        return ScalarType.createVarchar(NAME_CHAR_LEN);
+        return TypeFactory.createVarchar(NAME_CHAR_LEN);
     }
 }

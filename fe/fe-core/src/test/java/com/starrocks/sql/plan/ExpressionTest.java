@@ -18,13 +18,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.TupleId;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -35,6 +35,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
@@ -229,6 +237,14 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testExpression11() throws Exception {
+        String sql = "select cast(v1 as decimal256(58,5)) % cast(v2 as decimal32(9,7)) from t0";
+        String planFragment = getFragmentPlan(sql);
+        Assertions.assertTrue(planFragment.contains("|  <slot 4> : CAST(CAST(1: v1 AS DECIMAL256(58,5)) AS DECIMAL256(76,5)) " +
+                "% CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL256(76,7))"));
+    }
+
+    @Test
     public void testTimestampArithmeticExpr() throws Exception {
         String sql = "select id_date + interval '3' month," +
                 "id_date + interval '1' day," +
@@ -243,9 +259,9 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testScalarOperatorToExpr() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(2, Type.INT, "e", true);
-        ScalarOperator cast = new CastOperator(Type.DOUBLE, columnRefOperator);
-        ColumnRefOperator castColumnRef = new ColumnRefOperator(1, Type.INT, "cast", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(2, IntegerType.INT, "e", true);
+        ScalarOperator cast = new CastOperator(FloatType.DOUBLE, columnRefOperator);
+        ColumnRefOperator castColumnRef = new ColumnRefOperator(1, IntegerType.INT, "cast", true);
 
         HashMap<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         projectMap.put(castColumnRef, cast);
@@ -263,11 +279,11 @@ public class ExpressionTest extends PlanTestBase {
 
         // lambda functions
         ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(100000, Type.INT, "x", true),
+                new ColumnRefOperator(100000, IntegerType.INT, "x", true),
                 ConstantOperator.createInt(1));
-        ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
+        ColumnRefOperator colRef = new ColumnRefOperator(100000, IntegerType.INT, "x", true);
         LambdaFunctionOperator lambda =
-                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+                new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, BooleanType.BOOLEAN);
         variableToSlotRef.clear();
         projectMap.clear();
         context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
@@ -275,7 +291,7 @@ public class ExpressionTest extends PlanTestBase {
         Expr lambdaFunc = ScalarOperatorToExpr.buildExecExpression(lambda, context);
 
         Assertions.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
-        Assertions.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
+        Assertions.assertEquals("<slot 100000> -> <slot 100000> = 1", ExprToSql.toSql(lambdaFunc));
 
         LambdaFunctionExpr lexpr = ((LambdaFunctionExpr) lambdaFunc);
         Assertions.assertTrue(lexpr.getChildren().size() == 2 && lexpr.getChild(1) instanceof SlotRef);
@@ -284,7 +300,7 @@ public class ExpressionTest extends PlanTestBase {
         Assertions.assertTrue(slotRef.isFromLambda());
 
         List<TupleId> tids = ImmutableList.of(new TupleId(111));
-        Assertions.assertTrue(lexpr.getChild(1).isBoundByTupleIds(tids));
+        Assertions.assertTrue(ExprUtils.isBoundByTupleIds(lexpr.getChild(1), tids));
     }
 
     @Test
@@ -535,7 +551,7 @@ public class ExpressionTest extends PlanTestBase {
         List<ColumnRefOperator> outColumns = plan.getOutputColumns();
 
         Assertions.assertEquals(1, outColumns.size());
-        Assertions.assertEquals(Type.DATETIME, outColumns.get(0).getType());
+        Assertions.assertEquals(DateType.DATETIME, outColumns.get(0).getType());
         Assertions.assertTrue(outColumns.get(0).isNullable());
     }
 
@@ -1983,12 +1999,13 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testFoundJsonInt() {
-        Function func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.VARCHAR, Type.VARCHAR},
+        Function func = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT,
+                new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(func);
         Assertions.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());
 
-        func = Expr.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {Type.JSON, Type.VARCHAR},
+        func = ExprUtils.getBuiltinFunction(FunctionSet.GET_JSON_INT, new Type[] {JsonType.JSON, VarcharType.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Assertions.assertNotNull(func);
         Assertions.assertEquals(PrimitiveType.BIGINT, func.getReturnType().getPrimitiveType());

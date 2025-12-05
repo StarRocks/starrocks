@@ -439,7 +439,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                     "memory limit exceeded, please reduce load frequency or increase config "
                     "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
         }
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     auto state = get_state();
     if (state != kWriting) {
@@ -467,15 +467,15 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = _flush_memtable();
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = _flush_memtable();
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (full) {
         st = flush_memtable_async();
-        _reset_mem_table();
         ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
@@ -685,7 +685,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
     return Status::OK();
 }
 
-void DeltaWriter::_reset_mem_table() {
+Status DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
@@ -697,8 +697,10 @@ void DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    RETURN_IF_ERROR(_mem_table->prepare());
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
     _write_buffer_size = _mem_table->write_buffer_size();
+    return Status::OK();
 }
 
 Status DeltaWriter::commit() {

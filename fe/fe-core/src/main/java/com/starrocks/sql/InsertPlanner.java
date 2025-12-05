@@ -31,7 +31,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -39,6 +39,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
@@ -74,12 +75,12 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -108,6 +109,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
@@ -125,6 +128,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+import static com.starrocks.sql.StatementPlanner.collectSourceTablesCount;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
@@ -266,11 +270,12 @@ public class InsertPlanner {
     public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
         SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
         if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
-            List<Table> tables = new ArrayList<>();
-            AnalyzerUtils.collectSpecifyExternalTables(queryStatement, tables, Table::isExternalTableWithFileSystem);
-            for (Table table : tables) {
-                session.getGlobalStateMgr().getMetadataMgr().refreshTable(table.getCatalogName(),
-                        table.getCatalogDBName(), table, new ArrayList<>(), false);
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
+                if (t.getValue().isExternalTableWithFileSystem()) {
+                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
+                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
+                }
             }
         }
     }
@@ -443,8 +448,10 @@ public class InsertPlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
+                    Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
+                            ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
-                    olapTableSink.complete();
+                    olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
@@ -559,8 +566,12 @@ public class InsertPlanner {
                 session.getSessionVariable());
         OptExpression optimizedPlan;
 
+        int sourceTablesCount = collectSourceTablesCount(session, insertStmt);
+
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
-            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.initContext(session, columnRefFactory));
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setSourceTablesCount(sourceTablesCount);
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
                     logicalPlan.getRoot(),
                     requiredPropertySet,
@@ -597,7 +608,7 @@ public class InsertPlanner {
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
-                    if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
+                    if (isAutoIncrement && row.get(columnIdx).getType() == NullType.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                 targetColumn.getName() + " You can use `default` for an" +
                                 " AUTO INCREMENT column");
@@ -616,7 +627,7 @@ public class InsertPlanner {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
-                        if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
+                        if (isAutoIncrement && row.get(idx).getType() == NullType.NULL) {
                             throw new SemanticException(
                                     " `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                             targetColumn.getName() + " You can use `default` for an" +
@@ -770,7 +781,8 @@ public class InsertPlanner {
                 continue;
             }
 
-            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
+            // Target column which starts with "mv" should not be treated as materialized view column when this column exists
+            // in base schema,
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
@@ -825,20 +837,20 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
-                outputColumns.add(columnRefOperator);
-
+                ScalarOperator scalarOperator = null;
                 Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
+                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
-                            targetColumn.calculatedDefaultValue()));
+                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
@@ -984,7 +996,7 @@ public class InsertPlanner {
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
                 LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
-                Type type = expr.isConstantNull() ? Type.NULL : column.getType();
+                Type type = expr.isConstantNull() ? NullType.NULL : column.getType();
                 ScalarOperator scalarOperator =
                         ConstantOperator.createObject(expr.getRealObjectValue(), type);
                 ColumnRefOperator col = columnRefFactory
@@ -1017,7 +1029,7 @@ public class InsertPlanner {
                 PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
                 boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
                 if (isInvalid) {
-                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" + 
+                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" +
                             " for not partitioned by identity transform", icebergTable.getName());
                 }
             }

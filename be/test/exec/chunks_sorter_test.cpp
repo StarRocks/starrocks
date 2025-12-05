@@ -66,8 +66,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_first_all_null_single_column) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = 2147483647, _max = -2147483648 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=2147483647, _max=-2147483648, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterBuilderTest, null_first_all_null_multi_column) {
@@ -84,8 +84,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_first_all_null_multi_column) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = 2147483647, _max = -2147483648 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=2147483647, _max=-2147483648, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterBuilderTest, null_first_partial_null_asc) {
@@ -102,8 +102,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_first_partial_null_asc) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = -2147483648, _max = 12 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=-2147483648, _max=12, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterBuilderTest, null_first_partial_null_desc) {
@@ -120,8 +120,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_first_partial_null_desc) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = 10, _max = 2147483647 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=10, _max=2147483647, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterBuilderTest, null_last_has_null_single_column) {
@@ -138,8 +138,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_last_has_null_single_column) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = -2147483648, _max = 2147483647 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=-2147483648, _max=2147483647, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterBuilderTest, null_last_has_null_multi_column) {
@@ -170,8 +170,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_first_has_no_null_asc) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = -2147483648, _max = 14 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=-2147483648, _max=14, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterBuilderTest, null_last_has_no_null_desc) {
@@ -188,8 +188,8 @@ TEST_F(SortRuntimeFilterBuilderTest, null_last_has_no_null_desc) {
     ASSERT_TRUE(rf != nullptr);
     auto* bf = reinterpret_cast<MinMaxRuntimeFilter<TYPE_INT>*>(rf);
     ASSERT_EQ(bf->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = 11, _max = 2147483647 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=11, _max=2147483647, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 class SortRuntimeFilterUpdaterTest : public ::testing::Test {
@@ -303,8 +303,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_first_single_column_update_to_all_null
     _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = 2147483647, _max = -2147483648 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=2147483647, _max=-2147483648, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_first_multi_column_update_to_all_null) {
@@ -320,8 +320,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_first_multi_column_update_to_all_null)
     _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = 2147483647, _max = -2147483648 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=2147483647, _max=-2147483648, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_first_one_column_update) {
@@ -337,8 +337,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_first_one_column_update) {
     _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = -2147483648, _max = 5 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=-2147483648, _max=5, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_all_null) {
@@ -354,8 +354,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_all_null) {
     _updater.template operator()<TYPE_INT>(_all_null_rf_for_null_last, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_all_null_rf_for_null_last->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = -2147483648, _max = 2147483647 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=-2147483648, _max=2147483647, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_null) {
@@ -371,8 +371,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_null) {
     _updater.template operator()<TYPE_INT>(_all_null_rf_for_null_last, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_all_null_rf_for_null_last->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = -2147483648, _max = 2147483647 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=-2147483648, _max=2147483647, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_first_one_column_have_no_null) {
@@ -388,8 +388,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_first_one_column_have_no_null) {
     _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_first, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_no_null_rf_asc_for_null_first->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 1 _min = -2147483648, _max = 5 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=1, _min=-2147483648, _max=5, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_no_null_asc) {
@@ -405,8 +405,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_no_null_asc) {
     _updater.template operator()<TYPE_INT>(_no_null_rf_asc_for_null_last, column, row_id, asc, null_first,
                                            is_close_interval);
     ASSERT_EQ(_no_null_rf_asc_for_null_last->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = -2147483648, _max = 5 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=-2147483648, _max=5, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_no_null_desc) {
@@ -421,8 +421,8 @@ TEST_F(SortRuntimeFilterUpdaterTest, null_last_one_column_have_no_null_desc) {
 
     _updater.template operator()<TYPE_INT>(_no_null_rf_desc, column, row_id, asc, null_first, is_close_interval);
     ASSERT_EQ(_no_null_rf_desc->debug_string(),
-              "RuntimeMinMax(type = 5 has_null = 0 _min = 21, _max = 2147483647 left_close_interval = 1, "
-              "right_close_interval = 1 )");
+              "RuntimeMinMax(type=5, has_null=0, _min=21, _max=2147483647, left_close_interval=1, "
+              "right_close_interval=1)");
 }
 
 class ChunksSorterTest : public ::testing::Test {

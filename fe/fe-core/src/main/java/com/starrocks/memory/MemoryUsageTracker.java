@@ -50,7 +50,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
 
     private boolean initialize;
     public MemoryUsageTracker() {
-        super("MemoryUsageTracker", Config.memory_tracker_interval_seconds * 1000L);
+        super("memory-usage-tracker", Config.memory_tracker_interval_seconds * 1000L);
     }
 
     private void initMemoryTracker() {

@@ -13,12 +13,13 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,14 +32,14 @@ public class BeThreadsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("GROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PTHREAD_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
-                        .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("BOUND_CPUS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("BE_ID", IntegerType.BIGINT)
+                        .column("GROUP", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PTHREAD_ID", IntegerType.BIGINT)
+                        .column("TID", IntegerType.BIGINT)
+                        .column("IDLE", BooleanType.BOOLEAN)
+                        .column("FINISHED_TASKS", IntegerType.BIGINT)
+                        .column("BOUND_CPUS", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_BE_THREADS);
     }
 }

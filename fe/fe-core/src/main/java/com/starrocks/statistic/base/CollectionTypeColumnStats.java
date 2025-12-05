@@ -14,11 +14,11 @@
 
 package com.starrocks.statistic.base;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
 
 public class CollectionTypeColumnStats extends BaseColumnStats {
     private final boolean isManualJob;
@@ -32,7 +32,7 @@ public class CollectionTypeColumnStats extends BaseColumnStats {
     public String getFullDataSize() {
         long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                 ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
-        return "COUNT(*) * " + elementTypeSize + " * " + getCollectionSize();
+        return "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + getCollectionSize().trim() + ") ";
     }
 
     @Override
@@ -53,7 +53,7 @@ public class CollectionTypeColumnStats extends BaseColumnStats {
     @Override
     public String getCollectionSize() {
         String collectionSizeFunction = columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE";
-        return "AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")) ";
+        return "IFNULL(AVG(" + collectionSizeFunction + "(" + getQuotedColumnName() + ")), -1) ";
     }
 
     @Override

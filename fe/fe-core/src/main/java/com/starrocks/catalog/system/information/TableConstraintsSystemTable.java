@@ -13,11 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -31,13 +31,13 @@ public class TableConstraintsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(512))
-                        .column("CONSTRAINT_SCHEMA", ScalarType.createVarchar(64))
-                        .column("CONSTRAINT_NAME", ScalarType.createVarchar(64))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
-                        .column("TABLE_NAME", ScalarType.createVarchar(64))
-                        .column("CONSTRAINT_TYPE", ScalarType.createVarchar(64))
-                        .column("ENFORCED", ScalarType.createVarcharType(3))
+                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarchar(512))
+                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("CONSTRAINT_NAME", TypeFactory.createVarchar(64))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(64))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(64))
+                        .column("CONSTRAINT_TYPE", TypeFactory.createVarchar(64))
+                        .column("ENFORCED", TypeFactory.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_TABLE_CONSTRAINTS);
     }
 }

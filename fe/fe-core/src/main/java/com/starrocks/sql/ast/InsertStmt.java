@@ -21,10 +21,10 @@ import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.sql.ast.LoadStmt.MERGE_CONDITION;
 
 /**
  * Insert into is performed to load data from the result of query stmt.
@@ -259,7 +260,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isSpecifyPartitionNames() {
-        return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
+        return targetPartitionNames != null && !targetPartitionNames.isKeyPartitionNames();
     }
 
     public void setTargetColumnNames(List<String> targetColumnNames) {
@@ -268,6 +269,10 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public String getMergingCondition() {
+        return this.properties.get(MERGE_CONDITION);
     }
 
     public void setAutoIncrementPartialUpdate() {
@@ -312,7 +317,7 @@ public class InsertStmt extends DmlStmt {
     }
 
     public boolean isStaticKeyPartitionInsert() {
-        return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
+        return targetPartitionNames != null && targetPartitionNames.isKeyPartitionNames();
     }
 
     public boolean isPartitionNotSpecifiedInOverwrite() {

@@ -145,6 +145,7 @@ public:
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
     const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
     bool enable_resource_group() const { return _workgroup != nullptr; }
+    TQueryType::type query_type() const;
 
     // STREAM MV
     Status reset_epoch();

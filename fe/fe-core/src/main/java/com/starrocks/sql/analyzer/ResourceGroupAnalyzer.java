@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -57,7 +58,7 @@ public class ResourceGroupAnalyzer {
                 Expr lhs = eqPred.getChild(0);
                 Expr rhs = eqPred.getChild(1);
                 if (!(lhs instanceof SlotRef) || !(rhs instanceof StringLiteral)) {
-                    throw new SemanticException("Illegal classifier '" + eqPred.toSql() + "'");
+                    throw new SemanticException("Illegal classifier '" + ExprToSql.toSql(eqPred) + "'");
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
@@ -65,14 +66,14 @@ public class ResourceGroupAnalyzer {
                     if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
-                                        eqPred.toSql()));
+                                        ExprToSql.toSql(eqPred)));
                     }
                     classifier.setUser(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.ROLE)) {
                     if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.ROLE,
-                                        eqPred.toSql()));
+                                        ExprToSql.toSql(eqPred)));
                     }
                     classifier.setRole(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.SOURCE_IP)) {
@@ -99,7 +100,7 @@ public class ResourceGroupAnalyzer {
                     if (planCpuCostRange == null) {
                         throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
                                         + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
-                                ResourceGroup.PLAN_CPU_COST_RANGE, eqPred.toSql()));
+                                ResourceGroup.PLAN_CPU_COST_RANGE, ExprToSql.toSql(eqPred)));
                     }
                     classifier.setPlanCpuCostRange(planCpuCostRange);
                 } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_MEM_COST_RANGE)) {
@@ -107,7 +108,7 @@ public class ResourceGroupAnalyzer {
                     if (planMemCostRange == null) {
                         throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
                                         + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
-                                ResourceGroup.PLAN_MEM_COST_RANGE, eqPred.toSql()));
+                                ResourceGroup.PLAN_MEM_COST_RANGE, ExprToSql.toSql(eqPred)));
                     }
                     classifier.setPlanMemCostRange(planMemCostRange);
                 } else {
@@ -119,7 +120,7 @@ public class ResourceGroupAnalyzer {
                 List<Expr> rhs = inPred.getListChildren();
                 if (!(lhs instanceof SlotRef) || rhs.stream().anyMatch(e -> !(e instanceof StringLiteral))) {
                     throw new SemanticException(
-                            String.format("Illegal classifier specifier: '%s'", inPred.toSql()));
+                            String.format("Illegal classifier specifier: '%s'", ExprToSql.toSql(inPred)));
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 if (!key.equalsIgnoreCase(ResourceGroup.QUERY_TYPE)) {
@@ -137,7 +138,7 @@ public class ResourceGroupAnalyzer {
                         .map(String::toUpperCase).map(ResourceGroupClassifier.QueryType::valueOf)
                         .collect(Collectors.toSet()));
             } else {
-                throw new SemanticException(String.format("Illegal classifier specifier: '%s'", pred.toSql()));
+                throw new SemanticException(String.format("Illegal classifier specifier: '%s'", ExprToSql.toSql(pred)));
             }
         }
 
@@ -203,6 +204,11 @@ public class ResourceGroupAnalyzer {
                         throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(include)");
                     }
                     resourceGroup.setMemLimit(memLimit);
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_POOL)) {
+                    resourceGroup.setMemPool(value);
                     continue;
                 }
 

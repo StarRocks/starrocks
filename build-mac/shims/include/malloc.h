@@ -22,6 +22,25 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+// Provide malloc_usable_size for macOS with proper handling of jemalloc
+#ifndef MALLOC_USABLE_SIZE_DEFINED
+#define MALLOC_USABLE_SIZE_DEFINED
+
+// Check if jemalloc is available
+#if __has_include(<jemalloc/jemalloc.h>)
+#include <jemalloc/jemalloc.h>
+#endif
+
+// Check if malloc_usable_size is already defined by jemalloc
+#ifndef malloc_usable_size
+static inline size_t malloc_usable_size(void* ptr) {
+    if (ptr == nullptr) return 0;
+    return malloc_size(ptr);
+}
+#endif
+
+#endif // MALLOC_USABLE_SIZE_DEFINED
+
 // Provide GNU extensions expected by some codepaths on Linux
 // Implement memalign using posix_memalign on macOS
 static inline void* memalign(size_t alignment, size_t size) {
@@ -32,13 +51,15 @@ static inline void* memalign(size_t alignment, size_t size) {
 
 // Provide pvalloc: allocate page-aligned memory rounded up to page size
 static inline void* pvalloc(size_t size) {
-    size_t page = (size_t)getpagesize();
-    if (page == 0) page = 4096;
-    size_t rounded = (size + page - 1) / page * page;
-    // valloc is deprecated but still available; alternatives are posix_memalign
-    // but valloc matches pvalloc semantics best here.
-    return valloc(rounded);
+    long pagesize = sysconf(_SC_PAGESIZE);
+    if (pagesize <= 0) pagesize = 4096;
+    size_t n = ((size + (size_t)pagesize - 1) / (size_t)pagesize) * (size_t)pagesize;
+    return valloc(n);
 }
+
+// Note: TCMalloc/gperftools stub functions are provided separately
+// in gperftools_stubs.cpp to avoid conflicts with system headers
+
 #else
 #include <malloc.h>
 #endif

@@ -23,7 +23,9 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.PartitionKeySerializer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
@@ -45,6 +47,8 @@ import com.starrocks.thrift.TReplicaMeta;
 import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TTableMeta;
 import com.starrocks.thrift.TTabletMeta;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -351,7 +355,7 @@ public class ExternalOlapTable extends OlapTable {
                 TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
                 List<Column> columns = new ArrayList<Column>();
                 for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
-                    Type type = Type.fromThrift(columnMeta.getColumnType());
+                    Type type = TypeDeserializer.fromThrift(columnMeta.getColumnType());
                     Column column = new Column(columnMeta.getColumnName(), type);
                     if (columnMeta.isSetKey()) {
                         column.setIsKey(columnMeta.isKey());
@@ -374,10 +378,10 @@ public class ExternalOlapTable extends OlapTable {
                     long partitionId = tRange.getPartition_id();
                     ByteArrayInputStream stream = new ByteArrayInputStream(tRange.getStart_key());
                     DataInputStream input = new DataInputStream(stream);
-                    PartitionKey startKey = PartitionKey.read(input);
+                    PartitionKey startKey = PartitionKeySerializer.read(input);
                     stream = new ByteArrayInputStream(tRange.getEnd_key());
                     input = new DataInputStream(stream);
-                    PartitionKey endKey = PartitionKey.read(input);
+                    PartitionKey endKey = PartitionKeySerializer.read(input);
                     Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
                     short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
                     boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
@@ -417,7 +421,7 @@ public class ExternalOlapTable extends OlapTable {
         for (TIndexMeta indexMeta : meta.getIndexes()) {
             List<Column> columns = new ArrayList<>();
             for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
-                Type type = Type.fromThrift(columnMeta.getColumnType());
+                Type type = TypeDeserializer.fromThrift(columnMeta.getColumnType());
                 Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
                 if (columnMeta.isSetKey()) {
                     column.setIsKey(columnMeta.isKey());

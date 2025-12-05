@@ -579,6 +579,9 @@ public:
 
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
+    bool fragment_prepared() const { return _fragment_prepared; }
+    void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -599,15 +602,11 @@ private:
 
     DescriptorTbl* _desc_tbl = nullptr;
 
-    // Lock protecting _error_log and _unreported_error_idx
     std::mutex _error_log_lock;
 
     std::mutex _rejected_record_lock;
     std::string _rejected_record_file_path;
     std::unique_ptr<std::ofstream> _rejected_record_file;
-
-    // _error_log[_unreported_error_idx+] has been not reported to the coordinator.
-    int _unreported_error_idx;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;
@@ -724,6 +723,8 @@ private:
     DebugActionMgr _debug_action_mgr;
 
     bool _enable_event_scheduler = false;
+
+    bool _fragment_prepared = false;
 };
 
 #define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \

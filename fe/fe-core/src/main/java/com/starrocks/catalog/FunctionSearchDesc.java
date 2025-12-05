@@ -36,7 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
-import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.type.Type;
 
 // Used to search a function
 public class FunctionSearchDesc implements Writable {

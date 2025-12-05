@@ -65,7 +65,9 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
     auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
-    sink_ctx->path = t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
+    sink_ctx->path = t_iceberg_sink.__isset.data_location && !t_iceberg_sink.data_location.empty()
+                             ? t_iceberg_sink.data_location
+                             : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
     sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
     sink_ctx->column_names = iceberg_table_desc->full_column_names();
     sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();

@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.TupleDescriptor;
@@ -325,5 +326,111 @@ public class ColocatedBackendSelectorTest {
 
         return new DefaultWorkerProvider(id2Backend, id2ComputeNode, id2Backend, id2ComputeNode, false,
                 WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    private ComputeNode createTestComputeNode(long id, String host, int port) {
+        ComputeNode node = new ComputeNode(id, host, port);
+        node.setAlive(true);
+        return node;
+    }
+
+    @Test
+    public void testColocatedBackendSelectorWithBackupNodeSelection() throws StarRocksException {
+        // Test the new backup node selection functionality in shared-data mode
+        final int numBuckets = 2;
+        // Bucket 0 has replicas on nodes 1 and 2, but both are unavailable
+        // Bucket 1 has replicas on nodes 3 and 4, both available
+        final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
+                0, ImmutableList.of(1L, 2L),  // Both unavailable
+                1, ImmutableList.of(3L, 4L)   // Both available
+        );
+
+        // Create a custom WorkerProvider that allows backup node selection
+        ImmutableMap<Long, ComputeNode> allNodes = ImmutableMap.<Long, ComputeNode>builder()
+                .put(1L, createTestComputeNode(1L, "host1", 9030))
+                .put(2L, createTestComputeNode(2L, "host2", 9030))
+                .put(3L, createTestComputeNode(3L, "host3", 9030))
+                .put(4L, createTestComputeNode(4L, "host4", 9030))
+                .build();
+
+        // Make nodes 1 and 2 unavailable, nodes 3 and 4 available
+        ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of(
+                3L, allNodes.get(3L),
+                4L, allNodes.get(4L)
+        );
+
+        WorkerProvider workerProvider =
+                new DefaultSharedDataWorkerProvider(allNodes, availableNodes, WarehouseManager.DEFAULT_RESOURCE) {
+                    @Override
+                    public long selectBackupWorker(long workerId) {
+                        // Map unavailable nodes to available backup nodes
+                        if (workerId == 1L) {
+                            return 3L;
+                        }
+                        if (workerId == 2L) {
+                            return 4L;
+                        }
+                        return -1L;
+                    }
+                };
+
+        OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
+        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 1);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ColocatedBackendSelector.Assignment colocatedAssignment =
+                new ColocatedBackendSelector.Assignment(numBuckets, 1, Optional.empty());
+
+        ColocatedBackendSelector backendSelector = new ColocatedBackendSelector(
+                scanNode, assignment, colocatedAssignment, false, workerProvider, 1);
+        backendSelector.computeScanRangeAssignment();
+
+        // Bucket 0 should be assigned to backup node 3 (for unavailable node 1)
+        // Bucket 1 should be assigned to available node 3 or 4
+        Map<Integer, Long> seqToWorkerId = colocatedAssignment.getSeqToWorkerId();
+        assertThat(seqToWorkerId).containsKey(0);
+        assertThat(seqToWorkerId).containsKey(1);
+
+        // Node 3 should be selected as it's either the backup for bucket 0 or direct selection for bucket 1
+        assertThat(workerProvider.isWorkerSelected(3L)).isTrue();
+    }
+
+    @Test
+    public void testColocatedBackendSelectorWithAllNodesUnavailable() {
+        // Test case where all nodes for a bucket are unavailable and no backup available
+        final int numBuckets = 1;
+        final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
+                0, ImmutableList.of(1L, 2L)  // Both unavailable, no backup available
+        );
+        // Create a custom WorkerProvider that allows backup node selection
+        ImmutableMap<Long, ComputeNode> allNodes = ImmutableMap.<Long, ComputeNode>builder()
+                .put(1L, createTestComputeNode(1L, "host1", 9030))
+                .put(2L, createTestComputeNode(2L, "host2", 9030))
+                .build();
+
+        // No available nodes
+        ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
+
+        // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
+                WarehouseManager.DEFAULT_RESOURCE) {
+            @Override
+            public long selectBackupWorker(long workerId) {
+                // No backup available
+                return -1L;
+            }
+        };
+        OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
+        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 1);
+
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ColocatedBackendSelector.Assignment colocatedAssignment =
+                new ColocatedBackendSelector.Assignment(numBuckets, 1, Optional.empty());
+
+        ColocatedBackendSelector backendSelector = new ColocatedBackendSelector(
+                scanNode, assignment, colocatedAssignment, false, noBackupWorkerProvider, 1);
+
+        // Should throw exception when no backup node is available
+        Assertions.assertThrows(NonRecoverableException.class, backendSelector::computeScanRangeAssignment);
     }
 }

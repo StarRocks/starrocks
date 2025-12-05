@@ -31,10 +31,8 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -49,6 +47,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchedule;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,8 +67,8 @@ public class TabletSchedCtxTest {
     private static int PH_PART_ID = 6;
 
     private static String TB_NAME = "test";
-    private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1", ScalarType
-            .createType(PrimitiveType.TINYINT), true, null, "", "key1"));
+    private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1",
+            IntegerType.TINYINT, true, null, "", "key1"));
 
     private static int TABLET_ID_1 = 50000;
     private static int TABLET_ID_2 = 51000;

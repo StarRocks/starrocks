@@ -1,0 +1,9 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+.vscode
+.gitreview
+tags
+.idea/
+.pytest_cache/
+.github/
+__pycache__/
+/starrocks.egg-info/

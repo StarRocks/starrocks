@@ -55,7 +55,51 @@ ${license}
 package com.starrocks.builtins;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+
+import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
+import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
+import static com.starrocks.type.AnyMapType.ANY_MAP;
+import static com.starrocks.type.AnyStructType.ANY_STRUCT;
+import static com.starrocks.type.ArrayType.ARRAY_BIGINT;
+import static com.starrocks.type.ArrayType.ARRAY_BOOLEAN;
+import static com.starrocks.type.ArrayType.ARRAY_DATE;
+import static com.starrocks.type.ArrayType.ARRAY_DATETIME;
+import static com.starrocks.type.ArrayType.ARRAY_DECIMAL128;
+import static com.starrocks.type.ArrayType.ARRAY_DECIMAL32;
+import static com.starrocks.type.ArrayType.ARRAY_DECIMAL64;
+import static com.starrocks.type.ArrayType.ARRAY_DECIMALV2;
+import static com.starrocks.type.ArrayType.ARRAY_DOUBLE;
+import static com.starrocks.type.ArrayType.ARRAY_FLOAT;
+import static com.starrocks.type.ArrayType.ARRAY_INT;
+import static com.starrocks.type.ArrayType.ARRAY_JSON;
+import static com.starrocks.type.ArrayType.ARRAY_LARGEINT;
+import static com.starrocks.type.ArrayType.ARRAY_SMALLINT;
+import static com.starrocks.type.ArrayType.ARRAY_TINYINT;
+import static com.starrocks.type.ArrayType.ARRAY_VARCHAR;
+import static com.starrocks.type.BitmapType.BITMAP;
+import static com.starrocks.type.BooleanType.BOOLEAN;
+import static com.starrocks.type.DateType.DATE;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.DateType.TIME;
+import static com.starrocks.type.DecimalType.DECIMAL128;
+import static com.starrocks.type.DecimalType.DECIMAL256;
+import static com.starrocks.type.DecimalType.DECIMAL32;
+import static com.starrocks.type.DecimalType.DECIMAL64;
+import static com.starrocks.type.DecimalType.DECIMALV2;
+import static com.starrocks.type.FloatType.DOUBLE;
+import static com.starrocks.type.FloatType.FLOAT;
+import static com.starrocks.type.FunctionType.FUNCTION;
+import static com.starrocks.type.HLLType.HLL;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.IntegerType.LARGEINT;
+import static com.starrocks.type.IntegerType.SMALLINT;
+import static com.starrocks.type.IntegerType.TINYINT;
+import static com.starrocks.type.JsonType.JSON;
+import static com.starrocks.type.MapType.MAP_VARCHAR_VARCHAR;
+import static com.starrocks.type.PercentileType.PERCENTILE;
+import static com.starrocks.type.VarbinaryType.VARBINARY;
+import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class VectorizedBuiltinFunctions {
     public static void initBuiltins(FunctionSet functionSet) {
@@ -78,7 +122,6 @@ void __attribute__((constructor)) {module}_initialize() {{
 function_list = list()
 function_set = set()
 function_signature_set = set()
-
 
 def add_function(fn_data):
     entry = dict()
@@ -132,13 +175,13 @@ def add_function(fn_data):
 
 def generate_fe(path):
     fn_template = Template(
-        'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, Type.${ret}${args_types});'
+        'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
     )
 
     def gen_fe_fn(fnm):
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
         fnm["args_types"] = fnm["args_types"] + ", ".join(
-            ["Type." + i for i in fnm["args"] if i != "..."]
+            [i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
 
@@ -210,6 +253,7 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
+        "AiFunctions",
     ]
 
     modules_contents = dict()

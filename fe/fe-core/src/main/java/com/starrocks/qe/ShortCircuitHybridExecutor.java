@@ -29,15 +29,15 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.PExecShortCircuitResult;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
-import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TDescriptorTable;
@@ -76,7 +76,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     public ShortCircuitHybridExecutor(ConnectContext context, PlanFragment planFragment,
                                       List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
                                       boolean isBinaryRow, boolean enableProfile, String protocol,
-                                      WorkerProvider workerProvider) {
+                                      LazyWorkerProvider workerProvider) {
         super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile,
                 protocol, workerProvider);
     }
@@ -220,7 +220,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
             Optional<Backend> be = pick(scanBackendIds, aliveIdToBackends);
             if (be.isEmpty()) {
-                workerProvider.reportWorkerNotFoundException();
+                workerProvider.get().reportWorkerNotFoundException();
             }
             be.ifPresent(backend -> backend2Tablets.put(be.get().getBrpcAddress(), tabletWithVersion));
         }
@@ -239,7 +239,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         List<TKeyLiteralExpr> keyLiteralExprs = keyTuples.stream().map(keyTuple -> {
             TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
             keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
-                    .map(Expr::treeToThrift)
+                    .map(ExprToThrift::treeToThrift)
                     .collect(Collectors.toList()));
             return keyLiteralExpr;
         }).collect(Collectors.toList());
@@ -252,7 +252,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
             commonRequest.setDesc_tbl(tDescriptorTable);
             commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
-                    .map(Expr::treeToThrift).collect(Collectors.toList()));
+                    .map(ExprToThrift::treeToThrift).collect(Collectors.toList()));
             commonRequest.setIs_binary_row(isBinaryRow);
             commonRequest.setEnable_profile(enableProfile);
             if (planFragment.getSink() != null) {

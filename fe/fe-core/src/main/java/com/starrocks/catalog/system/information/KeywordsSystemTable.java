@@ -14,12 +14,12 @@
 
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -31,8 +31,8 @@ public class KeywordsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("WORD", ScalarType.createVarchar(128))
-                        .column("RESERVED", ScalarType.createType(PrimitiveType.BOOLEAN))
+                        .column("WORD", TypeFactory.createVarchar(128))
+                        .column("RESERVED", BooleanType.BOOLEAN)
                         .build(),
                 TSchemaTableType.SCH_KEYWORDS);
     }

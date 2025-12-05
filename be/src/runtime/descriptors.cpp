@@ -152,6 +152,13 @@ Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, Objec
     return Status::OK();
 }
 
+std::string HdfsPartitionDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "HdfsPartition(id=" << _id << ", location=" << _location << ", file_format=" << _file_format
+        << ", partition_key_value_evals=" << Expr::debug_string(_partition_key_value_evals);
+    return out.str();
+}
+
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _hdfs_base_path = tdesc.hdfsTable.hdfs_base_dir;
@@ -460,7 +467,17 @@ Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, Obj
     RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
     {
         std::unique_lock lock(_map_mutex);
-        _partition_id_to_desc_map[id] = partition;
+        const auto it = _partition_id_to_desc_map.find(id);
+        if (it != _partition_id_to_desc_map.end()) {
+            auto* old_partition = it->second;
+            if (partition->thrift_partition_key_exprs() != old_partition->thrift_partition_key_exprs()) {
+                return Status::InternalError(
+                        fmt::format("Partition id {} already exists. new partition = {}, old_partition = {}", id,
+                                    partition->debug_string(), old_partition->debug_string()));
+            }
+        } else {
+            _partition_id_to_desc_map[id] = partition;
+        }
     }
     return Status::OK();
 }

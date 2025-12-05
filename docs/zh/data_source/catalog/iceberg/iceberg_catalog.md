@@ -107,6 +107,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES
 (
     "type" = "iceberg",
+    [SecurityParams],
     MetastoreParams,
     StorageCredentialParams,
     MetadataRelatedParams
@@ -131,6 +132,20 @@ Iceberg catalog 的描述。此参数是可选的。
 #### type
 
 数据源的类型。将值设置为 `iceberg`。
+
+#### SecurityParams
+
+关于 StarRocks 如何管理 Catalog 数据访问的参数。
+
+有关管理 Iceberg REST Catalog 数据访问的详细说明，请参阅[Iceberg REST Catalog 的安全设置](./iceberg_rest_security.md)。
+
+##### catalog.access.control
+
+数据访问控制策略。有效值：
+
+- `native`（默认）：使用 StarRocks 内置的数据访问控制系统。
+- `allowall`：所有数据访问检查均委托给 Catalog 本身处理。
+- `ranger`：数据访问检查委托给 Apache Ranger 处理。
 
 #### MetastoreParams
 
@@ -317,6 +332,12 @@ REST catalog 的 `MetastoreParams`：
 必需：否
 
 描述：是否支持查询嵌套命名空间下的对象。默认值：`false`。
+
+##### iceberg.catalog.rest.view-endpoints-enabled
+
+必需：否
+
+描述：是否启用视图端点以支持视图相关操作。如果设置为 `false`，将禁用视图操作（如 `getView`）。默认值：`true`。
 
 以下示例创建了一个名为 `tabular` 的 Iceberg catalog，使用 Tabular 作为元存储：
 

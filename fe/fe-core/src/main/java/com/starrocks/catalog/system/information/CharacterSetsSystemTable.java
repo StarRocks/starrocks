@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.builder;
 
@@ -32,10 +32,10 @@ public class CharacterSetsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CHARACTER_SET_NAME", ScalarType.createVarchar(512))
-                        .column("DEFAULT_COLLATE_NAME", ScalarType.createVarchar(64))
-                        .column("DESCRIPTION", ScalarType.createVarchar(64))
-                        .column("MAXLEN", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("CHARACTER_SET_NAME", TypeFactory.createVarchar(512))
+                        .column("DEFAULT_COLLATE_NAME", TypeFactory.createVarchar(64))
+                        .column("DESCRIPTION", TypeFactory.createVarchar(64))
+                        .column("MAXLEN", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_CHARSETS);
     }
 }

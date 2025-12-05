@@ -13,12 +13,13 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.FN_REFLEN;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -34,31 +35,31 @@ public class PartitionsSystemTableSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TABLE_CATALOG", ScalarType.createVarchar(FN_REFLEN))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SUBPARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SUBPARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SUBPARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_DESCRIPTION", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("AVG_ROW_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("MAX_DATA_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("INDEX_LENGTH", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("DATA_FREE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("UPDATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("CHECK_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("CHECKSUM", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("PARTITION_COMMENT", ScalarType.createVarchar(2048))
-                        .column("NODEGROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLESPACE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SUBPARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("TABLE_CATALOG", TypeFactory.createVarchar(FN_REFLEN))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SUBPARTITION_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_ORDINAL_POSITION", IntegerType.BIGINT)
+                        .column("PARTITION_METHOD", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SUBPARTITION_METHOD", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_EXPRESSION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SUBPARTITION_EXPRESSION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("PARTITION_DESCRIPTION", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_ROWS", IntegerType.BIGINT)
+                        .column("AVG_ROW_LENGTH", IntegerType.BIGINT)
+                        .column("DATA_LENGTH", IntegerType.BIGINT)
+                        .column("MAX_DATA_LENGTH", IntegerType.BIGINT)
+                        .column("INDEX_LENGTH", IntegerType.BIGINT)
+                        .column("DATA_FREE", IntegerType.BIGINT)
+                        .column("CREATE_TIME", DateType.DATETIME)
+                        .column("UPDATE_TIME", DateType.DATETIME)
+                        .column("CHECK_TIME", DateType.DATETIME)
+                        .column("CHECKSUM", IntegerType.BIGINT)
+                        .column("PARTITION_COMMENT", TypeFactory.createVarchar(2048))
+                        .column("NODEGROUP", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLESPACE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("SUBPARTITION_ORDINAL_POSITION", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_PARTITIONS);
     }
 }

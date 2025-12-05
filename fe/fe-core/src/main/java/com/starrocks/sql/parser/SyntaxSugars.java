@@ -20,6 +20,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +42,7 @@ public class SyntaxSugars {
                 .put(FunctionSet.DS_HLL_ACCUMULATE, SyntaxSugars::dsHllCountDistinctStateUnion)
                 .put(FunctionSet.DS_HLL_COMBINE, SyntaxSugars::dsHllCountDistinctUnion)
                 .put(FunctionSet.DS_HLL_ESTIMATE, SyntaxSugars::dsHllCountDistinctMerge)
+                .put(FunctionSet.ENCODE_ROW_ID, SyntaxSugars::encodeRowId)
                 .build();
     }
 
@@ -51,7 +53,7 @@ public class SyntaxSugars {
      * - window functions
      */
     public static FunctionCallExpr parse(FunctionCallExpr call) {
-        return FUNCTION_PARSER.getOrDefault(call.getFnName().getFunction(), SyntaxSugars::defaultParse).apply(call);
+        return FUNCTION_PARSER.getOrDefault(call.getFunctionName(), SyntaxSugars::defaultParse).apply(call);
     }
 
     private static FunctionCallExpr defaultParse(FunctionCallExpr call) {
@@ -103,5 +105,11 @@ public class SyntaxSugars {
     private static FunctionCallExpr dsHllCountDistinctMerge(FunctionCallExpr call) {
         return new FunctionCallExpr(AggStateUtils.aggStateMergeFunctionName(FunctionSet.DS_HLL_COUNT_DISTINCT),
                 call.getChildren());
+    }
+
+    private static FunctionCallExpr encodeRowId(FunctionCallExpr call) {
+        final String encodeRowIdFuncName = TvrOpUtils.getEncodeRowIdFunctionNameChecked(
+                call.getChildren());
+        return new FunctionCallExpr(encodeRowIdFuncName, call.getChildren());
     }
 }

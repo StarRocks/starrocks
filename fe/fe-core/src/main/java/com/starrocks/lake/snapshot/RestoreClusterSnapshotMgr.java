@@ -19,11 +19,11 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -143,7 +143,7 @@ public class RestoreClusterSnapshotMgr {
         if (snapshotImagePath.endsWith("/meta")) {
             String pathPattern = snapshotImagePath + "/image/" + ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX + '*';
             List<FileStatus> fileStatusList = HdfsUtil.listFileMeta(pathPattern,
-                    new BrokerDesc(clusterSnapshot.getStorageVolume().getProperties()), false);
+                    clusterSnapshot.getStorageVolume().getProperties(), false);
             if (fileStatusList.isEmpty() || fileStatusList.get(0).isFile()) {
                 throw new StarRocksException("No cluster snapshot found in path " + pathPattern);
             }
@@ -162,11 +162,9 @@ public class RestoreClusterSnapshotMgr {
         long starMgrImageJournalId = 0L;
 
         try {
-            Storage storageFe = new Storage(localImagePath);
-            Storage storageStarMgr = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR);
-            // get image version
-            feImageJournalId = storageFe.getImageJournalId();
-            starMgrImageJournalId = storageStarMgr.getImageJournalId();
+            // Get image version, use image loader to support v2 image format
+            feImageJournalId = new ImageLoader(localImagePath).getImageJournalId();
+            starMgrImageJournalId = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR).getImageJournalId();
         } catch (Exception e) {
             throw new StarRocksException("Failed to get local image version", e);
         }

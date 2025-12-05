@@ -17,12 +17,12 @@ package com.starrocks.statistic.columns;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TResultBatch;
@@ -144,6 +144,35 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         Assertions.assertEquals(2, result.size());
         Assertions.assertEquals(usage1, result.get(0));
         Assertions.assertEquals(usage2, result.get(1));
+
+        // column not found
+        String rowNotFound = String.format("{\"data\": ['%s',%d,%d,%d,'%s','%s','%s']}",
+                feName,
+                db.getId(),
+                t1.getId(),
+                99999L,
+                "predicate",
+                DateUtils.formatDateTimeUnix(LocalDateTime.now()),
+                DateUtils.formatDateTimeUnix(LocalDateTime.now())
+        );
+        TResultBatch batchWithNotFound = new TResultBatch();
+        batchWithNotFound.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(rowNotFound.getBytes()),
+                ByteBuffer.wrap(row2.getBytes())));
+        List<ColumnUsage> resultWithNotFound = PredicateColumnsStorage.resultToColumnUsage(List.of(batchWithNotFound));
+        Assertions.assertEquals(2, resultWithNotFound.size());
+        Assertions.assertEquals(usage1, resultWithNotFound.get(0));
+        Assertions.assertEquals(usage2, resultWithNotFound.get(1));
+
+        // corrupted json
+        String corruptedJson = "{\"data\": [invalid json}";
+        TResultBatch batchWithCorrupted = new TResultBatch();
+        batchWithCorrupted.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(corruptedJson.getBytes()),
+                ByteBuffer.wrap(row2.getBytes())));
+        List<ColumnUsage> resultWithCorrupted =
+                PredicateColumnsStorage.resultToColumnUsage(List.of(batchWithCorrupted));
+        Assertions.assertEquals(2, resultWithCorrupted.size());
+        Assertions.assertEquals(usage1, resultWithCorrupted.get(0));
+        Assertions.assertEquals(usage2, resultWithCorrupted.get(1));
     }
 
     @Test

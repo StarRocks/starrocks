@@ -1,9 +1,6 @@
 ---
 sidebar_position: 100
 ---
-import AuthCompare from '../_assets/best_practices/_auth_comparison.mdx'
-import GroupProviderExample from '../_assets/best_practices/_auth_group_provider_example.mdx'
-import Solution3 from '../_assets/best_practices/_auth_solution_3.mdx'
 
 # 认证与授权
 
@@ -115,7 +112,12 @@ LDAP 可以用作：
 
 支持的身份验证模式比较：
 
-<AuthCompare />
+| 方法       | CREATE USER（本地用户）                                                                                                        | CREATE SECURITY INTEGRATION（基于会话的虚拟用户）                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 描述       | 在集群中手动创建用户，可与外部认证系统关联。该用户在集群中以显式方式存在。                                                                                    | 定义一个外部认证集成。集群本身不保存任何用户信息。可选地结合 Group Provider（用户组提供者）使用，用于定义允许访问的用户组。                                |
+| 登录过程     | 用户必须事先在集群中创建。在登录时，StarRocks 会通过自身或配置的外部认证系统（如 LDAP、JWT）对用户进行认证。只有预先创建的用户才能登录。                                            | 用户登录时，StarRocks 通过外部身份认证系统验证用户身份。若验证成功，系统会在内部创建一个临时的、会话级别的“虚拟用户”，该用户在会话结束后即被销毁。                      |
+| 授权过程     | 因为用户在集群中是持久存在的，所以可以提前通过本地授权系统或 Apache Ranger 为其分配权限。                                                                     | 虽然用户不会在集群中持久化，但可以预先定义角色与用户组之间的映射关系。用户登录后，系统会根据其所属用户组自动分配角色，从而实现基于角色的访问控制（RBAC）。Apache Ranger 也可同时使用。 |
+| 优缺点及适用场景 | <ul><li>**优点**：灵活性高——同时支持本地和外部授权系统。</li><li>**缺点**：需要手动创建用户，维护成本较高。</li><li>**适用场景**：适用于用户规模较小或由集群自身管理访问控制的场景。</li></ul> | <ul><li>**优点**：配置简便，仅需设置外部认证和允许访问的用户组。</li><li>**适用场景**：适用于用户规模较大、采用角色-组映射管理权限的场景。</li></ul>         |
 
 这些身份验证模式可以共存。当用户尝试登录时：
 
@@ -243,9 +245,19 @@ ADMIN SET FRONTEND CONFIG (
    )
    ```
 
-3. 将 Group Provider 与授权系统结合。
+3. 将 Group Provider 与授权系统结合。您可以使用内置授权系统或 Apache Ranger。
 
-   <GroupProviderExample />
+   - 内置授权：
+
+     角色可分配给用户组。登录时，系统会根据组成员身份自动为用户分配角色。
+
+     ```sql
+     GRANT role TO EXTERNAL GROUP <group_name>
+     ```
+
+   - Apache Ranger：
+
+     用户登录后，StarRocks 将组信息传递至 Ranger 进行策略评估。
 
 ### 授权
 
@@ -310,7 +322,19 @@ Apache Ranger 可以作为一个完整的解决方案本身使用，也可以与
 
 :::
 
-<Solution3 />
+### 方案三：外部认证（外部身份）+ 内部授权
+
+若您希望在使用 **StarRocks 内置授权系统**的同时仍依赖**外部认证**，可采用以下方法：
+
+1. 使用**安全集成**与外部身份验证系统建立连接。
+2. 在 **Group Provider** 中配置身份验证和授权所需的组信息。
+3. 在**安全集成**中定义允许登录集群的组。属于这些组的用户将被授予登录权限。
+4. 在 StarRocks 中**创建必要角色**并**授予外部组**。
+5. 用户登录时需同时通过身份验证且属于授权组。登录成功后，StarRocks 将根据组成员身份自动分配相应角色。
+6. 查询执行期间，StarRocks 将如常执行**基于内部 RBAC 的授权**。
+7. 此外可将 **Ranger** 与本方案结合使用，例如，采用 **StarRocks 原生 RBAC** 进行内部表授权，同时使用 **Ranger** 管理外部表授权。通过 Ranger 执行授权时，StarRocks 仍会将**用户 ID 及对应组信息**传递至 Ranger 进行访问控制。
+
+![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
 ## 另请参阅
 

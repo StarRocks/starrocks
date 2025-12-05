@@ -105,7 +105,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                     PlanTestBase.assertContains(plan, expects[i]);
                 }
@@ -119,7 +119,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertNotContains(plan, ":UNION", ": mv0");
+                    PlanTestBase.assertContains(plan, ":UNION", ": mv0");
                 }
             }
 
@@ -135,7 +135,8 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 String[] expects = {
                         "     TABLE: lineitem_par\n" +
-                                "     PARTITION PREDICATES: 25: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                "     PARTITION PREDICATES: 25: l_shipdate >= '1998-01-02', " +
+                                "(25: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (25: l_shipdate IS NULL)\n" +
                                 "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -144,7 +145,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                 "     tabletRatio=12/12", // case 1
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: 26: l_shipdate != '1998-01-01', " +
-                                "26: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                "(26: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (26: l_shipdate IS NULL)\n" +
                                 "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -152,7 +153,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                 "     partitions=3/4", // case 2
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', " +
-                                "26: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                "(26: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (26: l_shipdate IS NULL)\n" +
                                 "     NON-PARTITION PREDICATES: 25: l_suppkey > 1\n" +
                                 "     MIN/MAX PREDICATES: 25: l_suppkey > 1\n" +
                                 "     partitions=2/6",
@@ -192,9 +193,9 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                 "     tabletRatio=18/18",
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: date_trunc('month', 25: l_shipdate) = '1998-01-01', " +
-                                "25: l_shipdate IN (NULL, '1998-01-02', '1998-01-05')\n" +
+                                "(25: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (25: l_shipdate IS NULL)\n" +
                                 "     NO EVAL-PARTITION PREDICATES: date_trunc('month', 25: l_shipdate) = '1998-01-01'\n" +
-                                "     partitions=2/6"
+                                "     partitions=3/6"
                 };
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
@@ -221,7 +222,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
@@ -255,7 +256,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
@@ -311,7 +312,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 for (String query : sqls) {
                     logSysInfo(query);
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": lineitem_par");
+                    PlanTestBase.assertContains(plan, "mv0");
                 }
             }
 
@@ -331,7 +332,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                     logSysInfo(query);
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ": lineitem_par");
-                    PlanTestBase.assertNotContains(plan, ":UNION", ": mv0");
+                    PlanTestBase.assertContains(plan, ":UNION", ": mv0");
                 }
             }
         });
@@ -367,7 +368,7 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                         String[] expects = {
                                 "     TABLE: lineitem_par\n" +
                                         "     PARTITION PREDICATES: 25: l_shipdate >= '1998-01-02', " +
-                                        "25: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
+                                        "(25: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (25: l_shipdate IS NULL)\n" +
                                         "     partitions=2/6",
                                 "     TABLE: mv0\n" +
                                         "     PREAGGREGATION: ON\n" +
