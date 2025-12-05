@@ -20,13 +20,16 @@ import java.util.List;
 
 public class UpdateDictionaryMgrLog implements Writable {
     @SerializedName("nextTxnId")
-    private Long nextTxnId;
+    private long nextTxnId = 1;
 
     @SerializedName("nextDictionaryId")
-    private Long nextDictionaryId;
+    private long nextDictionaryId = 1;
 
     @SerializedName("dictionaryLogList")
     private List<UpdateDictionaryLog> dictionaryLogList;
+
+    public UpdateDictionaryMgrLog() {
+    }
 
     public UpdateDictionaryMgrLog(Long nextTxnId, Long nextDictionaryId) {
         this.nextTxnId = nextTxnId;

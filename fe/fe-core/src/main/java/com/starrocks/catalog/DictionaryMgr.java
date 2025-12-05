@@ -765,7 +765,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 updateDictionaryLog.setErrorMsg("");
                 updateDictionaryLog.setLastSuccessVersion(txnId);
                 walApplier = wal -> {
-                    dictionary.setFinished(System.currentTimeMillis(), txnId);
+                    dictionary.setFinished(ts, txnId);
                     dictionary.setErrorMsg(""); // reset error msg
                 };
             } else if (dictionary.getIgnoreFailedRefresh() &&

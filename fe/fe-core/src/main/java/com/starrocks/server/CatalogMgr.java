@@ -126,6 +126,9 @@ public class CatalogMgr {
                         catalogs.put(catalogName, catalog);
                         connectorMgr.addConnector(catalogName, connector);
                     });
+                } else {
+                    catalogs.put(catalogName, catalog);
+                    connectorMgr.addConnector(catalogName, connector);
                 }
             } catch (StarRocksConnectorException e) {
                 LOG.error("connector create failed. catalog [{}] ", catalogName, e);
@@ -186,15 +189,10 @@ public class CatalogMgr {
                     return;
                 }
 
-                writeLock();
-                try {
-                    AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
-                    GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog, wal -> {
-                        alterCatalogInternal(catalog, newConnector, properties);
-                    });
-                } finally {
-                    writeUnLock();
-                }
+                AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog, wal -> {
+                    alterCatalogInternal(catalog, newConnector, properties);
+                });
                 LOG.info("Recreate catalog [{}] with properties [{}]", catalogName, catalog.getConfig());
             }
         } finally {
