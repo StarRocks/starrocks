@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <regex>
+#include <string>
+#include <vector>
+
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -22,10 +26,24 @@
 
 namespace starrocks {
 
+// Security levels for http_request() SSRF protection
+enum class HttpSecurityLevel : int {
+    TRUSTED = 1,    // Allow all requests including private IPs
+    PUBLIC = 2,     // Block private IPs, allow all public hosts
+    RESTRICTED = 3, // Block private IPs, require allowlist (default)
+    PARANOID = 4    // Same as RESTRICTED, but private IPs blocked even if in allowlist
+};
+
 // State structure for HTTP request function
-// Stores only the global admin-enforced SSL verification setting
+// Stores admin-enforced settings from FE Config
 struct HttpRequestFunctionState {
-    bool ssl_verify_required;     // Admin-enforced SSL verification (global setting from Config)
+    // SSL verification (global setting from Config)
+    bool ssl_verify_required = false;
+
+    // SSRF protection settings (from FE Config)
+    int security_level = 3; // Default: RESTRICTED
+    std::vector<std::string> host_allowlist;
+    std::vector<std::regex> host_allowlist_patterns;
 };
 
 class HttpRequestFunctions {

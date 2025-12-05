@@ -4048,4 +4048,20 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "Enforce SSL verification for http_request function (cannot be disabled by users)")
     public static boolean http_request_ssl_verification_required = false;
+
+    /**
+     * http_request function SSRF protection settings
+     * Security level: 1=TRUSTED (allow all), 2=PUBLIC (block private IPs),
+     * 3=RESTRICTED (require allowlist, default), 4=PARANOID (always block private IPs even in allowlist)
+     */
+    @ConfField(mutable = true, comment = "HTTP request security level for SSRF protection: " +
+            "1=TRUSTED (allow all), 2=PUBLIC (block private IPs), " +
+            "3=RESTRICTED (require allowlist, default), 4=PARANOID (always block private IPs)")
+    public static int http_request_security_level = 3;
+
+    @ConfField(mutable = true, comment = "Comma-separated list of allowed hostnames for http_request function (exact match)")
+    public static String http_request_host_allowlist = "";
+
+    @ConfField(mutable = true, comment = "Comma-separated list of regex patterns for allowed hostnames in http_request function")
+    public static String http_request_host_allowlist_regexp = "";
 }

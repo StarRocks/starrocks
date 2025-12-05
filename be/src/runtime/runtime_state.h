@@ -372,6 +372,23 @@ public:
                _query_options.http_request_ssl_verification_required;
     }
 
+    int32_t http_request_security_level() const {
+        return _query_options.__isset.http_request_security_level ? _query_options.http_request_security_level
+                                                                  : 3; // default: RESTRICTED
+    }
+
+    const std::string& http_request_host_allowlist() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist ? _query_options.http_request_host_allowlist : empty;
+    }
+
+    const std::string& http_request_host_allowlist_regexp() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist_regexp
+                       ? _query_options.http_request_host_allowlist_regexp
+                       : empty;
+    }
+
     int32_t spill_mem_table_size() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
