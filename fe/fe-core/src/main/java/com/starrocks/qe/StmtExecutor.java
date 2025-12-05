@@ -1687,10 +1687,7 @@ public class StmtExecutor {
             if (!analyzeStmt.isAsync()) {
                 // sync statistics collection doesn't be interrupted by query timeout, but
                 // will print warning log if timeout, so we update timeout temporarily to avoid
-                // warning log.
-                // Note: The actual timeout for each SQL task within the analyze job is controlled
-                // by StatisticsCollectJob.calculateAndSetRemainingTimeout() which ensures the
-                // total job timeout (statistic_collect_query_timeout) is respected across all tasks.
+                // warning log
                 context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
                 context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
                 cancelableTask.get();
