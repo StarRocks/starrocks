@@ -184,6 +184,14 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### authentication_policy
+
+* **Scope**: Session
+* **Description**: Session-level variable that holds the raw authentication policy string (kept for MySQL 8.0 compatibility). It is declared and stored on the FE as part of the session state and exposed under the name `authentication_policy`. In the current codebase snapshot the value is stored as an opaque comma-separated string and there is no other usage or internal parsing of this field in FE (it is not referenced elsewhere). It is related to the `default_authentication_plugin` session variable: `authentication_policy` represents per-session authentication policy data while `default_authentication_plugin` indicates the default authentication plugin. Administrators or clients can set this variable per session (for example with `SET authentication_policy = '...'`) to preserve compatibility with MySQL clients or tooling.
+* **Default**: `*,,`
+* **Data Type**: String
+* **Introduced in**: -
+
 ### auto_increment_increment
 
 Used for MySQL client compatibility. No practical usage.
@@ -204,6 +212,29 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: default_catalog
 * **Data type**: String
 * **Introduced in**: v3.2.4
+
+### cbo_cte_force_reuse_node_count
+
+* **Description**: Session-scoped threshold that controls an optimizer shortcut for Common Table Expressions (CTEs). In RelationTransformer.visitCTE the planner counts nodes in a CTE producer tree (cteContext.getCteNodeCount). If that count is greater than or equal to this threshold and the threshold is greater than 0, the transformer forces reuse of the CTE: it skips inlining/transforming the producer plan, builds a consume operator with precomputed expression mappings (no inputs) and uses generated column refs instead. This reduces optimizer time for very large CTE producer trees at the cost of potentially less optimal physical plans. Setting the value to `0` disables the force-reuse optimization. This variable has a getter/setter in SessionVariable and is applied per session.
+* **Scope**: Session
+* **Default**: `2000`
+* **Data Type**: int
+* **Introduced in**: v3.5.3
+
+### cbo_cte_reuse
+
+* **Description**: Controls whether the optimizer may rewrite multi-distinct aggregate queries by reusing a Common Table Expression (CTE) (the CBO CTE‑reuse rewrite). When enabled, the planner (RewriteMultiDistinctRule) may choose a CTE-based rewrite for multi-column distincts, skewed aggregations, or when statistics indicate the CTE rewrite is more efficient; it also respects the `prefer_cte_rewrite` hint. When disabled, CTE-based rewrite is not allowed and the planner will attempt the multi-function rewrite; if a query requires CTE (for example, multi-column DISTINCT or functions that cannot be handled by multi-function rewrite) the planner will raise a user error. Note: the effective setting checked by the optimizer is the logical AND of this flag and the pipeline engine flag — i.e. `isCboCteReuse()` returns this variable AND `enablePipelineEngine`, so CTE reuse is only effective when `enablePipelineEngine` is on.
+* **Default**: `true`
+* **Data Type**: Boolean
+* **Introduced in**: `v3.2.0`
+
+### cbo_disabled_rules
+
+* **Description**: Comma-separated list of optimizer rule names to disable for the current session. Each name must match a `RuleType` enum value and only rules whose names start with `TF_` (transformation rules) or `GP_` (group-combination rules) may be disabled. The session variable is stored on `SessionVariable` (`getCboDisabledRules` / `setCboDisabledRules`) and is applied by the optimizer via `OptimizerOptions.applyDisableRuleFromSessionVariable()`, which parses the list and clears the corresponding rule switches so those rules are skipped during planning. When set through a SET statement, values are validated and the server will reject unknown names or names not starting with `TF_`/`GP_` with clear error messages (e.g. "Unknown rule name(s): ..." or "Only TF_ ... and GP_ ... can be disabled"). At planner runtime, unknown rule names are ignored with a warning (logged as "Ignoring unknown rule name: ... (may be from different version)"). Names must match enum identifiers exactly (case-sensitive). Whitespace around names is trimmed; empty entries are ignored.
+* **Scope**: Session
+* **Default**: `""` (no disabled rules)
+* **Data Type**: String
+* **Introduced in**: -
 
 ### cbo_enable_low_cardinality_optimize
 
@@ -228,24 +259,86 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Data type**: Boolean
 
-### cbo_materialized_view_rewrite_related_mvs_limit
+### cbo_max_reorder_node_use_dp
 
-* **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
-* **Default**: 16
-* **Introduced in**: v3.1.9, v3.2.5
+* **Description**: Session-scoped limit that controls when the cost-based optimizer (CBO) will include the DP (dynamic programming) join-reorder algorithm. The optimizer compares the number of join inputs (MultiJoinNode.atoms.size()) against this value and only runs or adds the DP reorder when `multiJoinNode.getAtoms().size() <= cbo_max_reorder_node_use_dp` and `cbo_enable_dp_join_reorder` is enabled. Used in JoinReorderFactory.createJoinReorderAdaptive (to add JoinReorderDP to the candidate algorithms) and in ReorderJoinRule.transform/rewrite (to decide whether to execute JoinReorderDP when copying plans into the memo). Default value 10 reflects a practical performance cutoff (comment in code: "10 table join reorder takes more than 100ms"). Tune this to trade optimizer runtime (DP is expensive) versus potential plan quality for larger multi-join queries. Interacts with `cbo_enable_dp_join_reorder` and the greedy threshold `cbo_max_reorder_node_use_greedy`. The comparison is inclusive (`<=`).
+* **Scope**: Session
+* **Default**: `10`
+* **Data Type**: long
+* **Introduced in**: `v3.2.0`
 
-### cbo_prune_subfield
+### cbo_max_reorder_node_use_exhaustive
 
-* **Description**: Whether to enable JSON subfield pruning. This variable must be used with the BE dynamic parameter `enable_json_flat`. Otherwise, it may degrade JSON data query performance.
-* **Default**: false
-* **Data type**: Int
-* **Introduced in**: v3.3.0
+* **Scope**: Session
+* **Description**: Controls the join-reorder algorithm selection threshold in the CBO. The optimizer counts inner/cross join nodes in the query; when that count is greater than this value the planner takes the transform-based (more aggressive) reorder path: it forces collection of CTE statistics and calls ReorderJoinRule.transform and related commutativity rules. When the count is less than or equal to this value the planner applies the cheaper join-transformation rules (and may add the INNER_JOIN_LEFT_ASSCOM_RULE for certain semi/anti-join cases). This session variable is read by the optimizer (`SPMOptimizer`, `QueryOptimizer`) and can be set at the session level via `setMaxTransformReorderJoins`.
+* **Default**: `4`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
+
+### cbo_max_reorder_node_use_greedy
+
+* **Description**: Maximum number of join inputs (atoms) in a multi-join for which the cost-based optimizer will consider the greedy join-reorder algorithm. The optimizer checks this limit (together with `cbo_enable_greedy_join_reorder`) when building the list of candidate reorder algorithms: if `multiJoinNode.getAtoms().size()` is less than or equal to this value, a `JoinReorderGreedy` instance will be added and executed. This variable is used by `JoinReorderFactory.createJoinReorderAdaptive()` and `ReorderJoinRule` to gate greedy reordering during join-reorder phases; it applies per session and affects whether greedy reordering is attempted (if statistics are available and greedy is enabled). Adjust this to control optimizer time/complexity trade-offs for queries with many joined relations.
+* **Scope**: Session (can be changed per-session)
+* **Default**: `16`
+* **Data type**: long
+* **Introduced in**: v3.4.0, v3.5.0
+
+### cbo_prune_json_subfield
+
+* **Scope**: Session
+* **Description**: When enabled, the cost-based optimizer collects and prunes JSON subfield expressions so that JSON access paths (subfields) are recognized and converted into ColumnAccessPath for scan operators. This enables flat-JSON path optimizations and push-down of JSON subfield access into the scan layer (see PruneSubfieldRule and SubfieldExpressionCollector). Note: normalization of cast-from-JSON expressions is gated by the general `cbo_prune_subfield` optimization; both work together to produce `get_json_xxx(...)` or cast-wrapped calls so BE can apply flat JSON optimizations. Enabling `cbo_prune_json_subfield` without backend support for `flat json` may degrade performance; disable it if the BE does not support flat JSON path pushdown.
+* **Default**: `true`
+* **Data type**: boolean
+* **Introduced in**: v3.3.0, v3.4.0, v3.5.0
+
+### cbo_use_correlated_predicate_estimate
+
+* **Description**: Session flag that controls whether the optimizer applies a correlation-aware heuristic when estimating selectivity for conjunctive equality predicates across multiple columns. When enabled (default), the estimator applies exponential-decay weights to the selectivities of additional columns beyond the primary multi-column stats or most selective predicate, reducing the multiplicative impact of further predicates (weights: 0.5, 0.25, 0.125 for up to three additional columns). When disabled, no decay is applied (decay factor = 1) and the estimator multiplies full selectivities for those columns (stronger independence assumption). This flag is checked by StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity to choose the decay factor in both the multi-column-statistics path and the fallback path, thereby affecting cardinality estimates used by the CBO.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.5.0
 
 ### character_set_database (global)
 
 * **Data type**: StringThe character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 * **Default**: utf8
 * **Data type**: String
+
+### collation_connection
+
+* **Description**: Session-scoped variable that stores the connection collation name for the current client session. It is declared in `SessionVariable` as `collationConnection` and exposed with the show-name `collation_connection`. The variable is surfaced in metadata and SHOW outputs (for example, used when building `SHOW CREATE VIEW` rows in `ShowExecutor` and returned as a constant for `information_schema.views` via `ViewsSystemTable.CONSTANT_MAP`). It represents the collation reported by the server for the connection (paired with `character_set_client` and related character-set variables) but does not by itself indicate runtime collation enforcement beyond what other components implement.
+* **Scope**: Session
+* **Default**: `utf8_general_ci`
+* **Data Type**: String
+* **Introduced in**: v3.2.0
+
+### collation_database
+
+* **Description**: Session-level variable that holds the default database collation name for the current session. It is declared in SessionVariable (annotated with `@VariableMgr.VarAttr`) and lives alongside other charset/collation session variables such as `character_set_client`, `collation_connection` and `collation_server`. The value is serialized when session variables are exported (e.g., included in the JSON produced by SessionVariable#getJsonString and in the session variable machinery), and is used to report the session's database collation. Changing this variable updates the session's reported database collation name; engine-level or object-level collation settings (server/table/column) may still take precedence for actual comparison/ordering behavior depending on context.
+* **Scope**: Session
+* **Default**: `utf8_general_ci`
+* **Data Type**: String
+* **Introduced in**: v3.2.0
+
+### collation_server
+
+* **Scope**: Session
+* **Description**: Session-level server collation name used by the FE to present MySQL-compatible collation behavior for this session. This variable sets the default collation identifier (for example `utf8_general_ci`) that FE reports to clients and that is associated with `character_set_server` / `collation_connection` / `collation_database`. It is persisted in the session variable JSON (see SessionVariable#getJsonString / replayFromJson) and is exposed via the variable manager (`@VarAttr(name = COLLATION_SERVER)`), so it appears in SHOW VARIABLES and can be changed per-session. The value is stored as a plain String in SessionVariable and typically holds a standard MySQL collation name (e.g. `utf8_general_ci`, `utf8mb4_unicode_ci`); the code does not enforce a fixed enum or perform additional validation here, so the effective behavior depends on downstream components that interpret the collation name for comparisons, ordering and other collation-sensitive operations.
+* **Default Value**: `utf8_general_ci`
+* **Data Type**: String
+* **Introduced in**: `v3.2.0`
+
+### computation_fragment_scheduling_policy
+
+* **Scope**: Session
+* **Description**: Controls the scheduler policy used to choose execution instances for computation fragments. Valid values (case-insensitive) are:
+  * `compute_nodes_only` — schedule fragments only on compute nodes (default).
+  * `all_nodes` — allow scheduling on both compute nodes and traditional backend nodes.
+  The variable is backed by the enum `SessionVariableConstants.ComputationFragmentSchedulingPolicy`. When set, the value is validated (upper-cased) against the enum; invalid values cause an error (`IllegalArgumentException` when set via API, `SemanticException` when used in a SET statement). The getter returns the corresponding enum value and falls back to `COMPUTE_NODES_ONLY` if unset or unrecognized. This setting affects how the FE chooses target nodes for fragment placement at planning/deployment time.
+* **Default**: `COMPUTE_NODES_ONLY`
+* **Data Type**: String
+* **Introduced in**: v3.2.7
 
 ### connector_io_tasks_per_scan_operator
 
@@ -290,9 +383,33 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: Seconds
 * **Introduced in**: v3.5.1
 
+### decimal_overflow_to_double
+
+* **Scope**: Session
+* **Description**: When enabled, the analyzer converts decimal arithmetic results that would overflow the maximum decimal precision into 64-bit floating point (`DOUBLE`) instead of widening to larger decimal types or failing. Concretely, in DecimalV3 arithmetic (see DecimalV3FunctionAnalyzer), if a multiplication's computed precision exceeds the engine's max decimal precision but its return scale is within the maximum, the session flag `decimal_overflow_to_double = true` causes the return type and operand target types to be set to `DOUBLE`. This yields an approximate (lossy) numeric result but avoids decimal precision overflow errors or forced use of larger decimal types. When false (default), the planner will keep decimal semantics (attempt decimal128/256 or throw on unrepresentable scale/precision).
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: -
+
+### default_authentication_plugin
+
+* **Scope**: Session
+* **Description**: Session-scoped variable that specifies the default MySQL authentication plugin name for this session. It is stored as SessionVariable.defaultAuthenticationPlugin and is used by StarRocks' MySQL-protocol compatibility layers when the server needs to advertise or use a default authentication plugin (for example during handshake or when a plugin is not specified). Accepts standard MySQL authentication plugin identifiers (e.g. `mysql_native_password`, `caching_sha2_password`) supported by the server. This variable affects session behavior only; persistent user account authentication configuration is managed separately. See related session variable `authentication_policy`.
+* **Default**: `mysql_native_password`
+* **Data Type**: String
+* **Introduced in**: -
+
 ### default_rowset_type (global)
 
 Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
+
+### default_storage_engine
+
+* **Scope**: Session
+* **Description**: Session system variable exposed as `default_storage_engine` (see SessionVariable VarAttr). It exists for MySQL 8.0 compatibility and to satisfy MySQL clients/libraries that query the session default storage engine. The variable is stored per-session in the SessionVariable object and is returned to clients (e.g., via SHOW VARIABLES). It is informational for compatibility; changing it adjusts the session-reported value but does not imply StarRocks will change internal storage implementation.
+* **Default**: `InnoDB`
+* **Data Type**: String
+* **Introduced in**: v3.4.2, v3.5.0
 
 ### default_table_compression
 
@@ -303,10 +420,42 @@ Used to set the default storage format used by the storage engine of the computi
 * **Default**: lz4_frame
 * **Introduced in**: v3.0
 
+### default_tmp_storage_engine
+
+* **Description**: Session variable that controls the default storage engine used for temporary tables (both explicit `CREATE TEMPORARY TABLE` and internal/implicit temporary tables created by the engine). Declared in `SessionVariable.java` with a `@VariableMgr.VarAttr` annotation, it exists primarily for MySQL 8.0 compatibility so clients and tools expecting MySQL-like behavior can observe or change the temporary-table engine per session. Changing this value affects how temporary table data is stored/managed on storage layers that honor different engines (for example, choosing between memory-backed vs. disk-backed engines).
+* **Scope**: Session
+* **Default**: `InnoDB`
+* **Data Type**: String
+* **Introduced in**: v3.4.2, v3.5.0
+
 ### disable_colocate_join
 
 * **Description**: Used to control whether the Colocation Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocation Join.
 * **Default**: false
+
+### disable_colocate_set
+
+* **Scope**: Session
+* **Description**: When false (default), the optimizer may apply "colocate set" handling for set operations (e.g., UNION / UNION DISTINCT) when the first child's hash distribution is local: the planner attempts to keep children colocated — avoiding full repartitioning by checking pairwise colocation and either converting to compatible bucket shuffles or keeping colocated execution. When true, this session flag disables that colocate-set optimization path; the planner will not rely on colocated-set guarantees and will instead fall back to converting the set operation to round-robin distribution or enforce explicit bucket shuffle conversions for non-colocated children. This flag is consulted by the planner (see ChildOutputPropertyGuarantor.visitPhysicalSetOperation) and exposed on the session via SessionVariable getter/setter (`isDisableColocateSet` / `setDisableColocateSet`).
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.5.0
+
+### disable_join_reorder
+
+* **Scope**: Session
+* **Description**: Controls whether the cost-based optimizer performs join reordering. When `false` (default) the optimizer may apply join-reorder transformations (e.g. `ReorderJoinRule`, join transformation and outer-join transformation rules) during logical optimization in the new planner paths (seen in `SPMOptimizer` and `QueryOptimizer`). When `true`, join reordering and related outer-join reorder rules are skipped, preventing the optimizer from changing join order. This is useful to reduce optimization time, to obtain stable/reproducible join ordering, or to work around cases where CBO reordering produces suboptimal plans. This setting interacts with other CBO/session controls such as `cbo_max_reorder_node`, `cbo_max_reorder_node_use_exhaustive`, and `enable_outer_join_reorder`.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### disable_spill_to_local_disk
+
+* **Description**: When set to `true` for the session, FE will instruct BE to disable spilling to local disk and instead rely on remote storage spill (if remote spill is configured). This flag is only meaningful when `enable_spill` = `true`, `enable_spill_to_remote_storage` = `true`, and a valid `spill_storage_volume` is provided and found by FE. The value is serialized into TSpillToRemoteStorageOptions (sent to BE) as `disable_spill_to_local_disk`. If remote spill is not configured or the named storage volume cannot be resolved, this setting has no effect. Use with caution: disabling local-disk spill can increase network I/O and latency and requires reliable, performant remote storage.
+* **Scope**: Session
+* **Default**: false
+* **Data Type**: boolean
+* **Introduced in**: v3.3.0, v3.4.0, v3.5.0
 
 ### div_precision_increment
 
@@ -339,6 +488,22 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.5.5, v4.0.1
 
+### enable_cbo_table_prune
+
+* **Description**: When enabled, the optimizer will add the CBO table pruning rule (CboTablePruneRule) during memo optimization to perform cost-based table pruning for cardinality-preserving joins. The rule is conditionally added in the optimizer (see QueryOptimizer.memoOptimize and SPMOptimizer.memoOptimize) only when the join-node count in the join tree is small (fewer than 10 join nodes). This option complements the rule-based pruning toggle `enable_rbo_table_prune` and lets the Cost-Based Optimizer try to remove unnecessary tables or inputs from join processing to reduce planning and execution complexity. Default is off because pruning can change plan shape; enable it only after validating on representative workloads.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_color_explain_output
+
+* **Scope**: Session
+* **Description**: Controls whether ANSI color escape sequences are included in textual EXPLAIN / PROFILE outputs. When enabled (`true`), StmtExecutor passes the session setting into the explain/profile pipeline (via calls to ExplainAnalyzer) so explain, EXPLAIN ANALYZE and analyze-profile outputs contain colored highlighting for readability in ANSI-capable terminals. When disabled (`false`), the output is produced without ANSI sequences (plain text), which is appropriate for logging, clients that do not support ANSI, or when piping output to files. This is a per-session toggle and does not change execution semantics—only the presentation of explain/profile text.
+* **Default**: `true`
+* **Data type**: boolean
+* **Introduced in**: v3.5.0
+
 ### enable_connector_adaptive_io_tasks
 
 * **Description**: Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value is `true`. If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.
@@ -363,6 +528,18 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.5.1
 
+### enable_distinct_agg_over_window
+
+* **Description**: Controls the optimizer rewrite that transforms DISTINCT aggregate calls over WINDOW clauses into an equivalent join-based plan. When enabled (`true`, the default) QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin will:
+  * detect queries containing a LogicalWindowOperator,
+  * run project-merge rewrites, derive logical properties,
+  * apply DistinctAggregationOverWindowRule to convert the DISTINCT-OVER-WINDOW pattern into a null-safe equality join (changing plan shape to enable further push-downs and aggregation optimizations),
+  * then run SeparateProjectRule and re-derive properties.
+  When disabled (`false`) the optimizer skips this transformation and leaves DISTINCT aggregates over windows unchanged. This setting is session-scoped and affects only the optimizer rewrite phase (see QueryOptimizer.convertDistinctAggOverWindowToNullSafeEqualJoin).
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
 ### enable_distinct_column_bucketization
 
 * **Description**: Whether to enable bucketization for the COUNT DISTINCT colum in a group-by-count-distinct query. Use the `select a, count(distinct b) from t group by a;` query as an example. If the GROUP BY colum `a` is a low-cardinality column and the COUNT DISTINCT column `b` is a high-cardinality column which has severe data skew, performance bottleneck will occur. In this situation, you can split data in the COUNT DISTINCT column into multiple buckets to balance data and prevent data skew. You must use this variable with the variable `count_distinct_column_buckets`.
@@ -371,6 +548,25 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
+
+### enable_eliminate_agg
+
+* **Description**: Controls optimizer transformations that remove or simplify aggregation operators when it is safe to do so. When enabled, the planner applies rules (EliminateAggRule and EliminateAggFunctionRule) to replace a LogicalAggregationOperator with a LogicalProjectOperator (and optionally a LogicalFilterOperator) in two cases:
+  - Whole-aggregation elimination (EliminateAggRule): when grouping keys form a unique key on the child (unique/UKFK constraints) and all aggregate calls are supported, non-distinct functions (SUM, COUNT, AVG, FIRST_VALUE, MAX, MIN, GROUP_CONCAT). COUNT is rewritten to an IF/CAST expression (COUNT(col) -> IF(col IS NULL, 0, 1); COUNT(*) -> 1).
+  - Per-function elimination (EliminateAggFunctionRule): when individual non-distinct aggregate functions over a grouped column (FIRST_VALUE, LAST_VALUE, ANY_VALUE, MAX, MIN) can be replaced by the column itself while preserving other aggregations.
+  The optimization requires non-empty group-by keys, supported function sets, and presence of relevant unique constraints or column relationships; it does not apply to DISTINCT aggregates.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.8, v3.4.0, v3.5.0
+
+### enable_filter_unused_columns_in_scan_stage
+
+* **Description**: Controls pruning of columns produced by Scan nodes so the scan stage only outputs columns that are actually needed downstream (either as outputs or for non-pushable predicates). When enabled, PlanFragmentBuilder.setUnUsedOutputColumns will mark scan output columns that are exclusively used in pushdownable predicates and not required later, allowing the scan to trim those columns and reduce I/O and network transfer. The pruning is guarded: it will not apply for aggregation-family indexes in the non-skip-aggregation (non-skip-aggr) scan stage (keys/value columns must be retained to merge/aggregate), and the planner always ensures at least one column is returned from a scan. See `isEnableFilterUnusedColumnsInScanStage()` and the enable/disable helpers `enableTrimOnlyFilteredColumnsInScanStage()` / `disableTrimOnlyFilteredColumnsInScanStage()` in SessionVariable.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
 
 ### enable_force_rule_based_mv_rewrite
 
@@ -404,6 +600,14 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_incremental_mv
+
+* **Description**: Session flag that controls whether the server will plan and keep an in-memory plan for materialized views that use incremental refresh. When enabled, `MaterializedViewAnalyzer.planMVQuery` will proceed for create-MV statements whose refresh scheme is an `IncrementalRefreshSchemeDesc`: it builds the logical and physical plan for the view query and sets the session `enableMVPlanner` flag (`setMVPlanner(true)`). When disabled, planning for incremental-refresh MVs is skipped. Accessible via `isEnableIncrementalRefreshMV()` and `setEnableIncrementalRefreshMv(boolean)` in `SessionVariable`.
+* **Scope**: Session (per-connection)
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
 ### enable_insert_partial_update
 
 * **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
@@ -421,6 +625,41 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: true
 * **Data type**: Boolean
 * **Introduced in**: v3.3.0
+
+### enable_lambda_pushdown
+
+* **Description**: Session-scoped boolean toggle that controls predicate pushdown behavior in the optimizer. Specifically, the `PushDownPredicateProjectRule` consults this flag: when `true` (default) the rule may push predicates through `Project` operators even if those projects contain `LambdaFunctionOperator` expressions; when `false` the rule inspects the project's expressions and aborts the pushdown if any lambda is present (the rule returns no transformation). This affects only the optimizer transformation phase (planning) and can be changed per session via the `SessionVariable` getter/setter (`getEnableLambdaPushDown` / `setEnableLambdaPushdown`).
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.6, v3.4.0, v3.5.0
+
+### enable_large_in_predicate
+
+* **Scope**: Session
+* **Description**: When enabled, the parser will convert IN-lists whose literal count meets or exceeds `large_in_predicate_threshold` into a special `LargeInPredicate` (handled in `AstBuilder`). The optimizer rule `LargeInPredicateToJoinRule` then converts that predicate into a `LEFT_SEMI_JOIN` (for IN) or `NULL_AWARE_LEFT_ANTI_JOIN` (for NOT IN) against a `RawValues` constant table, reducing FE memory and planning cost for very large IN lists by avoiding one expression node per constant. The transformation has correctness restrictions (no OR compound predicates, only one large-IN per query); if these restrictions or other conditions cause the optimization to fail, the planner throws `LargeInPredicateException` and upper layers (via `StmtExecutor` / `ConnectProcessor`) retry the query from the parser stage with `enable_large_in_predicate` disabled so the query falls back to the traditional expression-based IN handling. Use `large_in_predicate_threshold` to control the minimum literal count that triggers this behavior.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
+### enable_load_profile
+
+* **Scope**: Session
+* **Description**: When enabled, the FE requests collection of the runtime profile for load jobs and the load coordinator will collect/export the profile after a load completes. For stream load, FE sets `TQueryOptions.enable_profile = true` and passes `load_profile_collect_second` (from `stream_load_profile_collect_threshold_second`) to backends; the coordinator then conditionally calls profile collection (see StreamLoadTask.collectProfile()). The effective behavior is the logical OR of this session variable and the table-level property `enable_load_profile` on the destination table; collection is further gated by `load_profile_collect_interval_second` (FE-side sampling interval) to avoid frequent collection. The session flag is read via `SessionVariable.isEnableLoadProfile()` and can be set per-connection with `setEnableLoadProfile(...)`.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_local_shuffle_agg
+
+* **Description**: Controls whether the planner and cost model may produce a one-phase local aggregation plan that uses a local shuffle (Scan -> LocalShuffle -> OnePhaseAgg) instead of a two-phase/global-shuffle aggregation. When enabled (the default), the optimizer and cost model will:
+  - allow replacing a SHUFFLE exchange between Scan and Global Agg with a local shuffle + one-phase agg on single-backend-and-compute-node clusters (see `PruneShuffleDistributionNodeRule` and `EnforceAndCostTask`),
+  - let the cost model ignore network cost for SHUFFLE in that single-node case to favor the one-phase plan (`CostModel`).
+  The replacement is only considered when `enable_pipeline_engine` is enabled and the cluster is a single backend+compute node. The planner still rejects local-shuffle conversion in unsafe cases (e.g., DISTINCT aggregates, detected data skew, missing/unknown column statistics, multi-input operators like joins, or other semantic restrictions). Some code paths (INSERT/UPDATE/DELETE planners and MaterializedViewOptimizer) temporarily disable this session flag because non-query sinks or certain rewrites require per-driver scan assignment that local-shuffle cannot use.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
 
 ### enable_materialized_view_agg_pushdown_rewrite
 
@@ -460,6 +699,19 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * If this feature is disabled, only Local RF works.
 * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
+
+### enable_mv_planner
+
+* **Scope**: Session
+* **Description**: When enabled, activates the Materialized View (MV) planner mode for the current session. In this mode the optimizer:
+  - Uses MV-specific rule set via `context.getRuleSet().addRealtimeMVRules()` instead of the regular join implementation rules (QueryOptimizer).
+  - Allows stream implementation rules to apply (see `StreamImplementationRule.check` which returns true only when MV planner is on).
+  - Alters scan/operator construction during logical plan transformation (e.g., RelationTransformer chooses `LogicalBinlogScanOperator` for native tables/materialized views when MV planner is enabled).
+  - Disables or bypasses some standard transformations (for example, `SplitMultiPhaseAggRule.check` returns false when MV planner is on).
+  Materialized view planning code (MaterializedViewAnalyzer) sets this flag around MV planning work (sets to true before planning and resets to false afterward), so it is primarily intended for MV plan generation and testing. Setting this session variable affects only the current session’s optimizer behavior.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
 
 ### enable_parquet_reader_bloom_filter
 
@@ -503,6 +755,14 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to enable Query Feedback feature for slow queries and manually marked queries.
 * **Default**: true
 * **Introduced in**: v3.4.0
+
+### enable_predicate_reorder
+
+* **Scope**: Session
+* **Description**: When enabled, the optimizer applies the Predicate Reorder rule to AND (conjunctive) predicates during logical/physical plan rewrite. The rule extracts conjuncts via `Utils.extractConjuncts`, estimates each conjunct's selectivity with `DefaultPredicateSelectivityEstimator`, and reorders the conjuncts in ascending order of estimated selectivity (less restrictive first) to form a new `CompoundPredicateOperator` (AND). The rule only runs when the operator has a `CompoundPredicateOperator` with more than one conjunct. Statistics are gathered from child `OptExpression` statistics when available; for `PhysicalOlapScanOperator` it will fetch column statistics from `GlobalStateMgr.getCurrentState().getStatisticStorage()`. If child statistics are missing and the scan is not an OLAP scan, the rule skips reordering. The session variable is exposed via `SessionVariable.isEnablePredicateReorder()`, with `enablePredicateReorder()` and `disablePredicateReorder()` helper methods.
+* **Default**: false
+* **Data type**: boolean
+* **Introduced in**: v3.2.0
 
 ### enable_profile
 
@@ -553,11 +813,37 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to enable query-trigger ANALYZE tasks on tables under external catalogs.
 * **Introduced in**: v3.4.0
 
+### enable_rbo_table_prune
+
+* **Description**: When enabled, the optimizer applies Rule-Based (RBO) table pruning for cardinality-preserving joins in the current session. The optimizer runs a sequence of rewrite and pruning steps (partition pruning, project merge/separate, `UniquenessBasedTablePruneRule`, join reorder, and `RboTablePruneRule`) to remove unnecessary table scan alternatives and reduce scanned partitions/rows in joins. Enabling this option also disables join-equivalence derivation (`context.setEnableJoinEquivalenceDerive(false)`) while logical rule rewrite is running to avoid conflicting transformations. The pruning flow may additionally run `PrimaryKeyUpdateTableRule` for update statements if `enable_table_prune_on_update` is set. The rule is only executed when a query contains prunable joins (checked via `Utils.hasPrunableJoin(tree)`).
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_runtime_adaptive_dop
+
+* **Scope**: Session
+* **Description**: When enabled for a session, the planner and fragment builder will mark pipeline-capable fragments that support runtime adaptive DOP to use adaptive degree-of-parallelism at runtime. This option only takes effect when `enable_pipeline_engine` is true. Enabling it causes fragments to call `enableAdaptiveDop()` during plan construction, and has runtime implications: join probes may wait for all build phases to complete (which conflicts with `group_execution` behavior), and enabling runtime adaptive DOP will disable pipeline-level multi-partitioned runtime filters (the setter clears `enablePipelineLevelMultiPartitionedRf`). The flag is recorded in the query profile and can be toggled per-session.
+* **Default**: `false`
+* **Data type**: boolean
+* **Introduced in**: v3.2.0
+
 ### enable_scan_datacache
 
 * **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true 
 * **Introduced in**: v2.5
+
+### enable_shared_scan
+
+* **Scope**: Session
+* **Description**: Session-level boolean flag intended to request shared scan execution for pipeline queries. When pipeline execution is enabled, the FE will propagate this setting into the fragment execution parameters (`TExecPlanFragmentParams.enable_shared_scan`) so the BE can perform shared scanning (see `.../TFragmentInstanceFactory.java:153-159`). However, the FE currently does not honor user changes: `SessionVariable.isEnableSharedScan()` always returns `false` (see `.../SessionVariable.java:4176-4180`) and the feature has been disabled in FE since later versions due to incompatibility with event-based scheduling. As a result, setting this variable in a session has no effect in current releases.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+(Used in: `fe-core/src/main/java/com/starrocks/qe/SessionVariable.java`, `fe-core/src/main/java/com/starrocks/qe/scheduler/TFragmentInstanceFactory.java`)
 
 ### enable_short_circuit
 
@@ -583,6 +869,33 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: false
 * **Introduced in**: v3.3.0
 
+### enable_split_topn_agg
+
+* **Description**: Controls whether the optimizer may apply the SplitTopNAggregate transformation (implemented in `SplitTopNAggregateRule.java`). When enabled, the optimizer can rewrite a plan that has a TopN on top of an aggregation over an OLAP scan into a plan that:
+  - computes a restricted TopN-aggregation on a right-side partial scan (push-down),
+  - joins the TopN result back to the full scan,
+  - and finalizes aggregation on the join result.
+  This rewrite is intended to reduce work when TopN orders by aggregated columns and the limit is small. The rule is gated by several precise checks:
+  - TopN limit is set and less than or equal to `split_topn_agg_limit` (session `splitTopNAggLimit`, default 10000).
+  - scan/agg projections are identity (no column remapping).
+  - statistics/row-count heuristics (skip when outputRowCount < limit * 10 and stats are reliable, unless running unit tests).
+  - duplicated columns to be read twice ≤ 3.
+  - duplicated columns are not long strings or complex types (string with averageRowSize ≥ 5 or missing stats is treated as long).
+  - predicate complexity limits (≤ 2 conjuncts and ≤ 2 disjuncts).
+  - only a subset (not zero or all) of aggregations are referenced by ORDER BY.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
+### enable_split_topn_agg_limit
+
+* **Description**: Session-level threshold (row count) that controls whether the SplitTopN aggregate optimization may be applied. When `enable_split_topn_agg` is on, the optimizer's SplitTopNAggregateRule will skip the split transformation if the TopN operator's LIMIT is equal to the default unlimited value or greater than this threshold. This variable only governs the numeric cutoff (number of rows); the rule still enforces other correctness and cost checks (projections, predicates, column/type constraints and scan statistics) before applying the transformation.
+* **Scope**: Session
+* **Default**: `10000`
+* **Data Type**: long
+* **Introduced in**: -
+
 ### enable_spm_rewrite
 
 * **Description**: Whether to enable SQL Plan Manager (SPM) query rewrite. When enabled, StarRocks automatically rewrites queries to use bound query plans, improving query performance and stability.
@@ -600,6 +913,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v3.1.11, v3.2.5
 
+### enable_table_prune_on_update
+
+* **Description**: Session-level boolean that controls whether the optimizer applies primary-key-specific table pruning rules for UPDATE statements. When enabled, QueryOptimizer (during the pruneTables stage) invokes `PrimaryKeyUpdateTableRule` to rewrite/prune update plans — potentially improving pruning for primary-key update patterns. This flag is only effective when rule-based/CBO table pruning is active (see `enable_rbo_table_prune`). It is disabled by default because the transformation can change data-layout/plan shape (e.g., bucket-shuffle layout for OlapTableSink) and may cause correctness or performance regressions for concurrent updates.
+* **Default**: `false`
+* **Data type**: boolean
+* **Introduced in**: v3.2.4
+
 ### enable_tablet_internal_parallel
 
 * **Description**: Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency.
@@ -611,6 +931,27 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.
 * **Default**: true
 * **Introduced in**: v3.3
+
+### enable_ukfk_join_reorder
+
+* **Scope**: Session
+* **Description**: When enabled, the optimizer collects Unique Key (UK) / Foreign Key (FK) column constraints for the two join sides and uses that information to bias join reordering. If a join has an intact UK constraint, the optimizer may choose the FK table as the right child (probe/input) instead of using plain row-count comparison. The decision uses the helper allowFKAsRightTable(), which:
+  * rejects reordering when the FK side is ordered by the FK column (`fkConstraint.isOrderByFK`),
+  * computes normalized row counts by scaling row counts with summed column type sizes,
+  * computes a scale ratio = fkNormalizedRows / max(1, ukNormalizedRows), and
+  * allows the FK as right table only when the scale ratio and FK rows are below session thresholds (`max_ukfk_join_reorder_scale_ratio` and `max_ukfk_join_reorder_fk_rows`).
+  If UK/FK conditions are not met, join ordering falls back to the default smaller-table-as-right-child heuristic (rowCount comparison). The variable is accessed via SessionVariable getters/setters and used in the JoinOrder optimizer rule.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.4
+
+### enable_ukfk_opt
+
+* **Description**: Enables optimizer support for Unique-Key / Foreign-Key (UK/FK) based transformations and statistics enhancements. When set, the optimizer runs `UKFKConstraintsCollector` to collect unique and foreign-key constraints bottom‑up and attach them to plan nodes (OptExpressions). The collected constraints are consumed by transformation rules such as `PruneUKFKJoinRule` (which can prune the UK-side of joins, rewrite predicates from UK to FK columns and add IS NULL checks for outer-join cases) and `PruneUKFKGroupByKeysRule` (which can remove redundant GROUP BY keys derived from UK/FK relationships). The collected UK/FK information is also used in `StatisticsCalculator` to produce tighter join cardinality estimates for UK‑FK joins and may replace default estimates when more precise. Default is conservative (`false`) because these optimizations rely on declared schema constraints and can change plan shape and predicate placement.
+* **Default**: `false`
+* **Scope**: Session
+* **Data Type**: boolean
+* **Introduced in**: v3.2.4
 
 ### enable_view_based_mv_rewrite
 
@@ -680,6 +1021,14 @@ The commands affected by this variable are as follows:
 
 Used for MySQL client compatibility. No practical usage.
 
+### innodb_read_only
+
+* **Description**: Session-level flag (MySQL-compatible) that indicates the session's InnoDB read-only mode. The variable is declared and stored on the session as the Java field `innodbReadOnly` in `SessionVariable.java` and is accessible via `isInnodbReadOnly()` and `setInnodbReadOnly(boolean)`. The SessionVariable class only holds the flag; any enforcement (preventing write/DDL to InnoDB tables or altering transaction behavior) must be implemented by the transaction/storage/authorization layers which should read this session flag. Use this variable to convey client intent for read-only behavior within the current session for components that respect it.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
 ### insert_max_filter_ratio
 
 * **Description**: The maximum error tolerance of INSERT from files(). It's the maximum ratio of data records that can be filtered out due to inadequate data quality. When the ratio of unqualified data records reaches this threshold, the job fails. Range: [0, 1].
@@ -713,6 +1062,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: -
 
+### join_late_materialization
+
+* **Scope**: Session
+* **Description**: Controls whether the planner enables "late materialization" on join operators. When set to `true`, PlanFragmentBuilder reads the session flag and calls `joinNode.setEnableLateMaterialization(...)` so join execution can defer full row/payload materialization until after join/key-based filtering. This reduces memory usage and I/O for joins with large payload columns or highly selective join predicates by carrying only join keys through the join and materializing payloads for matched rows. The flag is defined in `SessionVariable.java` as `JOIN_LATE_MATERIALIZATION` and defaults to `false`. Enabling this may interact with column-trimming and scan-stage pruning optimizations (for example `enable_filter_unused_columns_in_scan_stage`) and can change join runtime behavior; test queries for correctness and performance before enabling broadly.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.0, v3.4.0, v3.5.0
+
 ### lake_bucket_assign_mode
 
 * **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
@@ -725,6 +1082,14 @@ Used for MySQL client compatibility. No practical usage.
 ### language (global)
 
 Used for MySQL client compatibility. No practical usage.
+
+### large_in_predicate_threshold
+
+* **Scope**: Session
+* **Description**: Threshold (number of constants) at which the planner switches a regular IN-list predicate into the compact LargeInPredicate representation to avoid building very large ASTs and heavy FE analysis/planning overhead. When `enable_large_in_predicate` is true and an IN-list (string or integer) contains >= this many literals, the parser (AstBuilder) creates a LargeInPredicate containing the raw text and a compact value list (and keeps only a minimal representative Expr in the AST). For integer lists the parser additionally verifies all literals can be parsed as integral values and will fall back to a normal InPredicate if parsing fails. LargeInPredicate is later transformed into a left semi/anti join for execution, improving parse/analyze/deploy performance for queries with very large constant IN lists. The variable is exposed as a session-level `VariableMgr.VarAttr` and can be get/set per session.
+* **Default**: `100000`
+* **Data Type**: int
+* **Introduced in**: -
 
 ### license (global)
 
@@ -783,6 +1148,26 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Default**: 33554432 (32 MB). You can raise this value if the client reports "PacketTooBigException".
 * **Unit**: Byte
 * **Data type**: Int
+
+### max_parallel_scan_instance_num
+
+* **Scope**: Session
+* **Description**: Session-level integer that caps the number of parallel scan instances the planner will produce for scan operators (applied to OLAP/Lake scan nodes). The value is propagated into the scan node Thrift message (`TOlapScanNode.max_parallel_scan_instance_num`) and is included in query/load runtime profiles. It is declared with `@VariableMgr.VarAttr` and can be read/set via the session variable APIs (`getMaxParallelScanInstanceNum` / `setMaxParallelScanInstanceNum`). Use this to limit scan parallelism per session for resource control or debugging. When left at the default `-1`, the planner/system default (resource- or configuration-derived) parallelism is used.
+* **Default**: `-1`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
+
+### max_pipeline_dop
+
+* **Scope**: Session
+* **Description**: The per-session upper bound for the pipeline engine's degree-of-parallelism (DOP). Behavior:
+  * Applies only when `enable_pipeline_engine` is enabled and `pipeline_dop` is not explicitly set (greater than 0). If `pipeline_dop` greater than 0 this variable is ignored and `pipeline_dop` is used directly.
+  * When `pipeline_dop` less than or equal to 0 (adaptive/default mode), the effective DOP for execution is computed as min(`max_pipeline_dop`, the backend default DOP returned by BackendResourceStat). For pipeline sinks the same logic uses the sink default DOP.
+  * If `max_pipeline_dop` less than or equal to 0 no additional cap is applied and the backend default DOP is used.
+  * Purpose: avoid negative overhead from scheduling on machines with very large core counts by capping automatically computed parallelism.
+* **Default**: `64`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
 
 ### max_pushdown_conditions_per_column
 
@@ -962,6 +1347,14 @@ Used for MySQL client compatibility. No practical use.
 
 Used for compatibility with JDBC connection pool C3P0. No practical use.
 
+### query_delivery_timeout
+
+* **Scope**: Session
+* **Description**: Timeout (in seconds) for phase 1 of query execution — the delivery of all plan fragment instances from the coordinator (FE) to backend executors (BEs). StarRocks executes queries in two phases: (1) deliver fragments to BEs, and (2) pull results after fragments are prepared. `query_delivery_timeout` controls how long the coordinator waits for fragment delivery to complete before timing out. When building the query options sent to the backend, the value is assigned to the `query_delivery_timeout` field (subject to an internal cap to avoid integer overflow). If `enablePhasedScheduler` is enabled, the system uses the `query_timeout` value instead for delivery timeout.
+* **Default**: `300`
+* **Data Type**: int (seconds)
+* **Introduced in**: v3.2.0
+
 ### query_mem_limit
 
 * **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable. Setting it to `0` indicates no limit is imposed.
@@ -1011,6 +1404,13 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 100
 * **Introduced in**: v3.0
 
+### resource_group 
+
+        * **Description**: The specified resource group of this session
+        * **Default**: ""
+        * **Data Type**: String
+        * **Introduced in**: 3.2.0
+
 ### runtime_filter_on_exchange_node
 
 * **Description**: Whether to place GRF on Exchange Node after GRF is pushed down across the Exchange operator to a lower-level operator. The default value is `false`, which means GRF will not be placed on Exchange Node after it is pushed down across the Exchange operator to a lower-level operator. This prevents repetitive use of GRF and reduces the computation time.
@@ -1039,6 +1439,35 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
 
+### skip_local_disk_cache
+
+* **Description**: Session flag that instructs the FE, when building scan ranges, to mark each tablet's internal scan range with `skip_disk_cache`. When set to `true`, `OlapScanNode.addScanRangeLocations()` sets `internalRange.setSkip_disk_cache(true)` on the created `TInternalScanRange` objects so downstream BE scan nodes are told to bypass the local disk cache for that scan. It is applied per-session and is evaluated at plan/scan-range construction time. Use this together with `skip_page_cache` (to control page cache skipping) and data-cache related variables (`enable_scan_datacache` / `enable_populate_datacache`) as appropriate.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.9, v3.4.0, v3.5.0
+
+### skip_page_cache
+
+* **Scope**: Session
+* **Description**: Session-level boolean flag that instructs the planner/frontend to mark scan ranges so backends should bypass the page cache when reading data. When enabled, `OlapScanNode.addScanRangeLocations` sets `TInternalScanRange.skip_page_cache` for each scan range sent to the backend, causing storage reads to skip the OS/page caching layer. Typical use cases: large one-time scans where avoiding page-cache pollution is desired or when a user prefers direct I/O semantics. Do not confuse with `skip_local_disk_cache`, which controls the storage-layer data cache; `fill_data_cache` can also influence caching behavior.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.9, v3.4.0, v3.5.0
+
+### spill_encode_level
+
+* **Scope**: Session
+* **Description**: Controls the encoding/compression behaviour applied to operator spill files. The integer is a bit-flag level whose meanings mirror `transmission_encode_level`:
+  * bit 1 (value `1`) — enable adaptive encoding;
+  * bit 2 (value `2`) — encode integer-like columns with streamvbyte;
+  * bit 4 (value `4`) — compress binary/string columns with LZ4.
+  Example semantics from the related `transmission_encode_level` comment: `7` enables adaptive encoding for numbers and strings; `6` forces encoding of numbers and strings. Changing this value adjusts CPU vs. disk I/O trade-offs for spills (higher encoding levels increase CPU work but reduce spill size / I/O).
+  Implemented as the session variable annotated `SPILL_ENCODE_LEVEL` in `SessionVariable.java` (getter `getSpillEncodeLevel()`), and documented adjacent to other spill tunables such as `spill_mem_table_size`.
+* **Default**: `7`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
+
 ### spill_mode (3.0 and later)
 
 The execution mode of intermediate result spilling. Valid values:
@@ -1047,6 +1476,22 @@ The execution mode of intermediate result spilling. Valid values:
 * `force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.
 
 This variable takes effect only when the variable `enable_spill` is set to `true`.
+
+### spill_partitionwise_agg
+
+* **Description**: Session-level flag that enables partition-wise aggregation behavior when spill is used for aggregation operators. When `spill_partitionwise_agg` is true (and `enable_spill` is enabled), the execution engine will partition spilled aggregation data and perform per-partition spill/merge processing. The flag is propagated to execution via `TSpillOptions.setSpill_partitionwise_agg`. Related session settings that affect its behavior are `spill_partitionwise_agg_partition_num` (number of partitions created) and `spill_partitionwise_agg_skew_elimination` (skew handling). This option reduces peak memory usage for large-group aggregations by splitting work across partitions during spill, but may increase I/O and merge overhead.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.5.2
+
+### spill_revocable_max_bytes
+
+* **Scope**: Session
+* **Description**: Experimental per-session threshold (in bytes) for operator revocable memory. If an operator's revocable memory exceeds this value, the operator will initiate spilling to disk "as soon as possible" to free revocable memory. Use this to tune aggressive spilling for memory‑intensive operators; the value is interpreted in bytes.
+* **Default**: `0`
+* **Data Type**: long
+* **Introduced in**: v3.2.0
 
 ### spill_storage_volume
 
@@ -1129,6 +1574,14 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
+### transaction_isolation
+
+* **Description**: Session-scoped compatibility variable that records the client-requested transaction isolation level using MySQL-style names. Declared in SessionVariable as `transactionIsolation` and annotated with `@VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)`; its presence ensures compatibility with MySQL 5.8 clients. There is a related `tx_isolation` variable (kept for c3p0 client compatibility). The value is stored per-session to satisfy client/libraries, e.g., `REPEATABLE-READ`. Transaction isolation semantics in the engine are managed by StarRocks' transaction subsystem and may not be changed solely by modifying this session variable.
+* **Scope**: Session
+* **Default**: `REPEATABLE-READ`
+* **Data Type**: String
+* **Introduced in**: v3.2.0
+
 ### transaction_read_only
 
 * **Description**: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
@@ -1148,6 +1601,14 @@ Used for MySQL client compatibility. No practical usage. The alias is `transacti
 * **Default**: -1
 * **Data type**: Int
 * **Introduced in**: v2.4
+
+### use_page_cache
+
+* **Description**: Session-scoped boolean that controls whether a query should use the backend page cache. If not explicitly set by FE, the query follows the BE's page-cache policy; if set in the session, FE enforces the session value. The session variable is propagated to the execution layer (e.g., `tResult.setUse_page_cache`) so BE execution honors the decision. Commonly disabled (`false`) for internal/background jobs (statistics collection, hyper queries, online optimize) to avoid polluting the shared page cache with non-user data — see usages in `StatisticsCollectJob`, `HyperQueryJob`, and `OnlineOptimizeJobV2`.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
 
 ### version (global)
 
