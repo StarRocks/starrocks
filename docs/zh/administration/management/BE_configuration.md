@@ -47,7 +47,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 是否可变: No
 - 描述: StarRocks 写入 pprof 工件（jemalloc 堆快照和 gperftools CPU 配置文件）的目录路径。代码会在此目录下构造文件名（例如 `heap_profile.<pid>.<rand>` 和 `starrocks_profile.<pid>.<rand>`），并且 /pprof/ 下的 HTTP 处理器会提供这些配置文件。在启动时，如果 `pprof_profile_dir` 非空，StarRocks 会尝试创建该目录。请确保该路径存在或对 BE 进程可写，并且有足够的磁盘空间；性能分析可能产生较大的文件，并在运行时影响性能。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ##### sys_log_dir
 
@@ -388,12 +388,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### metadata_cache_memory_limit_percent
 
-- 默认值: `30`
+- 默认值: 30
 - 类型: Int
 - 単位: Percent
 - 是否可变: Yes
 - 描述: 将元数据 LRU 缓存大小设置为进程内存限制的百分比。启动时 StarRocks 将缓存字节数计算为 (process_mem_limit * metadata_cache_memory_limit_percent / 100)，并将其传递给元数据缓存分配器。该缓存仅用于非 PRIMARY_KEYS 行集（不支持 PK 表），并且仅在 metadata_cache_memory_limit_percent > 0 时启用；将其设置为 <= 0 可禁用元数据缓存。增加此值会提高元数据缓存容量，但会减少分配给其他组件的内存；请根据工作负载和系统内存进行调优。在 BE_TEST 构建中不生效。
-- 引入版本: `v3.2.10`
+- 引入版本: v3.2.10
 
 ##### update_schema_worker_count
 
@@ -419,12 +419,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### dictionary_speculate_min_chunk_size
 
-- 默认值: `10000`
+- 默认值: 10000
 - 类型: Int
 - 単位: Rows
 - 是否可变: No
 - 描述: StringColumnWriter 和 DictColumnWriter 用于触发字典编码推测的最小行数（chunk 大小）。如果传入列（或累积缓冲区加上传入行）大小 >= `dictionary_speculate_min_chunk_size`，写入器将立即运行推测并设置一种编码（DICT、PLAIN 或 BIT_SHUFFLE），而不是继续缓冲更多行。对于字符串列，推测使用 `dictionary_encoding_ratio` 来决定字典编码是否有利；对于数值/非字符串列，使用 `dictionary_encoding_ratio_for_non_string_column`。此外，如果列的 byte_size 很大（>= UINT32_MAX），会强制立即进行推测以避免 BinaryColumn<uint32_t> 溢出。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ##### disable_storage_page_cache
 
@@ -905,7 +905,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: Percent
 - 是否可变: No
 - 描述: BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ### 导入
 
@@ -1090,34 +1090,34 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位: -
 - 是否可变: 是
 - 描述: 启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
-- 引入版本: `v3.5.0`
+- 引入版本: v3.5.0
 
 ##### enable_streaming_load_thread_pool
 
-- 默认值: `true`
+- 默认值: true
 - 类型: Boolean
 - 単位: -
 - 是否可变: Yes
 - 描述: 控制是否将 streaming load 的 scanner 提交到专用的 streaming load 线程池。当启用且查询为带有 `TLoadJobType::STREAM_LOAD` 的 LOAD 时，ConnectorScanNode 会将 scanner 任务提交到 `streaming_load_thread_pool`（该池配置为 INT32_MAX 的线程数和队列大小，即实际上是无界的）。当禁用时，scanner 使用通用的 `thread_pool` 及其 `PriorityThreadPool` 提交逻辑（优先级计算、try_offer/offer 行为）。启用可以将 streaming-load 的工作与常规查询执行隔离以减少干扰；但由于专用池实际上是无界的，在重度 streaming-load 流量下启用可能会增加并发线程数和资源使用。此选项默认开启，通常无需修改。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ##### load_diagnose_rpc_timeout_stack_trace_threshold_ms
 
-- 默认值: `600000`
+- 默认值: 600000
 - 类型: Int
 - 単位: Milliseconds
 - 是否可变: Yes
 - 描述: 用于决定何时为长时间运行的 load RPC 请求远程堆栈跟踪的阈值（毫秒）。当 load RPC 超时并返回超时错误且实际的 RPC 超时时间（_rpc_timeout_ms）超过此值时，`OlapTableSink`/`NodeChannel` 将在发往目标 BE 的 `load_diagnose` RPC 中包含 `stack_trace=true`，以便 BE 返回用于调试的堆栈跟踪。`LocalTabletsChannel::SecondaryReplicasWaiter` 也会在等待 secondary replicas 超过该间隔时触发从 primary 的尽力堆栈跟踪诊断。此行为依赖于 `enable_load_diagnose` 并使用 `load_diagnose_send_rpc_timeout_ms` 作为诊断 RPC 的超时；性能分析由 `load_diagnose_rpc_timeout_profile_threshold_ms` 单独控制。降低此值会更积极地请求堆栈跟踪。
-- 引入版本: `v3.5.0`
+- 引入版本: v3.5.0
 
 ##### load_fp_brpc_timeout_ms
 
-- 默认值: `-1`
+- 默认值: -1
 - 类型: Int
 - 単位: Milliseconds
 - 是否可变: Yes
 - 描述: 在触发 `node_channel_set_brpc_timeout` fail point 时，覆盖 OlapTableSink 所使用的每通道 brpc RPC 超时。如果设置为正值，NodeChannel 会将其内部 `_rpc_timeout_ms` 设置为该值（毫秒），使 open/add-chunk/cancel RPC 使用更短的超时，从而模拟产生 “[E1008]Reached timeout” 错误的 brpc 超时。默认值（`-1`）禁用覆盖。更改此值用于测试和故障注入；较小的值可能导致虚假超时并触发 load 诊断（参见 `enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms` 和 `load_diagnose_send_rpc_timeout_ms`）。
-- 引入版本: `v3.5.0`
+- 引入版本: v3.5.0
 
 ##### pull_load_task_dir
 
@@ -1130,12 +1130,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### routine_load_pulsar_timeout_second
 
-- 默认值: `10`
+- 默认值: 10
 - 类型: Int
 - 単位: Seconds
 - 是否可变: 否
 - 描述: BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ### 统计信息
 
@@ -1146,7 +1146,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 是否可变: No
 - 描述: 为 true 时，StarRocks 在启动期间初始化系统级监控：它会根据配置的存储路径发现磁盘设备并枚举网络接口，然后将这些信息传入 metrics 子系统以启用磁盘 I/O、网络流量和内存相关的系统指标采集。如果设备或接口发现失败，初始化会记录警告并中止系统指标的设置。该标志仅控制是否初始化系统指标；周期性指标聚合线程由 `enable_metric_calculator` 单独控制，JVM 指标初始化由 `enable_jvm_metrics` 控制。更改此值需要重启。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ##### profile_report_interval
 
@@ -2405,12 +2405,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### es_scroll_keepalive
 
-- 默认值: `5m`
+- 默认值: 5m
 - 类型: String
 - 単位: Minutes (string with suffix, e.g. "5m")
 - 是否可变: 否
 - 描述: 发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (?scroll=<value>) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
-- 引入版本: `v3.2.0`
+- 引入版本: v3.2.0
 
 ##### load_replica_status_check_interval_ms_on_failure
 
