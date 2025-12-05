@@ -1177,17 +1177,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     }
 
     // check global_dict efficacy
-    const auto& seg_global_dict_columns_valid_info = (*segment_writer)->global_dict_columns_valid_info();
-    for (const auto& it : seg_global_dict_columns_valid_info) {
-        if (!it.second) {
-            _global_dict_columns_valid_info[it.first] = false;
-        } else {
-            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                iter == _global_dict_columns_valid_info.end()) {
-                _global_dict_columns_valid_info[it.first] = true;
-            }
-        }
-    }
+    _check_global_dict((*segment_writer).get());
 
     if (seg_info) {
         seg_info->set_data_size(segment_size);
@@ -1215,6 +1205,20 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
 
     (*segment_writer).reset();
     return Status::OK();
+}
+
+void RowsetWriter::_check_global_dict(SegmentWriter* segment_writer) {
+    const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
+    for (const auto& it : seg_global_dict_columns_valid_info) {
+        if (!it.second) {
+            _global_dict_columns_valid_info[it.first] = false;
+        } else {
+            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
+                iter == _global_dict_columns_valid_info.end()) {
+                _global_dict_columns_valid_info[it.first] = true;
+            }
+        }
+    }
 }
 
 VerticalRowsetWriter::VerticalRowsetWriter(const RowsetWriterContext& context) : RowsetWriter(context) {}
@@ -1361,17 +1365,7 @@ Status VerticalRowsetWriter::final_flush() {
         }
 
         // check global_dict efficacy
-        const auto& seg_global_dict_columns_valid_info = segment_writer->global_dict_columns_valid_info();
-        for (const auto& it : seg_global_dict_columns_valid_info) {
-            if (!it.second) {
-                _global_dict_columns_valid_info[it.first] = false;
-            } else {
-                if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                    iter == _global_dict_columns_valid_info.end()) {
-                    _global_dict_columns_valid_info[it.first] = true;
-                }
-            }
-        }
+        _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
     }

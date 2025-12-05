@@ -214,6 +214,14 @@ set(STORAGE_FILES
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+<<<<<<< HEAD
+=======
+    lake/spill_mem_table_sink.cpp
+    lake/tablet_retain_info.cpp
+    lake/tablet_writer.cpp
+    load_spill_block_manager.cpp
+    load_chunk_spiller.cpp
+>>>>>>> 36f6509b3a ([BugFix] Fix global dictionary is not updated under some cases (backport #66194) (#66295))
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
