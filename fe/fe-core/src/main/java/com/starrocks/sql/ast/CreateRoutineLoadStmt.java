@@ -489,7 +489,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         RowDelimiter rowDelimiter = null;
         ImportColumnsStmt importColumnsStmt = null;
         ImportWhereStmt importWhereStmt = null;
-        PartitionNames partitionNames = null;
+        PartitionRef partitionNames = null;
         for (ParseNode parseNode : loadPropertyList) {
             if (parseNode instanceof ColumnSeparator) {
                 // check column separator
@@ -521,13 +521,18 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 if (matched.size() != 0) {
                     throw new AnalysisException("the predicate cannot contain subqueries");
                 }
-            } else if (parseNode instanceof PartitionNames) {
+            } else if (parseNode instanceof PartitionRef) {
                 // check partition names
                 if (partitionNames != null) {
                     throw new AnalysisException("repeat setting of partition names");
                 }
-                partitionNames = (PartitionNames) parseNode;
-                partitionNames.analyze();
+                partitionNames = (PartitionRef) parseNode;
+                if (partitionNames.getPartitionNames().isEmpty()) {
+                    throw new AnalysisException("No partition specifed in partition lists");
+                }
+                if (partitionNames.getPartitionNames().stream().anyMatch(Strings::isNullOrEmpty)) {
+                    throw new AnalysisException("there are empty partition name");
+                }
             }
         }
         return new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,

@@ -58,7 +58,7 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
@@ -1864,7 +1864,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
 
-            PartitionNames partitionNamesObject = tableRelation.getPartitionNames();
+            PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
             if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
                 throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
             }

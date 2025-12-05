@@ -83,7 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.catalog.KeysType.DUP_KEYS;
+import static com.starrocks.sql.ast.KeysType.DUP_KEYS;
 
 public class TabletSchedulerTest {
     @Mocked

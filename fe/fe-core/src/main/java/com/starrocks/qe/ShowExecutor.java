@@ -70,6 +70,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -157,7 +158,6 @@ import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -1887,7 +1887,7 @@ public class ShowExecutor {
                     boolean stop = false;
                     Collection<Partition> partitions = new ArrayList<>();
                     if (statement.hasPartition()) {
-                        PartitionNames partitionNames = statement.getPartitionNames();
+                        PartitionRef partitionNames = statement.getPartitionNames();
                         for (String partName : partitionNames.getPartitionNames()) {
                             Partition partition = olapTable.getPartition(partName, partitionNames.isTemp());
                             if (partition == null) {
