@@ -34,7 +34,6 @@
 
 package com.starrocks.common.util;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -43,22 +42,22 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
-import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.Clock;
 import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
-import java.util.SimpleTimeZone;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -70,17 +69,16 @@ public class TimeUtils {
 
     public static final String DEFAULT_TIME_ZONE = "Asia/Shanghai";
 
-    private static final TimeZone TIME_ZONE;
+    private static final ZoneId TIME_ZONE = ZoneOffset.ofTotalSeconds(8 * 3600);
 
     // set CST to +08:00 instead of America/Chicago
     public static final ImmutableMap<String, String> TIME_ZONE_ALIAS_MAP = ImmutableMap.of(
             "CST", DEFAULT_TIME_ZONE, "PRC", DEFAULT_TIME_ZONE);
 
-    // NOTICE: Date formats are not synchronized.
-    // it must be used as synchronized externally.
-    private static final SimpleDateFormat DATE_FORMAT;
-    private static final SimpleDateFormat DATETIME_FORMAT;
-    private static final SimpleDateFormat TIME_FORMAT;
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("y-M-d").withZone(TIME_ZONE);
+    private static final DateTimeFormatter DATETIME_FORMAT =
+            DateTimeFormatter.ofPattern("y-M-d H:m:s").withZone(TIME_ZONE);
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH").withZone(TIME_ZONE);
 
     private static final Pattern DATETIME_FORMAT_REG =
             Pattern.compile("^((\\d{2}(([02468][048])|([13579][26]))[\\-\\/\\s]?((((0?[13578])|(1[02]))[\\-\\/\\s]?"
@@ -90,7 +88,7 @@ public class TimeUtils {
                     + "[\\-\\/\\s]?((0?[1-9])|([1-2][0-9])|(3[01])))|(((0?[469])|(11))[\\-\\/\\s]?"
                     + "((0?[1-9])|([1-2][0-9])|(30)))|(0?2[\\-\\/\\s]?((0?[1-9])|(1[0-9])|(2[0-8]))))))"
                     + "(\\s(((0?[0-9])|([1][0-9])|([2][0-3]))\\:([0-5]?[0-9])((\\s)|(\\:([0-5]?[0-9])))))?$");
-    
+
     // A regular expressions that will support the pattern like ('Date/DateTime TimeZone').
     // For example ('2024-09-09 11:40:40.123 Asia/Shanghai'), ('2024-09-09 Asia/Shanghai').
     public static final Pattern DATETIME_WITH_TIME_ZONE_PATTERN =
@@ -100,40 +98,15 @@ public class TimeUtils {
 
     private static final Pattern TIMEZONE_OFFSET_FORMAT_REG = Pattern.compile("^[+-]{0,1}\\d{1,2}\\:\\d{2}$");
 
-    public static Date MIN_DATE = null;
-    public static Date MAX_DATE = null;
+    public static LocalDate MIN_DATE = LocalDate.of(0, 1, 1);
+    public static LocalDate MAX_DATE = LocalDate.of(9999, 12, 31);
 
-    public static Date MIN_DATETIME = null;
-    public static Date MAX_DATETIME = null;
+    public static LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
+    public static LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
 
     // It's really hard to define max unix timestamp because of timezone.
     // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
     public static Long MAX_UNIX_TIMESTAMP = 253402243199L;
-
-    static {
-        TIME_ZONE = new SimpleTimeZone(8 * 3600 * 1000, "");
-
-        DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
-        DATE_FORMAT.setTimeZone(TIME_ZONE);
-
-        DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        DATETIME_FORMAT.setTimeZone(TIME_ZONE);
-
-        TIME_FORMAT = new SimpleDateFormat("HH");
-        TIME_FORMAT.setTimeZone(TIME_ZONE);
-
-        try {
-            MIN_DATE = DATE_FORMAT.parse("0000-01-01");
-            MAX_DATE = DATE_FORMAT.parse("9999-12-31");
-
-            MIN_DATETIME = DATETIME_FORMAT.parse("0000-01-01 00:00:00");
-            MAX_DATETIME = DATETIME_FORMAT.parse("9999-12-31 23:59:59");
-
-        } catch (ParseException e) {
-            LOG.error("invalid date format", e);
-            System.exit(-1);
-        }
-    }
 
     public static long getStartTime() {
         return System.nanoTime();
@@ -143,17 +116,12 @@ public class TimeUtils {
         return System.nanoTime() - startTime;
     }
 
-    public static synchronized String getCurrentFormatTime() {
-        return DATETIME_FORMAT.format(new Date());
+    public static String getCurrentFormatTime() {
+        return DATETIME_FORMAT.format(getSystemNow());
     }
 
     public static TimeZone getTimeZone() {
-        String timezone;
-        if (ConnectContext.get() != null) {
-            timezone = ConnectContext.get().getSessionVariable().getTimeZone();
-        } else {
-            timezone = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable().getTimeZone();
-        }
+        String timezone = getSessionTimeZone();
         return TimeZone.getTimeZone(ZoneId.of(timezone, TIME_ZONE_ALIAS_MAP));
     }
 
@@ -193,74 +161,49 @@ public class TimeUtils {
         return dateFormat.format(new Date(timeStamp));
     }
 
-    public static synchronized String longToTimeString(long timeStamp) {
-        TimeZone timeZone = getTimeZone();
-        SimpleDateFormat dateFormatTimeZone = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        dateFormatTimeZone.setTimeZone(timeZone);
-        return longToTimeString(timeStamp, dateFormatTimeZone);
-    }
-
-    public static synchronized Date getTimeAsDate(String timeString) {
-        try {
-            Date date = TIME_FORMAT.parse(timeString);
-            return date;
-        } catch (ParseException e) {
-            LOG.warn("invalid time format: {}", timeString);
-            return null;
+    public static String longToTimeString(long timeStamp) {
+        if (timeStamp <= 0L) {
+            return FeConstants.NULL_STRING;
         }
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(TIME_ZONE).format(Instant.ofEpochMilli(timeStamp));
     }
 
-    public static synchronized Date parseDate(String dateStr, PrimitiveType type) throws AnalysisException {
-        Date date = null;
+    public static LocalDate parseDate(String dateStr) throws AnalysisException {
+        LocalDate date;
         Matcher matcher = DATETIME_FORMAT_REG.matcher(dateStr);
         if (!matcher.matches()) {
             throw new AnalysisException("Invalid date string: " + dateStr);
         }
-        if (type == PrimitiveType.DATE) {
-            ParsePosition pos = new ParsePosition(0);
-            date = DATE_FORMAT.parse(dateStr, pos);
-            if (pos.getIndex() != dateStr.length() || date == null) {
-                throw new AnalysisException("Invalid date string: " + dateStr);
-            }
-        } else if (type == PrimitiveType.DATETIME) {
-            try {
-                date = DATETIME_FORMAT.parse(dateStr);
-            } catch (ParseException e) {
-                throw new AnalysisException("Invalid date string: " + dateStr);
-            }
-        } else {
-            Preconditions.checkState(false, "error type: " + type);
+        ParsePosition pos = new ParsePosition(0);
+        date = DATE_FORMAT.parse(dateStr, pos).query(LocalDate::from);
+        if (pos.getIndex() != dateStr.length() || date == null) {
+            throw new AnalysisException("Invalid date string: " + dateStr);
         }
-
         return date;
     }
 
-    public static synchronized Date parseDate(String dateStr, Type type) throws AnalysisException {
-        return parseDate(dateStr, type.getPrimitiveType());
-    }
-
-    public static synchronized String format(Date date, PrimitiveType type) {
-        if (type == PrimitiveType.DATE) {
-            return DATE_FORMAT.format(date);
-        } else if (type == PrimitiveType.DATETIME) {
-            return DATETIME_FORMAT.format(date);
-        } else {
-            return "INVALID";
+    public static LocalDateTime parseDateTime(String dateTimeStr) throws AnalysisException {
+        LocalDateTime dateTime;
+        Matcher matcher = DATETIME_FORMAT_REG.matcher(dateTimeStr);
+        if (!matcher.matches()) {
+            throw new AnalysisException("Invalid date string: " + dateTimeStr);
         }
-    }
-
-    public static synchronized String format(Date date, Type type) {
-        return format(date, type.getPrimitiveType());
+        try {
+            dateTime = DATETIME_FORMAT.parse(dateTimeStr).query(LocalDateTime::from);
+        } catch (DateTimeException e) {
+            throw new AnalysisException("Invalid date string: " + dateTimeStr);
+        }
+        return dateTime;
     }
 
     public static long timeStringToLong(String timeStr) {
-        Date d;
+        LocalDateTime dateTime;
         try {
-            d = DATETIME_FORMAT.parse(timeStr);
-        } catch (ParseException e) {
+            dateTime = DATETIME_FORMAT.parse(timeStr).query(LocalDateTime::from);
+        } catch (RuntimeException e) {
             return -1;
         }
-        return d.getTime();
+        return dateTime.atZone(TIME_ZONE).toInstant().toEpochMilli();
     }
 
     // Check if the time zone_value is valid
@@ -374,7 +317,7 @@ public class TimeUtils {
         }
         return timezone;
     }
-    
+
     /**
      * Parse the time zone of the given timestampLiteral
      * using DATETIME_WITH_TIME_ZONE_PATTERN regular expressions
@@ -390,7 +333,7 @@ public class TimeUtils {
         String timeZone = matcher.group("timezone");
         return timeZone == null ? null : ZoneId.of(timeZone);
     }
-    
+
     /**
      * Parse the date or dateTime string of the given timestampLiteral
      * using DATETIME_WITH_TIME_ZONE_PATTERN regular expressions

@@ -36,7 +36,6 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.thrift.TGetTasksParams;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -53,9 +52,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -513,8 +510,7 @@ public class TaskManagerTest {
     }
 
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
-        Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
-        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+        return TimeUtils.parseDateTime(str);
     }
 
     @Test
