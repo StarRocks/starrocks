@@ -291,10 +291,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     @Override
     public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         // Calculate and set remaining timeout for this SQL task
-        int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
-        if (remainingTimeout < 0) {
-            throw new DdlException("Analyze job timeout exceeded");
-        }
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
 
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();

@@ -201,7 +201,8 @@ public abstract class StatisticsCollectJob {
      * @param analyzeStatus The AnalyzeStatus to get start time
      * @return The remaining timeout in seconds, or -1 if timeout has been exceeded
      */
-    protected int calculateAndSetRemainingTimeout(ConnectContext context, AnalyzeStatus analyzeStatus) {
+    protected int calculateAndSetRemainingTimeout(ConnectContext context, AnalyzeStatus analyzeStatus)
+            throws DdlException {
         LocalDateTime startTime = analyzeStatus.getStartTime();
         if (startTime == null) {
             // If start time is not set, use full timeout
@@ -218,7 +219,7 @@ public abstract class StatisticsCollectJob {
 
         // Timeout exceeded
         if (remainingSeconds <= 0) {
-            return -1;
+            throw new DdlException("Analyze job timeout exceeded");
         }
 
         // Use remaining time, but not less than minimum
@@ -233,10 +234,7 @@ public abstract class StatisticsCollectJob {
         int maxRetryTimes = 5;
         do {
             // Calculate and set remaining timeout for this SQL task
-            int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
-            if (remainingTimeout < 0) {
-                throw new DdlException("Analyze job timeout exceeded");
-            }
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
 
             context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);

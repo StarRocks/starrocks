@@ -107,13 +107,11 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         long insertFailures = 0;
 
         for (int i = 0; i < queryJobs.size(); i++) {
+            // Calculate and set remaining timeout for this query job
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
+
             HyperQueryJob queryJob = queryJobs.get(i);
             try {
-                // Calculate and set remaining timeout for this query job
-                int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
-                if (remainingTimeout < 0) {
-                    throw new RuntimeException("Analyze job timeout exceeded");
-                }
                 queryJob.queryStatistics();
                 rowsBuffer.addAll(queryJob.getStatisticsData());
                 sqlBuffer.addAll(queryJob.getStatisticsValueSQL());
@@ -160,16 +158,13 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
             return;
         }
 
-        // Calculate and set remaining timeout for this insert task
-        int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
-        if (remainingTimeout < 0) {
-            throw new DdlException("Analyze job timeout exceeded");
-        }
-
         int count = 0;
         int maxRetryTimes = 5;
         StatementBase insertStmt = createInsertStmt();
         do {
+            // Calculate and set remaining timeout for this insert task
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
+
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
 

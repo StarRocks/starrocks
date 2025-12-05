@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
@@ -1821,7 +1822,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testJobTimeout() {
+    public void testJobTimeout() throws DdlException {
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
@@ -1837,10 +1838,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus);
         Assertions.assertEquals(Config.statistic_collect_query_timeout,
                 connectContext.getSessionVariable().getQueryTimeoutS());
+        Assertions.assertEquals(Config.statistic_collect_query_timeout,
+                connectContext.getSessionVariable().getInsertTimeoutS());
 
         // timeout
         analyzeStatus.setStartTime(LocalDateTime.now().minusSeconds(3700));
-        Assertions.assertEquals(-1, job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
+        Assertions.assertThrows(DdlException.class,
+                () -> job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
 
         // normal
         LocalDateTime startTime = LocalDateTime.now().minusSeconds(10);
