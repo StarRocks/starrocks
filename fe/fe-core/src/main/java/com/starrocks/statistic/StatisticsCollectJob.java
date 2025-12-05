@@ -192,10 +192,52 @@ public abstract class StatisticsCollectJob {
         this.partitionTabletRowCounts = partitionTabletRowCounts;
     }
 
-    protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    /**
+     * Calculate remaining timeout for the analyze job and set it to the context.
+     * The timeout is calculated based on the job start time and the configured total timeout.
+     * Each SQL task should use the remaining time instead of the full timeout.
+     *
+     * @param context       The ConnectContext to set timeout
+     * @param analyzeStatus The AnalyzeStatus to get start time
+     * @return The remaining timeout in seconds, or -1 if timeout has been exceeded
+     */
+    protected int calculateAndSetRemainingTimeout(ConnectContext context, AnalyzeStatus analyzeStatus) {
+        LocalDateTime startTime = analyzeStatus.getStartTime();
+        if (startTime == null) {
+            // If start time is not set, use full timeout
+            int timeout = (int) Config.statistic_collect_query_timeout;
+            context.getSessionVariable().setQueryTimeoutS(timeout);
+            context.getSessionVariable().setInsertTimeoutS(timeout);
+            return timeout;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Duration elapsed = Duration.between(startTime, now);
+        long totalTimeoutSeconds = Config.statistic_collect_query_timeout;
+        long remainingSeconds = totalTimeoutSeconds - elapsed.getSeconds();
+
+        // Timeout exceeded
+        if (remainingSeconds <= 0) {
+            return -1;
+        }
+
+        // Use remaining time, but not less than minimum
+        context.getSessionVariable().setQueryTimeoutS((int) remainingSeconds);
+        context.getSessionVariable().setInsertTimeoutS((int) remainingSeconds);
+        return (int) remainingSeconds;
+    }
+
+    protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
+            throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
         do {
+            // Calculate and set remaining timeout for this SQL task
+            int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
+            if (remainingTimeout < 0) {
+                throw new DdlException("Analyze job timeout exceeded");
+            }
+
             context.setQueryId(UUIDUtil.genUUID());
             LOG.debug("statistics collect sql : {}", sql);
             if (Config.enable_print_sql) {

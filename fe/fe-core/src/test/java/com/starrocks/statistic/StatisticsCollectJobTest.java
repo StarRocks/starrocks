@@ -1819,4 +1819,34 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         }
         return result;
     }
+
+    @Test
+    public void testJobTimeout() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null, null,
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.now()));
+        StatisticsCollectJob job = jobs.get(0);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+
+        // no startTime
+        analyzeStatus.setStartTime(null);
+        job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus);
+        Assertions.assertEquals(Config.statistic_collect_query_timeout,
+                connectContext.getSessionVariable().getQueryTimeoutS());
+
+        // timeout
+        analyzeStatus.setStartTime(LocalDateTime.now().minusSeconds(3700));
+        Assertions.assertEquals(-1, job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
+
+        // normal
+        LocalDateTime startTime = LocalDateTime.now().minusSeconds(10);
+        analyzeStatus.setStartTime(startTime);
+        Assertions.assertEquals(Config.statistic_collect_query_timeout - 10,
+                job.calculateAndSetRemainingTimeout(connectContext, analyzeStatus));
+    }
+
 }

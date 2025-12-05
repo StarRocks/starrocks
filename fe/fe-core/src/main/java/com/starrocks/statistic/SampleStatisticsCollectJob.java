@@ -61,7 +61,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     db.getId(), table.getName(), db.getFullName(), columnSampleManager.getComplexTypeStats());
             context.getSessionVariable().setExprChildrenLimit(
                     Math.max(Config.expr_children_limit, columnSampleManager.getComplexTypeStats().size()));
-            collectStatisticSync(complexTypeColsTask, context);
+            collectStatisticSync(complexTypeColsTask, context, analyzeStatus);
         }
 
         List<List<ColumnStats>> columnStatsBatchList = columnSampleManager.splitPrimitiveTypeStats();
@@ -81,7 +81,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     db.getId(), table.getName(), db.getFullName(), columnStatsBatch, tabletSampleManager);
             context.getSessionVariable().setExprChildrenLimit(
                     Math.max(Config.expr_children_limit, sampleInfo.getMaxSampleTabletNum()));
-            collectStatisticSync(primitiveTypeColsTask, context);
+            collectStatisticSync(primitiveTypeColsTask, context, analyzeStatus);
 
             double progress = finishedTaskNum * 1.0 / totalTaskNum;
             if (progress >= recordStagePoint) {

@@ -119,6 +119,10 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setBigQueryProfileThreshold("0s");
         context.getSessionVariable().setParallelExecInstanceNum(1);
+        // Note: queryTimeoutS and insertTimeoutS will be set dynamically based on remaining job time
+        // in StatisticsCollectJob.calculateAndSetRemainingTimeout() to ensure the total job timeout
+        // is respected across all SQL tasks, not just individual task timeout.
+        // Set a default large value here, but it will be overridden per task.
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);

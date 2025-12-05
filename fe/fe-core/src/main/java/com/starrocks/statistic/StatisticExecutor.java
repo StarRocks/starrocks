@@ -520,6 +520,10 @@ public class StatisticExecutor {
 
         try {
             Stopwatch watch = Stopwatch.createStarted();
+            // Set start time if not already set
+            if (analyzeStatus.getStartTime() == null) {
+                analyzeStatus.setStartTime(LocalDateTime.now());
+            }
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed

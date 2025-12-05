@@ -109,6 +109,11 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         for (int i = 0; i < queryJobs.size(); i++) {
             HyperQueryJob queryJob = queryJobs.get(i);
             try {
+                // Calculate and set remaining timeout for this query job
+                int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
+                if (remainingTimeout < 0) {
+                    throw new RuntimeException("Analyze job timeout exceeded");
+                }
                 queryJob.queryStatistics();
                 rowsBuffer.addAll(queryJob.getStatisticsData());
                 sqlBuffer.addAll(queryJob.getStatisticsValueSQL());
@@ -129,7 +134,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             try {
-                flushInsertStatisticsData(context);
+                flushInsertStatisticsData(context, analyzeStatus);
             } catch (Exception e) {
                 insertFailures++;
                 if (insertFailures > Config.statistic_full_statistics_failure_tolerance_ratio * queryJobs.size()) {
@@ -150,9 +155,15 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private void flushInsertStatisticsData(ConnectContext context) throws Exception {
+    private void flushInsertStatisticsData(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         if (rowsBuffer.isEmpty()) {
             return;
+        }
+
+        // Calculate and set remaining timeout for this insert task
+        int remainingTimeout = calculateAndSetRemainingTimeout(context, analyzeStatus);
+        if (remainingTimeout < 0) {
+            throw new DdlException("Analyze job timeout exceeded");
         }
 
         int count = 0;
