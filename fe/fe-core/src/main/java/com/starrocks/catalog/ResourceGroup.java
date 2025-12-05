@@ -407,6 +407,9 @@ public class ResourceGroup {
     public String getMemPool() {
         return memPool;
     }
+    public boolean hasDefaultMemPool() {
+        return memPool == null || memPool.equals(DEFAULT_MEM_POOL);
+    }
 
     public void setMemPool(String memPool) {
         this.memPool = memPool;
