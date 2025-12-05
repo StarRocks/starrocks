@@ -44,14 +44,24 @@ public class ReplaceColumnRefRewriter {
         if (origin == null) {
             return null;
         }
-        return origin.clone().accept(rewriter, null);
+
+        ScalarOperator result = origin.clone().accept(rewriter, null);
+        // Check expression complexity after column reference replacement
+        // Use cached value (true) since clone() has already cleared the cache
+        result.checkMaxFlatChildren(true);
+        return result;
     }
 
     public ScalarOperator rewriteWithoutClone(ScalarOperator origin) {
         if (origin == null) {
             return null;
         }
-        return origin.accept(rewriter, null);
+
+        ScalarOperator result = origin.accept(rewriter, null);
+        // Check expression complexity after column reference replacement
+        // Force recalculation (false) since the expression structure has been modified without cloning
+        result.checkMaxFlatChildren(false);
+        return result;
     }
 
     private class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
