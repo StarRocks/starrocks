@@ -265,8 +265,7 @@ public:
                 constexpr uint32_t INT_VALUE = 0;
                 *slot_ptr = HashUtil::zlib_crc_hash(&INT_VALUE, 4, *slot_ptr);
             } else if constexpr (std::is_same_v<HashFunction, MurmurHash3Hash>) {
-                // For MurmurHash3, NULL should hash to 0
-                *slot_ptr = 0;
+                // For MurmurHash3, skip nulls
             } else {
                 *slot_ptr = *slot_ptr ^ (value + (*slot_ptr << 6) + (*slot_ptr >> 2));
             }
