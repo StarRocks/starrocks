@@ -72,7 +72,7 @@ Status PrinterStreamSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
     for (auto& col : chunk->columns()) {
         std::cout << col->debug_string() << std::endl;
     }
-    this->_output_chunks.push_back(chunk);
+    this->_output_chunks.emplace_back(chunk);
     return Status::OK();
 }
 
@@ -85,9 +85,9 @@ public:
                      std::vector<std::vector<std::vector<int64_t>>> expect_results) {
         ASSERT_TRUE(!epoch_results.empty());
         for (size_t i = 0; i < epoch_results.size(); i++) {
-            auto result = epoch_results[i];
+            const auto& result = epoch_results[i];
             auto columns = result->columns();
-            auto expect = expect_results[i];
+            const auto& expect = expect_results[i];
             ASSERT_EQ(columns.size(), expect.size());
             for (size_t j = 0; j < expect.size(); j++) {
                 CheckColumn<int64_t>(columns[j], expect[j]);
@@ -165,7 +165,7 @@ std::vector<TScanRangeParams> StreamOperatorsTest::_create_binlog_scan_ranges(si
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        range_params.push_back(param);
+        range_params.emplace_back(param);
     }
 
     return range_params;
@@ -196,7 +196,7 @@ TEST_F(StreamOperatorsTest, Dop_1) {
                             GeneratorStreamSourceParam{.num_column = 2, .start = 0, .step = 1, .chunk_size = 4}),
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()),
             };
-            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
+            _pipelines.emplace_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
         };
         return Status::OK();
     }));
@@ -226,7 +226,7 @@ TEST_F(StreamOperatorsTest, MultiDop_4) {
             op_factories.emplace_back(
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
             auto pipeline = std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group);
-            _pipelines.push_back(std::move(pipeline));
+            _pipelines.emplace_back(std::move(pipeline));
         };
         return Status::OK();
     }));
@@ -280,7 +280,7 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_Dop1) {
                                                                      _stream_aggregator),
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()),
             };
-            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
+            _pipelines.emplace_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
         };
         return Status::OK();
     }));
@@ -338,7 +338,7 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_MultiDop) {
                     next_operator_id(), next_plan_node_id(), _stream_aggregator));
             op_factories.emplace_back(
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
-            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
+            _pipelines.emplace_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
         };
         return Status::OK();
     }));
@@ -369,12 +369,12 @@ TEST_F(StreamOperatorsTest, binlog_dop_1) {
             _generate_morse_queue(binlog_scan_node.get(), scan_ranges, _degree_of_parallelism);
             OpFactories op_factories = binlog_scan_node->decompose_to_pipeline(_pipeline_context);
             for (int i = 0; i < _degree_of_parallelism; i++) {
-                _tablet_ids.push_back(i);
+                _tablet_ids.emplace_back(i);
             }
 
-            op_factories.push_back(
+            op_factories.emplace_back(
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
-            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
+            _pipelines.emplace_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
         };
         return Status::OK();
     }));
@@ -401,12 +401,12 @@ TEST_F(StreamOperatorsTest, binlog_dop_1_multi_epoch) {
             _generate_morse_queue(binlog_scan_node.get(), scan_ranges, _degree_of_parallelism);
             OpFactories op_factories = binlog_scan_node->decompose_to_pipeline(_pipeline_context);
             for (int i = 0; i < _degree_of_parallelism; i++) {
-                _tablet_ids.push_back(i);
+                _tablet_ids.emplace_back(i);
             }
 
-            op_factories.push_back(
+            op_factories.emplace_back(
                     std::make_shared<PrinterStreamSinkOperatorFactory>(next_operator_id(), next_plan_node_id()));
-            _pipelines.push_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
+            _pipelines.emplace_back(std::make_shared<pipeline::Pipeline>(next_pipeline_id(), op_factories, exec_group));
         };
         return Status::OK();
     }));

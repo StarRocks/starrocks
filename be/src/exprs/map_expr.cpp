@@ -45,7 +45,7 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
 
     for (size_t i = 0; i < num_pairs; i++) {
         pairs_columns[i] = ColumnHelper::cast_to_nullable_column(
-                ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, pairs_columns[i]));
+                ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, std::move(pairs_columns[i])));
     }
 
     auto key_col = ColumnHelper::create_column(_type.children[0], true);

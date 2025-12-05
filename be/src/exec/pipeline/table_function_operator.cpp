@@ -127,7 +127,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
 
     while (output_columns[0]->size() < max_chunk_size) {
         if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
-            _next_output_row < _table_function_result.second->get_data().back()) {
+            _next_output_row < _table_function_result.second->immutable_data().back()) {
             _copy_result(output_columns, max_chunk_size);
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
             RETURN_IF_ERROR(_process_table_function(state));
@@ -142,7 +142,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     for (const auto& column : output_columns) {
         RETURN_IF_ERROR(column->capacity_limit_reached());
     }
-    return _build_chunk(output_columns);
+    return _build_chunk(std::move(output_columns));
 }
 
 Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -205,7 +205,7 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
 
 void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_size) {
     DCHECK(_table_function_result.second->size() > 1 &&
-           _next_output_row < _table_function_result.second->get_data().back());
+           _next_output_row < _table_function_result.second->immutable_data().back());
     DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
     uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
@@ -231,9 +231,9 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
                 Datum value = input_column_ptr->get(_input_index_of_first_result + _next_output_row_offset);
                 if (value.is_null()) {
                     DCHECK(columns[i]->is_nullable());
-                    down_cast<NullableColumn*>(columns[i].get())->append_nulls(copy_rows);
+                    down_cast<NullableColumn*>(columns[i]->as_mutable_raw_ptr())->append_nulls(copy_rows);
                 } else {
-                    columns[i]->append_value_multiple_times(&value, copy_rows);
+                    columns[i]->as_mutable_raw_ptr()->append_value_multiple_times(&value, copy_rows);
                 }
             }
         }
@@ -250,7 +250,8 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
     // Build table function result
     if (_fn_result_required) {
         for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-            columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), fn_result_start, fn_result_count);
+            columns[_outer_slots.size() + i]->as_mutable_raw_ptr()->append(*(fn_result_cols[i]), fn_result_start,
+                                                                           fn_result_count);
         }
     }
 }

@@ -67,48 +67,48 @@ Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // catalog
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 const char* str = "def";
                 Slice value(str, strlen(str));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // schema
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index]);
                 Slice value(db_name.c_str(), db_name.length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 3: {
             // DEFAULT_CHARACTER_SET_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
                 const char* str = "utf8";
                 Slice value(str, strlen(str));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 4: {
             // DEFAULT_COLLATION_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
                 const char* str = "utf8_general_ci";
                 Slice value(str, strlen(str));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 5: {
             // SQL_PATH
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
-                fill_data_column_with_null(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
+                fill_data_column_with_null(column);
             }
             break;
         }

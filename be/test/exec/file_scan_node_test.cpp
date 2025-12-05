@@ -78,7 +78,7 @@ std::vector<TScanRangeParams> FileScanNodeTest::_create_csv_scan_ranges(const st
     params->src_tuple_id = 0;
     for (int i = 0; i < types.size(); i++) {
         params->expr_of_dest_slot[i] = TExpr();
-        params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
+        params->expr_of_dest_slot[i].nodes.emplace_back();
         params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
         params->expr_of_dest_slot[i].nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         params->expr_of_dest_slot[i].nodes[0].__set_is_nullable(true);

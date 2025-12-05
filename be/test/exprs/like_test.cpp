@@ -66,9 +66,9 @@ TEST_F(LikeTest, startConstPatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l >= 10 || l == 1) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
@@ -90,7 +90,7 @@ TEST_F(LikeTest, endConstPatternLike) {
         null->append(j % 2 == 0);
     }
 
-    columns.push_back(NullableColumn::create(std::move(str), std::move(null)));
+    columns.emplace_back(NullableColumn::create(std::move(str), std::move(null)));
     columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
@@ -112,9 +112,9 @@ TEST_F(LikeTest, endConstPatternLike) {
         }
 
         if (l == 19 || l == 9) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
@@ -149,9 +149,9 @@ TEST_F(LikeTest, substringConstPatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l == 12) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
@@ -238,7 +238,7 @@ TEST_F(LikeTest, haystackNullableLike) {
         }
     }
 
-    columns.push_back(NullableColumn::create(std::move(haystack), std::move(null)));
+    columns.emplace_back(NullableColumn::create(std::move(haystack), std::move(null)));
     columns.emplace_back(std::move(pattern));
     context->set_constant_columns(columns);
 
@@ -254,7 +254,7 @@ TEST_F(LikeTest, haystackNullableLike) {
     for (int l = 0; l < 20; ++l) {
         if (l % 2 == 0) {
             ASSERT_FALSE(result->is_null(l));
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
             ASSERT_TRUE(result->is_null(l));
         }
@@ -290,7 +290,7 @@ TEST_F(LikeTest, patternEmptyLike) {
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
 
     for (int l = 0; l < 20; ++l) {
-        ASSERT_TRUE(v->get_data()[l]);
+        ASSERT_TRUE(v->immutable_data()[l]);
     }
 
     ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
@@ -323,7 +323,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
 
     for (int l = 0; l < 20; ++l) {
-        ASSERT_TRUE(v->get_data()[l]);
+        ASSERT_TRUE(v->immutable_data()[l]);
     }
 
     ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
@@ -357,7 +357,7 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
 
     for (int l = 0; l < 20; ++l) {
-        ASSERT_TRUE(v->get_data()[l]);
+        ASSERT_TRUE(v->immutable_data()[l]);
     }
 
     ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
@@ -421,9 +421,9 @@ TEST_F(LikeTest, rowsPatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l % 2 == 0) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
@@ -454,7 +454,7 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
     }
 
     columns.emplace_back(std::move(str));
-    columns.push_back(NullableColumn::create(std::move(pattern), std::move(null)));
+    columns.emplace_back(NullableColumn::create(std::move(pattern), std::move(null)));
 
     context->set_constant_columns(columns);
 
@@ -469,10 +469,10 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
 
     for (int l = 0; l < 20; ++l) {
         if (l % 2 == 0) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
             ASSERT_FALSE(result->is_null(l));
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
             ASSERT_TRUE(result->is_null(l));
         }
     }
@@ -509,9 +509,9 @@ TEST_F(LikeTest, rowsPatternRegex) {
 
     for (int l = 0; l < 20; ++l) {
         if (l > 9) {
-            ASSERT_TRUE(v->get_data()[l]);
+            ASSERT_TRUE(v->immutable_data()[l]);
         } else {
-            ASSERT_FALSE(v->get_data()[l]);
+            ASSERT_FALSE(v->immutable_data()[l]);
         }
     }
 
@@ -553,7 +553,7 @@ TEST_F(LikeTest, constValueLike) {
 
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
     for (int i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(expected[i], v->get_data()[i]);
+        ASSERT_EQ(expected[i], v->immutable_data()[i]);
     }
 
     ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
@@ -588,7 +588,7 @@ TEST_F(LikeTest, constValueRegexp) {
 
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
     for (int i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(expected[i], v->get_data()[i]);
+        ASSERT_EQ(expected[i], v->immutable_data()[i]);
     }
 
     ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)

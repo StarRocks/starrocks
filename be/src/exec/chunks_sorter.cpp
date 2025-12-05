@@ -95,7 +95,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 // if this ConstColumn is the first column of the chunk.
                 // Case 2: an expression may generate a constant column for one Chunk, but a
                 // non-constant one for another Chunk, we replace them all by non-constant columns.
-                auto* const_col = down_cast<ConstColumn*>(col.get());
+                auto* const_col = down_cast<const ConstColumn*>(col.get());
                 const auto& data_col = const_col->data_column();
                 auto new_col = data_col->clone_empty();
                 new_col->append(*data_col, 0, 1);

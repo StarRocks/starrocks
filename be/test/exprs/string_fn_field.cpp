@@ -50,7 +50,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldStringTest) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(1, v->get_data()[i]);
+        ASSERT_EQ(1, v->immutable_data()[i]);
     }
 }
 
@@ -97,7 +97,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 
@@ -151,7 +151,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldDecTest) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 
@@ -200,7 +200,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest2) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 
@@ -233,7 +233,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest3) {
 
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], ColumnHelper::as_column<Int32Column>(v->data_column())->get_data()[0]);
+        ASSERT_EQ(res[i], ColumnHelper::as_column<Int32Column>(v->data_column())->immutable_data()[0]);
     }
 }
 
@@ -282,7 +282,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest4) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 

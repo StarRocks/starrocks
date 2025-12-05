@@ -82,7 +82,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         partial_chunk->reset();
-        auto& cols = partial_chunk->columns();
+        auto cols = partial_chunk->mutable_columns();
         for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
             cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
             cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
@@ -109,7 +109,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
              create_int_value_pb(5)});
     std::string dst_file_name = kSegmentDir + "/rewrite_rowset";
     std::vector<uint32_t> read_column_ids{2, 4};
-    std::vector<MutableColumnPtr> write_columns(read_column_ids.size());
+    MutableColumns write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
@@ -135,7 +135,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
-    auto seg_iterator = res.value();
+    const auto& seg_iterator = res.value();
 
     size_t count = 0;
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);

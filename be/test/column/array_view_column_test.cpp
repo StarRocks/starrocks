@@ -22,9 +22,9 @@
 
 namespace starrocks {
 
-ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t>>& values) {
-    UInt32Column::Ptr offsets = UInt32Column::create();
-    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+ArrayColumn::MutablePtr create_int32_array_column(const std::vector<std::vector<int32_t>>& values) {
+    auto offsets = UInt32Column::create();
+    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
     offsets->append(0);
     for (const auto& value : values) {
         for (auto v : value) {
@@ -32,11 +32,11 @@ ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t>>& val
         }
         offsets->append(elements->size());
     }
-    return ArrayColumn::create(elements, offsets);
+    return ArrayColumn::create(std::move(elements), std::move(offsets));
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_from_array) {
-    auto array_column = create_int32_array_column({{1}, {2, 3}});
+    ColumnPtr array_column = create_int32_array_column({{1}, {2, 3}});
     auto array_view_column = ArrayViewColumn::from_array_column(array_column);
     ASSERT_TRUE(array_view_column->is_array_view());
     ASSERT_FALSE(array_view_column->is_nullable());
@@ -45,7 +45,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_from_array) {
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_to_array) {
-    auto array_column = create_int32_array_column({{1}, {2, 3}});
+    ColumnPtr array_column = create_int32_array_column({{1}, {2, 3}});
     auto array_view_column = ArrayViewColumn::from_array_column(array_column);
     auto result = ArrayViewColumn::to_array_column(array_view_column);
     ASSERT_TRUE(result->is_array());
@@ -53,7 +53,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_to_array) {
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_get_elements) {
-    auto array_column = create_int32_array_column({{1}, {2, 3}});
+    ColumnPtr array_column = create_int32_array_column({{1}, {2, 3}});
     auto array_view_column = ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
 
     ASSERT_EQ(array_view_column->get_element_size(0), 1);
@@ -66,13 +66,13 @@ PARALLEL_TEST(ArrayViewColumnTest, test_get_elements) {
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_append) {
-    auto array_column_1 = create_int32_array_column({{}, {1}, {2, 3}});
+    ColumnPtr array_column_1 = create_int32_array_column({{}, {1}, {2, 3}});
     auto array_view_column_1 =
             ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_1));
     auto array_view_column_3 =
             ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_1));
 
-    auto array_column_2 = create_int32_array_column({{}, {1}, {2, 3}});
+    ColumnPtr array_column_2 = create_int32_array_column({{}, {1}, {2, 3}});
     auto array_view_column_2 =
             ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_2));
 
@@ -93,11 +93,11 @@ PARALLEL_TEST(ArrayViewColumnTest, test_append) {
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_compare) {
-    auto array_column_1 = create_int32_array_column({{}, {1}, {2, 3}});
+    ColumnPtr array_column_1 = create_int32_array_column({{}, {1}, {2, 3}});
     auto array_view_column_1 =
             ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_1));
 
-    auto array_column_2 = create_int32_array_column({{1}, {2, 3}, {4}});
+    ColumnPtr array_column_2 = create_int32_array_column({{1}, {2, 3}, {4}});
     auto array_view_column_2 =
             ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_2));
 
@@ -122,10 +122,10 @@ PARALLEL_TEST(ArrayViewColumnTest, test_compare) {
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_filter_range) {
-    auto array_column = create_int32_array_column({});
+    ColumnPtr array_column = create_int32_array_column({});
     const int total_rows = 127;
     for (int32_t i = 0; i < total_rows; i++) {
-        array_column->append_datum(DatumArray{i, i * 2});
+        array_column->as_mutable_ptr()->append_datum(DatumArray{i, i * 2});
     }
     auto array_view_column = ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
     Filter filter(total_rows, 1);
@@ -168,11 +168,11 @@ PARALLEL_TEST(ArrayViewColumnTest, test_filter_range) {
 }
 
 PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
-    auto array_column = create_int32_array_column({{1, 2}, {3}, {4, 5}});
+    ColumnPtr array_column = create_int32_array_column({{1, 2}, {3}, {4, 5}});
     {
         // replicate
         auto array_view_column =
-                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
+                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(Column::mutate(array_column)));
         Buffer<uint32_t> offsets{0, 2, 3, 6};
         auto column = array_view_column->replicate(offsets).value();
         ASSERT_TRUE(column->is_array_view());
@@ -192,7 +192,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
     }
     {
         auto array_view_column =
-                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
+                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(Column::mutate(array_column)));
         array_view_column->remove_first_n_values(1);
         ASSERT_EQ(array_view_column->size(), 2);
         // elements column won't be changed
@@ -214,7 +214,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
     {
         // assign
         auto array_view_column =
-                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
+                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(Column::mutate(array_column)));
 
         array_view_column->assign(5, 0);
         ASSERT_EQ(array_view_column->size(), 5);

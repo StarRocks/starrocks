@@ -39,7 +39,7 @@ VectorizedInfoFunc::VectorizedInfoFunc(const TExprNode& node) : Expr(node) {
 }
 
 StatusOr<ColumnPtr> VectorizedInfoFunc::evaluate_checked(ExprContext* context, Chunk* ptr) {
-    ColumnPtr column = _value->clone_empty();
+    MutableColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {
         column->resize(ptr->num_rows());

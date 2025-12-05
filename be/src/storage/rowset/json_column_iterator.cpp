@@ -183,7 +183,7 @@ Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
 
 template <typename FUNC>
 Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
-    Columns columns;
+    MutableColumns columns;
     for (int i = 0; i < _source_column_modules.size(); i++) {
         columns.emplace_back(_source_column_modules[i]->clone_empty());
     }
@@ -195,7 +195,9 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
     if (_is_direct) {
         json_column->set_flat_columns(_source_paths, _source_types, std::move(columns));
     } else {
-        RETURN_IF_ERROR(transformer->trans(std::move(columns)));
+        // convert mutable columns to immutable columns
+        Columns immutable_columns = ColumnHelper::to_columns(std::move(columns));
+        RETURN_IF_ERROR(transformer->trans(std::move(immutable_columns)));
         auto result = transformer->mutable_result();
         json_column->set_flat_columns(_target_paths, _target_types, std::move(result));
     }
@@ -208,8 +210,8 @@ Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         json_column = down_cast<JsonColumn*>(dst);
     }
@@ -232,8 +234,8 @@ Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* ds
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         json_column = down_cast<JsonColumn*>(dst);
     }
@@ -259,8 +261,8 @@ Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size
     // 1. Read null column
     if (_null_iter != nullptr) {
         auto* nullable_column = down_cast<NullableColumn*>(values);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
         RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
         nullable_column->update_has_null();
     } else {
@@ -387,16 +389,16 @@ Status JsonDynamicFlatIterator::_dynamic_flat(Column* output, FUNC read_fn) {
     if (output->is_nullable()) {
         // append null column
         auto* output_nullable = down_cast<NullableColumn*>(output);
-        auto* output_null = down_cast<NullColumn*>(output_nullable->null_column().get());
+        auto* output_null = down_cast<NullColumn*>(output_nullable->null_column_raw_ptr());
 
         auto* input_nullable = down_cast<NullableColumn*>(proxy.get());
-        auto* input_null = down_cast<NullColumn*>(input_nullable->null_column().get());
+        auto* input_null = down_cast<NullColumn*>(input_nullable->null_column_raw_ptr());
 
         output_null->append(*input_null, 0, input_null->size());
         output_nullable->set_has_null(input_nullable->has_null() | output_nullable->has_null());
 
         // json column
-        json_data = down_cast<JsonColumn*>(output_nullable->data_column().get());
+        json_data = down_cast<JsonColumn*>(output_nullable->data_column_raw_ptr());
     } else {
         json_data = down_cast<JsonColumn*>(output);
     }
@@ -547,8 +549,8 @@ Status JsonMergeIterator::next_batch(size_t* n, Column* dst) {
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         json_column = down_cast<JsonColumn*>(dst);
     }
@@ -572,8 +574,8 @@ Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         json_column = down_cast<JsonColumn*>(dst);
     }
@@ -597,8 +599,8 @@ Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
+        json_column = down_cast<JsonColumn*>(nullable_column->data_column_raw_ptr());
+        null_column = down_cast<NullColumn*>(nullable_column->null_column_raw_ptr());
     } else {
         json_column = down_cast<JsonColumn*>(dst);
     }
@@ -703,29 +705,29 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override {
         _source_chunk.reset();
-        auto source_column = _source_chunk.get_column_by_index(0);
-        RETURN_IF_ERROR(_parent->next_batch(n, source_column.get()));
+        auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+        RETURN_IF_ERROR(_parent->next_batch(n, source_column));
         return do_extract(dst);
     }
 
     Status next_batch(const SparseRange<>& range, Column* dst) override {
         _source_chunk.reset();
-        auto source_column = _source_chunk.get_column_by_index(0);
-        RETURN_IF_ERROR(_parent->next_batch(range, source_column.get()));
+        auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+        RETURN_IF_ERROR(_parent->next_batch(range, source_column));
         return do_extract(dst);
     }
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         _source_chunk.reset();
-        auto source_column = _source_chunk.get_column_by_index(0);
-        RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column.get()));
+        auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+        RETURN_IF_ERROR(_parent->fetch_values_by_rowid(rowids, size, source_column));
         return do_extract(values);
     }
 
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override {
-        auto source_column = _source_chunk.get_column_by_index(0);
-        return _parent->get_io_range_vec(range, source_column.get());
+        auto* source_column = _source_chunk.get_column_raw_ptr_by_index(0);
+        return _parent->get_io_range_vec(range, source_column);
     }
 
     std::string name() const override { return "JsonExtractIterator"; }
@@ -770,10 +772,11 @@ private:
         VLOG_ROW << "JsonExtractIterator extract from: " << _source_chunk.get_column_by_index(0)->debug_string();
         VLOG_ROW << "JsonExtractIterator extract: " << result->debug_string();
         if ((target->is_nullable() == result->is_nullable()) && (target->size() == 0)) {
-            target->swap_column(*result);
+            auto result_mut = result->as_mutable_raw_ptr();
+            target->swap_column(*result_mut);
         } else if (!target->is_nullable() && result->is_nullable()) {
             auto sz = result->size();
-            target->append(*(down_cast<NullableColumn*>(result.get())->data_column()), 0, sz);
+            target->append(*(down_cast<const NullableColumn*>(result.get())->data_column()), 0, sz);
         } else {
             target->append(*result, 0, result->size());
         }

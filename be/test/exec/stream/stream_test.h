@@ -69,7 +69,8 @@ protected:
         return std::make_shared<StreamAggregator>(std::move(params));
     }
 
-    std::vector<TExpr> _create_group_by_exprs(std::vector<SlotTypeInfo> slot_infos, std::vector<GroupByKeyInfo> infos) {
+    std::vector<TExpr> _create_group_by_exprs(std::vector<SlotTypeInfo> slot_infos,
+                                              const std::vector<GroupByKeyInfo>& infos) {
         std::vector<TExpr> exprs;
         for (auto& slot_id : infos) {
             auto info = slot_infos[slot_id];
@@ -79,7 +80,7 @@ protected:
         }
         return exprs;
     }
-    std::vector<TExpr> _create_agg_exprs(std::vector<SlotTypeInfo> slot_infos, std::vector<AggInfo> infos) {
+    std::vector<TExpr> _create_agg_exprs(std::vector<SlotTypeInfo> slot_infos, const std::vector<AggInfo>& infos) {
         std::vector<TExpr> exprs;
         for (auto& agg_info : infos) {
             auto slot_id = std::get<0>(agg_info);
@@ -114,8 +115,8 @@ protected:
     }
 
     template <class T>
-    void CheckChunk(ChunkPtr chunk, std::vector<LogicalType> types, std::vector<std::vector<T>> ans,
-                    std::vector<int8_t> ops) {
+    void CheckChunk(const ChunkPtr& chunk, const std::vector<LogicalType>& types,
+                    const std::vector<std::vector<T>>& ans, const std::vector<int8_t>& ops) {
         auto chunk_size = chunk->num_rows();
         auto num_col = chunk->num_columns();
         DCHECK_EQ(types.size(), num_col);
@@ -146,7 +147,7 @@ protected:
         }
     }
 
-    void CheckColumn(const StreamRowOp* ops, std::vector<int8_t> exp_col) {
+    void CheckColumn(const StreamRowOp* ops, const std::vector<int8_t>& exp_col) {
         for (size_t i = 0; i < exp_col.size(); i++) {
             DCHECK_EQ(ops[i], exp_col[i]);
         }

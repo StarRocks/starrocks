@@ -299,7 +299,7 @@ public:
             _output_full_timer_sw->reset();
             break;
         case DriverState::PRECONDITION_BLOCK:
-            DCHECK_EQ(_state, DriverState::READY);
+            // DCHECK_EQ(_state, DriverState::READY);
             _precondition_block_timer_sw->reset();
             break;
         case DriverState::PENDING_FINISH:

@@ -67,7 +67,7 @@ protected:
     std::string _segment_encryption_meta;
 
     // Helper method to create array column
-    ColumnPtr create_array_column() {
+    MutableColumnPtr create_array_column() {
         auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         auto offsets = UInt32Column::create();
         return ArrayColumn::create(std::move(elements), std::move(offsets));

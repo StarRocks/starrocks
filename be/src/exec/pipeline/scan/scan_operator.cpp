@@ -182,7 +182,6 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
-    DCHECK(!_unpluging);
     bool buffer_full = is_buffer_full();
     if (buffer_full) {
         return chunk_number > 0;

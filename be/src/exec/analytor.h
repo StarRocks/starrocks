@@ -289,14 +289,14 @@ private:
     std::vector<const AggregateFunction*> _agg_functions;
     std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<Columns> _agg_intput_columns;
+    std::vector<MutableColumns> _agg_intput_columns;
     std::vector<FunctionTypes> _agg_fn_types;
 
     std::vector<ExprContext*> _partition_ctxs;
-    Columns _partition_columns;
+    MutableColumns _partition_columns;
 
     std::vector<ExprContext*> _order_ctxs;
-    Columns _order_columns;
+    MutableColumns _order_columns;
 
     // Tuple id of the buffered tuple (identical to the input child tuple, which is
     // assumed to come from a single SortNode). NULL if both partition_exprs and
@@ -339,7 +339,7 @@ private:
     bool _input_eos = false;
 
     // Temporary output related structures
-    Columns _result_window_columns;
+    MutableColumns _result_window_columns;
 
     // Assistant structures for removeing unused buffered input chunks
     int64_t _removed_from_buffer_rows = 0;

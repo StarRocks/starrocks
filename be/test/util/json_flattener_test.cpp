@@ -135,17 +135,19 @@ protected:
         config::json_flat_complex_type_factor = 0.3;
     }
 
-    std::vector<ColumnPtr> test_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
-                                     const std::vector<LogicalType>& types, bool has_remain) {
-        ColumnPtr input = JsonColumn::create();
-        JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    Columns test_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
+                      const std::vector<LogicalType>& types, bool has_remain) {
+        MutableColumnPtr input_mut = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
         for (const auto& json : inputs) {
             ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
             json_input->append(&json_value);
         }
 
+        ColumnPtr input = ColumnPtr(std::move(input_mut));
+
         JsonFlattener flattener(paths, types, has_remain);
-        flattener.flatten(json_input);
+        flattener.flatten(input.get());
 
         auto result = flattener.mutable_result();
         if (has_remain) {
@@ -167,14 +169,18 @@ protected:
             EXPECT_EQ(paths.size(), result.size());
         }
 
-        return result;
+        return ColumnHelper::to_columns(std::move(result));
     }
 
-    std::vector<ColumnPtr> test_null_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
-                                          const std::vector<LogicalType>& types, bool has_remain) {
-        ColumnPtr input = JsonColumn::create();
-        NullColumnPtr nulls = NullColumn::create();
-        JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    Columns test_null_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
+                           const std::vector<LogicalType>& types, bool has_remain) {
+        MutableColumnPtr input_mut = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
+
+        ColumnPtr input = ColumnPtr(std::move(input_mut));
+
+        auto nulls_mut = NullColumn::create();
+        auto* nulls = down_cast<NullColumn*>(nulls_mut.get());
         for (const auto& json : inputs) {
             if (json == "NULL") {
                 json_input->append_default();
@@ -186,7 +192,7 @@ protected:
             }
         }
 
-        auto nullable_input = NullableColumn::create(input, nulls);
+        auto nullable_input = NullableColumn::create(input, std::move(nulls_mut));
         JsonFlattener flattener(paths, types, has_remain);
         flattener.flatten(nullable_input.get());
 
@@ -209,7 +215,7 @@ protected:
             }
             EXPECT_EQ(paths.size(), result.size());
         }
-        return result;
+        return ColumnHelper::to_columns(std::move(result));
     }
 };
 
@@ -325,12 +331,14 @@ TEST_F(JsonFlattenerTest, testSortHitNums) {
     };
     // clang-format on
 
-    ColumnPtr input = JsonColumn::create();
-    JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    MutableColumnPtr input_mut = JsonColumn::create();
+    JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
     for (const auto& json : jsons) {
         ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
         json_input->append(&json_value);
     }
+
+    ColumnPtr input = ColumnPtr(std::move(input_mut));
 
     {
         config::json_flat_sparsity_factor = 0.3;
@@ -405,12 +413,14 @@ TEST_F(JsonFlattenerTest, testRemainFilter) {
     };
     // clang-format on
 
-    ColumnPtr input = JsonColumn::create();
-    JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    MutableColumnPtr input_mut = JsonColumn::create();
+    JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
     for (const auto& json : jsons) {
         ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
         json_input->append(&json_value);
     }
+
+    ColumnPtr input = ColumnPtr(std::move(input_mut));
 
     {
         config::json_flat_sparsity_factor = 0.3;
@@ -443,12 +453,13 @@ TEST_F(JsonFlattenerTest, testPointJson) {
     };
     // clang-format on
 
-    ColumnPtr input = JsonColumn::create();
-    JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    MutableColumnPtr input_mut = JsonColumn::create();
+    JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
     for (const auto& json : jsons) {
         ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
         json_input->append(&json_value);
     }
+    ColumnPtr input = ColumnPtr(std::move(input_mut));
     JsonPathDeriver jf;
     jf.derived({json_input});
 
@@ -583,18 +594,20 @@ public:
     void SetUp() override { config::enable_json_flat_complex_type = true; }
     void TearDown() override { config::enable_json_flat_complex_type = false; }
 
-    std::vector<ColumnPtr> test_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
-                                     const std::vector<LogicalType>& types, bool has_remain) {
-        ColumnPtr input = JsonColumn::create();
-        JsonColumn* json_input = down_cast<JsonColumn*>(input.get());
+    Columns test_json(const std::vector<std::string>& inputs, const std::vector<std::string>& paths,
+                      const std::vector<LogicalType>& types, bool has_remain) {
+        MutableColumnPtr input_mut = JsonColumn::create();
+        JsonColumn* json_input = down_cast<JsonColumn*>(input_mut.get());
         for (const auto& json : inputs) {
             ASSIGN_OR_ABORT(auto json_value, JsonValue::parse(json));
             json_input->append(&json_value);
         }
 
+        ColumnPtr input = ColumnPtr(std::move(input_mut));
+
         JsonFlattener flattener(paths, types, has_remain);
-        flattener.flatten(json_input);
-        return flattener.mutable_result();
+        flattener.flatten(input.get());
+        return ColumnHelper::to_columns(std::move(flattener.mutable_result()));
     }
 };
 
@@ -609,14 +622,14 @@ TEST_P(JsonBoolExtractionTest, testExtractBoolNullColumnConsistency) {
     auto result_columns = test_json(inputs, paths, types, false);
     ASSERT_EQ(1, result_columns.size());
 
-    auto* result = down_cast<NullableColumn*>(result_columns[0].get());
+    auto* result = down_cast<const NullableColumn*>(result_columns[0].get());
     result->check_or_die();
     ASSERT_EQ(1, result->size());
 
-    auto* bool_column = down_cast<BooleanColumn*>(result->data_column().get());
+    auto* bool_column = down_cast<const BooleanColumn*>(result->data_column().get());
     EXPECT_EQ(expected_value, bool_column->get_data()[0]);
 
-    auto* null_column = down_cast<NullColumn*>(result->null_column().get());
+    auto* null_column = down_cast<const NullColumn*>(result->null_column().get());
     EXPECT_EQ(0, null_column->get_data()[0]) << "Null column should contain 0 for non-null values";
 }
 

@@ -454,9 +454,10 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
 void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                  bool filter_all, bool hit_all, const Filter& filter) {
     if (filter_all) {
+        auto columns = (*chunk)->mutable_columns();
         for (size_t i = start_column; i < start_column + column_count; i++) {
-            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
-            auto& null_data = null_column->mutable_null_column()->get_data();
+            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(columns[i]);
+            auto& null_data = null_column->null_column_raw_ptr()->get_data();
             for (size_t j = 0; j < (*chunk)->num_rows(); j++) {
                 null_data[j] = 1;
                 null_column->set_has_null(true);
@@ -467,9 +468,10 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
             return;
         }
 
+        auto columns = (*chunk)->mutable_columns();
         for (size_t i = start_column; i < start_column + column_count; i++) {
-            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
-            auto& null_data = null_column->mutable_null_column()->get_data();
+            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(columns[i]);
+            auto& null_data = null_column->null_column_raw_ptr()->get_data();
             for (size_t j = 0; j < filter.size(); j++) {
                 if (filter[j] == 0) {
                     null_data[j] = 1;

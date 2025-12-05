@@ -65,24 +65,24 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
     return &_schema_mapping[column_index];
 }
 
-#define TYPE_REINTERPRET_CAST(FromType, ToType)      \
-    {                                                \
-        size_t row_num = base_chunk->num_rows();     \
-        for (size_t row = 0; row < row_num; ++row) { \
-            Datum base_datum = base_col->get(row);   \
-            Datum new_datum;                         \
-            if (base_datum.is_null()) {              \
-                new_datum.set_null();                \
-                new_col->append_datum(new_datum);    \
-                continue;                            \
-            }                                        \
-            FromType src;                            \
-            src = base_datum.get<FromType>();        \
-            ToType dst = static_cast<ToType>(src);   \
-            new_datum.set(dst);                      \
-            new_col->append_datum(new_datum);        \
-        }                                            \
-        break;                                       \
+#define TYPE_REINTERPRET_CAST(FromType, ToType)                         \
+    {                                                                   \
+        size_t row_num = base_chunk->num_rows();                        \
+        for (size_t row = 0; row < row_num; ++row) {                    \
+            Datum base_datum = base_col->get(row);                      \
+            Datum new_datum;                                            \
+            if (base_datum.is_null()) {                                 \
+                new_datum.set_null();                                   \
+                new_col->as_mutable_raw_ptr()->append_datum(new_datum); \
+                continue;                                               \
+            }                                                           \
+            FromType src;                                               \
+            src = base_datum.get<FromType>();                           \
+            ToType dst = static_cast<ToType>(src);                      \
+            new_datum.set(dst);                                         \
+            new_col->as_mutable_raw_ptr()->append_datum(new_datum);     \
+        }                                                               \
+        break;                                                          \
     }
 
 #define CONVERT_FROM_TYPE(from_type)                                                \
@@ -304,7 +304,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
 
             if (new_schema.field(i)->is_nullable()) {
-                new_col = ColumnHelper::cast_to_nullable_column(new_col);
+                new_col = ColumnHelper::cast_to_nullable_column(std::move(new_col));
             }
 #ifdef BE_TEST
             VLOG(2) << "evaluate result:" << new_col->debug_string();
@@ -327,12 +327,12 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             VLOG(2) << "i=" << i << ", ref_column=" << ref_column << ", base_index=" << base_index
                     << ", ref_type=" << ref_type << ", new_type=" << new_type;
 
-            ColumnPtr& base_col = base_chunk->get_column_by_index(base_index);
-            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            auto& base_col = base_chunk->get_column_by_index(base_index);
+            auto& new_col = new_chunk->get_column_by_index(i);
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
                 if (new_col->is_nullable() != base_col->is_nullable()) {
-                    new_col->append(*base_col.get());
+                    new_col->as_mutable_raw_ptr()->append(*base_col);
                 } else {
                     new_col = base_col;
                 }
@@ -343,7 +343,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
-                                                      new_col.get(), mem_pool);
+                                                      new_col->as_mutable_raw_ptr(), mem_pool);
                 if (!st.ok()) {
                     LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
                                  << logical_type_to_string(new_type);
@@ -383,7 +383,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         } else {
             VLOG(2) << "no ref column: i=" << i << ", ref_column=" << ref_column;
-            ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+            auto* new_col = new_chunk->get_column_raw_ptr_by_index(i);
             for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                 new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
@@ -407,9 +407,9 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))->reset_column();
-            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))
-                    ->append_nulls(new_chunk->num_rows());
+            auto* col = new_chunk->get_column_raw_ptr_by_index(it.first);
+            col->reset_column();
+            col->append_nulls(new_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
         } else {
@@ -417,8 +417,8 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
             // it maybe a constant column or some other column type.
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
-            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))
-                    ->swap_by_data_column(output_column);
+            auto* col = down_cast<NullableColumn*>(new_chunk->get_column_raw_ptr_by_index(it.first));
+            col->swap_by_data_column(output_column);
         }
     }
 
@@ -505,9 +505,9 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))->reset_column();
-            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))
-                    ->append_nulls(read_chunk->num_rows());
+            auto* col = down_cast<NullableColumn*>(tmp_new_chunk->get_column_raw_ptr_by_index(cid));
+            col->reset_column();
+            col->append_nulls(read_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             tmp_new_chunk->get_column_by_index(cid).swap(tmp);
         } else {
@@ -515,8 +515,8 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
             // it maybe a constant column or some other column type
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
-            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))
-                    ->swap_by_data_column(output_column);
+            auto* col = down_cast<NullableColumn*>(tmp_new_chunk->get_column_raw_ptr_by_index(cid));
+            col->swap_by_data_column(output_column);
         }
     }
 

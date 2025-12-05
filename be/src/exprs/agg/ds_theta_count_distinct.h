@@ -137,9 +137,9 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const ColumnType* input = down_cast<const ColumnType*>(src[0].get());
-        auto* result = down_cast<BinaryColumn*>((*dst).get());
+        auto* result = down_cast<BinaryColumn*>(dst.get());
 
         Bytes& bytes = result->get_bytes();
         result->get_offset().resize(chunk_size + 1);
