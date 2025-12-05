@@ -20,53 +20,96 @@ import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
 import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class RecursiveCTETest extends PlanTestBase {
-    //    @Test
+    @Test
     public void testSimpleRecursiveCTE() throws Exception {
         String sql = "with recursive cte as " +
                 "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) " +
                 "select * from cte";
-        String plan = testCte(sql);
-        assertContains(plan, "MultiCastDataSinks\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 03\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 07\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 11\n" +
-                "    RANDOM\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 2> : rand()");
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "SELECT `test`.`t0`.`v1`\n"
+                + "FROM `test`.`t0`");
+        assertContains(plan, "Recursive Statement: SELECT `cte`.`v1` + 1 AS `v1 + 1`");
+        assertContains(plan, "Outer Statement After Rewriting:\n"
+                + "SELECT `cte`.`v1`");
     }
 
-    //    @Test
-    public void testSimpleRecursiveCTEExplain() throws Exception {
-        String sql = "with recursive cte as " +
-                "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) " +
+    @Test
+    public void testRecursiveCTEWithColumnNames() throws Exception {
+        String sql = "with recursive cte(id, parent_id) as " +
+                "(select v1, v2 from t0 where v2 is null " +
+                "union all " +
+                "select t0.v1, t0.v2 from t0 join cte on t0.v2 = cte.id) " +
                 "select * from cte";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "MultiCastDataSinks\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 03\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 07\n" +
-                "    RANDOM\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 11\n" +
-                "    RANDOM\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 2> : rand()");
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "SELECT `test`.`t0`.`v1`, `test`.`t0`.`v2`\n"
+                + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v2` IS NULL");
+        assertContains(plan, ".`parent_id`\n"
+                + "FROM `test`.`cte_");
+        assertContains(plan, "Outer Statement After Rewriting:\n"
+                + "SELECT `cte`.`id`, `cte`.`parent_id`");
     }
 
-    public String testCte(String sql) throws Exception {
+    @Test
+    public void testMultipleRecursiveCTE() throws Exception {
+        String sql = "with recursive " +
+                "cte1 as (select v1 from t0 union all select v1 + 1 from cte1 where v1 < 5), " +
+                "cte2 as (select v4 from t1 union all select v4 + 1 from cte2 where v4 < 5) " +
+                "select * from cte1, cte2";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive CTE Name: cte1\n"
+                + "Temporary Table: cte1_");
+        assertContains(plan, "Recursive CTE Name: cte2\n"
+                + "Temporary Table: cte2_");
+        assertContains(plan, "WHERE `cte1`.`v1` < 5");
+        assertContains(plan, "WHERE `cte2`.`v4` < 5");
+    }
+
+    @Test
+    public void testMultipleRecursiveCTE2() throws Exception {
+        String sql = "with recursive " +
+                "cte1 as (select v1 from t0   union all select v1 + 1 from cte1 where v1 < 5), " +
+                "cte2 as (select v1 from cte1 union all select v1 + 1 from cte2 where v1 < 5) " +
+                "select * from cte1, cte2";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive CTE Name: cte1\n"
+                + "Temporary Table: cte1_");
+        assertContains(plan, "Recursive CTE Name: cte2\n"
+                + "Temporary Table: cte2_");
+        assertContains(plan, "WHERE `cte1`.`v1` < 5");
+        assertContains(plan, "WHERE `cte2`.`v1` < 5");
+    }
+
+    @Test
+    public void testNestedRecursiveCTE() throws Exception {
+        String sql = "with recursive cte1 as " +
+                "(select v1 from t0 union all select v1 + 1 from cte1 where v1 < 10) " +
+                "select * from (select * from cte1 where v1 > 5) t";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, ".*, 0 AS `_cte_level`");
+        assertContains(plan, "WHERE `cte1`.`v1` < 10");
+        assertContains(plan, "WHERE `cte1`.`v1` > 5) `t`");
+    }
+
+    @Test
+    public void testUnionRecursiveCTE() throws Exception {
+        String sql = "with recursive cte as " +
+                "(select v1 from t0 union select v1 + 1 from cte where v1 < 10) " +
+                "select * from cte";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "SELECT `test`.`t0`.`v1`\n"
+                + "FROM `test`.`t0`");
+        assertContains(plan, "Recursive Statement: SELECT `cte`.`v1` + 1 AS `v1 + 1`");
+        assertContains(plan, "Outer Statement After Rewriting:\n"
+                + "SELECT `cte`.`v1`");
+    }
+
+    public String explainRecursiveCte(String sql) throws Exception {
         List<StatementBase> statements;
         try (Timer ignored = Tracers.watchScope("Parser")) {
             statements = SqlParser.parse(sql, connectContext.getSessionVariable());
@@ -76,9 +119,8 @@ public class RecursiveCTETest extends PlanTestBase {
         if (RecursiveCTEAstCheck.hasRecursiveCte(statementBase)) {
             RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
             StatementBase sb = executor.splitOuterStmt(statementBase);
-            executor.prepareRecursiveCTE();
-            System.out.println("asd");
+            return executor.explainCTE(sb);
         }
-        return null;
+        return getCostExplain(sql);
     }
 }

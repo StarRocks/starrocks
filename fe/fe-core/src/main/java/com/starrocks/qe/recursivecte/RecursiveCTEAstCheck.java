@@ -24,7 +24,6 @@ import java.util.Stack;
 
 public class RecursiveCTEAstCheck extends AstTraverser<Void, Void> {
     private final Stack<String> cteNameStack = new Stack<>();
-
     private boolean isRecursiveCte = false;
 
     public static boolean hasRecursiveCte(StatementBase stmt) {
@@ -55,8 +54,6 @@ public class RecursiveCTEAstCheck extends AstTraverser<Void, Void> {
                 throw new SemanticException("Doesn't support multi-level recursive CTE");
             }
             isRecursiveCte = true;
-        } else if (isRecursiveCte) {
-            throw new SemanticException("Recursive CTE can only reference itself");
         }
         return null;
     }

@@ -67,7 +67,7 @@ import java.util.Map;
 public class RecursiveCTEExecutor {
     private static final Logger LOG = LogManager.getLogger(RecursiveCTEExecutor.class);
 
-    private record RecursiveCTEGroup(QueryStatement startStmt, QueryStatement recursiveStmt,
+    private record RecursiveCTEGroup(QueryStatement startStmt, QueryStatement recursiveStmt, boolean isDistinct,
                                      CreateTemporaryTableStmt tempTableStmt) {
     }
 
@@ -143,12 +143,16 @@ public class RecursiveCTEExecutor {
             }
 
             // recursive plan
-            RecursiveCTEStager stager = new RecursiveCTEStager(group.recursiveStmt, tempTableName);
+            RecursiveCTEStager stager = new RecursiveCTEStager(group, tempTableName);
             for (int i = 1; i < connectContext.getSessionVariable().getRecursiveCteMaxDepth(); i++) {
                 insert = stager.next();
                 executor = StmtExecutor.newInternalExecutor(connectContext, insert);
                 connectContext.setQueryId(UUIDUtil.genUUID());
                 executor.execute();
+                if (connectContext.getState().getAffectedRows() <= 0) {
+                    // no more rows inserted, break
+                    break;
+                }
                 if (connectContext.getState().getErrType() != QueryState.ErrType.UNKNOWN) {
                     LOG.warn("Error occurred during executing recursive CTE recursive statement: {}",
                             connectContext.getState().getErrorMessage());
@@ -177,25 +181,25 @@ public class RecursiveCTEExecutor {
     private static class RecursiveCTEStager extends AstTraverser<Void, Void> {
         private int currentLoops;
         private final TableName tempTableName;
-        private final QueryStatement select;
+        private final RecursiveCTEGroup group;
         private Expr tempPredicate = null;
         private boolean initPredicate = false;
 
-        public RecursiveCTEStager(QueryStatement select, TableName tempTableName) {
+        public RecursiveCTEStager(RecursiveCTEGroup group, TableName tempTableName) {
             this.currentLoops = 0;
             this.tempTableName = tempTableName;
-            this.select = select;
+            this.group = group;
         }
 
         public InsertStmt next() {
-            visit(select.getQueryRelation());
+            visit(group.recursiveStmt.getQueryRelation());
             currentLoops++;
-            SubqueryRelation subquery = new SubqueryRelation(new QueryStatement(select.getQueryRelation()));
+            SubqueryRelation subquery = new SubqueryRelation(new QueryStatement(group.recursiveStmt.getQueryRelation()));
             subquery.setAlias(new TableName(null, "loops_" + System.currentTimeMillis()));
-            SelectRelation recursiveSelect = new SelectRelation(
-                    new SelectList(List.of(new SelectListItem(subquery.getAlias()),
-                            new SelectListItem(new IntLiteral(currentLoops, IntegerType.INT), "_cte_level")), false),
-                    subquery, null, null, null);
+            SelectRelation recursiveSelect = new SelectRelation(new SelectList(List.of(
+                    new SelectListItem(subquery.getAlias()),
+                    new SelectListItem(new IntLiteral(currentLoops, IntegerType.INT), "_cte_level")),
+                    group.isDistinct), subquery, null, null, null);
 
             InsertStmt insert = new InsertStmt(tempTableName, new QueryStatement(recursiveSelect));
             insert.setOrigStmt(new OriginStatement(AstToSQLBuilder.toSQL(insert)));
@@ -229,13 +233,17 @@ public class RecursiveCTEExecutor {
     }
 
     private class RecursiveCTESplitter extends AstTraverser<Void, Void> {
+        private boolean inRecursiveCTEScope = false;
+
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             if (node.hasWithClause()) {
                 List<CTERelation> cteRelations = Lists.newArrayList();
                 for (CTERelation cteRelation : node.getCteRelations()) {
                     if (cteRelation.isRecursive()) {
+                        inRecursiveCTEScope = true;
                         visit(cteRelation, context);
+                        inRecursiveCTEScope = false;
                     } else {
                         cteRelations.add(cteRelation);
                     }
@@ -310,6 +318,10 @@ public class RecursiveCTEExecutor {
         @Override
         public Void visitCTE(CTERelation node, Void context) {
             Preconditions.checkState(node.isRecursive());
+            if (!node.isRecursive() && !node.isAnchor() && inRecursiveCTEScope) {
+                throw new SemanticException("Recursive CTE can't reference non-recursive CTE.");
+            }
+
             if (!node.isRecursive() || !node.isAnchor()) {
                 return null;
             }
@@ -319,9 +331,6 @@ public class RecursiveCTEExecutor {
             }
             if (unionRelation.getRelations().size() < 2) {
                 throw new SemanticException("Recursive CTE must have at least anchor and recursive member.");
-            }
-            if (!SetQualifier.ALL.equals(unionRelation.getQualifier())) {
-                throw new SemanticException("Recursive CTE must be UNION ALL now.");
             }
 
             // create temporary table for recursive cte
@@ -342,17 +351,18 @@ public class RecursiveCTEExecutor {
                     "Temporary Table for Recursive CTE", Lists.newArrayList(), null);
 
             // split recursive cte
+            boolean isDistinct = SetQualifier.DISTINCT.equals(unionRelation.getQualifier());
             SubqueryRelation subquery = new SubqueryRelation(new QueryStatement(unionRelation.getRelations().get(0)));
             subquery.setAlias(new TableName(null, "anchar_" + System.currentTimeMillis()));
             SelectRelation startSelect = new SelectRelation(
                     new SelectList(List.of(new SelectListItem(subquery.getAlias()),
-                            new SelectListItem(new IntLiteral(0, IntegerType.INT), "_cte_level")), false),
+                            new SelectListItem(new IntLiteral(0, IntegerType.INT), "_cte_level")), isDistinct),
                     subquery, null, null, null);
 
             QueryStatement start = new QueryStatement(startSelect);
             QueryStatement recursive = new QueryStatement(unionRelation.getRelations().get(1));
 
-            recursiveCTEGroups.put(node.getName(), new RecursiveCTEGroup(start, recursive, tempTableStmt));
+            recursiveCTEGroups.put(node.getName(), new RecursiveCTEGroup(start, recursive, isDistinct, tempTableStmt));
             cteTempTableMap.put(node.getName(), tempTableName);
 
             visit(start.getQueryRelation());
