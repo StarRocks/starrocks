@@ -37,6 +37,7 @@
 #include <fmt/format.h>
 
 #include <atomic>
+#include <future>
 #include <memory>
 #include <shared_mutex>
 #include <sstream>
@@ -384,6 +385,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     // prepare fragment instance in parallel
     std::vector<PromiseStatusSharedPtr> promise_statuses;
+    std::vector<std::shared_future<Status>> prepare_futures;
     // must use shared_ptr to avoid uaf
     std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
             std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
@@ -395,21 +397,34 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             auto& fragment_executor = fragment_executors->at(i);
             ms->set_value(fragment_executor.prepare(_exec_env, req, req));
         });
+        prepare_futures.emplace_back(ms->get_future().share());
         promise_statuses.emplace_back(std::move(ms));
     }
 
+    size_t failed_idx = unique_requests.size();
     for (size_t i = 0; i < unique_requests.size(); ++i) {
-        auto& promise = promise_statuses[i];
         // When a preparation fails, return error immediately. The other unfinished preparation is safe,
         // since they can use the shared pointer of promise/t_batch_requests/fragment_executors
-        status = promise->get_future().get();
+        status = prepare_futures[i].get();
         if (status.ok()) {
             status = fragment_executors->at(i).execute(_exec_env);
         } else if (status.is_duplicate_rpc_invocation()) {
             status = Status::OK();
         }
         if (!status.ok()) {
+            failed_idx = i;
             break;
+        }
+    }
+
+    if (failed_idx != unique_requests.size()) {
+        // Drain remaining preparations and release their query context references to avoid leaks when execute() is skipped.
+        auto query_ctx = _exec_env->query_context_mgr()->get(common_request.params.query_id);
+        for (size_t j = failed_idx + 1; j < unique_requests.size(); ++j) {
+            Status prepare_status = prepare_futures[j].get();
+            if (prepare_status.ok() && query_ctx != nullptr) {
+                fragment_executors->at(j)._fail_cleanup(true);
+            }
         }
     }
 
