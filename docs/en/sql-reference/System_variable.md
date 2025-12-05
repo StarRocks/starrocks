@@ -876,7 +876,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
   - joins the TopN result back to the full scan,
   - and finalizes aggregation on the join result.
   This rewrite is intended to reduce work when TopN orders by aggregated columns and the limit is small. The rule is gated by several precise checks:
-  - TopN limit is set and <= `split_topn_agg_limit` (session `splitTopNAggLimit`, default 10000).
+  - TopN limit is set and less than or equal to `split_topn_agg_limit` (session `splitTopNAggLimit`, default 10000).
   - scan/agg projections are identity (no column remapping).
   - statistics/row-count heuristics (skip when outputRowCount < limit * 10 and stats are reliable, unless running unit tests).
   - duplicated columns to be read twice ≤ 3.
