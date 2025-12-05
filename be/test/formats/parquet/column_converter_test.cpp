@@ -251,6 +251,13 @@ TEST_F(ColumnConverterTest, Int32Test) {
         }
     }
     {
+        const std::string col_name = "time_millis";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
+        }
+    }
+    {
         const std::string col_name = "uint8";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT);
