@@ -68,8 +68,8 @@ bool dump_snapshot(const std::string& filename) {
                    ("prof.dump", nullptr, nullptr, &fname, sizeof(const char*))) == 0;
 }
 
-// declare exec from script
-std::string exec(const std::string& cmd);
+// declare exec from runtime/exec.cpp
+std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms = 1200000);
 
 void HeapProf::enable_prof() {
 #ifndef __APPLE__
@@ -121,7 +121,7 @@ std::string HeapProf::to_dot_format(const std::string& heapdump_filename) {
 #ifdef __APPLE__
     return "not support on MacOS";
 #else
-    return exec(fmt::format("{} --dot {} {}", jeprof, binary, heapdump_filename));
+    return lite_exec({jeprof, "--dot", binary, heapdump_filename});
 #endif
 }
 
