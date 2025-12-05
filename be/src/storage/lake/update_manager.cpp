@@ -627,7 +627,14 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
     new_rows_op.mutable_rowset()->set_data_size(total_data_size);
     new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segments_size() > 1);
-    if (new_rows_op.rowset().segments_size() > 0) {
+    // append del files from old op to new op
+    for (int i = 0; i < op_write.dels_size(); i++) {
+        new_rows_op.add_dels(op_write.dels(i));
+    }
+    for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
+        new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
+    }
+    if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
             (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
