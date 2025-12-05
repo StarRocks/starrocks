@@ -36,12 +36,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### diagnose_stack_trace_interval_ms
 
-- デフォルト: `1800000` (30 minutes)
+- デフォルト: 1800000 (30 minutes)
 - タイプ: long
 - 単位: Milliseconds
 - 変更可能: Yes
 - 説明: DiagnoseDaemon が `STACK_TRACE` リクエストに対して行う連続したスタックトレース診断の最小時間間隔を制御します。診断リクエストが到着したとき、最後の収集が `diagnose_stack_trace_interval_ms` ミリ秒未満であれば、デーモンはスタックトレースの収集およびログ出力をスキップします。頻繁なスタックダンプによる CPU 負荷やログ量を減らすためにこの値を大きくし、短期間の問題をデバッグするためにより頻繁なトレースを取得したい場合（例えば TabletsChannel::add_chunk が長時間ブロックするロードのフェイルポイントシミュレーションなど）には値を小さくしてください。
-- 導入バージョン: `v3.5.0`
+- 導入バージョン: v3.5.0
 
 ##### log_buffer_level
 
@@ -245,12 +245,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_jvm_metrics
 
-- デフォルト: `false`
+- デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: No
 - 説明: StarRocks が起動時に JVM 固有のメトリクスを初期化して登録するかどうかを制御します。値は Daemon::init 内の init_starrocks_metrics で読み取られ、StarRocksMetrics::initialize の init_jvm_metrics パラメータとして渡されます。有効にするとメトリクスサブシステムは JVM 関連のコレクタ（例: heap、GC、thread メトリクス）を作成してエクスポートし、無効の場合はそれらのコレクタは初期化されません。このフラグは起動時にのみ評価され、ランタイム中に変更することはできません。前方互換性のための設定であり、将来のリリースで削除される可能性があります。システムレベルのメトリクス収集は `enable_system_metrics` を使用して制御してください。
-- 導入バージョン: `v4.0.0`
+- 導入バージョン: v4.0.0
 
 ##### get_pindex_worker_count
 
@@ -417,12 +417,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### retry_apply_interval_second
 
-- デフォルト: `30`
+- デフォルト: 30
 - タイプ: Int
 - 単位: Seconds
 - 変更可能: Yes
 - 説明: 失敗した tablet apply 操作の再試行をスケジュールする際に使用される基本間隔（秒）。サブミッション失敗後の再試行を直接スケジュールするために使用されるほか、バックオフの基礎乗数としても使用されます：次の再試行遅延は min(600, `retry_apply_interval_second` * failed_attempts) として計算されます。コードはまた累積再試行時間（等差数列の和）を計算するために `retry_apply_interval_second` を使用し、その値を `retry_apply_timeout_second` と比較して再試行を継続するか判断します。`enable_retry_apply` が true の場合にのみ有効です。この値を増やすと個々の再試行遅延および累積の再試行時間が長くなり、減らすと再試行がより頻繁になり `retry_apply_timeout_second` に達する前に試行回数が増える可能性があります。
-- 導入バージョン: `v3.2.9`
+- 導入バージョン: v3.2.9
 
 ##### update_schema_worker_count
 
@@ -1096,25 +1096,25 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_load_channel_rpc_async
 
-- デフォルト: `true`
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
 - 説明: 有効にすると、load-channel の open RPC（例: PTabletWriterOpen）の処理が BRPC ワーカーから専用のスレッドプールへオフロードされます。リクエストハンドラは ChannelOpenTask を生成して内部 `_async_rpc_pool` に投入し、`LoadChannelMgr::_open` をインラインで実行しません。これにより BRPC スレッド内の作業量とブロッキングが減少し、`load_channel_rpc_thread_pool_num` と `load_channel_rpc_thread_pool_queue_size` で同時実行性を調整できるようになります。スレッドプールへの投入が失敗する（プールが満杯またはシャットダウン済み）と、リクエストはキャンセルされエラー状態が返されます。プールは `LoadChannelMgr::close()` でシャットダウンされるため、有効化する際は容量とライフサイクルを考慮し、リクエストの拒否や処理遅延を避けるようにしてください。
-- 導入バージョン: `v3.5.0`
+- 導入バージョン: v3.5.0
 
 ##### es_http_timeout_ms
 
-- デフォルト: `5000`
+- デフォルト: 5000
 - タイプ: Int
 - 単位: Milliseconds
 - 変更可能: No
 - 説明: Elasticsearch の scroll リクエストに対して ESScanReader 内の ES ネットワーククライアントが使用する HTTP 接続タイムアウト（ミリ秒）。この値は次の scroll POST を送信する前に `network_client.set_timeout_ms()` を介して適用され、スクロール処理中にクライアントが ES の応答を待つ時間を制御します。ネットワークが遅い場合や大きなクエリで早期タイムアウトを回避するためにこの値を増やし、応答しない ES ノードに対しては早めに失敗させたい場合は値を小さくしてください。この設定はスクロールコンテキストのキープアライブ期間を制御する `es_scroll_keepalive` を補完します。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### es_index_max_result_window
 
-- デフォルト: `10000`
+- デフォルト: 10000
 - タイプ: Int
 - 単位: Documents
 - 変更可能: No
@@ -1123,12 +1123,12 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### load_channel_rpc_thread_pool_num
 
-- デフォルト: `-1`
+- デフォルト: -1
 - タイプ: Int
 - 単位: Threads
 - 変更可能: はい
 - 説明: load-channel 非同期 RPC スレッドプールの最大スレッド数。`<= 0`（デフォルト `-1`）に設定するとプールサイズは自動的に CPU コア数（CpuInfo::num_cores()）に設定されます。設定された値は ThreadPoolBuilder の max threads として使われ、プールの最小スレッド数は min(5, max_threads) に設定されます。プールのキューサイズは `load_channel_rpc_thread_pool_queue_size` によって別途制御されます。この設定は、load RPC の処理を同期から非同期に切り替えた後も動作が互換となるように、async RPC プールサイズを brpc ワーカーのデフォルト（`brpc_num_threads`）に合わせるために導入されました。ランタイムでこの設定を変更すると ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(...) がトリガーされます。
-- 導入バージョン: `v3.5.0`
+- 導入バージョン: v3.5.0
 
 ##### load_channel_rpc_thread_pool_queue_size
 
@@ -1141,21 +1141,21 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### load_fp_tablets_channel_add_chunk_block_ms
 
-- デフォルト: `-1`
+- デフォルト: -1
 - タイプ: Int
 - 単位: Milliseconds
 - 変更可能: Yes
 - 説明: 有効にすると（正のミリ秒値に設定すると）このフェイルポイント設定は load 処理中に TabletsChannel::add_chunk を指定した時間だけスリープさせます。BRPC のタイムアウトエラー（例: "[E1008]Reached timeout"）をシミュレートしたり、add_chunk の高コスト操作によるロード遅延を模擬するために使用されます。値が <= 0（デフォルト `-1`）の場合、注入は無効になります。フォールトハンドリング、タイムアウト、レプリカ同期挙動のテストを目的としており、書き込み完了を遅延させ上流のタイムアウトやレプリカの中止を引き起こす可能性があるため、通常の本番ワークロードでは有効にしないでください。
-- 導入バージョン: `v3.5.0`
+- 導入バージョン: v3.5.0
 
 ##### streaming_load_thread_pool_idle_time_ms
 
-- デフォルト: `2000`
+- デフォルト: 2000
 - タイプ: Int
 - 単位: Milliseconds
 - 変更可能: No
 - 説明: streaming-load 関連のスレッドプールに対するスレッドのアイドルタイムアウト（ミリ秒）を設定します。この値は `stream_load_io` プールに対して ThreadPoolBuilder に渡されるアイドルタイムアウトとして使用され、`load_rowset_pool` と `load_segment_pool` にも適用されます。これらのプール内のスレッドはこの期間アイドル状態が続くと回収されます；値を小さくするとアイドル時のリソース使用は減りますがスレッド生成のオーバーヘッドが増え、値を大きくするとスレッドが長く生存します。`stream_load_io` プールは `enable_streaming_load_thread_pool` が有効な場合に使用されます。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ##### streaming_load_thread_pool_num_min
 
@@ -1164,7 +1164,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 変更可能: No
 - 説明: ExecEnv 初期化時に作成される streaming load IO スレッドプール ("stream_load_io") の最小スレッド数。プールは `set_max_threads(INT32_MAX)` と `set_max_queue_size(INT32_MAX)` で構築され、事実上デッドロック回避のために無制限にされます。値が 0 の場合、プールはスレッドを持たずに需要に応じて拡張します；正の値を設定すると起動時にその数のスレッドを確保します。このプールは `enable_streaming_load_thread_pool` が true のときに使用され、アイドルタイムアウトは `streaming_load_thread_pool_idle_time_ms` で制御されます。全体の並行度は依然として `fragment_pool_thread_num_max` と `webserver_num_workers` によって制約されるため、この値を変更する必要は稀であり、高すぎるとリソース使用量が増える可能性があります。
-- 導入バージョン: `v3.2.0`
+- 導入バージョン: v3.2.0
 
 ### 統計レポート
 
@@ -2421,7 +2421,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 単位: -
 - 変更可能: Yes
 - 説明: 有効な場合、再試行可能と分類される Tablet の apply 失敗（例えば一時的なメモリ制限エラー）は直ちにタブレットをエラーにマークするのではなく、再試行のために再スケジュールされます。TabletUpdates の再試行経路は次の試行を現在の失敗回数に `retry_apply_interval_second` を乗じてスケジュールし、最大 600s にクランプするため、連続する失敗に伴ってバックオフが大きくなります。明示的に再試行不可なエラー（例えば corruption）は再試行をバイパスして apply プロセスを直ちにエラー状態にします。再試行は全体のタイムアウト／終了条件に達するまで続き、その後 apply はエラー状態になります。これをオフにすると、失敗した apply タスクの自動再スケジュールが無効になり、失敗した apply は再試行なしでエラー状態に移行します。
-- 導入バージョン: `v3.2.9`
+- 導入バージョン: v3.2.9
 
 ##### enable_token_check
 
