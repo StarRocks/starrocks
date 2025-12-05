@@ -75,10 +75,11 @@ public class TimeUtils {
     public static final ImmutableMap<String, String> TIME_ZONE_ALIAS_MAP = ImmutableMap.of(
             "CST", DEFAULT_TIME_ZONE, "PRC", DEFAULT_TIME_ZONE);
 
+    //Compatible: 2013-2-29
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("y-M-d").withZone(TIME_ZONE);
+    //Compatible: 2013-2-28 2:3:4
     private static final DateTimeFormatter DATETIME_FORMAT =
             DateTimeFormatter.ofPattern("y-M-d H:m:s").withZone(TIME_ZONE);
-    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH").withZone(TIME_ZONE);
 
     private static final Pattern DATETIME_FORMAT_REG =
             Pattern.compile("^((\\d{2}(([02468][048])|([13579][26]))[\\-\\/\\s]?((((0?[13578])|(1[02]))[\\-\\/\\s]?"
@@ -98,11 +99,11 @@ public class TimeUtils {
 
     private static final Pattern TIMEZONE_OFFSET_FORMAT_REG = Pattern.compile("^[+-]{0,1}\\d{1,2}\\:\\d{2}$");
 
-    public static LocalDate MIN_DATE = LocalDate.of(0, 1, 1);
-    public static LocalDate MAX_DATE = LocalDate.of(9999, 12, 31);
+    public static final LocalDate MIN_DATE = LocalDate.of(0, 1, 1);
+    public static final LocalDate MAX_DATE = LocalDate.of(9999, 12, 31);
 
-    public static LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
-    public static LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
+    public static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
+    public static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
 
     // It's really hard to define max unix timestamp because of timezone.
     // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
@@ -165,7 +166,8 @@ public class TimeUtils {
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;
         }
-        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(TIME_ZONE).format(Instant.ofEpochMilli(timeStamp));
+        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(getSystemTimeZone().toZoneId())
+                .format(Instant.ofEpochMilli(timeStamp));
     }
 
     public static LocalDate parseDate(String dateStr) throws AnalysisException {
@@ -175,7 +177,11 @@ public class TimeUtils {
             throw new AnalysisException("Invalid date string: " + dateStr);
         }
         ParsePosition pos = new ParsePosition(0);
-        date = DATE_FORMAT.parse(dateStr, pos).query(LocalDate::from);
+        try {
+            date = DATE_FORMAT.parse(dateStr, pos).query(LocalDate::from);
+        } catch (RuntimeException e) {
+            throw new AnalysisException("Invalid date string: " + dateStr);
+        }
         if (pos.getIndex() != dateStr.length() || date == null) {
             throw new AnalysisException("Invalid date string: " + dateStr);
         }
@@ -190,7 +196,7 @@ public class TimeUtils {
         }
         try {
             dateTime = DATETIME_FORMAT.parse(dateTimeStr).query(LocalDateTime::from);
-        } catch (DateTimeException e) {
+        } catch (RuntimeException e) {
             throw new AnalysisException("Invalid date string: " + dateTimeStr);
         }
         return dateTime;
