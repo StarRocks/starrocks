@@ -16,11 +16,14 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -165,20 +168,29 @@ public class HiveWriteUtils {
             throw new StarRocksConnectorException("Failed to create remote path: " + path);
         }
     }
+
+    public static LiteralExpr normalizeKey(LiteralExpr key, Type targetType) {
+        if (key instanceof DecimalLiteral) {
+            DecimalLiteral decimalKey = (DecimalLiteral) key;
+            ScalarType type = (ScalarType) key.getType();
+            int scale = type.decimalScale();
     
-    public static LiteralExpr normalizeKey(LiteralExpr key) {
-        if (!(key instanceof DecimalLiteral)) {
-            return key;
+            BigDecimal scaled = decimalKey.getValue()
+                    .setScale(scale, RoundingMode.HALF_UP);
+    
+            key = new DecimalLiteral(scaled);
         }
 
-        DecimalLiteral decimalKey = (DecimalLiteral) key;
-        ScalarType type = (ScalarType) key.getType();
-        int scale = type.decimalScale();
-
-        BigDecimal scaled = decimalKey.getValue()
-                .setScale(scale, RoundingMode.HALF_UP);
-
-        return new DecimalLiteral(scaled);
+        if (!key.getType().equals(targetType)) {
+            try {
+                key = (LiteralExpr) ExprCastFunction.castTo(key, targetType);
+            } catch (AnalysisException e) {
+                throw new StarRocksConnectorException(
+                        String.format("Failed to cast partition column literal %s to %s",
+                                key.getStringValue(), targetType), e);
+            }
+        }
+        return key;
     }
 
 }

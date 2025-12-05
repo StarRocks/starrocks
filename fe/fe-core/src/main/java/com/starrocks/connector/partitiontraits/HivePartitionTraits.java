@@ -16,14 +16,12 @@ package com.starrocks.connector.partitiontraits;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -67,25 +65,7 @@ public class HivePartitionTraits extends DefaultTraits {
         Preconditions.checkState(values.size() == types.size(),
                 "columns size is %s, but values size is %s", types.size(), values.size());
 
-        PartitionKey partitionKey = createEmptyKey();
-
-        // change string value to LiteralExpr,
-        for (int i = 0; i < values.size(); i++) {
-            String rawValue = values.get(i);
-            Type type = types.get(i);
-            LiteralExpr exprValue;
-            // rawValue could be null for delta table
-            if (rawValue == null) {
-                rawValue = "null";
-            }
-            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
-                partitionKey.setNullPartitionValue(rawValue);
-                exprValue = NullLiteral.create(type);
-            } else {
-                exprValue = LiteralExpr.create(rawValue, type);
-            }
-            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
-        }
+        PartitionKey partitionKey = super.createPartitionKeyWithType(values, types);
 
         for (int i = 0; i < types.size(); i++) {
             LiteralExpr exprValue = partitionKey.getKeys().get(i);

@@ -527,7 +527,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 new ConcurrentSkipListMap<>(partitionValueMap.comparator());
 
         partitionValueMap.forEach((key, valueSet) -> {
-            LiteralExpr newKey = HiveWriteUtils.normalizeKey(key);
+            LiteralExpr newKey = HiveWriteUtils.normalizeKey(key, key.getType());
             newMap.computeIfAbsent(newKey, k -> new HashSet<>()).addAll(valueSet);
         });
 

@@ -172,7 +172,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             }
         } else if (table.isHiveTable()) {
             if (partitionColumns.stream().map(Column::getType).anyMatch(this::hiveNotSupportedPartitionColumnType)) {
-                throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
+                throw new StarRocksPlannerException("Table partition by decimalV2 datatype is not supported",
                         ErrorType.UNSUPPORTED);
             }
         } else if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {

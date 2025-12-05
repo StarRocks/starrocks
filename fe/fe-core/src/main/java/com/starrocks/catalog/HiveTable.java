@@ -42,7 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -350,26 +349,13 @@ public class HiveTable extends Table {
             tPartition.setFile_format(hivePartitions.get(i).getFileFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream()
-                    .map(ExprToThrift::treeToThrift)
-                    .collect(Collectors.toList()));
+            Preconditions.checkState(keys.size() == partitionColumns.size(),
+                    "Partition key size does not match partition columns size");
             List<TExpr> partitionKeyExprs = Lists.newArrayListWithCapacity(keys.size());
             for (int j = 0; j < keys.size(); j++) {
                 LiteralExpr literal = keys.get(j);
-                literal = HiveWriteUtils.normalizeKey(literal);
-                if (j < partitionColumns.size()) {
-                    Type targetType = partitionColumns.get(j).getType();
-                    if (!literal.getType().equals(targetType)) {
-                        try {
-                            literal = (LiteralExpr) literal.castTo(targetType);
-                        } catch (AnalysisException e) {
-                            throw new StarRocksConnectorException(
-                                    String.format("Failed to cast partition column %s literal %s to %s",
-                                            partitionColumns.get(j).getName(), literal.toSql(), targetType), e);
-                        }
-                    }
-                }
-                partitionKeyExprs.add(literal.treeToThrift());
+                literal = HiveWriteUtils.normalizeKey(literal, partitionColumns.get(j).getType());
+                partitionKeyExprs.add(ExprToThrift.treeToThrift(literal));
             }
             tPartition.setPartition_key_exprs(partitionKeyExprs);
 
