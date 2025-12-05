@@ -114,8 +114,9 @@ public:
         return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
     }
 
+    template <typename ArrayAggState>
     static AggregateFunctionPtr MakeArrayAggAggregateFunctionV2() {
-        return std::make_shared<ArrayAggAggregateFunctionV2>();
+        return std::make_shared<ArrayAggAggregateFunctionV2<ArrayAggState>>();
     }
 
     static AggregateFunctionPtr MakeGroupConcatAggregateFunctionV2() {
