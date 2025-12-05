@@ -137,8 +137,10 @@ public class SqlBlackList {
             for (Map.Entry<String, BlackListSql> entry : sqlBlackListMap.entrySet()) {
                 if (entry.getValue().id == id) {
                     sqlBlackListMap.remove(entry.getKey());
+                    return;
                 }
             }
+            LOG.info("Not found forbidden SQL index {} in blacklist", id);
         }
     }
 
