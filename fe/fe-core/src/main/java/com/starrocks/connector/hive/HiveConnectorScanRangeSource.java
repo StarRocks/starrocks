@@ -107,8 +107,6 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     protected void initRemoteFileInfoSource() {
         List<PartitionAttachment> partitionAttachments = Lists.newArrayList();
-        List<String> partitionNames = Lists.newArrayList();
-        boolean hasAllPartitionNames = true;
 
         // get partitions keys;
         List<PartitionKey> partitionKeys = Lists.newArrayList();
@@ -118,17 +116,6 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             PartitionAttachment attachment = new PartitionAttachment();
             attachment.partitionId = partitionId;
             partitionAttachments.add(attachment);
-            if (hasAllPartitionNames) {
-                String partitionName = scanNodePredicates.getIdToPartitionName().get(partitionId);
-                if (partitionName == null) {
-                    hasAllPartitionNames = false;
-                } else {
-                    partitionNames.add(partitionName);
-                }
-            }
-        }
-        if (!hasAllPartitionNames || partitionNames.isEmpty()) {
-            partitionNames = null;
         }
 
         // get data options by keys;
@@ -140,13 +127,11 @@ public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
         }
 
-        GetRemoteFilesParams.Builder builder = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys)
-                .setPartitionAttachments(partitionAttachments)
-                .setUseCache(useMetadataCache());
-        if (partitionNames != null) {
-            builder.setPartitionNames(partitionNames);
-        }
-        GetRemoteFilesParams params = builder.build();
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys)
+                        .setPartitionAttachments(partitionAttachments)
+                        .setUseCache(useMetadataCache())
+                        .build();
         remoteFileInfoSource = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFilesAsync(table, params);
     }
 

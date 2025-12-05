@@ -344,8 +344,6 @@ public class OptExternalPartitionPruner {
                 }
                 for (int i = 0; i < keys.size(); i++) {
                     partitionKeys.add(new Pair<>(keys.get(i), ids.get(i)));
-                    operator.getScanOperatorPredicates().getIdToPartitionName()
-                            .put(ids.get(i), partitionNames.get(i));
                 }
             } else {
                 partitionKeys.add(new Pair<>(new PartitionKey(), 0L));

@@ -51,6 +51,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -355,6 +356,7 @@ public class HiveTable extends Table {
             List<TExpr> partitionKeyExprs = Lists.newArrayListWithCapacity(keys.size());
             for (int j = 0; j < keys.size(); j++) {
                 LiteralExpr literal = keys.get(j);
+                literal = HiveWriteUtils.normalizeKey(literal);
                 if (j < partitionColumns.size()) {
                     Type targetType = partitionColumns.get(j).getType();
                     if (!literal.getType().equals(targetType)) {

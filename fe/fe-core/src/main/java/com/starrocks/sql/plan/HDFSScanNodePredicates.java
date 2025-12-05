@@ -29,7 +29,6 @@ import java.util.Map;
 public class HDFSScanNodePredicates {
     // id -> partition key
     private Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
-    private Map<Long, String> idToPartitionName = Maps.newHashMap();
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();
 
     // partitionConjuncts contains partition filters.
@@ -57,14 +56,6 @@ public class HDFSScanNodePredicates {
 
     public void setIdToPartitionKey(Map<Long, PartitionKey> idToPartitionKey) {
         this.idToPartitionKey = idToPartitionKey;
-    }
-
-    public Map<Long, String> getIdToPartitionName() {
-        return idToPartitionName;
-    }
-
-    public void setIdToPartitionName(Map<Long, String> idToPartitionName) {
-        this.idToPartitionName = idToPartitionName;
     }
 
     public Collection<Long> getSelectedPartitionIds() {

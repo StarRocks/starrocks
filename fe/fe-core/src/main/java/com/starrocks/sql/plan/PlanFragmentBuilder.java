@@ -1224,7 +1224,6 @@ public class PlanFragmentBuilder {
                 HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
                 scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
-                scanNodePredicates.setIdToPartitionName(predicates.getIdToPartitionName());
 
                 hudiScanNode.setupScanRangeLocations(context.getDescTbl());
 
@@ -1268,7 +1267,6 @@ public class PlanFragmentBuilder {
                 HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
                 scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
-                scanNodePredicates.setIdToPartitionName(predicates.getIdToPartitionName());
 
                 hdfsScanNode.setupScanRangeLocations(context.getDescTbl());
 
