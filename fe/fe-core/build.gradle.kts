@@ -70,6 +70,17 @@ dependencies {
     implementation("com.aliyun.odps:odps-sdk-core") {
         exclude(group = "org.codehaus.jackson", module = "jackson-mapper-asl")
         exclude(group = "org.ini4j", module = "ini4j")
+<<<<<<< HEAD
+=======
+        exclude(group = "org.antlr", module = "antlr4")
+        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
+        exclude(group = "org.lz4", module = "lz4-java")
+    }
+    implementation("com.aliyun.odps:odps-sdk-table-api") {
+        exclude(group = "org.antlr", module = "antlr4")
+        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
+        exclude(group = "org.lz4", module = "lz4-pure-java")
+>>>>>>> 0d820dabbf ([BugFix] Fix CVE-2025-12183 by upgrading lz4-java to 1.8.1 (#66362))
     }
     implementation("com.aliyun.odps:odps-sdk-table-api")
     implementation("com.azure:azure-identity")
@@ -196,6 +207,8 @@ dependencies {
         exclude(group = "io.netty", module = "*")
         exclude(group = "org.glassfish", module = "javax.el")
         exclude(group = "org.apache.zookeeper", module = "zookeeper")
+        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.hudi:hudi-hadoop-mr") {
         exclude(group = "org.glassfish", module = "javax.el")
@@ -218,7 +231,10 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core")
     implementation("org.apache.logging.log4j:log4j-layout-template-json")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl")
-    implementation("org.apache.paimon:paimon-bundle")
+    implementation("org.apache.paimon:paimon-bundle") {
+        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
+        exclude(group = "org.lz4", module = "lz4-java")
+    }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
     implementation("org.apache.parquet:parquet-avro")
@@ -250,6 +266,8 @@ dependencies {
         exclude(group = "org.eclipse.jetty", module = "jetty-servlet")
         exclude(group = "org.eclipse.jetty", module = "jetty-client")
         exclude(group = "org.eclipse.jetty", module = "jetty-security")
+        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.spark:spark-launcher_2.12")
     compileOnly("org.apache.spark:spark-sql_2.12")
@@ -280,6 +298,11 @@ dependencies {
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:bundle")
     implementation("tools.profiler:async-profiler")
+<<<<<<< HEAD
+=======
+    implementation("com.github.vertical-blank:sql-formatter:2.0.4")
+    implementation("at.yawk.lz4:lz4-java")
+>>>>>>> 0d820dabbf ([BugFix] Fix CVE-2025-12183 by upgrading lz4-java to 1.8.1 (#66362))
     // dependency sync end
 
     // extra dependencies pom.xml does not have
