@@ -1,0 +1,72 @@
+-- name: test_hive_decimal_partition
+
+create external catalog hive_test_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}");
+
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c1=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2=1.4;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2=1.4 or c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where cast(c2 as bigint)=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 >=2;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 >= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 > 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 < 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5 and c2 > 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part where c2 <= 1.5 and c2 >= 1;
+
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c1=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2=1.4;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2=1.4 or c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where cast(c2 as bigint)=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 >=2;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 >= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 > 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 < 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5 and c2 > 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_float_part where c2 <= 1.5 and c2 >= 1;
+
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c1=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2=1.4;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2=1.4 or c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where cast(c2 as bigint)=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 >=2;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 >= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 > 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 < 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5 and c2 > 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_double_part where c2 <= 1.5 and c2 >= 1;
+
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c1=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2=1.4;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2=1.4 or c2=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where cast(c2 as bigint)=1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 >=2;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 >= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 > 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 < 2.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5 and c2 > 1;
+select * from hive_test_${uuid0}.hive_oss_db.t_decimal_part2 where c2 <= 1.5 and c2 >= 1;
+
+drop catalog hive_test_${uuid0};
