@@ -944,6 +944,7 @@ public class QueryOptimizer extends Optimizer {
         context.setInMemoPhase(true);
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        CTEUtils.collectCteOperators(tree, context);
         // add CboTablePruneRule
         if (Utils.countJoinNodeSize(tree, CboTablePruneRule.JOIN_TYPES) < 10 &&
                 sessionVariable.isEnableCboTablePrune()) {

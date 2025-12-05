@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyExceptRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyIntersectRule;
@@ -386,6 +387,7 @@ public class RuleSet {
                     PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
                     PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
                     new PruneEmptyDirectRule(),
+                    new PruneEmptyCTEAnchorRule(),
                     new PruneEmptyUnionRule(),
                     new PruneEmptyIntersectRule(),
                     new PruneEmptyExceptRule(),
