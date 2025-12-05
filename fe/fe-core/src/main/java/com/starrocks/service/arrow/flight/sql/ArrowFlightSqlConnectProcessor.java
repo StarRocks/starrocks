@@ -203,8 +203,6 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
             Tracers.close();
         }
 
-        setResultFromLeaderIfForwarded();
-
         if (executor != null) {
             auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             executor.addFinishedQueryDetail();
@@ -333,22 +331,6 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
         StatementBase parsedStmt = stmts.get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql));
         return parsedStmt;
-    }
-
-    private void setResultFromLeaderIfForwarded() {
-        ArrowFlightSqlConnectContext arrowCtx = (ArrowFlightSqlConnectContext) ctx;
-        if (executor == null || !executor.isForwardToLeader()) {
-            return;
-        }
-
-        if (arrowCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            return;
-        }
-
-        ShowResultSet resultSet = executor.getShowResultSet();
-        if (resultSet != null) {
-            arrowCtx.addShowResult(DebugUtil.printId(arrowCtx.getExecutionId()), resultSet);
-        }
     }
 
 }

@@ -15,6 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
@@ -26,9 +28,18 @@ import com.starrocks.thrift.TUserIdentity;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class ForwardTest {
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
+
+public class ForwardTest extends SchedulerTestBase {
+    @BeforeEach
+    public void before() {
+        mockFrontends(FRONTENDS);
+        mockFrontendService(new MockFrontendServiceClient());
+    }
 
     TMasterOpRequest makeRequest() {
         TMasterOpRequest request = new TMasterOpRequest();
@@ -107,5 +118,49 @@ public class ForwardTest {
 
         final TMasterOpResult result = service.forward(request);
         Assertions.assertEquals("unknown exception", result.errorMsg);
+    }
+
+    @Test
+    public void testArrowFlightSQL() throws Exception {
+        PQueryStatistics statistics = new PQueryStatistics();
+        statistics.scanBytes = 1L;
+        statistics.scanRows = 1L;
+        statistics.returnedRows = 1L;
+        new MockUp<RowBatch>() {
+            @Mock
+            public PQueryStatistics getQueryStatistics() {
+                return statistics;
+            }
+        };
+
+        final FrontendServiceImpl service = spy(new FrontendServiceImpl(ExecuteEnv.getInstance()));
+
+        TNetworkAddress address = new TNetworkAddress();
+        Frontend frontend = FRONTENDS.get(0);
+        frontend.setRpcPort(8030);
+        address.setHostname(frontend.getHost());
+        address.setPort(frontend.getRpcPort());
+        doReturn(address).when(service).getClientAddr();
+
+        final TMasterOpRequest request = makeRequest();
+        request.setConnectionId(1);
+        request.setSql("select 1");
+        request.setIsInternalStmt(false);
+        request.setIs_arrow_flight_sql(true);
+        request.setUser("root");
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Long getMaxJournalId() {
+                return 1L;
+            }
+
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        final TMasterOpResult result = service.forward(request);
+        Assertions.assertEquals("", result.errorMsg);
     }
 }
