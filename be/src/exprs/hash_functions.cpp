@@ -17,12 +17,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
-
-// Define XXH_STATIC_LINKING_ONLY to expose the complete XXH3_state_t definition
-// This is needed when using XXH3_state_t in containers like std::vector
-#define XXH_STATIC_LINKING_ONLY
 #include "util/xxh3.h"
-#undef XXH_STATIC_LINKING_ONLY
 
 namespace starrocks {
 
