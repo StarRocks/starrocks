@@ -46,6 +46,8 @@ class ChunkExtraData {
 public:
     ChunkExtraData() = default;
     virtual ~ChunkExtraData() = default;
+    virtual ChunkExtraDataPtr clone_empty(size_t size) const = 0;
+    virtual ChunkExtraDataPtr clone() const = 0;
 };
 
 class Chunk {

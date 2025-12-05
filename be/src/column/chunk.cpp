@@ -92,7 +92,9 @@ void Chunk::reset() {
         c->reset_column();
     }
     _delete_state = DEL_NOT_SATISFIED;
-    _extra_data.reset();
+    if (_extra_data != nullptr) {
+        _extra_data.reset();
+    }
 }
 
 void Chunk::swap_chunk(Chunk& other) {
@@ -281,7 +283,9 @@ ChunkUniquePtr Chunk::clone_unique() const {
         chunk->_columns[idx] = _columns[idx]->clone();
     }
     chunk->_owner_info = _owner_info;
-    chunk->_extra_data = _extra_data->clone();
+    if (_extra_data != nullptr) {
+        chunk->_extra_data = _extra_data->clone();
+    }
     chunk->check_or_die();
     return chunk;
 }

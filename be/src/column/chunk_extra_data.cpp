@@ -33,7 +33,7 @@ void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_
     }
 }
 
-ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
+ChunkExtraDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
     Columns columns(_columns.size());
     for (size_t i = 0; i < _columns.size(); i++) {
         auto mutable_col = _columns[i]->clone_empty();
@@ -44,7 +44,7 @@ ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
     return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
 }
 
-ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone() const {
+ChunkExtraDataPtr ChunkExtraColumnsData::clone() const {
     Columns columns(_columns.size());
     for (size_t i = 0; i < _columns.size(); i++) {
         auto mutable_col = _columns[i]->clone();
