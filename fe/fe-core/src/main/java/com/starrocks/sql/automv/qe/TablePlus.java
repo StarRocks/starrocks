@@ -20,6 +20,8 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.pn.OpUtil;
@@ -99,6 +101,8 @@ public class TablePlus {
         printer.add("PROPERTIES").spaces(1).add("(").newLine();
         List<PrettyPrinter> propertyItems = table.getProperties().entrySet()
                 .stream()
+                .filter(e -> RunMode.isSharedNothingMode() ||
+                        !e.getKey().equals(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE))
                 .map(e -> new PrettyPrinter()
                         .addDoubleQuoted(e.getKey())
                         .add(" = ")

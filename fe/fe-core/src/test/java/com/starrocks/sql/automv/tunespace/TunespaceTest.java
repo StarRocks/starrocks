@@ -17,8 +17,10 @@ package com.starrocks.sql.automv.tunespace;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -36,6 +38,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.sql.Timestamp;
 import java.util.Collections;
@@ -209,6 +212,22 @@ public class TunespaceTest {
 
         } finally {
             dropTunespace("ts0");
+        }
+    }
+
+    @Test
+    public void createTunespaceOnDifferentRunModes() throws Exception {
+        try {
+            Config.run_mode = "shared_data";
+            RunMode.detectRunMode();
+            TablePlus table = PlanPieceInfo.getTable("db.ts", 10, 1);
+            Assertions.assertFalse(table.getCreateTableSql().contains("replicated_storage"));
+            Config.run_mode = "shared_nothing";
+            RunMode.detectRunMode();
+            Assertions.assertTrue(table.getCreateTableSql().contains("replicated_storage"));
+        } finally {
+            Config.run_mode = "shared_nothing";
+            RunMode.detectRunMode();
         }
     }
 
