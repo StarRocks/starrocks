@@ -3489,7 +3489,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks allows Lake tables to use the combined transaction log path for relevant transactions. Available only for shared-data clusters.
+- Description: When this item is set to `true`, the system allows Lake tables to use the combined transaction log path for relevant transactions. Available for shared-data clusters only.
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
 ### Other
