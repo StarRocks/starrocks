@@ -32,10 +32,15 @@ log_error() {
 # ============================================================================
 export STARROCKS_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export STARROCKS_BE_HOME="$STARROCKS_HOME/be"
-export STARROCKS_THIRDPARTY="$STARROCKS_HOME/thirdparty"
 export STARROCKS_BUILD_MAC="$STARROCKS_HOME/build-mac"
 
+# Respect a pre-set STARROCKS_THIRDPARTY so callers can point to a shared deps dir
+if [[ -z "${STARROCKS_THIRDPARTY:-}" ]]; then
+    export STARROCKS_THIRDPARTY="$STARROCKS_HOME/thirdparty"
+fi
+
 log_info "StarRocks home: $STARROCKS_HOME"
+log_info "StarRocks third-party libraries: $STARROCKS_THIRDPARTY"
 
 # ============================================================================
 # SYSTEM VALIDATION
