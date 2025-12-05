@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
@@ -161,5 +162,28 @@ public class StmtExecutorTest {
         Assertions.assertNotNull(summaryProfile);
         Assertions.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
+    }
+
+    @Test
+    public void testExecTimeout() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+            Assertions.assertEquals(ctx.getSessionVariable().getQueryTimeoutS(), executor.getExecTimeout());
+        }
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("analyze table t1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+            Assertions.assertEquals(Config.statistic_collect_query_timeout, executor.getExecTimeout());
+        }
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("create table t2 as select * from t1",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+            Assertions.assertEquals(ctx.getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        }
     }
 }
