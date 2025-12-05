@@ -1090,4 +1090,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
+
+    @Test
+    public void testNestCTERewrite() throws Exception {
+        String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks");
+    }
 }
