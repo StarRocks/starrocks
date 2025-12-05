@@ -44,8 +44,8 @@ bool dump_snapshot(const std::string& filename) {
     return je_mallctl("prof.dump", nullptr, nullptr, &fname, sizeof(const char*)) == 0;
 }
 
-// declare exec from script
-std::string exec(const std::string& cmd);
+// declare exec from runtime/exec.cpp
+std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms = 1200000);
 
 void HeapProf::enable_prof() {
     LOG(INFO) << "try to enable the heap profiling";
@@ -82,7 +82,15 @@ std::string HeapProf::to_dot_format(const std::string& heapdump_filename) {
     auto base_home = getenv("STARROCKS_HOME");
     std::string jeprof = fmt::format("{}/bin/jeprof", base_home);
     std::string binary = fmt::format("{}/lib/starrocks_be", base_home);
+<<<<<<< HEAD
     return exec(fmt::format("{} --dot {} {}", jeprof, binary, heapdump_filename));
+=======
+#ifdef __APPLE__
+    return "not support on MacOS";
+#else
+    return lite_exec({jeprof, "--dot", binary, heapdump_filename});
+#endif
+>>>>>>> a4a1cdfe53 ([BugFix] Avoid using fork in sub processes (#66334))
 }
 
 } // namespace starrocks
