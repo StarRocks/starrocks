@@ -83,6 +83,7 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
+        <lz4-java.version>1.8.1</lz4-java.version>
     </properties>
 
     <profiles>
@@ -653,6 +654,11 @@ under the License.
                         <groupId>com.google.protobuf</groupId>
                         <artifactId>protobuf-java</artifactId>
                     </exclusion>
+                    <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
+                    <exclusion>
+                        <artifactId>lz4-java</artifactId>
+                        <groupId>org.lz4</groupId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -971,6 +977,11 @@ under the License.
                         <groupId>org.apache.zookeeper</groupId>
                         <artifactId>zookeeper</artifactId>
                     </exclusion>
+                    <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
+                    <exclusion>
+                        <groupId>org.lz4</groupId>
+                        <artifactId>lz4-java</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1131,6 +1142,11 @@ under the License.
                         <groupId>org.ini4j</groupId>
                         <artifactId>ini4j</artifactId>
                     </exclusion>
+                    <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
+                    <exclusion>
+                        <groupId>org.lz4</groupId>
+                        <artifactId>lz4-pure-java</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1157,6 +1173,13 @@ under the License.
                 <groupId>org.apache.paimon</groupId>
                 <artifactId>paimon-bundle</artifactId>
                 <version>${paimon.version}</version>
+                <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
+                <exclusions>
+                    <exclusion>
+                        <artifactId>lz4-java</artifactId>
+                        <groupId>org.lz4</groupId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -1336,6 +1359,14 @@ under the License.
                     </exclusion>
                 </exclusions>
             </dependency>
+
+            <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
