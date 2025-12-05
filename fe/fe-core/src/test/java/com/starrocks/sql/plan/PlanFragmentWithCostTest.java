@@ -108,11 +108,14 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
     // still choose two stage agg even it's a high cardinality scene to cover bad case when statistics is uncorrect
     @Test
-    public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
-        new Expectations() {
-            {
-                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
-                result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
+    public void testAggWithHighCardinality() throws Exception {
+        new MockUp<MockTpchStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.size() == 1 && columns.contains("v2")) {
+                    return ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
+                }
+                return List.of();
             }
         };
 
