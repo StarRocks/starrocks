@@ -473,14 +473,6 @@
                 <artifactId>kryo-shaded</artifactId>
                 <version>${kryo.version}</version>
             </dependency>
-<<<<<<< HEAD
-=======
-
-            <dependency>
-                <groupId>software.amazon.awssdk</groupId>
-                <artifactId>bundle</artifactId>
-                <version>${aws-v2-sdk.version}</version>
-            </dependency>
 
             <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
             <dependency>
@@ -488,8 +480,6 @@
                 <artifactId>lz4-java</artifactId>
                 <version>${lz4-java.version}</version>
             </dependency>
-
->>>>>>> 0d820dabbf ([BugFix] Fix CVE-2025-12183 by upgrading lz4-java to 1.8.1 (#66362))
         </dependencies>
     </dependencyManagement>
 
