@@ -594,4 +594,29 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                 .explainWithout(mvName);
         starRocksAssert.dropMaterializedView(mvName);
     }
+
+    @Test
+    public void testCreateMVForIcebergWithRetentionCondition5() throws Exception {
+        String mvName = "iceberg_day_mv1";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_mv1`\n" +
+                "PARTITION BY dt\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_retention_condition\" = \"dt >= current_date() - interval 10 year\"" +
+                ")\n" +
+                "AS SELECT count(1), date_trunc('day', ts) as dt " +
+                "FROM `iceberg0`.`partitioned_transforms_db`.`t0_day_with_null_partition` as a " +
+                "group by date_trunc('day', ts);");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView partitionedMaterializedView =
+                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "iceberg_day_mv1"));
+        triggerRefreshMv(testDb, partitionedMaterializedView);
+
+        Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+        Assertions.assertEquals(5, partitions.size());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
 }
