@@ -3034,7 +3034,7 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         # Validate scanBytes
         actual_scan_bytes = query_detail.get("scanBytes")
         tools.assert_true(
-            actual_scan_bytes > 0,
+            actual_scan_bytes >= 0,
             f"scanBytes is negative: {actual_scan_bytes}"
         )
         # print(f"✓ scanBytes validation passed: {actual_scan_bytes}")
