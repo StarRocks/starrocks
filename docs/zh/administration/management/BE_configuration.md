@@ -40,6 +40,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：日志落盘的策略。默认值表示日志缓存在内存中。有效值为 `-1` 和 `0`。`-1` 表示日志不在内存中缓存。
 - 引入版本：-
 
+##### pprof_profile_dir
+
+- 默认值: `${STARROCKS_HOME}/log`
+- 类型: string
+- 単位: -
+- 是否可变: No
+- 描述: StarRocks 写入 pprof 工件（jemalloc 堆快照和 gperftools CPU 配置文件）的目录路径。代码会在此目录下构造文件名（例如 `heap_profile.<pid>.<rand>` 和 `starrocks_profile.<pid>.<rand>`），并且 /pprof/ 下的 HTTP 处理器会提供这些配置文件。在启动时，如果 `pprof_profile_dir` 非空，StarRocks 会尝试创建该目录。请确保该路径存在或对 BE 进程可写，并且有足够的磁盘空间；性能分析可能产生较大的文件，并在运行时影响性能。
+- 引入版本: v3.2.0
+
 ##### sys_log_dir
 
 - 默认值：`${STARROCKS_HOME}/log`
@@ -76,6 +85,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：日志卷保留的数目。
 - 引入版本：-
 
+##### sys_log_timezone
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否在日志前缀中显示时区信息。`true` 表示显示时区信息，`false` 表示不显示。
+- 引入版本：-
+
 ##### sys_log_verbose_level
 
 - 默认值：10
@@ -92,15 +110,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位：-
 - 是否动态：否
 - 描述：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
-- 引入版本：-
-
-##### sys_log_timezone
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否在日志前缀中显示时区信息。`true` 表示显示时区信息，`false` 表示不显示。
 - 引入版本：-
 
 ### 服务器
@@ -204,6 +213,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。`true` 表示压缩，`false` 表示不压缩。
 - 引入版本：-
 
+##### delete_worker_count_normal_priority
+
+- 默认值: 2
+- 类型: Int
+- 単位: Threads
+- 是否可变: No
+- 描述: 在 BE agent 上专门用于处理删除（REALTIME_PUSH with DELETE）任务的普通优先级工作线程数量。启动时，此值会与 delete_worker_count_high_priority 相加以确定 DeleteTaskWorkerPool 的大小（参见 agent_server.cpp）。线程池会将前 delete_worker_count_high_priority 个线程分配为 HIGH 优先级，其余为 NORMAL；普通优先级线程处理标准删除任务并有助于整体删除吞吐量。增加此值可提高并发删除能力（会增加 CPU/IO 使用）；减少则可降低资源争用。
+- 引入版本: v3.2.0
+
 ##### enable_https
 
 - 默认值: false
@@ -249,6 +267,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：心跳线程数。
 - 引入版本：-
 
+##### local_library_dir
+
+- 默认值: `${UDF_RUNTIME_DIR}`
+- 类型: string
+- 単位: -
+- 是否可变: 否
+- 描述: BE 上的本地目录，用于存放 UDF（用户自定义函数）库并作为 Python UDF worker 进程的工作目录。StarRocks 会将 UDF 库从 HDFS 复制到此路径，在 `<local_library_dir>/pyworker_<pid>` 创建每个 worker 的 Unix 域套接字，并在 exec 前将 Python worker 进程的工作目录切换到此目录。该目录必须存在、对 BE 进程可写，并且位于支持 Unix 域套接字的文件系统上（即本地文件系统）。由于该配置在运行时不可变，请在启动前设置并确保每个 BE 上具有足够的权限和磁盘空间。
+- 引入版本: v3.2.0
+
 ##### mem_limit
 
 - 默认值：90%
@@ -293,6 +320,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：Thrift Client 默认的重试时间间隔。
 - 引入版本：-
+
+##### thrift_port
+
+- 默认值: 0
+- 类型: Int
+- 単位: -
+- 是否可变: 否
+- 描述: 用于导出基于 Thrift 的内部 BackendService 的端口。当进程以 Compute Node 模式运行且该项设置为非零值时，它会覆盖 `be_port` 并使 Thrift 服务器绑定到此值；否则使用 `be_port`。此配置已弃用 — 将非零 `thrift_port` 设置会记录警告，建议改用 `be_port`。
+- 引入版本: v3.2.0
 
 ##### thrift_rpc_connection_max_valid_time_ms
 
@@ -350,9 +386,45 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述: BE 节点在集群的全局集群标识符。具有相同集群 ID 的 FE 或 BE 属于同一个 StarRocks 集群。取值范围：正整数。默认值 -1 表示在 Leader FE 首次启动时随机生成一个。
 - 引入版本: v3.2.0
 
+##### metadata_cache_memory_limit_percent
+
+- 默认值: 30
+- 类型: Int
+- 単位: Percent
+- 是否可变: Yes
+- 描述: 将元数据 LRU 缓存大小设置为进程内存限制的百分比。启动时 StarRocks 将缓存字节数计算为 (`process_mem_limit * metadata_cache_memory_limit_percent / 100`)，并将其传递给元数据缓存分配器。该缓存仅用于非 PRIMARY_KEYS 行集（不支持 PK 表），并且仅在 `metadata_cache_memory_limit_percent` 大于 0 时启用；将其设置为小于等于 0 可禁用元数据缓存。增加此值会提高元数据缓存容量，但会减少分配给其他组件的内存；请根据工作负载和系统内存进行调优。在 BE_TEST 构建中不生效。
+- 引入版本: v3.2.10
+
+##### update_schema_worker_count
+
+- 默认值: 3
+- 类型: Int
+- 単位: Threads
+- 是否可变: No
+- 描述: 配置后端用于处理 TTaskType::UPDATE_SCHEMA 任务的动态 ThreadPool（名称为 "update_schema"）中最大的工作线程数。该 ThreadPool 在 agent_server 启动时创建，最小线程数为 0（空闲时可缩减为零），最大线程数等于此设置；线程池使用默认的空闲超时并具有近乎无限的队列。增加此值可允许更多并发的 schema 更新任务（会增加 CPU 和内存使用），降低则可限制并行的 schema 操作。
+- 引入版本: v3.2.3
+
 ### 用户，角色及权限
 
+##### ssl_certificate_path
+
+- 默认值: 
+- 类型: String
+- 単位: -
+- 是否可变: 否
+- 描述: 在 enable_https 为 true 时，BE 的 brpc server 将使用的 TLS/SSL 证书文件（PEM 格式）的绝对路径。在 BE 启动时，此值会复制到 `brpc::ServerOptions::ssl_options().default_cert.certificate`；你还必须将 `ssl_private_key_path` 设置为对应的私钥。若 CA 要求，提供服务器证书及任何中间证书的 PEM 格式（证书链）。该文件必须对 StarRocks BE 进程可读，并且仅在启动时应用。如果在 enable_https 启用时该值未设置或无效，brpc 的 TLS 配置可能失败并导致服务器无法正确启动。
+- 引入版本: v4.0.0
+
 ### 查询引擎
+
+##### dictionary_speculate_min_chunk_size
+
+- 默认值: 10000
+- 类型: Int
+- 単位: Rows
+- 是否可变: No
+- 描述: StringColumnWriter 和 DictColumnWriter 用于触发字典编码推测的最小行数（chunk 大小）。如果传入列（或累积缓冲区加上传入行）大小大于等于 `dictionary_speculate_min_chunk_size`，写入器将立即运行推测并设置一种编码（DICT、PLAIN 或 BIT_SHUFFLE），而不是继续缓冲更多行。对于字符串列，推测使用 `dictionary_encoding_ratio` 来决定字典编码是否有利；对于数值/非字符串列，使用 `dictionary_encoding_ratio_for_non_string_column`。此外，如果列的 byte_size 很大（大于等于 UINT32_MAX），会强制立即进行推测以避免 `BinaryColumn<uint32_t>` 溢出。
+- 引入版本: v3.2.0
 
 ##### disable_storage_page_cache
 
@@ -655,6 +727,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：是否启用 Parquet 文件的 Bloom Filter 以提高性能。`true` 表示启用 Bloom Filter，`false` 表示禁用。还可以使用系统变量 `enable_parquet_reader_bloom_filter` 在 Session 级别上控制这一行为。Parquet 中的 Bloom Filter 是在**每个行组的列级维护的**。如果 Parquet 文件包含某些列的 Bloom Filter，查询就可以使用这些列上的谓词来有效地跳过行组。
 - 引入版本：v3.5
 
+##### parquet_reader_bloom_filter_enable
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: 是
+- 描述: 控制是否启用 Parquet 文件的布隆过滤器以提升性能的布尔值。`true` 表示启用布隆过滤器，`false` 表示禁用。也可以通过会话级别的系统变量 `enable_parquet_reader_bloom_filter` 控制此行为。Parquet 中的布隆过滤器是按“每个 row group 的列级别”维护的。如果 Parquet 文件为某些列维护了布隆过滤器，则对这些列的谓词可以高效地跳过不相关的 row group。
+- 引入版本: v3.5
+
 ##### path_gc_check_step
 
 - 默认值：1000
@@ -807,6 +888,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
 - 引入版本：-
+
+##### udf_thread_pool_size
+
+- 默认值: 1
+- 类型: Int
+- 単位: Threads
+- 是否可变: 否
+- 描述: 设置在 ExecEnv 中创建的 UDF 调用 PriorityThreadPool 的大小（用于执行用户自定义函数/UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 UDF 执行；保持较小可避免过度的 CPU 和内存争用。
+- 引入版本: v3.2.0
+
+##### update_memory_limit_percent
+
+- 默认值: 60
+- 类型: Int
+- 単位: Percent
+- 是否可变: No
+- 描述: BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 引入版本: v3.2.0
 
 ### 导入
 
@@ -991,7 +1090,34 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 单位: -
 - 是否可变: 是
 - 描述: 启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
-- 引入版本: `v3.5.0`
+- 引入版本: v3.5.0
+
+##### enable_streaming_load_thread_pool
+
+- 默认值: true
+- 类型: Boolean
+- 単位: -
+- 是否可变: Yes
+- 描述: 控制是否将 streaming load 的 scanner 提交到专用的 streaming load 线程池。当启用且查询为带有 `TLoadJobType::STREAM_LOAD` 的 LOAD 时，ConnectorScanNode 会将 scanner 任务提交到 `streaming_load_thread_pool`（该池配置为 INT32_MAX 的线程数和队列大小，即实际上是无界的）。当禁用时，scanner 使用通用的 `thread_pool` 及其 `PriorityThreadPool` 提交逻辑（优先级计算、try_offer/offer 行为）。启用可以将 streaming-load 的工作与常规查询执行隔离以减少干扰；但由于专用池实际上是无界的，在重度 streaming-load 流量下启用可能会增加并发线程数和资源使用。此选项默认开启，通常无需修改。
+- 引入版本: v3.2.0
+
+##### load_diagnose_rpc_timeout_stack_trace_threshold_ms
+
+- 默认值: 600000
+- 类型: Int
+- 単位: Milliseconds
+- 是否可变: Yes
+- 描述: 用于决定何时为长时间运行的 load RPC 请求远程堆栈跟踪的阈值（毫秒）。当 load RPC 超时并返回超时错误且实际的 RPC 超时时间（_rpc_timeout_ms）超过此值时，`OlapTableSink`/`NodeChannel` 将在发往目标 BE 的 `load_diagnose` RPC 中包含 `stack_trace=true`，以便 BE 返回用于调试的堆栈跟踪。`LocalTabletsChannel::SecondaryReplicasWaiter` 也会在等待 secondary replicas 超过该间隔时触发从 primary 的尽力堆栈跟踪诊断。此行为依赖于 `enable_load_diagnose` 并使用 `load_diagnose_send_rpc_timeout_ms` 作为诊断 RPC 的超时；性能分析由 `load_diagnose_rpc_timeout_profile_threshold_ms` 单独控制。降低此值会更积极地请求堆栈跟踪。
+- 引入版本: v3.5.0
+
+##### load_fp_brpc_timeout_ms
+
+- 默认值: -1
+- 类型: Int
+- 単位: Milliseconds
+- 是否可变: Yes
+- 描述: 在触发 `node_channel_set_brpc_timeout` fail point 时，覆盖 OlapTableSink 所使用的每通道 brpc RPC 超时。如果设置为正值，NodeChannel 会将其内部 `_rpc_timeout_ms` 设置为该值（毫秒），使 open/add-chunk/cancel RPC 使用更短的超时，从而模拟产生 “[E1008]Reached timeout” 错误的 brpc 超时。默认值（`-1`）禁用覆盖。更改此值用于测试和故障注入；较小的值可能导致虚假超时并触发 load 诊断（参见 `enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms` 和 `load_diagnose_send_rpc_timeout_ms`）。
+- 引入版本: v3.5.0
 
 ##### pull_load_task_dir
 
@@ -1002,7 +1128,25 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述: BE 存储 “pull load” 任务的数据和工作文件（下载的源文件、任务状态、临时输出等）的文件系统路径。该目录必须对 BE 进程可写，并且具有足够的磁盘空间以容纳下载的内容。
 - 引入版本: v3.2.0
 
+##### routine_load_pulsar_timeout_second
+
+- 默认值: 10
+- 类型: Int
+- 単位: Seconds
+- 是否可变: 否
+- 描述: BE 在请求未提供显式超时时使用的 Pulsar 相关 routine load 操作的默认超时（秒）。具体地，`PInternalServiceImplBase::get_pulsar_info` 将该值乘以 1000，形成以毫秒为单位的超时值，传递给用于获取 Pulsar 分区元数据和 backlog 的 routine load 任务执行器方法。增大该值可在 Pulsar 响应较慢时减少超时失败，但会延长故障检测时间；减小该值可在 broker 响应慢时更快失败。与用于 Kafka 的 `routine_load_kafka_timeout_second` 类似。
+- 引入版本: v3.2.0
+
 ### 统计信息
+
+##### enable_system_metrics
+
+- 默认值: true
+- 类型: Boolean
+- 単位: -
+- 是否可变: No
+- 描述: 为 true 时，StarRocks 在启动期间初始化系统级监控：它会根据配置的存储路径发现磁盘设备并枚举网络接口，然后将这些信息传入 metrics 子系统以启用磁盘 I/O、网络流量和内存相关的系统指标采集。如果设备或接口发现失败，初始化会记录警告并中止系统指标的设置。该标志仅控制是否初始化系统指标；周期性指标聚合线程由 `enable_metric_calculator` 单独控制，JVM 指标初始化由 `enable_jvm_metrics` 控制。更改此值需要重启。
+- 引入版本: v3.2.0
 
 ##### profile_report_interval
 
@@ -1104,6 +1248,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：Cumulative 文件大小达到 Base 文件的比例。此项为 Base Compaction 触发条件之一。
 - 引入版本：-
+
+##### chaos_test_enable_random_compaction_strategy
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: 是
+- 描述: 当此项设置为 `true` 时，TabletUpdates::compaction() 将使用为混沌测试准备的随机压缩策略（compaction_random）。此标志强制在平板的压缩选择中采用非确定性/随机策略，而不是正常策略（例如 size-tiered compaction），并在压缩选择时具有优先权。仅用于可控的测试场景：启用后可能导致不可预测的压缩顺序、增加的 I/O/CPU 和测试不稳定性。请勿在生产环境中启用；仅用于故障注入或混沌测试场景。
+- 引入版本: v3.3.12, 3.4.2, 3.5.0, 4.0.0
 
 ##### check_consistency_worker_count
 
@@ -2249,6 +2402,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：是
 - 描述：是否开启 Token 检验。`true` 表示开启，`false` 表示不开启。
 - 引入版本：-
+
+##### es_scroll_keepalive
+
+- 默认值: 5m
+- 类型: String
+- 単位: Minutes (string with suffix, e.g. "5m")
+- 是否可变: 否
+- 描述: 发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (`?scroll=<value>`) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
+- 引入版本: v3.2.0
 
 ##### load_replica_status_check_interval_ms_on_failure
 
