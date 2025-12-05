@@ -866,10 +866,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/split_order_by"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("21:MERGING-EXCHANGE"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("20:TOP-N"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("15:MERGING-EXCHANGE"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains("14:TOP-N"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("22:MERGING-EXCHANGE"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("21:TOP-N"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("16:MERGING-EXCHANGE"), replayPair.second);
+        Assertions.assertTrue(replayPair.second.contains("15:TOP-N"), replayPair.second);
 
     }
 
@@ -1127,5 +1127,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(plan, "AGGREGATE (merge finalize)\n"
                 + "  |  output: sum(106: sum), avg(108: avg), multi_distinct_count(109: count)\n"
                 + "  |  group by: 10: RegionID, 107: count");
+    }
+
+    @Test
+    public void testNestCTERewrite() throws Exception {
+        String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks");
     }
 }

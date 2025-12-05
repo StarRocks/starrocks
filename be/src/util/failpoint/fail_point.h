@@ -126,6 +126,7 @@ private:
 #define DEFINE_FAIL_POINT(NAME)                       \
     starrocks::failpoint::FailPoint fp_##NAME(#NAME); \
     starrocks::failpoint::FailPointRegisterer fpr_##NAME(&fp_##NAME);
+#define DECLARE_FAIL_POINT(NAME) extern starrocks::failpoint::FailPoint fp_##NAME;
 #define DEFINE_SCOPED_FAIL_POINT(NAME)                       \
     starrocks::failpoint::ScopedFailPoint sfp_##NAME(#NAME); \
     starrocks::failpoint::FailPointRegisterer fpr_##NAME(&sfp_##NAME);
@@ -161,6 +162,7 @@ private:
     } while (false)
 #else
 #define DEFINE_FAIL_POINT(NAME)
+#define DECLARE_FAIL_POINT(NAME)
 #define DEFINE_SCOPED_FAIL_POINT(NAME)
 #define FAIL_POINT_SCOPE(NAME)
 #define FAIL_POINT_TRIGGER_EXECUTE(NAME, stmt)

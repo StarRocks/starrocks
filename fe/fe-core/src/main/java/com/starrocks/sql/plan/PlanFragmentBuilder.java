@@ -1853,6 +1853,19 @@ public class PlanFragmentBuilder {
                                     "only support `regexp` or `rlike` for log grep");
                         }
                     }
+
+                    if (like.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
+                        String pattern = constantOperator.getVarchar();
+                        switch (columnRefOperator.getName()) {
+                            case "TABLE_SCHEMA":
+                            case "DATABASE_NAME":
+                                scanNode.setSchemaDb(pattern);
+                                break;
+                            case "TABLE_NAME":
+                                scanNode.setSchemaTable(pattern);
+                                break;
+                        }
+                    }
                 }
             }
 
@@ -2565,7 +2578,8 @@ public class PlanFragmentBuilder {
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
                         topN.getPartitionLimit(), topN.getOrderSpec(),
-                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), topN.getPreAggCall(), inputFragment);
+                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), topN.getPreAggCall(), topN.isPerPipeline(),
+                        inputFragment);
             } else {
                 return buildFinalTopNFragment(context, topN.getTopNType(), topN.getLimit(), topN.getOffset(),
                         inputFragment, optExpr);
@@ -2612,7 +2626,7 @@ public class PlanFragmentBuilder {
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       List<ColumnRefOperator> partitionByColumns, long partitionLimit,
                                                       OrderSpec orderSpec, TopNType topNType, long limit, long offset,
-                                                      Map<ColumnRefOperator, CallOperator> preAggFnCalls,
+                                                      Map<ColumnRefOperator, CallOperator> preAggFnCalls, boolean perPipeline,
                                                       PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = Lists.newArrayList();
             List<Expr> partitionExprs = Lists.newArrayList();
@@ -2715,6 +2729,7 @@ public class PlanFragmentBuilder {
             sortNode.setPreAggOutputColumnId(preAggOutputColumnIds);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
+            sortNode.setPerPipeline(perPipeline);
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
             sortNode.setHasNullableGenerateChild();
             sortNode.computeStatistics(optExpr.getStatistics());
@@ -4320,8 +4335,8 @@ public class PlanFragmentBuilder {
         }
 
         private ScalarOperator extractAndValidateAsofTemporalPredicate(List<ScalarOperator> otherJoin,
-                                                            ColumnRefSet leftColumns,
-                                                            ColumnRefSet rightColumns) {
+                                                                       ColumnRefSet leftColumns,
+                                                                       ColumnRefSet rightColumns) {
             List<ScalarOperator> candidates = new ArrayList<>();
 
             for (ScalarOperator predicate : otherJoin) {

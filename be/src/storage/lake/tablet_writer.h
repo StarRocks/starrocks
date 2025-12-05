@@ -30,6 +30,7 @@ class Chunk;
 class Column;
 class TabletSchema;
 class ThreadPool;
+class SegmentWriter;
 
 struct OlapWriterStatistics;
 
@@ -142,6 +143,8 @@ public:
     const OlapWriterStatistics& stats() const { return _stats; }
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
+
+    void check_global_dict(SegmentWriter* segment_writer);
 
 protected:
     TabletManager* _tablet_mgr;

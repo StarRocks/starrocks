@@ -458,6 +458,7 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
+        ./runtime/exec_sub_process_test.cpp
         ./runtime/load_fail_point_test.cpp
         ./runtime/query_statistics_test.cpp
         ./serde/column_array_serde_test.cpp
@@ -572,6 +573,7 @@ set(EXEC_FILES
         ./storage/record_predicate/record_predicate_helper_test.cpp
         ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
+        ./cache/datacache_metrics_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
