@@ -203,6 +203,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v3.2.4
 
+### cbo_cte_force_reuse_node_count
+
+* **描述**: 会话级阈值，用于控制优化器对公用表表达式（CTE）的一种快捷处理。在 RelationTransformer.visitCTE 中，规划器会统计 CTE 生产者树中的节点数（cteContext.getCteNodeCount）。如果该计数大于或等于此阈值且阈值大于 0，则 transformer 强制重用该 CTE：跳过对生产者计划的内联/转换，构建一个带有预计算表达式映射（无输入）的 consume 操作符，并改用生成的列引用。这样可以在面对非常大的 CTE 生产者树时减少优化器时间，但可能以生成的物理计划不是最优为代价。将该值设置为 `0` 可禁用强制重用优化。此变量在 SessionVariable 中有 getter/setter，并按会话应用。
+* **范围**: Session
+* **默认值**: `2000`
+* **数据类型**: int
+* **引入版本**: v3.5.3
+
+### cbo_disabled_rules
+
+* **描述**: 以逗号分隔的优化器规则名称列表，用于在当前会话中禁用规则。每个名称必须与 `RuleType` 枚举值匹配，且仅可禁用名称以 `TF_`（转换规则）或 `GP_`（组组合规则）开头的规则。该会话变量存储在 `SessionVariable`（`getCboDisabledRules` / `setCboDisabledRules`）中，并由优化器通过 `OptimizerOptions.applyDisableRuleFromSessionVariable()` 应用；该方法解析列表并清除对应的规则开关，从而在规划期间跳过这些规则。通过 SET 语句设置时，值会被校验，服务器会以明确错误信息拒绝未知名称或不以 `TF_`/`GP_` 开头的名称（例如 "Unknown rule name(s): ..." 或 "Only TF_ ... and GP_ ... can be disabled"）。在规划器运行时，未知的规则名称会被忽略并记录警告（记录为 "Ignoring unknown rule name: ... (may be from different version)"）。名称必须与枚举标识符完全匹配（区分大小写）。名称周围的空白会被修剪；空条目会被忽略。
+* **作用域**: Session
+* **默认值**: `""`（无被禁用规则）
+* **数据类型**: String
+* **引入版本**: -
+
 ### cbo_enable_low_cardinality_optimize
 
 * 描述：是否开启低基数全局字典优化。开启后，查询 STRING 列时查询速度会有 3 倍左右提升。
@@ -226,24 +242,30 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 类型：Boolean
 
-### cbo_materialized_view_rewrite_related_mvs_limit
-
-* 描述：用于指定查询在 Plan 阶段最多拥有的候选物化视图个数。
-* 默认值：16
-* 类型：Int
-* 引入版本：v3.1.9, v3.2.5
-
-### cbo_prune_subfield
-
-* 描述：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
-* 默认值：false
-* 引入版本：v3.3.0
-
 ### character_set_database（global）
 
 * 描述：StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码（`utf8`）。
 * 默认值：utf8
 * 类型：String
+
+### collation_server
+
+* **范围**: 会话
+* **描述**: 会话级别的服务器校对名，由 FE 用于为该会话呈现兼容 MySQL 的校对行为。该变量设置 FE 向客户端报告并与 `character_set_server` / `collation_connection` / `collation_database` 关联的默认校对标识符（例如 `utf8_general_ci`）。它会以会话变量 JSON 的形式持久化（参见 SessionVariable#getJsonString / replayFromJson），并通过变量管理器暴露（`@VarAttr(name = COLLATION_SERVER)`），因此会出现在 SHOW VARIABLES 中并且可以按会话更改。该值以普通 String 存储在 SessionVariable 中，通常保存标准的 MySQL 校对名（例如 `utf8_general_ci`、`utf8mb4_unicode_ci`）；代码在此处不强制固定枚举或额外校验，因此实际行为取决于下游解释校对名称以用于比较、排序和其他与校对相关操作的组件。
+* **默认值**: `utf8_general_ci`
+* **类型**: String
+* **引入版本**: `v3.2.0`
+
+### computation_fragment_scheduling_policy
+
+* **作用域**: Session
+* **描述**: 控制用于为 computation fragments 选择执行实例的调度策略。有效值（不区分大小写）有：
+  * `compute_nodes_only` — 仅在 compute nodes 上调度 fragments（默认）。
+  * `all_nodes` — 允许在 compute nodes 和传统 backend nodes 上调度。
+  该变量由枚举 `SessionVariableConstants.ComputationFragmentSchedulingPolicy` 支持。设置时，会将值上调为大写并与枚举校验；无效值会导致错误（通过 API 设置时抛出 `IllegalArgumentException`，在 SET 语句中使用时抛出 `SemanticException`）。getter 返回相应的枚举值，如果未设置或无法识别则回退到 `COMPUTE_NODES_ONLY`。此设置影响 FE 在规划/部署时如何选择 fragment 放置的目标节点。
+* **默认值**: `COMPUTE_NODES_ONLY`
+* **数据类型**: String
+* **引入版本**: v3.2.7
 
 ### connector_io_tasks_per_scan_operator
 
@@ -273,6 +295,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1024
 * 引入版本：v2.5
 
+### custom_query_id (session)
+
+* **描述**: 用于将某些外部标识绑定到当前查询。在执行查询前可以使用 `SET SESSION custom_query_id = 'my-query-id';` 进行设置。查询结束后该值会被重置。该值可以传递给 `KILL QUERY 'my-query-id'`。在审计日志中可以作为 `customQueryId` 字段找到该值。
+* **默认值**: ""
+* **类型**: String
+* **引入版本**: v3.4.0
+
 ### datacache_sharing_work_period
 
 - 描述：Cache Sharing 功能的生效时长。每次群集扩展操作后，如果启用了缓存共享功能，只有在这段时间内的请求才会尝试访问其他节点的缓存数据。
@@ -295,6 +324,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：控制是否启用 Colocate Join 功能。默认值为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。
 * 默认值：false
+
+### disable_join_reorder
+
+* **范围**: 会话
+* **描述**: 控制基于代价的优化器是否执行连接重排序。当 `false`（默认）时，优化器可能在新规划路径的逻辑优化阶段应用连接重排序转换（例如 `ReorderJoinRule`、join transformation 和 outer-join transformation 规则），这些路径见于 `SPMOptimizer` 和 `QueryOptimizer`。当为 `true` 时，会跳过连接重排序及相关的外连接重排序规则，阻止优化器改变连接顺序。此选项有助于减少优化时间、获得稳定/可复现的连接顺序，或规避 CBO 重排序产生次优计划的情况。此设置会与其他 CBO/会话控制项交互，例如 `cbo_max_reorder_node`、`cbo_max_reorder_node_use_exhaustive` 和 `enable_outer_join_reorder`。
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
 
 ### div_precision_increment
 
@@ -329,6 +366,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.5.5，v4.0.1
 
+### enable_cbo_table_prune
+
+* **描述**: 启用后，优化器将在 memo 优化期间添加基于代价的表裁剪规则（CboTablePruneRule），对保持基数的连接进行基于代价的表裁剪。该规则仅在优化器中有条件地添加（参见 QueryOptimizer.memoOptimize 和 SPMOptimizer.memoOptimize），并且只在连接树中的连接节点数量较小时添加（少于 10 个连接节点）。此选项补充基于规则的裁剪开关 `enable_rbo_table_prune`，允许基于代价的优化器尝试从连接处理中移除不必要的表或输入，以减少计划和执行复杂度。默认关闭，因为裁剪可能改变计划形状；仅在代表性工作负载上验证后再启用。
+* **范围**: 会话
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
 ### enable_connector_adaptive_io_tasks
 
 * 描述：外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -352,6 +397,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 - 描述：是否启用 Cache Sharing。设置为 `true` 可启用该功能。Cache Sharing 能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，这有助于减少集群扩展过程中缓存失效造成的性能抖动。只有当 FE 参数 `enable_trace_historical_node` 设置为 `true` 时，此变量才会生效。
 - 默认值：true
 - 引入版本：v3.5.1
+
+### enable_distinct_agg_over_window
+
+* **描述**: 控制优化器重写，将带有 WINDOW 子句的 DISTINCT 聚合调用转换为等价的基于 join 的计划。启用时（`true`，默认值），QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin 将会：
+  * 检测包含 LogicalWindowOperator 的查询，
+  * 运行投影合并（project-merge）重写，并推导逻辑属性，
+  * 应用 DistinctAggregationOverWindowRule 将 DISTINCT-OVER-WINDOW 模式转换为 null-safe 等值连接（改变计划形状以便进一步下推和聚合优化），
+  * 然后运行 SeparateProjectRule 并重新推导属性。
+  禁用时（`false`），优化器跳过此转换，保留窗口上的 DISTINCT 聚合不变。该设置是会话级的，仅影响优化器重写阶段（参见 QueryOptimizer.convertDistinctAggOverWindowToNullSafeEqualJoin）。
+* **默认值**: `true`
+* **类型**: boolean
+* **引入版本**: -
 
 ### enable_distinct_column_bucketization
 
@@ -409,6 +466,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 类型：Boolean
 * 引入版本：v3.3.0
+
+### enable_load_profile
+
+* **作用域**: Session
+* **描述**: 启用后，FE 会请求收集 load 作业的运行时 profile，load 协调器将在 load 完成后收集/导出该 profile。对于 stream load，FE 会设置 `TQueryOptions.enable_profile = true` 并将 `load_profile_collect_second`（来自 `stream_load_profile_collect_threshold_second`）传递给 backends；协调器随后有条件地调用 profile 收集（参见 StreamLoadTask.collectProfile()）。实际行为是此会话变量与目标表上的表级属性 `enable_load_profile` 的逻辑 OR；采集还受 `load_profile_collect_interval_second`（FE 端采样间隔）的限制以避免频繁采集。会话标志通过 `SessionVariable.isEnableLoadProfile()` 读取，并且可以通过 `setEnableLoadProfile(...)` 按连接设置。
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
 
 ### enable_materialized_view_agg_pushdown_rewrite
 
@@ -493,6 +558,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.4.0
 
+### enable_predicate_reorder
+
+* **范围**: 会话
+* **描述**: 启用后，优化器在逻辑/物理计划重写阶段对 AND（合取）谓词应用 Predicate Reorder 规则。该规则通过 `Utils.extractConjuncts` 提取合取项，使用 `DefaultPredicateSelectivityEstimator` 估算每个合取项的选择性，并按估算选择性升序（较不限制的先）重排合取项以构造新的 `CompoundPredicateOperator`（AND）。只有当操作符包含超过一个合取项的 `CompoundPredicateOperator` 时，规则才会运行。当可用时，统计信息从子 `OptExpression` 的统计信息收集；对于 `PhysicalOlapScanOperator`，它会从 `GlobalStateMgr.getCurrentState().getStatisticStorage()` 获取列统计。如果缺少子统计且扫描不是 OLAP 扫描，则规则将跳过重排序。该会话变量通过 `SessionVariable.isEnablePredicateReorder()` 暴露，并提供辅助方法 `enablePredicateReorder()` 与 `disablePredicateReorder()`。
+* **默认值**: false
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
 ### enable_profile
 
 用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。2.5 版本之前，该变量名称为 `is_report_success`，2.5 版本之后更名为 `enable_profile`。
@@ -539,6 +612,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：-
 * 描述：是否开启查询触发 ANALYZE 外表任务。
 * 引入版本：v3.4.0
+
+### enable_rbo_table_prune
+
+* **描述**: 启用后，优化器在当前会话中对保持基数的连接应用基于规则的 (RBO) 表裁剪。优化器运行一系列重写和裁剪步骤（分区裁剪、投影合并/拆分、`UniquenessBasedTablePruneRule`、连接重排 和 `RboTablePruneRule`）以移除不必要的表扫描备选项并减少连接中的扫描分区/行数。启用此选项还会在逻辑规则重写运行时禁用连接等价推导（`context.setEnableJoinEquivalenceDerive(false)`），以避免冲突的转换。如果设置了 `enable_table_prune_on_update`，裁剪流程在处理 UPDATE 语句时可能额外运行 `PrimaryKeyUpdateTableRule`。该规则仅在查询包含可裁剪连接时执行（通过 `Utils.hasPrunableJoin(tree)` 检查）。
+* **范围**: 会话
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
 
 ### enable_scan_datacache
 
@@ -675,6 +756,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### init_connect (global)
 
 用于兼容 MySQL 客户端。无实际作用。
+
+### innodb_read_only
+
+* **描述**: 会话级别标志（兼容 MySQL），指示会话的 InnoDB 只读模式。该变量在会话中以 Java 字段 `innodbReadOnly`（定义于 `SessionVariable.java`）声明并存储，可通过 `isInnodbReadOnly()` 和 `setInnodbReadOnly(boolean)` 访问。SessionVariable 类仅保存该标志；任何强制执行（例如阻止对 InnoDB 表的写/DDL 或改变事务行为）必须由事务/存储/授权层来实现，这些层应读取此会话标志。对尊重该标志的组件而言，使用此变量在当前会话中传达客户端的只读意图。
+* **范围**: 会话
+* **默认值**: `true`
+* **类型**: boolean
+* **引入版本**: v3.2.0
 
 ### insert_max_filter_ratio
 
@@ -1044,6 +1133,27 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：在SQL执行计划中, 单表允许的最大扫描分区数.
 * 默认值：0 (无限制)
 * 引入版本：v3.3.9
+
+### skip_local_disk_cache
+
+* **描述**: 会话标志，指示 FE 在构建 scan ranges 时为每个 tablet 的内部扫描范围标记 `skip_disk_cache`。当设置为 `true` 时，`OlapScanNode.addScanRangeLocations()` 会在创建的 `TInternalScanRange` 对象上调用 `internalRange.setSkip_disk_cache(true)`，从而通知下游 BE 的扫描节点在该扫描中绕过本地磁盘缓存。该设置按会话应用，并在计划/扫描范围构建时评估。可与 `skip_page_cache`（控制页面缓存跳过）和数据缓存相关变量（`enable_scan_datacache` / `enable_populate_datacache`）结合使用。
+* **作用域**: Session
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.3.9, v3.4.0, v3.5.0
+
+### spill_encode_level
+
+* **范围**: Session
+* **描述**: 控制应用于 operator 溢写（spill）文件的编码/压缩行为。该整数为位标志级别，其含义与 `transmission_encode_level` 对应：
+  * bit 1 (值 `1`) — 启用自适应编码；
+  * bit 2 (值 `2`) — 对类似整数的列使用 streamvbyte 编码；
+  * bit 4 (值 `4`) — 对二进制/字符串列使用 LZ4 压缩。
+  来自相关 `transmission_encode_level` 注释的示例语义：`7` 为数字和字符串启用自适应编码；`6` 强制对数字和字符串进行编码。更改此值会调整溢写时的 CPU 与磁盘 I/O 权衡（更高的编码级别会增加 CPU 工作但减少溢写大小 / I/O）。
+  作为会话变量在 `SessionVariable.java` 中以注释 `SPILL_ENCODE_LEVEL` 实现（getter 为 `getSpillEncodeLevel()`），并与其他溢写可调项（例如 `spill_mem_table_size`）相邻记录。
+* **默认值**: `7`
+* **类型**: int
+* **引入版本**: v3.2.0
 
 ### spill_mode (3.0 及以后)
 
