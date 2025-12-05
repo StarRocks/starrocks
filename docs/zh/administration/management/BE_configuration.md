@@ -392,7 +392,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: Int
 - 単位: Percent
 - 是否可变: Yes
-- 描述: 将元数据 LRU 缓存大小设置为进程内存限制的百分比。启动时 StarRocks 将缓存字节数计算为 (process_mem_limit * metadata_cache_memory_limit_percent / 100)，并将其传递给元数据缓存分配器。该缓存仅用于非 PRIMARY_KEYS 行集（不支持 PK 表），并且仅在 metadata_cache_memory_limit_percent > 0 时启用；将其设置为 <= 0 可禁用元数据缓存。增加此值会提高元数据缓存容量，但会减少分配给其他组件的内存；请根据工作负载和系统内存进行调优。在 BE_TEST 构建中不生效。
+- 描述: 将元数据 LRU 缓存大小设置为进程内存限制的百分比。启动时 StarRocks 将缓存字节数计算为 (`process_mem_limit * metadata_cache_memory_limit_percent / 100`)，并将其传递给元数据缓存分配器。该缓存仅用于非 PRIMARY_KEYS 行集（不支持 PK 表），并且仅在 `metadata_cache_memory_limit_percent` 大于 0 时启用；将其设置为小于等于 0 可禁用元数据缓存。增加此值会提高元数据缓存容量，但会减少分配给其他组件的内存；请根据工作负载和系统内存进行调优。在 BE_TEST 构建中不生效。
 - 引入版本: v3.2.10
 
 ##### update_schema_worker_count
