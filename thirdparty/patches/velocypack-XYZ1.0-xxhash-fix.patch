@@ -1,0 +1,23 @@
+diff -rupN velocypack-XYZ1.0.orig/include/velocypack/velocypack-common.h velocypack-XYZ1.0/include/velocypack/velocypack-common.h
+--- velocypack-XYZ1.0.orig/include/velocypack/velocypack-common.h	2022-10-27 18:22:53.050941619 +0000
++++ velocypack-XYZ1.0/include/velocypack/velocypack-common.h	2024-01-01 00:00:00.000000000 +0000
+@@ -92,8 +92,13 @@
+ #include "velocypack/velocypack-memory.h"
+ 
+ #ifdef VELOCYPACK_XXHASH
+-// forward for XXH functions declared elsewhere
+-extern "C" unsigned long long XXH64(void const*, std::size_t, unsigned long long);
+-extern "C" unsigned int XXH32(void const* input, std::size_t len, unsigned int seed);
++// forward for XXH functions declared elsewhere
++// Only declare if xxhash.h hasn't been included yet (check for XXHASH_H_5627135585666179)
++// This avoids function signature conflicts when both velocypack and xxhash are used together
++// Note: We use uint64_t to match XXH64_hash_t (which is uint64_t in C++)
++#ifndef XXHASH_H_5627135585666179
++#include <cstdint>
++extern "C" uint64_t XXH64(void const*, std::size_t, uint64_t);
++extern "C" unsigned int XXH32(void const* input, std::size_t len, unsigned int seed);
++#endif
+ 
+ #define VELOCYPACK_HASH(mem, size, seed) XXH64(mem, size, seed)
+ #define VELOCYPACK_HASH32(mem, size, seed) XXH32(mem, size, seed)
+
