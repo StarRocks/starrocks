@@ -496,6 +496,29 @@ void ArrayColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+void ArrayColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    // hash buffer for batch evaluation of elements
+    constexpr size_t kBatchSize = 64;
+    uint32_t buffer[kBatchSize];
+
+    const auto offsets = _offsets->immutable_data();
+    for (uint32_t i = from; i < to; ++i) {
+        uint32_t offset = offsets[i];
+        size_t array_size = offsets[i + 1] - offset;
+        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&array_size, sizeof(array_size), hash[i]));
+        for (size_t j = 0; j < array_size;) {
+            size_t batch_size = std::min(kBatchSize, array_size - j);
+            size_t ele_offset = offset + j;
+            std::fill(buffer, buffer + batch_size, hash[i]);
+            _elements->xxh3_hash(buffer, ele_offset, ele_offset + batch_size);
+            for (size_t k = 0; k < batch_size; ++k) {
+                hash[i] += buffer[k];
+            }
+            j += batch_size;
+        }
+    }
+}
+
 void ArrayColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         crc32_hash_at(hash + i, i);

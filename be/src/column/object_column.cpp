@@ -274,6 +274,11 @@ void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const
 }
 
 template <typename T>
+void ObjectColumn<T>::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    throw std::runtime_error("xxh3_hash is not supported for ObjectColumn");
+}
+
+template <typename T>
 void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "object column shouldn't call crc32_hash ";
 }

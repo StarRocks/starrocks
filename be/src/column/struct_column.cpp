@@ -376,6 +376,12 @@ void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     }
 }
 
+void StructColumn::xxh3_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    for (const ColumnPtr& column : _fields) {
+        column->xxh3_hash(seed, from, to);
+    }
+}
+
 void StructColumn::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     for (const ColumnPtr& column : _fields) {
         column->crc32_hash(seed, from, to);

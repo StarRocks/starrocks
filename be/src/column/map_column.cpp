@@ -560,6 +560,49 @@ void MapColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     }
 }
 
+void MapColumn::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    const auto offsets_data = _offsets->immutable_data();
+    // Buffer for batching column hashes to avoid virtual call per element
+    // while avoiding large memory allocation.
+    constexpr int kBatchSize = 64;
+    uint32_t buffer[kBatchSize];
+
+    for (uint32_t i = from; i < to; ++i) {
+        uint32_t offset = offsets_data[i];
+        size_t map_size = offsets_data[i + 1] - offset;
+        hash[i] = static_cast<uint32_t>(HashUtil::xx_hash3_64(&map_size, sizeof(map_size), hash[i]));
+        uint32_t base_hash = hash[i];
+        uint32_t accumulated_hash = 0;
+
+        size_t current_offset = offset;
+        size_t remaining = map_size;
+        while (remaining > 0) {
+            size_t chunk = std::min(static_cast<size_t>(kBatchSize), remaining);
+
+            // Hash keys
+            std::fill(buffer, buffer + chunk, base_hash);
+            _keys->xxh3_hash(buffer - current_offset, static_cast<uint32_t>(current_offset),
+                             static_cast<uint32_t>(current_offset + chunk));
+            for (size_t j = 0; j < chunk; ++j) {
+                accumulated_hash += buffer[j];
+            }
+
+            // Hash values
+            std::fill(buffer, buffer + chunk, base_hash);
+            _values->xxh3_hash(buffer - current_offset, static_cast<uint32_t>(current_offset),
+                               static_cast<uint32_t>(current_offset + chunk));
+            for (size_t j = 0; j < chunk; ++j) {
+                accumulated_hash += buffer[j];
+            }
+
+            current_offset += chunk;
+            remaining -= chunk;
+        }
+        // Combine keys and values hash (commutative operation)
+        hash[i] += accumulated_hash;
+    }
+}
+
 void MapColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     for (uint32_t i = from; i < to; ++i) {
         crc32_hash_at(hash + i, i);

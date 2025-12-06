@@ -812,6 +812,17 @@ void BinaryColumnBase<T>::fnv_hash_selective(uint32_t* hashes, uint16_t* sel, ui
 }
 
 template <typename T>
+void BinaryColumnBase<T>::xxh3_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        T length = _offsets[i + 1] - _offsets[i];
+        // Cast to int32_t for xx_hash3_64, which matches fnv_hash behavior
+        // In practice, string length is unlikely to exceed INT32_MAX
+        hashes[i] = static_cast<uint32_t>(
+                HashUtil::xx_hash3_64(_bytes.data() + _offsets[i], static_cast<int32_t>(length), hashes[i]));
+    }
+}
+
+template <typename T>
 void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     // keep hash if _bytes is empty
     for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
