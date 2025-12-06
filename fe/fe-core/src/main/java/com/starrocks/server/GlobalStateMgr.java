@@ -1461,6 +1461,9 @@ public class GlobalStateMgr {
             // Need to rebuild active lake compaction transactions before lake scheduler starting to run
             // Lake compactionMgr is started on all FE nodes and scheduler only starts to run when the FE is leader
             compactionMgr.buildActiveCompactionTransactionMap();
+            // restore storage volumes to virtual tablet group mappings while FE is leader
+            // (include after transferring to leader role)
+            ((SharedDataStorageVolumeMgr) storageVolumeMgr).restoreStorageVolumeToVTabletGroupMappings();
 
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
