@@ -598,6 +598,7 @@ public class FunctionSet {
     public static final String CURRENT_USER = "current_user";
     public static final String CURRENT_ROLE = "current_role";
     public static final String CURRENT_GROUP = "current_group";
+    public static final String CURRENT_WAREHOUSE = "current_warehouse";
 
     // scalar function
     public static final String STATE_SUFFIX = "_state";

@@ -79,7 +79,8 @@ public class SqlUtils {
                             return true;
                         } else if (itemExpr instanceof InformationFunction informationFunction) {
                             return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
-                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id");
+                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id")
+                                    || informationFunction.getFuncType().equalsIgnoreCase("current_warehouse");
                         }
                     }
                 }
