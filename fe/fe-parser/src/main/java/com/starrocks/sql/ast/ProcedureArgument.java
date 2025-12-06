@@ -14,36 +14,32 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.ast.expression.Expr;
 
-public class RandomDistributionDesc extends DistributionDesc {
-    int numBucket;
+import java.util.Optional;
 
-    public RandomDistributionDesc() {
-        this(0, NodePosition.ZERO);
+public class ProcedureArgument {
+    private final String name;
+    private final Expr value;
+
+    public ProcedureArgument(String name, Expr value) {
+        this.name = name;
+        this.value = value;
     }
 
-    public RandomDistributionDesc(int numBucket) {
-        this(numBucket, NodePosition.ZERO);
+    public Optional<String> getName() {
+        return Optional.ofNullable(name);
     }
 
-    public RandomDistributionDesc(int numBucket, NodePosition pos) {
-        super(pos);
-        this.numBucket = numBucket;
-    }
-
-
-    @Override
-    public int getBuckets() {
-        return numBucket;
+    public Expr getValue() {
+        return value;
     }
 
     @Override
     public String toString() {
-        if (numBucket > 0) {
-            return "DISTRIBUTED BY RANDOM BUCKETS " + numBucket;
-        } else {
-            return "DISTRIBUTED BY RANDOM";
-        }
+        // Note: This is a simplified version. For full SQL representation,
+        // use AstToSQLBuilder.toSQL(value) from fe-core module.
+        String valueSql = value != null ? value.toString() : "null";
+        return getName().map(n -> n + " => " + valueSql).orElse(valueSql);
     }
 }

@@ -12,36 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
+// SHOW TABLE STATUS
+public class ShowTableStatusStmt extends ShowStmt {
+    private String db;
+    private final String wild;
+    private Expr where;
 
-public class ShowDeleteStmt extends ShowStmt {
-
-    private String dbName;
-
-    public ShowDeleteStmt(String dbName) {
-        this(dbName, NodePosition.ZERO);
+    public ShowTableStatusStmt(String db, String wild, Expr where) {
+        this(db, wild, where, NodePosition.ZERO);
     }
 
-    public ShowDeleteStmt(String dbName, NodePosition pos) {
+    public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
+        this.db = db;
+        this.wild = wild;
+        this.where = where;
     }
 
-    public String getDbName() {
-        return dbName;
+    public void setDb(String db) {
+        this.db = db;
     }
 
-    public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+    public String getDb() {
+        return db;
+    }
+
+    public String getPattern() {
+        return wild;
+    }
+
+    public Expr getWhereClause() {
+        return where;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowDeleteStatement(this, context);
+        return visitor.visitShowTableStatusStatement(this, context);
     }
 }

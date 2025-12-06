@@ -16,34 +16,29 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class RandomDistributionDesc extends DistributionDesc {
-    int numBucket;
+public class ShowDeleteStmt extends ShowStmt {
 
-    public RandomDistributionDesc() {
-        this(0, NodePosition.ZERO);
+    private String dbName;
+
+    public ShowDeleteStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
     }
 
-    public RandomDistributionDesc(int numBucket) {
-        this(numBucket, NodePosition.ZERO);
-    }
-
-    public RandomDistributionDesc(int numBucket, NodePosition pos) {
+    public ShowDeleteStmt(String dbName, NodePosition pos) {
         super(pos);
-        this.numBucket = numBucket;
+        this.dbName = dbName;
     }
 
+    public String getDbName() {
+        return dbName;
+    }
 
-    @Override
-    public int getBuckets() {
-        return numBucket;
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
     }
 
     @Override
-    public String toString() {
-        if (numBucket > 0) {
-            return "DISTRIBUTED BY RANDOM BUCKETS " + numBucket;
-        } else {
-            return "DISTRIBUTED BY RANDOM";
-        }
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowDeleteStatement(this, context);
     }
 }

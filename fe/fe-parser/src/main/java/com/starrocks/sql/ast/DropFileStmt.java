@@ -19,8 +19,6 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 public class DropFileStmt extends DdlStmt {
     public static final String PROP_CATALOG = "catalog";
 
@@ -50,7 +48,7 @@ public class DropFileStmt extends DdlStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getCatalogName() {
@@ -67,6 +65,6 @@ public class DropFileStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitDropFileStatement(this, context);
+        return visitor.visitDropFileStatement(this, context);
     }
 }

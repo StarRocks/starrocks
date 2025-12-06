@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.
@@ -35,7 +34,6 @@ public class ShowProcStmt extends ShowStmt {
     }
 
     private final String path;
-    private ProcNodeInterface node;
 
     public ShowProcStmt(String path) {
         this(path, NodePosition.ZERO);
@@ -46,21 +44,12 @@ public class ShowProcStmt extends ShowStmt {
         this.path = path;
     }
 
-
-    public ProcNodeInterface getNode() {
-        return node;
-    }
-
-    public void setNode(ProcNodeInterface node) {
-        this.node = node;
-    }
-
     public String getPath() {
         return path;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowProcStmt(this, context);
+        return visitor.visitShowProcStmt(this, context);
     }
 }

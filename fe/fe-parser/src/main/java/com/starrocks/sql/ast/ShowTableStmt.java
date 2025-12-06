@@ -18,8 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // SHOW TABLES
 public class ShowTableStmt extends ShowStmt {
     private String db;
@@ -67,7 +65,7 @@ public class ShowTableStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = normalizeName(db);
+        this.db = db;
     }
 
     public Expr getWhereClause() {
@@ -76,6 +74,6 @@ public class ShowTableStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatement(this, context);
+        return visitor.visitShowTableStatement(this, context);
     }
 }

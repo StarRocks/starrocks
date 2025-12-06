@@ -14,31 +14,30 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Optional;
+public class ShowDynamicPartitionStmt extends ShowStmt {
+    private String db;
 
-public class ProcedureArgument {
-    private final String name;
-    private final Expr value;
-
-    public ProcedureArgument(String name, Expr value) {
-        this.name = name;
-        this.value = value;
+    public ShowDynamicPartitionStmt(String db) {
+        this(db, NodePosition.ZERO);
     }
 
-    public Optional<String> getName() {
-        return Optional.ofNullable(name);
+    public ShowDynamicPartitionStmt(String db, NodePosition pos) {
+        super(pos);
+        this.db = db;
     }
 
-    public Expr getValue() {
-        return value;
+    public String getDb() {
+        return db;
+    }
+
+    public void setDb(String db) {
+        this.db = db;
     }
 
     @Override
-    public String toString() {
-        String valueSql = AstToSQLBuilder.toSQL(value);
-        return getName().map(n -> n + " => " + valueSql).orElse(valueSql);
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowDynamicPartitionStatement(this, context);
     }
 }

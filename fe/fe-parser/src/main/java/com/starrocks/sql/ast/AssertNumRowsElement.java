@@ -15,8 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.thrift.TAssertion;
-
 public class AssertNumRowsElement {
     public enum Assertion {
         EQ, // val1 == val2
@@ -24,26 +22,7 @@ public class AssertNumRowsElement {
         LT, // val1 < val2
         LE, // val1 <= val2
         GT, // val1 > val2
-        GE; // val1 >= val2
-
-        public TAssertion toThrift() {
-            switch (this) {
-                case EQ:
-                    return TAssertion.EQ;
-                case NE:
-                    return TAssertion.NE;
-                case LT:
-                    return TAssertion.LT;
-                case LE:
-                    return TAssertion.LE;
-                case GT:
-                    return TAssertion.GT;
-                case GE:
-                    return TAssertion.GE;
-                default:
-                    return null;
-            }
-        }
+        GE // val1 >= val2
     }
 
     private final long desiredNumOfRows;

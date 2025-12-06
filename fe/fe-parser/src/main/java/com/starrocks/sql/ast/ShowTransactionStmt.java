@@ -17,43 +17,46 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
+// syntax:
+//      SHOW TRANSACTION  WHERE id=123
+public class ShowTransactionStmt extends ShowStmt {
 
-// SHOW TABLE STATUS
-public class ShowTableStatusStmt extends ShowStmt {
-    private String db;
-    private final String wild;
-    private Expr where;
+    private String dbName;
+    private Expr whereClause;
+    private long txnId;
 
-    public ShowTableStatusStmt(String db, String wild, Expr where) {
-        this(db, wild, where, NodePosition.ZERO);
+    public ShowTransactionStmt(String dbName, Expr whereClause) {
+        this(dbName, whereClause, NodePosition.ZERO);
     }
 
-    public ShowTableStatusStmt(String db, String wild, Expr where, NodePosition pos) {
+    public ShowTransactionStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
-        this.db = db;
-        this.wild = wild;
-        this.where = where;
-    }
-
-    public void setDb(String db) {
-        this.db = normalizeName(db);
-    }
-
-    public String getDb() {
-        return db;
-    }
-
-    public String getPattern() {
-        return wild;
+        this.dbName = dbName;
+        this.whereClause = whereClause;
     }
 
     public Expr getWhereClause() {
-        return where;
+        return whereClause;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTableStatusStatement(this, context);
+        return visitor.visitShowTransactionStatement(this, context);
     }
 }

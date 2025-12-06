@@ -27,8 +27,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.UUID;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // SHOW EXPORT STATUS statement used to get status of load job.
 //
 // syntax:
@@ -76,7 +74,7 @@ public class ShowExportStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getDbName() {

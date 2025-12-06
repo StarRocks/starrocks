@@ -21,8 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -82,15 +80,7 @@ public class ShowAlterStmtAnalyzer {
                 sb.append("/optimize");
             }
 
-            // create show proc stmt
-            // '/jobs/db_name/rollup|schema_change/
-            ProcNodeInterface node = null;
-            try {
-                node = ProcService.getInstance().open(sb.toString());
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PROC_PATH, sb.toString());
-            }
-            statement.setNode(node);
+            statement.setProcPath(sb.toString());
         }
 
         public void analyzeSyntax(ShowAlterStmt statement, ConnectContext context) {

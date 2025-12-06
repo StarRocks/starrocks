@@ -12,46 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
+import java.util.UUID;
 
-public class CancelLoadStmt extends DdlStmt {
-
+/**
+ * syntax:
+ * CANCEL EXPORT FROM example_db WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122"
+ */
+public class CancelExportStmt extends DdlStmt {
     private String dbName;
-    private String label;
+    private Expr whereClause;
 
-    private final Expr whereClause;
-
-    public String getDbName() {
-        return dbName;
-    }
+    private UUID queryId;
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
+    }
+
+    public void setQueryId(UUID queryId) {
+        this.queryId = queryId;
     }
 
     public Expr getWhereClause() {
         return whereClause;
     }
 
-    public String getLabel() {
-        return label;
+    public String getDbName() {
+        return dbName;
     }
 
-    public void setLabel(String label) {
-        this.label = label;
+    public UUID getQueryId() {
+        return queryId;
     }
 
-    public CancelLoadStmt(String dbName, Expr whereClause) {
+    public CancelExportStmt(String dbName, Expr whereClause) {
         this(dbName, whereClause, NodePosition.ZERO);
     }
 
-    public CancelLoadStmt(String dbName, Expr whereClause, NodePosition pos) {
+    public CancelExportStmt(String dbName, Expr whereClause, NodePosition pos) {
         super(pos);
         this.dbName = dbName;
         this.whereClause = whereClause;
@@ -59,6 +61,6 @@ public class CancelLoadStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitCancelLoadStatement(this, context);
+        return visitor.visitCancelExportStatement(this, context);
     }
 }

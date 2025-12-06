@@ -16,7 +16,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;
 import java.util.Map;
@@ -30,7 +29,7 @@ public class PropertySet implements ParseNode {
 
     public PropertySet(Collection<Property> properties, NodePosition pos) {
         this.pos = pos;
-        if (CollectionUtils.isNotEmpty(properties)) {
+        if (properties != null && !properties.isEmpty()) {
             for (Property property : properties) {
                 propertyMap.put(property.getKey(), property);
             }

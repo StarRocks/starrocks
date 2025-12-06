@@ -12,54 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
-// syntax:
-//      SHOW TRANSACTION  WHERE id=123
-public class ShowTransactionStmt extends ShowStmt {
-
+public class ShowSmallFilesStmt extends ShowStmt {
     private String dbName;
-    private Expr whereClause;
-    private long txnId;
 
-    public ShowTransactionStmt(String dbName, Expr whereClause) {
-        this(dbName, whereClause, NodePosition.ZERO);
+    public ShowSmallFilesStmt(String dbName) {
+        this(dbName, NodePosition.ZERO);
     }
 
-    public ShowTransactionStmt(String dbName, Expr whereClause, NodePosition pos) {
+    public ShowSmallFilesStmt(String dbName, NodePosition pos) {
         super(pos);
         this.dbName = dbName;
-        this.whereClause = whereClause;
-    }
-
-    public Expr getWhereClause() {
-        return whereClause;
     }
 
     public String getDbName() {
         return dbName;
     }
 
-    public long getTxnId() {
-        return txnId;
-    }
-
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
-    }
-
-    public void setTxnId(long txnId) {
-        this.txnId = txnId;
+        this.dbName = dbName;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTransactionStatement(this, context);
+        return visitor.visitShowSmallFilesStatement(this, context);
     }
 }
