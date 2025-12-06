@@ -4026,7 +4026,7 @@ public class Config extends ConfigBase {
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int tablet_reshard_max_split_count = 8;
+    public static int tablet_reshard_max_split_count = 1024;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale

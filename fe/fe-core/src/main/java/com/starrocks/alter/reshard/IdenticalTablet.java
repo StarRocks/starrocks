@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.List;
+
 /*
  * IdenticalTablet saves the old tablet id and the new tablet for a tablet that is not split or merged
  */
@@ -30,14 +32,6 @@ public class IdenticalTablet implements ReshardingTablet {
     public IdenticalTablet(long oldTabletId, long newTabletId) {
         this.oldTabletId = oldTabletId;
         this.newTabletId = newTabletId;
-    }
-
-    public long getOldTabletId() {
-        return oldTabletId;
-    }
-
-    public long getNewTabletId() {
-        return newTabletId;
     }
 
     @Override
@@ -58,6 +52,24 @@ public class IdenticalTablet implements ReshardingTablet {
     @Override
     public long getFirstOldTabletId() {
         return oldTabletId;
+    }
+
+    public long getOldTabletId() {
+        return oldTabletId;
+    }
+
+    @Override
+    public List<Long> getOldTabletIds() {
+        return List.of(oldTabletId);
+    }
+
+    public long getNewTabletId() {
+        return newTabletId;
+    }
+
+    @Override
+    public List<Long> getNewTabletIds() {
+        return List.of(newTabletId);
     }
 
     @Override

@@ -234,7 +234,7 @@ public class TypeSerializer {
     public static TAggStateDesc toThrift(AggStateDesc aggStateDesc) {
         TAggStateDesc tAggStateDesc = new TAggStateDesc();
         tAggStateDesc.setAgg_func_name(Function.rectifyFunctionName(aggStateDesc.getFunctionName()));
-        
+
         List<Type> argTypes = aggStateDesc.getArgTypes();
         for (Type argType : argTypes) {
             TTypeDesc tTypeDesc = new TTypeDesc();
@@ -242,7 +242,7 @@ public class TypeSerializer {
             toThrift(argType, tTypeDesc);
             tAggStateDesc.addToArg_types(tTypeDesc);
         }
-        
+
         tAggStateDesc.setResult_nullable(aggStateDesc.getResultNullable());
         tAggStateDesc.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
 

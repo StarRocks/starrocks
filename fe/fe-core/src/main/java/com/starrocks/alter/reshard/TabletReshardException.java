@@ -17,13 +17,13 @@ package com.starrocks.alter.reshard;
 /*
  * This exception will be thrown when tablet reshard job execution error
  */
-public class TabletReshardJobException extends RuntimeException {
+public class TabletReshardException extends RuntimeException {
 
-    public TabletReshardJobException(String message) {
+    public TabletReshardException(String message) {
         super(message);
     }
 
-    public TabletReshardJobException(String message, Throwable cause) {
+    public TabletReshardException(String message, Throwable cause) {
         super(message, cause);
     }
 }

@@ -21,12 +21,18 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.FindSplitPointRequest;
+import com.starrocks.proto.FindSplitPointResponse;
+import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletRangePB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -36,6 +42,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -44,7 +51,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import javax.validation.constraints.NotNull;
 
-public class TabletReshardJobTest {
+public class SplitTabletJobTest {
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
     private static Database db;
@@ -82,6 +89,26 @@ public class TabletReshardJobTest {
                 return CompletableFuture.completedFuture(task.call());
             }
         };
+
+        new MockUp<MockLakeService>() {
+            @Mock
+            public Future<FindSplitPointResponse> findSplitPoint(FindSplitPointRequest request) {
+                FindSplitPointResponse response = new FindSplitPointResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = TStatusCode.OK.getValue();
+                response.tabletSplitResults = new ArrayList<>(request.tabletSplitInfos.size());
+                for (var tabletSplitInfo : request.tabletSplitInfos) {
+                    var tabletSplitResult = new FindSplitPointResponse.TabletSplitResult();
+                    tabletSplitResult.tabletId = tabletSplitInfo.tabletId;
+                    tabletSplitResult.splitRanges = new ArrayList<>(tabletSplitInfo.splitCount);
+                    for (int i = 0; i < tabletSplitInfo.splitCount; ++i) {
+                        tabletSplitResult.splitRanges.add(new TabletRangePB());
+                    }
+                    response.tabletSplitResults.add(tabletSplitResult);
+                }
+                return CompletableFuture.completedFuture(response);
+            }
+        };
     }
 
     @Test
@@ -94,21 +121,21 @@ public class TabletReshardJobTest {
         Assertions.assertNotNull(tabletReshardJob);
 
         tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.PENDING, tabletReshardJob.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
+
+        tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
         Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, table.getState());
 
         tabletReshardJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
-        Assertions.assertNull(table.getPhysicalPartition(physicalPartition.getId()));
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
-        PhysicalPartition newPhysicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        Assertions.assertTrue(newPhysicalPartition != physicalPartition);
-
-        long newVersion = newPhysicalPartition.getVisibleVersion();
+        long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = newPhysicalPartition.getBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
@@ -140,13 +167,10 @@ public class TabletReshardJobTest {
         tabletReshardJob.replay();
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
-        PhysicalPartition newPhysicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        Assertions.assertTrue(newPhysicalPartition != physicalPartition);
-
-        long newVersion = newPhysicalPartition.getVisibleVersion();
+        long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = newPhysicalPartition.getBaseIndex();
+        MaterializedIndex newMaterializedIndex = physicalPartition.getBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
@@ -193,6 +217,12 @@ public class TabletReshardJobTest {
         clause.setTabletReshardSplitSize(-2);
 
         TabletReshardJobFactory factory = new SplitTabletJobFactory(db, table, clause);
-        return factory.createTabletReshardJob();
+        TabletReshardJob tabletReshardJob = factory.createTabletReshardJob();
+
+        Assertions.assertTrue(tabletReshardJob.getParallelTablets() > 0);
+        Assertions.assertNotNull(tabletReshardJob.toString());
+        Assertions.assertNotNull(tabletReshardJob.getInfo());
+
+        return tabletReshardJob;
     }
 }
