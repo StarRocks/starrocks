@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "exec/range_router.h"
 #include "exec/tablet_sink_index_channel.h"
 
 namespace starrocks {
@@ -36,6 +37,12 @@ public:
                               const std::vector<uint32_t>& record_hashes,
                               const std::vector<uint16_t>& validate_select_idx,
                               std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunk);
+
+    virtual Status send_chunk_by_range(const OlapTableSchemaParam* schema,
+                                       const std::vector<OlapTablePartition*>& partitions,
+                                       const std::vector<uint16_t>& validate_select_idx,
+                                       std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
+                                       Chunk* chunk);
 
     virtual Status try_open(RuntimeState* state);
     virtual Status open_wait();
@@ -68,7 +75,9 @@ public:
     }
 
 protected:
-    Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
+    // Virtual to allow tests or derived senders (e.g. colocate sender) to intercept
+    // how chunks are dispatched to BE nodes.
+    virtual Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
     Status _write_combined_txn_log();
     void _mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool _is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
@@ -106,6 +115,10 @@ protected:
     std::set<int64_t> _failed_channels;
     // mapping from partition id to CombinedTxnLogPB
     std::map<int64_t, CombinedTxnLogPB> _txn_log_map;
+
+private:
+    // index_id -> partition_id -> range router
+    std::unordered_map<int64_t, std::unordered_map<int64_t, std::unique_ptr<RangeRouter>>> _range_checkers;
 };
 
 } // namespace starrocks

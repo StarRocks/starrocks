@@ -297,6 +297,8 @@ struct TOlapTablePartitionParam {
     8: optional list<Exprs.TExpr> partition_exprs
 
     9: optional bool enable_automatic_partition
+    // used for range distribution table to split data into multiple ranges
+    10: optional list<string> range_distribution_columns
 }
 
 struct TOlapTableColumnParam {

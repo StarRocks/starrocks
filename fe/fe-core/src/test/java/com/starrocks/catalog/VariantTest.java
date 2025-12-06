@@ -14,11 +14,15 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.thrift.TTuple;
+import com.starrocks.thrift.TVariant;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -267,6 +271,82 @@ public class VariantTest {
 
         StringVariant v2 = new StringVariant(VarcharType.VARCHAR, "a");
         Assertions.assertTrue(v1.compareTo(v2) < 0);
+    }
+
+    // ==================== Variant.toThrift / Tuple.toThrift Tests ====================
+
+    @Test
+    public void testVariantToThriftNumeric() {
+        Variant intVariant = new IntVariant(IntegerType.INT, 123);
+        TVariant tInt = intVariant.toThrift();
+
+        Assertions.assertTrue(tInt.isSetType());
+        Assertions.assertEquals(TypeSerializer.toThrift(IntegerType.INT), tInt.getType());
+        Assertions.assertTrue(tInt.isSetLong_value());
+        Assertions.assertEquals(123L, tInt.getLong_value());
+        Assertions.assertFalse(tInt.isSetString_value());
+    }
+
+    @Test
+    public void testVariantToThriftBoolean() {
+        Variant boolVariant = new BoolVariant(true);
+        TVariant tBool = boolVariant.toThrift();
+
+        Assertions.assertTrue(tBool.isSetType());
+        Assertions.assertEquals(TypeSerializer.toThrift(BooleanType.BOOLEAN), tBool.getType());
+        Assertions.assertTrue(tBool.isSetLong_value());
+        Assertions.assertEquals(1L, tBool.getLong_value());
+        Assertions.assertFalse(tBool.isSetString_value());
+    }
+
+    @Test
+    public void testVariantToThriftString() {
+        Variant strVariant = new StringVariant(VarcharType.VARCHAR, "hello");
+        TVariant tStr = strVariant.toThrift();
+
+        Assertions.assertTrue(tStr.isSetType());
+        Assertions.assertEquals(TypeSerializer.toThrift(VarcharType.VARCHAR), tStr.getType());
+        Assertions.assertFalse(tStr.isSetLong_value());
+        Assertions.assertTrue(tStr.isSetString_value());
+        Assertions.assertEquals("hello", tStr.getString_value());
+    }
+
+    @Test
+    public void testVariantToThriftDateTime() {
+        Variant dtVariant = new DateVariant(DateType.DATETIME, "2024-01-15T10:30:00");
+        TVariant tDt = dtVariant.toThrift();
+
+        Assertions.assertTrue(tDt.isSetType());
+        Assertions.assertEquals(TypeSerializer.toThrift(DateType.DATETIME), tDt.getType());
+        // Date/time are encoded via string_value in TVariant.
+        Assertions.assertFalse(tDt.isSetLong_value());
+        Assertions.assertTrue(tDt.isSetString_value());
+        Assertions.assertFalse(tDt.getString_value().isEmpty());
+    }
+
+    @Test
+    public void testTupleToThrift() {
+        Variant v1 = new IntVariant(IntegerType.BIGINT, 42L);
+        Variant v2 = new StringVariant(VarcharType.VARCHAR, "world");
+        Tuple tuple = new Tuple(Arrays.asList(v1, v2));
+
+        TTuple tTuple = tuple.toThrift();
+        Assertions.assertEquals(2, tTuple.getValuesSize());
+
+        TVariant t1 = tTuple.getValues().get(0);
+        TVariant t2 = tTuple.getValues().get(1);
+
+        Assertions.assertTrue(t1.isSetLong_value());
+        Assertions.assertEquals(42L, t1.getLong_value());
+
+        Assertions.assertTrue(t2.isSetString_value());
+        Assertions.assertEquals("world", t2.getString_value());
+
+        // Verify that the embedded type descriptors are aligned with original Types.
+        Type type1 = v1.getType();
+        Type type2 = v2.getType();
+        Assertions.assertEquals(TypeSerializer.toThrift(type1), t1.getType());
+        Assertions.assertEquals(TypeSerializer.toThrift(type2), t2.getType());
     }
 
     // ==================== DateVariant Tests ====================

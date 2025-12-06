@@ -272,6 +272,10 @@ public:
 
     Status test_add_partitions(OlapTablePartition* partition);
 
+    const std::vector<SlotDescriptor*>& range_distribution_slot_descs() const { return _range_distribution_slot_descs; }
+
+    bool is_range_distribution() const { return !_range_distribution_slot_descs.empty(); }
+
 private:
     /**
      * @brief  find tablets with range partition table
@@ -336,6 +340,8 @@ private:
     std::map<ChunkRow*, std::vector<int64_t>, PartionKeyComparator> _partitions_map;
 
     Random _rand{(uint32_t)time(nullptr)};
+
+    std::vector<SlotDescriptor*> _range_distribution_slot_descs;
 };
 
 } // namespace starrocks

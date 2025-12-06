@@ -273,6 +273,18 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
     }
 
+    if (_t_param.__isset.range_distribution_columns) {
+        for (auto& col : _t_param.range_distribution_columns) {
+            auto it = slots_map.find(col);
+            if (it == std::end(slots_map)) {
+                std::stringstream ss;
+                ss << "range distributed column not found, columns=" << col;
+                return Status::InternalError(ss.str());
+            }
+            _range_distribution_slot_descs.emplace_back(it->second);
+        }
+    }
+
     // initial partitions
     for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
