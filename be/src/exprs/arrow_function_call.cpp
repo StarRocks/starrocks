@@ -128,6 +128,7 @@ std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_i
         py_func_desc.input_types = context->get_arg_types();
         py_func_desc.return_type = context->get_return_type();
         py_func_desc.content = _fn.content;
+        py_func_desc.driver_id = driver_id;
         return build_py_call_stub(context, py_func_desc);
     }
     return create_error_call_stub(Status::NotFound(fmt::format("unsupported function type:{}", binary_type)));
