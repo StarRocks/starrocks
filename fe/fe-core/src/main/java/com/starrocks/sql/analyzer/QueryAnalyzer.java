@@ -1884,7 +1884,7 @@ public class QueryAnalyzer {
             }
 
             if (table instanceof OlapTable) {
-                ((OlapTable) table).maySetDatabaseName(db.getFullName());
+                ((OlapTable) table).maySetDatabaseId(db.getId());
             }
 
             return table;

@@ -64,14 +64,7 @@ public class CloudNativeFastSchemaEvolutionV2Test extends StarRocksTestBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
         schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
-        schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
-        long startTime = System.currentTimeMillis();
-        while (schemaChangeHandler.isRunning()) {
-            Thread.sleep(100);
-            Assertions.assertTrue(System.currentTimeMillis() - startTime < 60000,
-                    "Schema change handler is not stopped in 60 seconds");
-        }
+        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
         UtFrameUtils.setUpForPersistTest();
     }
 

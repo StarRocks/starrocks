@@ -51,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class MetaUtils {
 
@@ -200,13 +201,19 @@ public class MetaUtils {
         }
     }
 
-    public static long lookupDbIdByTableId(long tableId) {
+    public static long lookupDbIdByTable(OlapTable table) {
+        Optional<Long> dbId = table.mayGetDatabaseId();
+        if (dbId.isPresent()) {
+            return dbId.get();
+        }
+        long tableId = table.getId();
         long res = -1;
         for (Long id : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
             if (db != null &&
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
                 res = db.getId();
+                table.maySetDatabaseId(res);
                 break;
             }
         }
