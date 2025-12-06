@@ -82,7 +82,9 @@ void SpillablePartitionWiseDistinctSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_distinct_op->prepare(state));
+    RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     DCHECK(!_distinct_op->aggregator()->is_none_group_by_exprs());
     _distinct_op->aggregator()->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
@@ -217,6 +219,14 @@ Status SpillablePartitionWiseDistinctSourceOperator::prepare(RuntimeState* state
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     RETURN_IF_ERROR(_non_pw_distinct->prepare(state));
     RETURN_IF_ERROR(_pw_distinct->prepare(state));
+    return Status::OK();
+}
+
+Status SpillablePartitionWiseDistinctSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_distinct->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_distinct->prepare_local_state(state));
+
     return Status::OK();
 }
 

@@ -21,9 +21,15 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-    RETURN_IF_ERROR(_aggregator->open(state));
     _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateDistinctBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    // since prepare_local_state is executed in multi-thread, use a private owned pool to avoid Lock Contention
+    RETURN_IF_ERROR(_aggregator->prepare(state, _object_pool.get(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->open(state));
     return Status::OK();
 }
 

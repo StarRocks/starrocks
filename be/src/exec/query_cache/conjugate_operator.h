@@ -43,6 +43,7 @@ public:
                       pipeline::OperatorPtr source_op);
     ~ConjugateOperator() override = default;
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool has_output() const override;
     bool need_input() const override;
