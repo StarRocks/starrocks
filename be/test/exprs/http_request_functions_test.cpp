@@ -401,7 +401,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3AllowlistWorksTest) {
 PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllowlistTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
-    state.host_allowlist = {"127.0.0.1", "192.168.1.1"};
+    state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
     state.allow_private_in_allowlist = true;  // Must enable this flag
 
     // Private IPs in allowlist should be allowed at level 3 with allow_private_in_allowlist=true
@@ -417,7 +417,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPAllowedWithAllo
 PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutFlagTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
-    state.host_allowlist = {"127.0.0.1", "192.168.1.1"};
+    state.ip_allowlist = {"127.0.0.1", "192.168.1.1"};
     state.allow_private_in_allowlist = false;  // Default: false
 
     // Private IPs in allowlist should be BLOCKED without allow_private_in_allowlist flag
@@ -432,7 +432,8 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel3PrivateIPBlockedWithoutF
 PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
     HttpRequestFunctionState state;
     state.security_level = 4;  // PARANOID
-    state.host_allowlist = {"example.com", "127.0.0.1"};
+    state.ip_allowlist = {"127.0.0.1"};
+    state.host_allowlist_patterns = compile_regex_patterns("example\\.com");
     state.allow_private_in_allowlist = true;
 
     // Level 4: ALL requests are blocked regardless of allowlist or settings
@@ -452,7 +453,7 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityLevel4BlocksAllRequestsTest) {
 PARALLEL_TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
     HttpRequestFunctionState state;
     state.security_level = 3;  // RESTRICTED
-    state.host_allowlist = {"example.com"};
+    state.host_allowlist_patterns = compile_regex_patterns("example\\.com");
 
     // Invalid URL format should be blocked
     auto status1 = validate_host_security("", state);
