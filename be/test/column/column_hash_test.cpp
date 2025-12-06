@@ -58,13 +58,16 @@ public:
     void TearDown() override {}
 
     void test_hash_function(const ColumnPtr& column, uint32_t from, uint32_t to) {
+        if (GetParam().hash_func == murmur_hash3_x86_32_column &&
+            !(column->is_date() || column->get_name().starts_with("int"))) {
+            GTEST_SKIP() << "MurmurHash3 column hash is skipped due to it doesn't support these types.";
+        }
         std::vector<uint32_t> hashes(to - from, 0);
         GetParam().hash_func(*column, hashes.data(), from, to);
 
         // Verify all hashes are computed (non-zero for non-empty columns)
         for (size_t i = 0; i < hashes.size(); ++i) {
-            // TODO: murmur hash is werid
-            if (!column->is_null(i) && GetParam().hash_func != murmur_hash3_x86_32_column) {
+            if (!column->is_null(i)) {
                 ASSERT_NE(0, hashes[i]) << "column: " << column->debug_string();
             }
         }

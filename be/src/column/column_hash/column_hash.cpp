@@ -178,7 +178,7 @@ public:
                 } else {
                     // for decimal/timestamp type, the storage is very different from iceberg,
                     // and consider they are merely used, these types are forbidden by fe
-                    return Status::NotSupported("Unsupported type for MurmurHash3");
+                    DCHECK(false) << "Unsupported type for MurmurHash3: " << std::type_index(typeid(T)).name();
                 }
                 *hash = hash_value;
             } else {
