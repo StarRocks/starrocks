@@ -54,7 +54,12 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class StatisticsExecutorTest extends PlanTestBase {
     @BeforeAll
@@ -331,5 +336,54 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
         connectContext.setCurrentWarehouse("default_warehouse");
         FeConstants.enableUnitStatistics = true;
+    }
+
+    @Test
+    public void testCancelAnalyzeDuringExecution() throws Exception {
+        CountDownLatch taskStarted = new CountDownLatch(1);
+        AtomicBoolean analyzeCancelled = new AtomicBoolean(false);
+
+        // Mock executeAnalyze to block execution
+        // This will be called by CancelableAnalyzeTask in the background thread pool
+        new MockUp<StmtExecutor>() {
+            @Mock
+            protected void executeAnalyze(com.starrocks.sql.ast.AnalyzeStmt analyzeStmt,
+                                          com.starrocks.statistic.AnalyzeStatus analyzeStatus,
+                                          com.starrocks.catalog.Database db,
+                                          com.starrocks.catalog.Table table) {
+                taskStarted.countDown();
+                try {
+                    // Block here - when cancel() is called, it will interrupt this thread
+                    // via cancelableTask.cancel(true), causing await() to throw InterruptedException
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    analyzeCancelled.set(true);
+                    Thread.currentThread().interrupt();
+                    // Re-throw to let CancelableAnalyzeTask handle it
+                    throw new RuntimeException("Task interrupted", e);
+                }
+            }
+        };
+
+        // Execute ANALYZE in a separate thread (simulating client connection)
+        Thread analyzeThread = new Thread(() -> {
+            try {
+                connectContext.executeSql("ANALYZE TABLE t0_stats");
+            } catch (InterruptedException ignored) {
+            } catch (Exception e) {
+                Assertions.fail(e);
+            }
+        });
+        analyzeThread.start();
+
+        // Wait for task to start executing in background thread pool
+        assertTrue(taskStarted.await(5, TimeUnit.SECONDS), "Task should start executing");
+
+        // Wait for main thread to finish (it should exit due to InterruptedException)
+        analyzeThread.interrupt();
+        analyzeThread.join(5000);
+
+        // Verify task is cancelled in finally block
+        assertTrue(analyzeCancelled.get(), "the analyze task should be cancelled");
     }
 }
