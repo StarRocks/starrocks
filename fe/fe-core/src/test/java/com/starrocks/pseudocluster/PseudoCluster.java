@@ -411,8 +411,9 @@ public class PseudoCluster {
                         "autoReconnect=true&failOverReadOnly=false&maxReconnects=10");
         dataSource.setUsername("root");
         dataSource.setPassword("");
-        dataSource.setMaxTotal(40);
-        dataSource.setMaxIdle(40);
+        // Reduce connection pool size for UT to minimize thread usage
+        dataSource.setMaxTotal(10);
+        dataSource.setMaxIdle(5);
         cluster.dataSource = dataSource;
 
         ThriftConnectionPool.beHeartbeatPool = cluster.heartBeatPool;
