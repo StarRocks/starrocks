@@ -157,6 +157,7 @@ vectorized_functions = [
     [102871, "least", True, False, "DECIMAL64", ["DECIMAL64", "..."], "MathFunctions::least<TYPE_DECIMAL64>"],
     [102872, "least", True, False, "DECIMAL128", ["DECIMAL128", "..."], "MathFunctions::least<TYPE_DECIMAL128>"],
     [10288, "least", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::least<TYPE_DATETIME>"],
+    [102880, "least", True, False, "DATE", ["DATE", "..."], "MathFunctions::least<TYPE_DATE>"],
     [10289, "least", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::least<TYPE_VARCHAR>"],
 
     [10290, "greatest", True, False, "TINYINT", ["TINYINT", "..."], "MathFunctions::greatest<TYPE_TINYINT>"],
@@ -171,6 +172,7 @@ vectorized_functions = [
     [102971, "greatest", True, False, "DECIMAL64", ["DECIMAL64", "..."], "MathFunctions::greatest<TYPE_DECIMAL64>"],
     [102972, "greatest", True, False, "DECIMAL128", ["DECIMAL128", "..."], "MathFunctions::greatest<TYPE_DECIMAL128>"],
     [10298, "greatest", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::greatest<TYPE_DATETIME>"],
+    [102980, "greatest", True, False, "DATE", ["DATE", "..."], "MathFunctions::greatest<TYPE_DATE>"],
     [10299, "greatest", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::greatest<TYPE_VARCHAR>"],
 
     [10300, "rand", True, False, "DOUBLE", [], "MathFunctions::rand", "MathFunctions::rand_prepare",
