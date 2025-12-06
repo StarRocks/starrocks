@@ -87,6 +87,7 @@ information_schema	tables	TABLE_COLLATION	18
 information_schema	tables	CHECKSUM	19
 information_schema	tables	CREATE_OPTIONS	20
 information_schema	tables	TABLE_COMMENT	21
+information_schema	tables	CREATOR	22
 information_schema	table_privileges	GRANTEE	1
 information_schema	table_privileges	TABLE_CATALOG	2
 information_schema	table_privileges	TABLE_SCHEMA	3
