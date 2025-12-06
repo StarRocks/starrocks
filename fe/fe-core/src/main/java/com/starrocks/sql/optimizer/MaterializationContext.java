@@ -572,11 +572,20 @@ public class MaterializationContext {
         }
     }
 
+    /**
+     * NOTE: This method should be called after mv's compensate has been initialized.
+     */
     public MVCompensation getMvCompensation(OptExpression queryExpression) {
+        // if there is only one compensation, return it directly
+        if (queryToMVCompensationMap.size() == 1) {
+            return queryToMVCompensationMap.values().iterator().next();
+        }
+        // otherwise, get the specific compensation for this query expression
         return getOrInitMVCompensation(queryExpression);
     }
 
     /**
+     * NOTE: This method should be called after mv's compensate has been initialized.
      * Check the mv context can be used for rewrite:
      * - if mv compensation's state is no rewrite, return false
      * - if mv compensation's state is unkwown & check mode is checked, return false
@@ -593,12 +602,15 @@ public class MaterializationContext {
                     }
                 }).reduce(0, Integer::sum);
         int compensationSize = queryToMVCompensationMap.size();
+        // if all compensations are no rewrite, return true
         if (score == compensationSize) {
             return true;
         }
+        // if some compensations are no rewrite, return false
         if (score == 0) {
             return false;
         }
+        // mixed case, need to check the specific compensation for this query expression
         MVCompensation mvCompensation = getOrInitMVCompensation(queryExpression);
         return isMVCompensateNoRewrite(mvCompensation);
     }
