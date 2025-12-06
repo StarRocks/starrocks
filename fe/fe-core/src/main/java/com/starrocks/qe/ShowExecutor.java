@@ -81,6 +81,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -452,34 +453,83 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowDatabasesStatement(ShowDbStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
-            List<String> dbNames;
-            String catalogName;
-            if (statement.getCatalogName() == null) {
-                catalogName = context.getCurrentCatalog();
-            } else {
-                catalogName = statement.getCatalogName();
-            }
-            dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames(context, catalogName);
-
+            
             PatternMatcher matcher = null;
             if (statement.getPattern() != null) {
                 matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                         CaseSensibility.DATABASE.getCaseSensibility());
             }
+            
             Set<String> dbNameSet = Sets.newTreeSet();
-            for (String dbName : dbNames) {
-                // Filter dbname
-                if (matcher != null && !matcher.match(dbName)) {
-                    continue;
+            
+            // Check if cross-catalog listing is enabled and no specific catalog is requested
+            // Only do cross-catalog listing when user is in the default/internal catalog
+            // When user connects to an external catalog (via database field), show only that catalog's databases
+            String currentCatalog = context.getCurrentCatalog();
+            boolean inExternalCatalog = !CatalogMgr.isInternalCatalog(currentCatalog);
+            boolean crossCatalogEnabled = Config.enable_cross_catalog_database_list 
+                    && statement.getCatalogName() == null 
+                    && !inExternalCatalog;
+            
+            if (crossCatalogEnabled) {
+                // List databases from all catalogs
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+                
+                List<String> allCatalogNames = Lists.newArrayList();
+                allCatalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                // Add external catalogs, filtering out resource mapping catalogs
+                catalogMgr.getCatalogs().keySet().stream()
+                        .filter(name -> !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(name))
+                        .forEach(allCatalogNames::add);
+                
+                for (String catalog : allCatalogNames) {
+                    try {
+                        List<String> dbNames = globalStateMgr.getMetadataMgr().listDbNames(context, catalog);
+                        for (String dbName : dbNames) {
+                            // For cross-catalog mode, use "catalog.database" format
+                            String qualifiedName = catalog + "." + dbName;
+                            if (matcher != null && !matcher.match(qualifiedName)) {
+                                continue;
+                            }
+                            
+                            try {
+                                Authorizer.checkAnyActionOnOrInDb(context, catalog, dbName);
+                            } catch (AccessDeniedException e) {
+                                continue;
+                            }
+                            
+                            dbNameSet.add(qualifiedName);
+                        }
+                    } catch (Exception e) {
+                        // Log but continue with other catalogs if one fails
+                        LOG.warn("Failed to list databases from catalog {}: {}", catalog, e.getMessage());
+                    }
                 }
-
-                try {
-                    Authorizer.checkAnyActionOnOrInDb(context, catalogName, dbName);
-                } catch (AccessDeniedException e) {
-                    continue;
+            } else {
+                // Original single-catalog behavior
+                String catalogName;
+                if (statement.getCatalogName() == null) {
+                    catalogName = context.getCurrentCatalog();
+                } else {
+                    catalogName = statement.getCatalogName();
                 }
+                List<String> dbNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames(context, catalogName);
+                
+                for (String dbName : dbNames) {
+                    // Filter dbname
+                    if (matcher != null && !matcher.match(dbName)) {
+                        continue;
+                    }
 
-                dbNameSet.add(dbName);
+                    try {
+                        Authorizer.checkAnyActionOnOrInDb(context, catalogName, dbName);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    dbNameSet.add(dbName);
+                }
             }
 
             for (String dbName : dbNameSet) {

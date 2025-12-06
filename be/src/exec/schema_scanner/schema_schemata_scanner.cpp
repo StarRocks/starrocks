@@ -68,8 +68,12 @@ Status SchemaSchemataScanner::fill_chunk(ChunkPtr* chunk) {
             // catalog
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
-                const char* str = "def";
-                Slice value(str, strlen(str));
+                // Use actual catalog name from response if available, otherwise fallback to "def"
+                std::string catalog_name = "def";
+                if (_db_result.__isset.catalogs && _db_index < _db_result.catalogs.size()) {
+                    catalog_name = _db_result.catalogs[_db_index];
+                }
+                Slice value(catalog_name.c_str(), catalog_name.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
