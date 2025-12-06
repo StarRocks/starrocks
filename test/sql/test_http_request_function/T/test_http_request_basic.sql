@@ -15,7 +15,10 @@
 --     password VARCHAR       -- Default: ''
 --   ) -> VARCHAR
 
--- Test 1: NULL input returns NULL
+-- Setup: Allow external API hosts for basic functional tests
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|httpbin\\.org");
+
+-- Test 1: NULL input returns error (required parameter cannot be NULL)
 SELECT http_request(url => NULL);
 
 -- Test 2: Empty string returns JSON with error
@@ -241,3 +244,6 @@ SELECT json_query(http_request(
     url => 'https://httpbin.org/get',
     method => 'GeT'
 ), '$.status') as status;
+
+-- Cleanup: Reset allowlist to default (empty)
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");

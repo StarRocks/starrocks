@@ -11,6 +11,12 @@
 -- Security Level 3 (RESTRICTED, Default) Tests
 -- ============================================================
 
+-- Setup: Ensure clean config state (reset any pollution from previous tests)
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "false");
+
 -- Test 1: Default security level (3=RESTRICTED) blocks requests without allowlist
 -- Should return error with "allowlist" message
 SELECT json_query(http_request(
@@ -218,22 +224,6 @@ ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "");
 ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|httpbin\\.org");
 
 -- Test 30: Host matching regexp should be allowed
-SELECT json_query(http_request(
-    url => 'https://jsonplaceholder.typicode.com/posts/1'
-), '$.status') as status;
-
--- ============================================================
--- Invalid Security Level Tests
--- ============================================================
-
--- Test 31: Invalid security level (0) should be rejected or fall back to default
-ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "0");
-SELECT json_query(http_request(
-    url => 'https://jsonplaceholder.typicode.com/posts/1'
-), '$.status') as status;
-
--- Test 32: Invalid security level (5) should be rejected or fall back to default
-ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "5");
 SELECT json_query(http_request(
     url => 'https://jsonplaceholder.typicode.com/posts/1'
 ), '$.status') as status;

@@ -248,6 +248,20 @@ public class ConfigBase {
                             "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
+            case "http_request_allow_private_in_allowlist":
+                if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
+                    throw new InvalidConfException(
+                            "'http_request_allow_private_in_allowlist' must be 'true' or 'false'. Current value: "
+                                    + confVal);
+                }
+                break;
+            case "http_request_ssl_verification_required":
+                if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
+                    throw new InvalidConfException(
+                            "'http_request_ssl_verification_required' must be 'true' or 'false'. Current value: "
+                                    + confVal);
+                }
+                break;
             case "http_request_security_level":
                 int securityLevel = Integer.parseInt(confVal);
                 if (securityLevel < 1 || securityLevel > 4) {
