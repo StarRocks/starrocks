@@ -248,6 +248,66 @@ public class ConfigBase {
                             "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
+            case "http_request_allow_private_in_allowlist":
+                if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
+                    throw new InvalidConfException(
+                            "'http_request_allow_private_in_allowlist' must be 'true' or 'false'. Current value: "
+                                    + confVal);
+                }
+                break;
+            case "http_request_ssl_verification_required":
+                if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
+                    throw new InvalidConfException(
+                            "'http_request_ssl_verification_required' must be 'true' or 'false'. Current value: "
+                                    + confVal);
+                }
+                break;
+            case "http_request_security_level":
+                int securityLevel = Integer.parseInt(confVal);
+                if (securityLevel < 1 || securityLevel > 4) {
+                    throw new InvalidConfException("'http_request_security_level' must be between 1 and 4. " +
+                            "1=TRUSTED, 2=PUBLIC, 3=RESTRICTED, 4=PARANOID. Current value: " + confVal);
+                }
+                break;
+            case "http_request_ip_allowlist":
+                // Validate comma-separated IPv4 address list
+                // Valid: "192.168.1.1" or "10.0.0.1, 172.16.0.1"
+                if (!confVal.isEmpty()) {
+                    String ipv4Pattern = "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$";
+                    String[] ips = confVal.split(",");
+                    for (String ip : ips) {
+                        String trimmed = ip.trim();
+                        if (trimmed.isEmpty()) {
+                            throw new InvalidConfException(
+                                    "Invalid 'http_request_ip_allowlist': empty value between commas. " +
+                                            "Current value: '" + confVal + "'");
+                        }
+                        if (!trimmed.matches(ipv4Pattern)) {
+                            throw new InvalidConfException(
+                                    "Invalid 'http_request_ip_allowlist': '" + trimmed + "' is not a valid IPv4 address. " +
+                                            "Expected format: '192.168.1.1' or '10.0.0.1,172.16.0.1'");
+                        }
+                    }
+                }
+                break;
+            case "http_request_host_allowlist_regexp":
+                // Validate each regex pattern in comma-separated list
+                if (!confVal.isEmpty()) {
+                    String[] patterns = confVal.split(",");
+                    for (String pattern : patterns) {
+                        String trimmed = pattern.trim();
+                        if (!trimmed.isEmpty()) {
+                            try {
+                                Pattern.compile(trimmed);
+                            } catch (Exception e) {
+                                throw new InvalidConfException(
+                                        "'http_request_host_allowlist_regexp' contains invalid regex pattern '" +
+                                                trimmed + "': " + e.getMessage());
+                            }
+                        }
+                    }
+                }
+                break;
             default:
                 break;
         }

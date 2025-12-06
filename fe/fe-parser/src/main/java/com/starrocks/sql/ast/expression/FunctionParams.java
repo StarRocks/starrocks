@@ -107,6 +107,73 @@ public class FunctionParams {
         return exprs;
     }
 
+    public void appendPositionalDefaultArgExprs(Function fn) {
+        List<Expr> lastDefaults = fn.getLastDefaultsFromN(exprs.size());
+        if (lastDefaults != null) {
+            exprs.addAll(lastDefaults);
+        }
+    }
+
+    public void reorderNamedArgAndAppendDefaults(Function fn) {
+        String[] names = fn.getArgNames();
+        Preconditions.checkState(names != null && names.length >= exprsNames.size());
+        String[] newNames = new String[names.length];
+        Expr[] newExprs = new Expr[names.length];
+        int defaultNum = 0;
+        for (int j = 0; j < names.length; j++) {
+            for (int i = 0; i < exprsNames.size(); i++) {
+                if (exprsNames.get(i).equals(names[j])) {
+                    newNames[j] = exprsNames.get(i);
+                    newExprs[j] = exprs.get(i);
+                    break;
+                }
+            }
+            if (newExprs[j] == null) {
+                newExprs[j] = fn.getDefaultNamedExpr(names[j]);
+                newNames[j] = names[j];
+                Preconditions.checkState(newExprs[j] != null);
+                defaultNum++;
+            }
+        }
+        Preconditions.checkState(defaultNum + exprsNames.size() == names.length);
+        exprs = Arrays.asList(newExprs);
+        exprsNames = Arrays.asList(newNames);
+    }
+
+    /**
+     * Append default values for positional arguments.
+     * This method is used when calling a function that has named arguments support
+     * using positional arguments syntax.
+     * @param fn the function definition with named arguments
+     */
+    public void appendDefaultsForPositionalArgs(Function fn) {
+        String[] names = fn.getArgNames();
+        Preconditions.checkState(names != null && names.length >= exprs.size());
+        int providedCount = exprs.size();
+        // Create a new mutable list if the current list is not modifiable
+        List<Expr> newExprs = new java.util.ArrayList<>(exprs);
+        // Append default values for remaining parameters
+        for (int i = providedCount; i < names.length; i++) {
+            Expr defaultExpr = fn.getDefaultNamedExpr(names[i]);
+            Preconditions.checkState(defaultExpr != null,
+                    "Missing default value for parameter: " + names[i]);
+            newExprs.add(defaultExpr);
+        }
+        exprs = newExprs;
+    }
+
+    public String getNamedArgStr() {
+        Preconditions.checkState(exprs.size() == exprsNames.size());
+        String result = "";
+        for (int i = 0; i < exprs.size(); i++) {
+            if (i != 0) {
+                result = result.concat(",");
+            }
+            result = result.concat(exprsNames.get(i) + "=>" + ExprToSql.toSql(exprs.get(i)));
+        }
+        return result;
+    }
+
     public void setIsDistinct(boolean v) {
         isDistinct = v;
     }
