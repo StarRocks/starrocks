@@ -16,8 +16,11 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -26,6 +29,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Map;
 import java.util.UUID;
 
@@ -159,6 +164,21 @@ public class HiveWriteUtils {
             LOG.error("Failed to create remote path {}", path, e);
             throw new StarRocksConnectorException("Failed to create remote path: " + path);
         }
+    }
+    
+    public static LiteralExpr normalizeKey(LiteralExpr key) {
+        if (!(key instanceof DecimalLiteral)) {
+            return key;
+        }
+
+        DecimalLiteral decimalKey = (DecimalLiteral) key;
+        ScalarType type = (ScalarType) key.getType();
+        int scale = type.decimalScale();
+
+        BigDecimal scaled = decimalKey.getValue()
+                .setScale(scale, RoundingMode.HALF_UP);
+
+        return new DecimalLiteral(scaled);
     }
 
 }

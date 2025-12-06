@@ -13,11 +13,17 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 
 import java.util.List;
 import java.util.Map;
@@ -54,5 +60,39 @@ public class HivePartitionTraits extends DefaultTraits {
                 partitionNameWithPartition.values().stream()
                         .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
                         .max(Long::compareTo);
+    }
+
+    @Override
+    public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
+        Preconditions.checkState(values.size() == types.size(),
+                "columns size is %s, but values size is %s", types.size(), values.size());
+
+        PartitionKey partitionKey = createEmptyKey();
+
+        // change string value to LiteralExpr,
+        for (int i = 0; i < values.size(); i++) {
+            String rawValue = values.get(i);
+            Type type = types.get(i);
+            LiteralExpr exprValue;
+            // rawValue could be null for delta table
+            if (rawValue == null) {
+                rawValue = "null";
+            }
+            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
+                partitionKey.setNullPartitionValue(rawValue);
+                exprValue = NullLiteral.create(type);
+            } else {
+                exprValue = LiteralExpr.create(rawValue, type);
+            }
+            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
+        }
+
+        for (int i = 0; i < types.size(); i++) {
+            LiteralExpr exprValue = partitionKey.getKeys().get(i);
+            if (exprValue.getType().isDecimalV3()) {
+                exprValue.setType(types.get(i)); //keep the precision and scale.
+            }
+        }
+        return partitionKey;
     }
 }

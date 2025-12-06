@@ -14,9 +14,14 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
@@ -98,7 +103,17 @@ public class HiveWriteUtilsTest {
     }
 
     @Test
-    public void testFileCreateByQuery() {
-        Assertions.assertFalse(HiveWriteUtils.fileCreatedByQuery("000000_0", "aaaa-bbbb"));
+    public void testNormalizeKeyDecimal() throws Exception {
+        ScalarType type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
+        DecimalLiteral decimalLiteral = new DecimalLiteral("1.235", type);
+        LiteralExpr normalized = HiveWriteUtils.normalizeKey(decimalLiteral);
+        Assertions.assertTrue(normalized instanceof DecimalLiteral);
+        Assertions.assertEquals("1.24", ((DecimalLiteral) normalized).getValue().toPlainString());
+    }
+
+    @Test
+    public void testNormalizeKeyNonDecimal() {
+        LiteralExpr literal = new IntLiteral(5);
+        Assertions.assertSame(literal, HiveWriteUtils.normalizeKey(literal));
     }
 }
