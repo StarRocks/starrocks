@@ -15,6 +15,16 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/gen_cpp")
 
 set (GEN_CPP_DIR ${GENSRC_DIR}/gen_cpp)
+
+# On macOS we bundle pre-generated thrift sources under src/gen_cpp because
+# the gensrc makefiles depend on Linux-only toolchains. When those generated
+# sources are unavailable in ${GENSRC_DIR}/gen_cpp fall back to the checked-in
+# copies so that the build can still link the thrift definitions.
+if (NOT EXISTS "${GEN_CPP_DIR}/AgentService_types.cpp")
+    message(WARNING "Generated thrift sources not found in ${GEN_CPP_DIR}; "
+                    "falling back to ${SRC_DIR}/gen_cpp")
+    set(GEN_CPP_DIR "${SRC_DIR}/gen_cpp")
+endif()
 set(SRC_FILES
     ${SRC_DIR}/gen_cpp/thrift_types_customize_impl.cpp
     ${GEN_CPP_DIR}/AgentService_types.cpp

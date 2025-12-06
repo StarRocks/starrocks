@@ -117,8 +117,16 @@ fi
 export HOMEBREW_PREFIX="/opt/homebrew"
 export CC="$HOMEBREW_PREFIX/opt/llvm/bin/clang"
 export CXX="$HOMEBREW_PREFIX/opt/llvm/bin/clang++"
-export AR="$HOMEBREW_PREFIX/opt/llvm/bin/llvm-ar"
-export RANLIB="$HOMEBREW_PREFIX/opt/llvm/bin/llvm-ranlib"
+# Always rely on the system binutils to emit proper Mach-O archives on macOS
+export AR="/usr/bin/ar"
+export RANLIB="/usr/bin/ranlib"
+export STRIP="/usr/bin/strip"
+# Helper used by every CMake project to force system binutils (prevents corrupt Mach-O archives)
+cmake_toolchain_args=(
+    -DCMAKE_AR="$AR"
+    -DCMAKE_RANLIB="$RANLIB"
+    -DCMAKE_STRIP="$STRIP"
+)
 export OPENSSL_ROOT_DIR="$HOMEBREW_PREFIX/opt/openssl@3"
 export PKG_CONFIG_PATH="$OPENSSL_ROOT_DIR/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 export CFLAGS="-march=armv8-a -O3"
@@ -372,6 +380,7 @@ build_gflags() {
     mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -424,6 +433,7 @@ build_glog() {
     mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -506,12 +516,34 @@ build_boost() {
             --without-libraries=python
     fi
 
+    # Ensure project-config.jam always forces the system binutils when b2 runs
+    local project_config="$PWD/project-config.jam"
+    local boost_toolset_id="starrocks"
+    if [[ -f "$project_config" && -z ${STARROCKS_BOOST_TOOLCHAIN_PATCHED:-} ]]; then
+        if ! grep -q "STARROCKS_BOOST_TOOLCHAIN" "$project_config"; then
+            log_info "Patching project-config.jam to force /usr/bin/ar and /usr/bin/ranlib"
+            cat >>"$project_config" <<'EOF'
+
+# STARROCKS_BOOST_TOOLCHAIN: ensure Boost.Build uses macOS system binutils so
+# the produced archives are valid Mach-O files.
+using clang
+    : starrocks
+    : /opt/homebrew/opt/llvm/bin/clang++
+    : <archiver>/usr/bin/ar
+      <ranlib>/usr/bin/ranlib
+      <striper>/usr/bin/strip
+    ;
+EOF
+        fi
+        export STARROCKS_BOOST_TOOLCHAIN_PATCHED=1
+    fi
+
     # Build boost with static linking and C++11
     # Use clang from homebrew LLVM for the actual libraries (ABI compatibility with StarRocks)
     # Exclude contract library due to compatibility issues with newer Clang on macOS ARM64
     log_info "Building boost libraries (this may take a while)..."
     ./b2 \
-        toolset=clang \
+        toolset=clang-${boost_toolset_id} \
         link=static \
         runtime-link=static \
         threading=multi \
@@ -526,6 +558,8 @@ build_boost() {
         --without-graph_parallel \
         --without-python \
         --without-contract \
+        -sAR="$AR" \
+        -sRANLIB="$RANLIB" \
         -j"$PARALLEL_JOBS" \
         install
 
@@ -593,8 +627,8 @@ build_protobuf() {
         # Create a combined libprotobuf with the shim
         cd "$INSTALL_DIR/lib"
         cp libprotobuf.a libprotobuf.a.backup
-        ar rcs libprotobuf.a "$shim_obj"
-        ranlib libprotobuf.a 2>/dev/null || true
+        /usr/bin/ar rcs libprotobuf.a "$shim_obj"
+        /usr/bin/ranlib libprotobuf.a 2>/dev/null || true
         rm -f libprotobuf.a.backup
     fi
 
@@ -870,6 +904,7 @@ build_brpc() {
     fi
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
@@ -941,6 +976,7 @@ build_rocksdb() {
     mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -993,6 +1029,7 @@ build_velocypack() {
     mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -1358,6 +1395,7 @@ build_vectorscan() {
     log_info "Using Boost version $boost_version"
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -1406,7 +1444,7 @@ __hash_memory(const void* __ptr, size_t __size) noexcept
 EOF
         local shim_obj="$build_dir/hash_memory_shim.o"
         $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
-        ( cd "$INSTALL_DIR/lib" && ar rcs libhs.a "$shim_obj" && ranlib libhs.a 2>/dev/null || true )
+        ( cd "$INSTALL_DIR/lib" && /usr/bin/ar rcs libhs.a "$shim_obj" && /usr/bin/ranlib libhs.a 2>/dev/null || true )
         log_success "Injected hash_memory shim into libhs.a"
     fi
 
@@ -1497,6 +1535,7 @@ build_simdutf() {
     mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_INSTALL_LIBDIR=lib \
@@ -1539,6 +1578,7 @@ build_fmt() {
     mkdir -p cmake_build && cd cmake_build
 
     cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_INSTALL_LIBDIR=lib \
@@ -1682,6 +1722,7 @@ build_croaringbitmap() {
 
     # Try to build with CPM first, fallback to simple build if it fails
     if ! cmake .. \
+        "${cmake_toolchain_args[@]}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -1792,7 +1833,7 @@ __hash_memory(const void* __ptr, size_t __size) noexcept
 EOF
             local shim_obj="$build_dir/hash_memory_shim.o"
             $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
-            ( cd "$INSTALL_DIR/lib" && ar rcs libroaring.a "$shim_obj" && ranlib libroaring.a 2>/dev/null || true )
+            ( cd "$INSTALL_DIR/lib" && /usr/bin/ar rcs libroaring.a "$shim_obj" && /usr/bin/ranlib libroaring.a 2>/dev/null || true )
             log_success "Injected hash_memory shim into libroaring.a"
 
             # Verify installation
@@ -1843,7 +1884,7 @@ __hash_memory(const void* __ptr, size_t __size) noexcept
 EOF
             local shim_obj="$build_dir/hash_memory_shim.o"
             $CXX $CXXFLAGS -c "$shim_src" -o "$shim_obj"
-            ( cd "$INSTALL_DIR/lib" && ar rcs libroaring.a "$shim_obj" && ranlib libroaring.a 2>/dev/null || true )
+            ( cd "$INSTALL_DIR/lib" && /usr/bin/ar rcs libroaring.a "$shim_obj" && /usr/bin/ranlib libroaring.a 2>/dev/null || true )
             log_success "Injected hash_memory shim into libroaring.a"
         fi
     fi

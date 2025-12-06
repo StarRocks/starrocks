@@ -128,7 +128,9 @@ public:
 };
 
 // see details about ABI compatibility issue https://github.com/StarRocks/starrocks/issues/233
-#if _GLIBCXX_USE_CXX11_ABI
+// For libc++ (macOS) `_GLIBCXX_USE_CXX11_ABI` is undefined, but the optimized RawString is still safe.
+// Only guard against the legacy libstdc++ ABI where the macro exists and is 0.
+#if !defined(_GLIBCXX_USE_CXX11_ABI) || _GLIBCXX_USE_CXX11_ABI
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
 #else

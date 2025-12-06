@@ -101,8 +101,32 @@ set(STARROCKS_THIRDPARTY "$ENV{STARROCKS_THIRDPARTY}")
 set(SRC_DIR "${BASE_DIR}/src")
 set(GENSRC_DIR "${SRC_DIR}/gen_cpp/build")
 set(GENCODE_DIR "${GENSRC_DIR}/gen_cpp")
+set(GEN_THRIFT_SENTINEL "${GENCODE_DIR}/AgentService_types.cpp")
+
+# On macOS we copy pre-generated thrift/protobuf sources into be/src/gen_cpp.
+# When gensrc/build is unavailable (common outside Linux), fall back to the
+# checked-in copies so the linker still sees the thrift symbol definitions.
+if(NOT EXISTS "${GENCODE_DIR}")
+    message(WARNING "Generated C++ sources directory not found at ${GENCODE_DIR}; "
+                    "falling back to ${SRC_DIR}/gen_cpp")
+    set(GENSRC_DIR "${SRC_DIR}/gen_cpp")
+    set(GENCODE_DIR "${GENSRC_DIR}")
+    set(GEN_THRIFT_SENTINEL "${GENCODE_DIR}/AgentService_types.cpp")
+elseif(NOT EXISTS "${GEN_THRIFT_SENTINEL}")
+    message(WARNING "Generated thrift outputs missing in ${GENCODE_DIR}; "
+                    "falling back to ${SRC_DIR}/gen_cpp")
+    set(GENSRC_DIR "${SRC_DIR}/gen_cpp")
+    set(GENCODE_DIR "${GENSRC_DIR}")
+    set(GEN_THRIFT_SENTINEL "${GENCODE_DIR}/AgentService_types.cpp")
+endif()
+
 if(NOT EXISTS "${GENCODE_DIR}")
     message(FATAL_ERROR "Generated C++ sources directory not found: ${GENCODE_DIR}")
+endif()
+
+if(NOT EXISTS "${GEN_THRIFT_SENTINEL}")
+    message(FATAL_ERROR "Unable to locate thrift sources (expected ${GEN_THRIFT_SENTINEL}). "
+                        "Please run gensrc build or sync pre-generated files.")
 endif()
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
 set(OUTPUT_DIR "${BASE_DIR}/output")
