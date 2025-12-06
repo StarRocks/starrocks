@@ -49,9 +49,16 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
+
+    // Add .gz extension for compressed CSV files
+    std::string file_suffix = boost::to_lower_copy(ctx->format);
+    if (boost::iequals(ctx->format, formats::CSV) && ctx->compression_type == TCompressionType::GZIP) {
+        file_suffix += ".gz";
+    }
+
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
-            boost::to_lower_copy(ctx->format));
+            file_suffix);
 
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
