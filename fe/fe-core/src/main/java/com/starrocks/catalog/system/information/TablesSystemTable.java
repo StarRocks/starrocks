@@ -19,6 +19,7 @@ import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
+import com.starrocks.common.Config;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
@@ -166,7 +167,17 @@ public class TablesSystemTable extends SystemTable {
                     params.setTable_name(value.getVarchar());
                     break;
                 case "TABLE_SCHEMA":
-                    authInfo.setPattern(value.getVarchar());
+                    String schemaValue = value.getVarchar();
+                    // Handle catalog.database format when cross-catalog discovery is enabled
+                    if (Config.enable_cross_catalog_database_list && schemaValue.contains(".")) {
+                        int dotIndex = schemaValue.indexOf(".");
+                        String catalogName = schemaValue.substring(0, dotIndex);
+                        String dbName = schemaValue.substring(dotIndex + 1);
+                        authInfo.setCatalog_name(catalogName);
+                        authInfo.setPattern(dbName);
+                    } else {
+                        authInfo.setPattern(schemaValue);
+                    }
                     break;
                 default:
                     throw new NotImplementedException("unsupported column: " + name);

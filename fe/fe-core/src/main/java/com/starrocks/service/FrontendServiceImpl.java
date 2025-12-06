@@ -150,6 +150,7 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -436,11 +437,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-        if (params.isSetCatalog_name()) {
-            catalogName = params.getCatalog_name();
-        }
-
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
@@ -452,25 +448,79 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         context.setCurrentRoleIds(currentUser);
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
-        LOG.debug("get db names: {}", dbNames);
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
 
         List<String> dbs = new ArrayList<>();
-        for (String fullName : dbNames) {
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
-                continue;
+        List<String> catalogs = new ArrayList<>();
+
+        // Check if cross-catalog listing is enabled and no specific catalog is requested
+        boolean crossCatalogEnabled = Config.enable_cross_catalog_database_list && !params.isSetCatalog_name();
+
+        if (crossCatalogEnabled) {
+            // List databases from all catalogs
+            List<String> allCatalogNames = new ArrayList<>();
+            allCatalogNames.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            // Add external catalogs, filtering out resource mapping catalogs
+            catalogMgr.getCatalogs().keySet().stream()
+                    .filter(name -> !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(name))
+                    .forEach(allCatalogNames::add);
+
+            for (String catalog : allCatalogNames) {
+                try {
+                    List<String> dbNames = metadataMgr.listDbNames(context, catalog);
+                    for (String fullName : dbNames) {
+                        final String db = ClusterNamespace.getNameFromFullName(fullName);
+                        // For cross-catalog mode, match pattern against "catalog.database" format
+                        String qualifiedName = catalog + "." + db;
+                        if (!PatternMatcher.matchPattern(params.getPattern(), qualifiedName, matcher, caseSensitive)) {
+                            continue;
+                        }
+
+                        try {
+                            Authorizer.checkAnyActionOnOrInDb(context, catalog, fullName);
+                        } catch (AccessDeniedException e) {
+                            continue;
+                        }
+
+                        dbs.add(qualifiedName);
+                        catalogs.add(catalog);
+                    }
+                } catch (Exception e) {
+                    // Log but continue with other catalogs if one fails
+                    LOG.warn("Failed to list databases from catalog {}: {}", catalog, e.getMessage());
+                }
+            }
+            result.setCatalogs(catalogs);
+        } else {
+            // Original single-catalog behavior
+            String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            if (params.isSetCatalog_name()) {
+                catalogName = params.getCatalog_name();
             }
 
-            try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
-            } catch (AccessDeniedException e) {
-                continue;
-            }
+            List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
+            LOG.debug("get db names: {}", dbNames);
 
-            dbs.add(fullName);
+            for (String fullName : dbNames) {
+                final String db = ClusterNamespace.getNameFromFullName(fullName);
+                if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                dbs.add(fullName);
+                catalogs.add(catalogName);
+            }
+            result.setCatalogs(catalogs);
         }
+
         result.setDbs(dbs);
+        LOG.debug("get db result: dbs={}, catalogs={}", dbs, catalogs);
         return result;
     }
 

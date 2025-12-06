@@ -569,7 +569,12 @@ public class InformationSchemaDataSource {
                     // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
                     // the catalog name is always `def`
                     info.setTable_catalog(DEF);
-                    info.setTable_schema(dbName);
+                    // When cross-catalog discovery is enabled, return catalog.database format
+                    if (Config.enable_cross_catalog_database_list) {
+                        info.setTable_schema(catalogName + "." + dbName);
+                    } else {
+                        info.setTable_schema(dbName);
+                    }
                     info.setTable_name(table.getName());
                     info.setTable_type(table.getMysqlType());
                     info.setEngine(table.getEngine());
