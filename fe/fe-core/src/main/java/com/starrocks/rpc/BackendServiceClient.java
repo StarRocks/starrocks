@@ -69,10 +69,13 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.NoSuchElementException;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 
 public class BackendServiceClient {
     private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
+
+    private static final int RETRY_TIMES = 2;
 
     private BackendServiceClient() {
     }
@@ -84,30 +87,17 @@ public class BackendServiceClient {
     private Future<PExecPlanFragmentResult> sendPlanFragmentAsync(TNetworkAddress address, PExecPlanFragmentRequest pRequest)
             throws RpcException {
         Tracers.count(Tracers.Module.SCHEDULER, "DeployDataSize", pRequest.serializedRequest.length);
-        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
-            final PBackendService service = BrpcProxy.getBackendService(address);
-            TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
-            return service.execPlanFragmentAsync(pRequest);
-        } catch (NoSuchElementException e) {
-            try {
-                // retry
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    // do nothing
-                }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return service.execPlanFragmentAsync(pRequest);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Execute plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
-        } catch (Throwable e) {
-            LOG.warn("Execute plan fragment catch a exception, address={}:{}",
-                    address.getHostname(), address.getPort(), e);
-            throw new RpcException(address.hostname, e.getMessage());
-        }
+
+        return retryNoSuchElement(
+                () -> {
+                    try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployAsyncSendTime")) {
+                        final PBackendService service = BrpcProxy.getBackendService(address);
+                        TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
+                        return service.execPlanFragmentAsync(pRequest);
+                    }
+                },
+                address,
+                "Execute plan fragment");
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
@@ -142,29 +132,14 @@ public class BackendServiceClient {
         qid.hi = queryId.hi;
         qid.lo = queryId.lo;
         pRequest.queryId = qid;
-        try {
-            final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.cancelPlanFragmentAsync(pRequest);
-        } catch (NoSuchElementException e) {
-            // retry
-            try {
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    // do nothing
-                }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return service.cancelPlanFragmentAsync(pRequest);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Cancel plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
-        } catch (Throwable e) {
-            LOG.warn("Cancel plan fragment catch a exception, address={}:{}",
-                    address.getHostname(), address.getPort(), e);
-            throw new RpcException(address.hostname, e.getMessage());
-        }
+
+        return retryNoSuchElement(
+                () -> {
+                    final PBackendService service = BrpcProxy.getBackendService(address);
+                    return service.cancelPlanFragmentAsync(pRequest);
+                },
+                address,
+                "Cancel plan fragment");
     }
 
     public Future<PFetchDataResult> fetchDataAsync(TNetworkAddress address, PFetchDataRequest request) throws RpcException {
@@ -312,6 +287,30 @@ public class BackendServiceClient {
             LOG.warn("failed to execute processDictionaryCache, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
+    }
+
+    private <T> T retryNoSuchElement(Callable<T> action, TNetworkAddress address, String actionName) throws RpcException {
+        for (int i = 0; i < RETRY_TIMES; i++) {
+            try {
+                return action.call();
+            } catch (Throwable e) {
+                boolean isNoSuchElement = e instanceof NoSuchElementException || e.getCause() instanceof NoSuchElementException;
+                if (!isNoSuchElement) {
+                    LOG.warn("{} catch an exception, address={}:{}", actionName, address.getHostname(), address.getPort(), e);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
+                if (i + 1 >= RETRY_TIMES) {
+                    LOG.warn("{} retry failed, address={}:{}", actionName, address.getHostname(), address.getPort(), e);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        throw new RpcException(address.hostname, "retry exhausted");
     }
 
     private static class SingletonHolder {
