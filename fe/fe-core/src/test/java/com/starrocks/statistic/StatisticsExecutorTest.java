@@ -128,7 +128,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
 
         new Expectations(context) {
             {
@@ -137,7 +138,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        collectJob.collectStatisticSync(sql, context);
+        collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
     @Test
@@ -320,7 +321,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
         StmtExecutor executor = new StmtExecutor(connectContext, stmt);
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
+                LocalDateTime.now());
 
         Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
         Table table =
