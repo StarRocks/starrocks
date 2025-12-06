@@ -1019,7 +1019,7 @@ public class StarOSAgentTest {
         };
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Failed to create fake shard. error: INTERNAL:Mocked error",
+                "Failed to create virtual shard. error: INTERNAL:Mocked error",
                 () -> starosAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, groupId, properties, vTabletId,
                         WarehouseManager.DEFAULT_RESOURCE));
     }
