@@ -333,6 +333,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_PROFILE_REPORT_INTERVAL = "runtime_profile_report_interval";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
     public static final String ENABLE_ASYNC_PROFILE = "enable_async_profile";
+    // Profile output format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
+    public static final String PROFILE_FORMAT_VERSION = "profile_format_version";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
     public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
@@ -1437,6 +1439,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
     private String bigQueryProfileThreshold = "30s";
+
+    // Profile output format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
+    @VariableMgr.VarAttr(name = PROFILE_FORMAT_VERSION)
+    private int profileFormatVersion = 1;
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -4212,6 +4218,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableAsyncProfile(boolean enableAsyncProfile) {
         this.enableAsyncProfile = enableAsyncProfile;
+    }
+
+    public int getProfileFormatVersion() {
+        return profileFormatVersion;
+    }
+
+    public void setProfileFormatVersion(int profileFormatVersion) {
+        this.profileFormatVersion = profileFormatVersion;
     }
 
     public boolean isEnableReplicationJoin() {
