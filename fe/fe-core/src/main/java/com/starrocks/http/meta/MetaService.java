@@ -64,6 +64,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MetaService {
     private static final Logger LOG = LogManager.getLogger(MetaService.class);
@@ -408,6 +410,10 @@ public class MetaService {
     public static class DumpAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpAction.class);
 
+        private static final long DUMP_MIN_INTERVAL_MS = 60 * 1000;
+        private static final AtomicBoolean IS_DUMPING = new AtomicBoolean(false);
+        private static final AtomicLong LAST_DUMP_TIME = new AtomicLong(0);
+
         public DumpAction(ActionController controller) {
             super(controller);
         }
@@ -429,26 +435,44 @@ public class MetaService {
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
-            /*
-             * Before dump, we acquired the globalStateMgr read lock and all databases' read lock and all
-             * the jobs' read lock. This will guarantee the consistency of database and job queues.
-             * But Backend may still inconsistent.
-             */
-
-            // TODO: Still need to lock ClusterInfoService to prevent add or drop Backends
-            String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
-            if (dumpFilePath == null) {
-                response.appendContent("dump failed. " + dumpFilePath);
+            long currentTime = System.currentTimeMillis();
+            long lastDumpTime = LAST_DUMP_TIME.get();
+            long elapsed = currentTime - lastDumpTime;
+            if (elapsed < DUMP_MIN_INTERVAL_MS) {
+                long remainingSeconds = (DUMP_MIN_INTERVAL_MS - elapsed) / 1000;
+                response.appendContent("dump request rejected: too frequent. please wait " +
+                        remainingSeconds + " seconds before next dump request.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
             }
 
-            response.appendContent("dump finished. " + dumpFilePath);
-            writeResponse(request, response);
-            return;
+            if (!IS_DUMPING.compareAndSet(false, true)) {
+                response.appendContent("dump request rejected: another dump operation is in progress.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
+            }
+
+            try {
+                LAST_DUMP_TIME.set(System.currentTimeMillis());
+                String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
+                if (dumpFilePath == null) {
+                    response.appendContent("dump failed. " + dumpFilePath);
+                }
+
+                response.appendContent("dump finished. " + dumpFilePath);
+                writeResponse(request, response);
+            } finally {
+                IS_DUMPING.set(false);
+            }
         }
     }
 
     public static class DumpStarMgrAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpStarMgrAction.class);
+
+        private static final long DUMP_MIN_INTERVAL_MS = 60 * 1000;
+        private static final AtomicBoolean IS_DUMPING = new AtomicBoolean(false);
+        private static final AtomicLong LAST_DUMP_TIME = new AtomicLong(0);
 
         public DumpStarMgrAction(ActionController controller) {
             super(controller);
@@ -474,13 +498,35 @@ public class MetaService {
             if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
                 String str = "current run mode " + RunMode.name() + " does not support dump starmgr meta.";
                 response.appendContent(str);
-            } else {
-                String str = GlobalStateMgr.getCurrentState().getStarOSAgent().dump();
-                response.appendContent(str);
+                writeResponse(request, response);
+                return;
             }
 
-            writeResponse(request, response);
-            return;
+            long currentTime = System.currentTimeMillis();
+            long lastDumpTime = LAST_DUMP_TIME.get();
+            long elapsed = currentTime - lastDumpTime;
+            if (elapsed < DUMP_MIN_INTERVAL_MS) {
+                long remainingSeconds = (DUMP_MIN_INTERVAL_MS - elapsed) / 1000;
+                response.appendContent("dump request rejected: too frequent. please wait " +
+                        remainingSeconds + " seconds before next dump request.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
+            }
+
+            if (!IS_DUMPING.compareAndSet(false, true)) {
+                response.appendContent("dump request rejected: another dump operation is in progress.");
+                writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
+                return;
+            }
+
+            try {
+                LAST_DUMP_TIME.set(System.currentTimeMillis());
+                String str = GlobalStateMgr.getCurrentState().getStarOSAgent().dump();
+                response.appendContent(str);
+                writeResponse(request, response);
+            } finally {
+                IS_DUMPING.set(false);
+            }
         }
     }
 
