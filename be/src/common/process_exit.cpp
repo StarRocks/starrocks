@@ -29,19 +29,11 @@ std::atomic<bool> k_starrocks_exit;
 // but also waiting for all threads to exit gracefully.
 std::atomic<bool> k_starrocks_quick_exit;
 
-<<<<<<< HEAD
-=======
-// NOTE: when backend is going to shutdown, if FE's heartbeat request received, the status code
-// in the response will be set to SHUTDOWN, then FE leader will know the node is in shutdown immediately.
-// This flag records whether there is a such response with status SHUTDOWN sent back to FE.
-std::atomic<bool> k_starrocks_fe_heartbeat_aware_shutdown = false;
-
 // NOTE: when BE is crashing (e.g., due to fatal signal), this flag will be set to true.
 // In this case, BE will return not alive status to FE's heartbeat request.
 // This flag prevents infinite loops when errors occur in jemalloc data structures.
 std::atomic<bool> k_starrocks_be_crashing = false;
 
->>>>>>> c24a7de0ab ([BugFix] Fix BE still reported as alive on SIGSEGV (#66212))
 bool set_process_exit() {
     bool expected = false;
     return k_starrocks_exit.compare_exchange_strong(expected, true);
@@ -60,20 +52,6 @@ bool process_quick_exit_in_progress() {
     return k_starrocks_quick_exit.load(std::memory_order_relaxed);
 }
 
-<<<<<<< HEAD
-=======
-void set_frontend_aware_of_exit() {
-    k_starrocks_fe_heartbeat_aware_shutdown.store(true);
-}
-
-void clear_frontend_aware_of_exit() {
-    k_starrocks_fe_heartbeat_aware_shutdown.store(false);
-}
-
-bool is_frontend_aware_of_exit() {
-    return k_starrocks_fe_heartbeat_aware_shutdown.load(std::memory_order_relaxed);
-}
-
 void set_process_is_crashing() {
     k_starrocks_be_crashing.store(true, std::memory_order_relaxed);
 }
@@ -82,5 +60,4 @@ bool is_process_crashing() {
     return k_starrocks_be_crashing.load(std::memory_order_relaxed);
 }
 
->>>>>>> c24a7de0ab ([BugFix] Fix BE still reported as alive on SIGSEGV (#66212))
 } // namespace starrocks
