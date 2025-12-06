@@ -334,7 +334,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         return ConstColumn::create(std::move(res), columns[0]->size());
     }
 
-    BinaryColumn* haystack = nullptr;
+    const BinaryColumn* haystack = nullptr;
     NullColumnPtr res_null = nullptr;
     if (columns[0]->is_nullable()) {
         auto haystack_null = ColumnHelper::as_column<NullableColumn>(columns[0]);

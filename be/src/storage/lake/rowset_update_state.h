@@ -211,7 +211,7 @@ private:
     // one for each segment file
     std::vector<SegmentPKEncodeResultPtr> _upserts;
     // one for each delete file
-    std::vector<MutableColumnPtr> _deletes;
+    MutableColumns _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
@@ -223,7 +223,7 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
-    std::vector<MutableColumnPtr> _auto_increment_delete_pks;
+    MutableColumns _auto_increment_delete_pks;
 
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;

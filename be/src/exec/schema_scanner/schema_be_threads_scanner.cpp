@@ -56,48 +56,48 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // group
                 Slice v(info.group);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // name
                 Slice v(info.name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 4: {
                 // pthread_id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.pthread_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.pthread_id);
                 break;
             }
             case 5: {
                 // os tid
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tid);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.tid);
                 break;
             }
             case 6: {
                 // idle
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.idle);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.idle);
                 break;
             }
             case 7: {
                 // finished_tasks
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.finished_tasks);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.finished_tasks);
                 break;
             }
             case 8: {
                 // num_bound_cpu_cores
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_bound_cpu_cores);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_bound_cpu_cores);
                 break;
             }
             default:

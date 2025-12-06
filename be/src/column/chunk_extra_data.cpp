@@ -19,21 +19,36 @@
 namespace starrocks {
 void ChunkExtraColumnsData::filter(const Buffer<uint8_t>& selection) {
     for (auto& col : _columns) {
-        col->filter(selection);
+        auto mutable_col = col->as_mutable_ptr();
+        mutable_col->filter(selection);
+        col = std::move(mutable_col);
     }
 }
 
 void ChunkExtraColumnsData::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
     for (auto& col : _columns) {
-        col->filter_range(selection, from, to);
+        auto mutable_col = col->as_mutable_ptr();
+        mutable_col->filter_range(selection, from, to);
+        col = std::move(mutable_col);
     }
 }
 
-ChunkExtraColumnsDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
+ChunkExtraDataPtr ChunkExtraColumnsData::clone_empty(size_t size) const {
     Columns columns(_columns.size());
     for (size_t i = 0; i < _columns.size(); i++) {
-        columns[i] = _columns[i]->clone_empty();
-        columns[i]->reserve(size);
+        auto mutable_col = _columns[i]->clone_empty();
+        mutable_col->reserve(size);
+        columns[i] = std::move(mutable_col);
+    }
+    auto extra_data_metas = _data_metas;
+    return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
+}
+
+ChunkExtraDataPtr ChunkExtraColumnsData::clone() const {
+    Columns columns(_columns.size());
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto mutable_col = _columns[i]->clone();
+        columns[i] = std::move(mutable_col);
     }
     auto extra_data_metas = _data_metas;
     return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(columns));
@@ -43,7 +58,9 @@ void ChunkExtraColumnsData::append(const ChunkExtraColumnsData& src, size_t offs
     auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
-        _columns[i]->append(*src_columns[i], offset, count);
+        auto mutable_col = _columns[i]->as_mutable_ptr();
+        mutable_col->append(*src_columns[i], offset, count);
+        _columns[i] = std::move(mutable_col);
     }
 }
 
@@ -52,7 +69,9 @@ void ChunkExtraColumnsData::append_selective(const ChunkExtraColumnsData& src, c
     auto& src_columns = src.columns();
     DCHECK_EQ(src_columns.size(), _columns.size());
     for (size_t i = 0; i < _columns.size(); ++i) {
-        _columns[i]->append_selective(*src_columns[i], indexes, from, size);
+        auto mutable_col = _columns[i]->as_mutable_ptr();
+        mutable_col->append_selective(*src_columns[i], indexes, from, size);
+        _columns[i] = std::move(mutable_col);
     }
 }
 
@@ -92,7 +111,9 @@ StatusOr<uint8_t*> ChunkExtraColumnsData::serialize(uint8_t* buff, bool sorted, 
 StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff, bool sorted, const int encode_level) {
     DCHECK_EQ(encode_level, 0);
     for (auto& column : _columns) {
-        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, column.get(), sorted, encode_level));
+        auto mutable_col = column->as_mutable_ptr();
+        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, mutable_col.get(), sorted, encode_level));
+        column = std::move(mutable_col);
     }
     return buff;
 }

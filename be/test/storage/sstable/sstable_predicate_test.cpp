@@ -96,7 +96,7 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         }
         auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_1, pk_columns);
         auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
-        pk_chunk->get_column_by_name("col1")->append_datum(Datum(12345));
+        pk_chunk->get_column_raw_ptr_by_name("col1")->append_datum(Datum(12345));
         ASSERT_EQ(pk_chunk->num_rows(), 1);
 
         uint32_t hashes = 0;
@@ -134,8 +134,8 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         }
         auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_2, pk_columns);
         auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
-        pk_chunk->get_column_by_name("col1")->append_datum(Datum(12345));
-        pk_chunk->get_column_by_name("col2")->append_datum(Datum(66666));
+        pk_chunk->get_column_raw_ptr_by_name("col1")->append_datum(Datum(12345));
+        pk_chunk->get_column_raw_ptr_by_name("col2")->append_datum(Datum(66666));
         ASSERT_EQ(pk_chunk->num_rows(), 1);
 
         uint32_t hashes = 0;

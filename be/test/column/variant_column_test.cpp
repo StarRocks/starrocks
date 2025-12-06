@@ -56,7 +56,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
         EXPECT_EQ("variant", column->get_name());
         EXPECT_TRUE(column->is_variant());
 
-        VariantColumn::Ptr column_ptr = ColumnHelper::cast_to<TYPE_VARIANT>(column);
+        auto column_ptr = ColumnHelper::cast_to<TYPE_VARIANT>(column);
         ASSERT_EQ(column_ptr->size(), 1);
         auto res = column_ptr->get_object(0);
         ASSERT_EQ(res->serialize_size(), variant.serialize_size());
@@ -67,7 +67,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
     }
     // clone
     {
-        VariantColumn::Ptr column = VariantColumn::create();
+        auto column = VariantColumn::create();
         const uint8_t int_chars[] = {primitiveHeader(VariantPrimitiveType::INT32), 0xD2, 0x02, 0x96, 0x49};
         std::string_view int_string(reinterpret_cast<const char*>(int_chars), sizeof(int_chars));
         VariantValue variant{VariantMetadata::kEmptyMetadata, int_string};
@@ -109,7 +109,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
             ASSERT_EQ(copy->size(), 1);
             ASSERT_FALSE(copy->is_nullable());
 
-            VariantColumn::Ptr variant_column_ptr = ColumnHelper::cast_to<TYPE_VARIANT>(copy);
+            auto variant_column_ptr = ColumnHelper::cast_to<TYPE_VARIANT>(copy);
             ASSERT_EQ(variant_column_ptr->size(), 1);
             auto res = variant_column_ptr->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());
@@ -118,7 +118,7 @@ PARALLEL_TEST(VariantColumnTest, test_build_column) {
             EXPECT_EQ(res->to_string(), variant.to_string());
             EXPECT_EQ("1234567890", res->to_string());
 
-            VariantColumn* variant_column = ColumnHelper::cast_to_raw<TYPE_VARIANT>(copy.get());
+            auto variant_column = ColumnHelper::cast_to_raw<TYPE_VARIANT>(copy);
             ASSERT_EQ(variant_column->size(), 1);
             auto raw_res = variant_column->get(0).get_variant();
             ASSERT_EQ(res->serialize_size(), variant.serialize_size());

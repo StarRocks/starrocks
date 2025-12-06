@@ -213,6 +213,12 @@ template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor&
                                            const avro_value_t& value);
 template Status add_numeric_column<uint8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                             const avro_value_t& value);
+template Status add_numeric_column<uint16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                             const avro_value_t& value);
+template Status add_numeric_column<uint32_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                             const avro_value_t& value);
+template Status add_numeric_column<uint64_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                             const avro_value_t& value);
 template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                            const avro_value_t& value);
 template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,

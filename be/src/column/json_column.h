@@ -116,10 +116,6 @@ public:
 
     LogicalType get_flat_field_type(const std::string& path) const;
 
-    Columns& get_flat_fields() { return _flat_columns; };
-
-    const Columns& get_flat_fields() const { return _flat_columns; };
-
     Columns get_flat_fields_ptrs() const {
         Columns columns;
         columns.reserve(_flat_columns.size());
@@ -144,7 +140,7 @@ public:
     bool has_remain() const { return _flat_columns.size() == (_flat_column_paths.size() + 1); }
 
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                          const Columns& flat_columns);
+                          MutableColumns&& flat_columns);
 
     bool is_equallity_schema(const Column* other) const;
 
@@ -158,7 +154,7 @@ public:
 
 private:
     // flat-columns[sub_columns, remain_column]
-    Columns _flat_columns;
+    std::vector<Column::WrappedPtr> _flat_columns;
 
     // flat-column paths, doesn't contains remain column
     std::vector<std::string> _flat_column_paths;

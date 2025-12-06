@@ -723,9 +723,10 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
 
         if (!columns[i]->is_nullable() && !columns[i]->is_view() && column->is_nullable()) {
             // upgrade to nullable column
-            columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
+            size_t col_size = columns[i]->size();
+            columns[i] = NullableColumn::create(std::move(columns[i]), NullColumn::create(col_size, 0));
         }
-        columns[i]->append(*column);
+        columns[i]->as_mutable_raw_ptr()->append(*column);
         FAIL_POINT_TRIGGER_EXECUTE(hash_join_append_bad_alloc, {
             if (i > 0) throw std::bad_alloc();
         });
@@ -741,7 +742,7 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
                 _table_items->key_columns[i] =
                         NullableColumn::create(_table_items->key_columns[i], NullColumn::create(row_count, 0));
             }
-            _table_items->key_columns[i]->append(*key_columns[i]);
+            _table_items->key_columns[i]->as_mutable_raw_ptr()->append(*key_columns[i]);
         }
     }
 
@@ -766,7 +767,7 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
             // upgrade to nullable column
             columns[i] = NullableColumn::create(columns[i], NullColumn::create(columns[i]->size(), 0));
         }
-        columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
+        columns[i]->as_mutable_raw_ptr()->append(*other_columns[i], 1, other_columns[i]->size() - 1);
     }
 
     auto& key_columns = _table_items->key_columns;
@@ -780,7 +781,7 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
                 const size_t row_count = key_columns[i]->size();
                 key_columns[i] = NullableColumn::create(key_columns[i], NullColumn::create(row_count, 0));
             }
-            key_columns[i]->append(*other_key_columns[i]);
+            key_columns[i]->as_mutable_raw_ptr()->append(*other_key_columns[i]);
         }
     }
     defer.cancel();
@@ -789,12 +790,11 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
 ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
     DCHECK(chunk != nullptr && chunk->num_rows() > 0);
     ChunkPtr output = std::make_shared<Chunk>();
-    //
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
         ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
         if (slot->is_nullable()) {
-            column = ColumnHelper::cast_to_nullable_column(column);
+            column = ColumnHelper::cast_to_nullable_column(std::move(column));
         }
         output->append_column(column, slot->id());
     }
@@ -854,13 +854,15 @@ void JoinHashTable::remove_duplicate_index(Filter* filter) {
 
 Status JoinHashTable::_upgrade_key_columns_if_overflow() {
     for (auto& column : _table_items->key_columns) {
-        auto ret = column->upgrade_if_overflow();
+        auto mut_col = column->as_mutable_ptr();
+        auto ret = mut_col->upgrade_if_overflow();
         if (!ret.ok()) {
             return ret.status();
         } else if (ret.value() != nullptr) {
             column = ret.value();
         } else {
-            continue;
+            // keep the original column
+            column = std::move(mut_col);
         }
     }
     return Status::OK();

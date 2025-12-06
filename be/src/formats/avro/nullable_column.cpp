@@ -31,7 +31,7 @@ static Status add_adaptive_nullable_numeric_column(Column* column, const TypeDes
         column->append_nulls(1);
         return Status::OK();
     }
-    auto& data_column = nullable_column->begin_append_not_default_value();
+    auto data_column = nullable_column->begin_append_not_default_value();
     RETURN_IF_ERROR(add_numeric_column<T>(data_column.get(), type_desc, name, value));
     nullable_column->finish_append_one_not_default_value();
     return Status::OK();
@@ -47,6 +47,12 @@ template Status add_adaptive_nullable_numeric_column<int8_t>(Column* column, con
                                                              const std::string& name, const avro_value_t& value);
 template Status add_adaptive_nullable_numeric_column<uint8_t>(Column* column, const TypeDescriptor& type_desc,
                                                               const std::string& name, const avro_value_t& value);
+template Status add_adaptive_nullable_numeric_column<uint16_t>(Column* column, const TypeDescriptor& type_desc,
+                                                               const std::string& name, const avro_value_t& value);
+template Status add_adaptive_nullable_numeric_column<uint32_t>(Column* column, const TypeDescriptor& type_desc,
+                                                               const std::string& name, const avro_value_t& value);
+template Status add_adaptive_nullable_numeric_column<uint64_t>(Column* column, const TypeDescriptor& type_desc,
+                                                               const std::string& name, const avro_value_t& value);
 template Status add_adaptive_nullable_numeric_column<double>(Column* column, const TypeDescriptor& type_desc,
                                                              const std::string& name, const avro_value_t& value);
 template Status add_adaptive_nullable_numeric_column<float>(Column* column, const TypeDescriptor& type_desc,
@@ -57,15 +63,15 @@ static Status add_nullable_numeric_column(Column* column, const TypeDescriptor& 
                                           const avro_value_t& value) {
     auto nullable_column = down_cast<NullableColumn*>(column);
 
-    auto& null_column = nullable_column->null_column();
-    auto& data_column = nullable_column->data_column();
+    auto* null_column = nullable_column->null_column_raw_ptr();
+    auto* data_column = nullable_column->data_column_raw_ptr();
     if (avro_value_get_type(&value) == AVRO_NULL) {
         data_column->append_default(1);
         null_column->append(1);
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(add_numeric_column<T>(data_column.get(), type_desc, name, value));
+    RETURN_IF_ERROR(add_numeric_column<T>(data_column, type_desc, name, value));
 
     null_column->append(0);
     return Status::OK();
@@ -78,7 +84,7 @@ static Status add_adpative_nullable_binary_column(Column* column, const TypeDesc
         nullable_column->append_nulls(1);
         return Status::OK();
     }
-    auto& data_column = nullable_column->begin_append_not_default_value();
+    auto data_column = nullable_column->begin_append_not_default_value();
 
     RETURN_IF_ERROR(add_binary_column(data_column.get(), type_desc, name, value));
 
@@ -91,13 +97,13 @@ static Status add_nullable_binary_column(Column* column, const TypeDescriptor& t
                                          const avro_value_t& value) {
     auto nullable_column = down_cast<NullableColumn*>(column);
 
-    auto& null_column = nullable_column->null_column();
-    auto& data_column = nullable_column->data_column();
+    auto* null_column = nullable_column->null_column_raw_ptr();
+    auto* data_column = nullable_column->data_column_raw_ptr();
     if (avro_value_get_type(&value) == AVRO_NULL) {
         nullable_column->append_nulls(1);
         return Status::OK();
     }
-    RETURN_IF_ERROR(add_binary_column(data_column.get(), type_desc, name, value));
+    RETURN_IF_ERROR(add_binary_column(data_column, type_desc, name, value));
     null_column->append(0);
     return Status::OK();
 }
@@ -109,7 +115,7 @@ static Status add_adpative_nullable_native_json_column(Column* column, const Typ
         nullable_column->append_nulls(1);
         return Status::OK();
     }
-    auto& data_column = nullable_column->begin_append_not_default_value();
+    auto data_column = nullable_column->begin_append_not_default_value();
 
     RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
 
@@ -122,13 +128,13 @@ static Status add_nullable_native_json_column(Column* column, const TypeDescript
                                               const avro_value_t& value) {
     auto nullable_column = down_cast<NullableColumn*>(column);
 
-    auto& null_column = nullable_column->null_column();
-    auto& data_column = nullable_column->data_column();
+    auto* null_column = nullable_column->null_column_raw_ptr();
+    auto* data_column = nullable_column->data_column_raw_ptr();
     if (avro_value_get_type(&value) == AVRO_NULL) {
         column->append_nulls(1);
         return Status::OK();
     }
-    RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+    RETURN_IF_ERROR(add_native_json_column(data_column, type_desc, name, value));
 
     null_column->append(0);
     return Status::OK();
@@ -157,10 +163,10 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
         if (avro_value_get_type(&value) == AVRO_ARRAY) {
             auto nullable_column = down_cast<NullableColumn*>(column);
 
-            auto array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
-            auto null_column = nullable_column->null_column();
+            auto array_column = down_cast<ArrayColumn*>(nullable_column->data_column_raw_ptr());
+            auto* null_column = nullable_column->null_column_raw_ptr();
 
-            auto& elems_column = array_column->elements_column();
+            auto* elems_column = array_column->elements_column_raw_ptr();
             size_t n = 0;
             if (avro_value_get_size(&value, &n) != 0) {
                 auto err_msg = strings::Substitute("Failed to get array size, column=$0", name);
@@ -172,11 +178,11 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
                     auto err_msg = strings::Substitute("Failed to get array element, column=$0", name);
                     return Status::InvalidArgument(err_msg);
                 }
-                RETURN_IF_ERROR(add_nullable_column(elems_column.get(), type_desc.children[0], name, element));
+                RETURN_IF_ERROR(add_nullable_column(elems_column, type_desc.children[0], name, element));
             }
 
-            auto offsets = array_column->offsets_column();
-            uint32_t sz = offsets->get_data().back() + n;
+            auto* offsets = array_column->offsets_column_raw_ptr();
+            uint32_t sz = offsets->immutable_data().back() + n;
             offsets->append_numbers(&sz, sizeof(sz));
             null_column->append(0);
 
@@ -217,7 +223,7 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
 
             auto array_column = down_cast<ArrayColumn*>(nullable_column->mutable_begin_append_not_default_value());
 
-            auto& elems_column = array_column->elements_column();
+            auto* elems_column = array_column->elements_column_raw_ptr();
             size_t n = 0;
             if (avro_value_get_size(&value, &n) != 0) {
                 auto err_msg = strings::Substitute("Failed to get array size, column=$0", name);
@@ -229,11 +235,11 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
                     auto err_msg = strings::Substitute("Failed to get array element, column=$0", name);
                     return Status::InvalidArgument(err_msg);
                 }
-                RETURN_IF_ERROR(add_nullable_column(elems_column.get(), type_desc.children[0], name, element));
+                RETURN_IF_ERROR(add_nullable_column(elems_column, type_desc.children[0], name, element));
             }
 
-            auto offsets = array_column->offsets_column();
-            uint32_t sz = offsets->get_data().back() + n;
+            auto* offsets = array_column->offsets_column_raw_ptr();
+            uint32_t sz = offsets->immutable_data().back() + n;
             offsets->append_numbers(&sz, sizeof(sz));
 
             nullable_column->finish_append_one_not_default_value();

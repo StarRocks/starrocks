@@ -36,12 +36,12 @@ Status StructColumnReader::read_datum(const avro::GenericDatum& datum, Column* c
 
     for (size_t i = 0; i < _type_desc.children.size(); ++i) {
         const auto& field_name = _type_desc.field_names[i];
-        auto& field_column = struct_column->field_column(field_name);
+        auto* field_column = struct_column->field_column_raw_ptr(field_name);
 
         if (record.hasField(field_name)) {
             const auto& field = record.field(field_name);
             auto* field_reader = down_cast<NullableColumnReader*>(_field_readers[i].get());
-            RETURN_IF_ERROR(field_reader->read_datum(field, field_column.get()));
+            RETURN_IF_ERROR(field_reader->read_datum(field, field_column));
         } else {
             field_column->append_nulls(1);
         }
@@ -55,15 +55,15 @@ Status ArrayColumnReader::read_datum(const avro::GenericDatum& datum, Column* co
     auto* element_reader = down_cast<NullableColumnReader*>(_element_reader.get());
 
     auto array_column = down_cast<ArrayColumn*>(column);
-    auto& elements_column = array_column->elements_column();
-    auto& offsets_column = array_column->offsets_column();
+    auto* elements_column = array_column->elements_column_raw_ptr();
+    auto* offsets_column = array_column->offsets_column_raw_ptr();
 
     const auto& array = datum.value<avro::GenericArray>();
     const auto& array_values = array.value();
 
     uint32_t n = 0;
     for (auto& value : array_values) {
-        RETURN_IF_ERROR(element_reader->read_datum(value, elements_column.get()));
+        RETURN_IF_ERROR(element_reader->read_datum(value, elements_column));
         ++n;
     }
 
@@ -78,11 +78,11 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
     auto* value_reader = down_cast<NullableColumnReader*>(_value_reader.get());
 
     auto map_column = down_cast<MapColumn*>(column);
-    auto keys_column = down_cast<NullableColumn*>(map_column->keys_column().get());
-    auto& keys_null_column = keys_column->null_column();
-    auto keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column().get());
-    auto& values_column = map_column->values_column();
-    auto& offsets_column = map_column->offsets_column();
+    auto keys_column = down_cast<NullableColumn*>(map_column->keys_column_raw_ptr());
+    auto* keys_null_column = keys_column->null_column_raw_ptr();
+    auto keys_data_column = down_cast<BinaryColumn*>(keys_column->data_column_raw_ptr());
+    auto* values_column = map_column->values_column_raw_ptr();
+    auto* offsets_column = map_column->offsets_column_raw_ptr();
 
     const auto& map = datum.value<avro::GenericMap>();
     const auto& map_values = map.value();
@@ -98,7 +98,7 @@ Status MapColumnReader::read_datum(const avro::GenericDatum& datum, Column* colu
         keys_null_column->append(0);
 
         const auto& value = p.second;
-        RETURN_IF_ERROR(value_reader->read_datum(value, values_column.get()));
+        RETURN_IF_ERROR(value_reader->read_datum(value, values_column));
 
         ++n;
     }

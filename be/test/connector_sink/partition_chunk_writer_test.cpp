@@ -205,7 +205,7 @@ TEST_F(PartitionChunkWriterTest, buffer_partition_chunk_writer) {
 
         // Create a chunk
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-        chunk->get_column_by_index(0)->append_datum(Slice("aaa"));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa"));
 
         // Write chunk
         auto ret = partition_writer->write(chunk);
@@ -251,8 +251,12 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
     });
 
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false, nullptr,
-                                             _fragment_context.get(), tuple_desc, nullptr, nullptr});
+            SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, 100, false},
+                                             nullptr,
+                                             _fragment_context.get(),
+                                             tuple_desc,
+                                             nullptr,
+                                             nullptr});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -271,7 +275,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         writer_helper->reset();
         // Create a chunk
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-        chunk->get_column_by_index(0)->append_datum(Slice("aaa"));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa"));
 
         // Write chunk
         auto ret = partition_writer->write(chunk);
@@ -296,7 +300,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
 
         // Create a chunk
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-        chunk->get_column_by_index(0)->append_datum(Slice("aaa"));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa"));
 
         for (size_t i = 0; i < 3; ++i) {
             // Write chunk
@@ -539,8 +543,12 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
     sort_ordering->sort_descs.descs.emplace_back(true, false);
     const size_t max_file_size = 1073741824; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
-                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
+            SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
+                                             nullptr,
+                                             _fragment_context.get(),
+                                             tuple_desc,
+                                             nullptr,
+                                             sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -562,9 +570,9 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
             // Create a chunk
             ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
             auto ret = partition_writer->write(chunk);
@@ -605,9 +613,9 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
             // Create a chunk
             ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
             auto ret = partition_writer->write(chunk);
@@ -688,8 +696,12 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
     sort_ordering->sort_descs.descs.emplace_back(false, false);
     const size_t max_file_size = 1073741824; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
-                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
+            SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
+                                             nullptr,
+                                             _fragment_context.get(),
+                                             tuple_desc,
+                                             nullptr,
+                                             sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -711,9 +723,9 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
             // Create a chunk
             ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
             auto ret = partition_writer->write(chunk);
@@ -754,9 +766,9 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
             // Create a chunk
             ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
             auto ret = partition_writer->write(chunk);
@@ -838,8 +850,12 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
     sort_ordering->sort_descs.descs.emplace_back(false, false);
     const size_t max_file_size = 1073741824; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
-                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
+            SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
+                                             nullptr,
+                                             _fragment_context.get(),
+                                             tuple_desc,
+                                             nullptr,
+                                             sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -861,18 +877,18 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
             // Create a chunk
             ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
             std::string suffix = std::to_string(3 - i);
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(1)->append_datum(Slice("222" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(1)->append_datum(Slice("222" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
-            chunk->get_column_by_index(1)->append_datum(Slice("222" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
-            chunk->get_column_by_index(1)->append_datum(Slice("111" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("222" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("111" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("222" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("111" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("222" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Slice("111" + suffix));
 
             // Write chunk
             auto ret = partition_writer->write(chunk);
@@ -969,8 +985,12 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
     sort_ordering->sort_descs.descs.emplace_back(true, false);
     const size_t max_file_size = 1073741823; // 1GB
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
-            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, max_file_size, false, nullptr,
-                                             _fragment_context.get(), tuple_desc, nullptr, sort_ordering});
+            SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
+                                             nullptr,
+                                             _fragment_context.get(),
+                                             tuple_desc,
+                                             nullptr,
+                                             sort_ordering});
     auto partition_chunk_writer_factory =
             std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     std::vector<int8_t> partition_field_null_list;
@@ -992,9 +1012,9 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
             // Create a chunk
             ChunkPtr chunk = ChunkHelper::new_chunk(*schema, 3);
             std::string suffix = std::to_string(3 - i);
-            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + suffix));
-            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + suffix));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + suffix));
 
             // Write chunk
             auto ret = partition_writer->write(chunk);

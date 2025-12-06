@@ -87,7 +87,7 @@ public:
 private:
     const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
     size_t _ratio = 0;
-    std::vector<ColumnPtr> _columns{};
+    Columns _columns{};
     std::shared_ptr<StringFunctionsState> _state;
     std::string _rpl_value = "";
     size_t _num_rows = 4096;

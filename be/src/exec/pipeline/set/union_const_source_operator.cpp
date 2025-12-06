@@ -41,7 +41,7 @@ StatusOr<ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::RuntimeState*
 
             RETURN_IF_HAS_ERROR(_const_expr_lists[_next_processed_row_index + row_i]);
             auto cur_row_dst_column =
-                    ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(), src_column, 1);
+                    ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(), std::move(src_column), 1);
             dst_column->append(*cur_row_dst_column, 0, 1);
         }
 

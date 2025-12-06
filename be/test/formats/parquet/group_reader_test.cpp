@@ -43,7 +43,7 @@ public:
 
     Status prepare() override { return Status::OK(); }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst_col) override {
         size_t num_rows = static_cast<size_t>(range.span_size());
         if (_step > 1) {
             return Status::EndOfFile("");
@@ -57,6 +57,7 @@ public:
             num_rows = 4;
         }
 
+        auto dst = dst_col->as_mutable_ptr();
         if (_type == tparquet::Type::type::INT32) {
             _append_int32_column(dst.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
@@ -218,7 +219,7 @@ void GroupReaderTest::_check_double_column(Column* column, size_t start, size_t 
 void GroupReaderTest::_check_chunk(GroupReaderParam* param, const ChunkPtr& chunk, size_t start, size_t count) {
     ASSERT_EQ(param->read_cols.size(), chunk->num_columns());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
-        auto column = chunk->columns()[i].get();
+        auto column = chunk->mutable_columns()[i].get();
         auto _type = param->read_cols[i].type_in_parquet;
         size_t num_rows = count;
 

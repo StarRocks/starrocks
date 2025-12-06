@@ -196,7 +196,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     if (read_index > 0) {
-        Columns result_columns(_types.size());
+        MutableColumns result_columns(_types.size());
         for (size_t i = 0; i < _types.size(); ++i) {
             result_columns[i] = // default NullableColumn
                     ColumnHelper::create_column(_types[i].result_type, _types[i].is_nullable);
