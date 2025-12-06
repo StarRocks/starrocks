@@ -64,8 +64,6 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class MetaService {
     private static final Logger LOG = LogManager.getLogger(MetaService.class);
@@ -409,10 +407,7 @@ public class MetaService {
 
     public static class DumpAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpAction.class);
-
-        private static final long DUMP_MIN_INTERVAL_MS = 60 * 1000;
-        private static final AtomicBoolean IS_DUMPING = new AtomicBoolean(false);
-        private static final AtomicLong LAST_DUMP_TIME = new AtomicLong(0);
+        private static final OperationRateLimiter RATE_LIMITER = new OperationRateLimiter(60 * 1000);
 
         public DumpAction(ActionController controller) {
             super(controller);
@@ -435,25 +430,20 @@ public class MetaService {
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
-            long currentTime = System.currentTimeMillis();
-            long lastDumpTime = LAST_DUMP_TIME.get();
-            long elapsed = currentTime - lastDumpTime;
-            if (elapsed < DUMP_MIN_INTERVAL_MS) {
-                long remainingSeconds = (DUMP_MIN_INTERVAL_MS - elapsed) / 1000;
+            if (RATE_LIMITER.isInCooldown()) {
                 response.appendContent("dump request rejected: too frequent. please wait " +
-                        remainingSeconds + " seconds before next dump request.");
+                        RATE_LIMITER.getRemainingCooldownSeconds() + " seconds before next dump request.");
                 writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
                 return;
             }
 
-            if (!IS_DUMPING.compareAndSet(false, true)) {
+            if (!RATE_LIMITER.tryAcquire()) {
                 response.appendContent("dump request rejected: another dump operation is in progress.");
                 writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
                 return;
             }
 
             try {
-                LAST_DUMP_TIME.set(System.currentTimeMillis());
                 String dumpFilePath = GlobalStateMgr.getCurrentState().dumpImage();
                 if (dumpFilePath == null) {
                     response.appendContent("dump failed. " + dumpFilePath);
@@ -462,17 +452,14 @@ public class MetaService {
                 response.appendContent("dump finished. " + dumpFilePath);
                 writeResponse(request, response);
             } finally {
-                IS_DUMPING.set(false);
+                RATE_LIMITER.release();
             }
         }
     }
 
     public static class DumpStarMgrAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(DumpStarMgrAction.class);
-
-        private static final long DUMP_MIN_INTERVAL_MS = 60 * 1000;
-        private static final AtomicBoolean IS_DUMPING = new AtomicBoolean(false);
-        private static final AtomicLong LAST_DUMP_TIME = new AtomicLong(0);
+        private static final OperationRateLimiter RATE_LIMITER = new OperationRateLimiter(60 * 1000);
 
         public DumpStarMgrAction(ActionController controller) {
             super(controller);
@@ -502,30 +489,25 @@ public class MetaService {
                 return;
             }
 
-            long currentTime = System.currentTimeMillis();
-            long lastDumpTime = LAST_DUMP_TIME.get();
-            long elapsed = currentTime - lastDumpTime;
-            if (elapsed < DUMP_MIN_INTERVAL_MS) {
-                long remainingSeconds = (DUMP_MIN_INTERVAL_MS - elapsed) / 1000;
+            if (RATE_LIMITER.isInCooldown()) {
                 response.appendContent("dump request rejected: too frequent. please wait " +
-                        remainingSeconds + " seconds before next dump request.");
+                        RATE_LIMITER.getRemainingCooldownSeconds() + " seconds before next dump request.");
                 writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
                 return;
             }
 
-            if (!IS_DUMPING.compareAndSet(false, true)) {
+            if (!RATE_LIMITER.tryAcquire()) {
                 response.appendContent("dump request rejected: another dump operation is in progress.");
                 writeResponse(request, response, HttpResponseStatus.TOO_MANY_REQUESTS);
                 return;
             }
 
             try {
-                LAST_DUMP_TIME.set(System.currentTimeMillis());
                 String str = GlobalStateMgr.getCurrentState().getStarOSAgent().dump();
                 response.appendContent(str);
                 writeResponse(request, response);
             } finally {
-                IS_DUMPING.set(false);
+                RATE_LIMITER.release();
             }
         }
     }
