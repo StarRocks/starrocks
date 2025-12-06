@@ -283,13 +283,6 @@ AS
 
 有关多列分区表达式的详细指导，参考 [示例五](#示例)。
 
-:::note
-自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
-- 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
-- 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
-- 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
-:::
-
 **order_by_expression**（选填）
 
 异步物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
@@ -404,6 +397,13 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
+- `refresh_mode`：在 StarRocks v4.1 中引入，`refresh_mode` 参数用于控制物化视图（MV）的刷新方式。默认值为 `PCT`。可用模式包括：
+
+  - `PCT`：（默认）对于分区物化视图，当基表数据发生变化时，仅刷新受影响的分区，保证该分区的数据一致性。对于非分区物化视图，基表任何数据变化都会触发全量刷新。
+  - `AUTO`：如果可能，会尝试使用增量刷新。如果物化视图的查询定义不支持增量刷新，则会自动回退到 `PCT` 模式进行本次操作。在进行了一次 PCT 刷新后，如果条件允许，后续刷新有可能再次回到增量刷新模式。
+  - `INCREMENTAL`：仅允许进行增量刷新。如果根据定义物化视图不支持增量刷新，或遇到无法增量处理的数据，则创建或刷新的操作会失败。
+  - `FULL`：每次都强制进行全量刷新，无论物化视图是否支持增量刷新或分区级刷新。
+
 **query_statement**（必填）
 
 创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。从 v3.1.6 版本开始，StarRocks 支持使用 Common Table Expression (CTE) 创建异步物化视图。
@@ -473,6 +473,87 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - 物化视图中的数据不保证与外部数据目录的数据强一致。
   - 目前暂不支持基于资源（Resource）构建物化视图。
   - StarRocks 目前无法感知外部数据目录基表数据是否发生变动，所以每次刷新会默认刷新所有分区。您可以通过手动刷新方式指定刷新部分分区。
+
+## 增量物化视图
+
+StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图（MV）的刷新行为。您可以在创建每个物化视图时指定 `refresh_mode`。如果在创建物化视图时未设置 `refresh_mode`，系统将使用由配置参数 `Config.default_mv_refresh_mode`（默认值为 `pct`）决定的默认刷新模式。请注意以下使用说明：
+
+- 调整 `refresh_mode` 时存在以下限制：
+  - 不能将传统物化视图（即类型为 `pct` 的视图）更改为 `auto` 或 `incremental` 刷新模式。如需更改，必须重建该物化视图。
+  - 当将物化视图从 `auto` 或 `incremental` 类型修改时，系统会检查是否支持增量刷新。如果不支持，则操作失败。
+- 增量物化视图不支持指定分区刷新：
+  - 对于 `INCREMENTAL` 类型的 MV，如果尝试指定分区刷新，会抛出异常。
+  - 对于 `AUTO` 类型的 MV，StarRocks 会自动切换到 `PCT` 模式执行刷新操作。
+
+### 支持的增量算子
+
+增量刷新仅支持基表的追加（append-only）操作。如果在基表上执行了不支持的操作（如 `UPDATE`、`MERGE` 或 `OVERWRITE`）：
+- 当 `refresh_mode` 设置为 `INCREMENTAL` 时，物化视图刷新将失败。
+- 当 `refresh_mode` 设置为 `AUTO` 时，系统会自动回退到 `PCT` 模式进行刷新。
+
+当前支持以下增量刷新操作符：
+
+| 操作符                          | 是否支持增量刷新                                                                                                   |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| Select                          | 支持                                                                                                              |
+| From `<Table>`                  | 仅支持 Iceberg/Paimon 表，不支持其他类型表                                                                              |
+| Filter                          | 支持                                                                                                              |
+| Group By 聚合                   | 支持  <br> - 暂不支持含有 `distinct` 的聚合函数。<br> - 暂不支持无 GROUP BY 的聚合。     |
+| Inner Join                      | 支持                                                                                                              |
+| Union All                       | 支持                                                                                                              |
+| Left/Right/Full Outer Join      | 暂不支持                                                                                                          |
+
+**注意：**
+- 虽然上述大部分操作符支持增量刷新，但某些操作符组合当前存在以下限制：  
+  - 支持 join 后聚合和 union 后聚合的增量计算。
+  - 但不支持聚合后做 join 或聚合后做 union all 的增量计算。
+
+### 示例
+```
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "INCREMENTAL"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
+  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
+  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
+  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
+  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
+  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
+  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
+FROM 
+  iceberg_catalog.iceberg_test_dbt1 
+  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
+  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
+  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
+  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
+ GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
+ 
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+```
+information_schema.task_runs 表中的 EXTRA_MESSAGE 列已新增 refreshMode 字段，用于标识该 TaskRun 的刷新模式。更多细节请参考 [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md)。
+```
+mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
+     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
+    TASK_NAME: mv-78190
+  CREATE_TIME: 2025-10-17 10:44:41
+  FINISH_TIME: 2025-10-17 10:44:44
+        STATE: SUCCESS
+      CATALOG: NULL
+     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
+   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
+  EXPIRE_TIME: 2025-10-24 10:44:41
+   ERROR_CODE: 0
+ERROR_MESSAGE: NULL
+     PROGRESS: 100%
+EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
+   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
+       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
+
+```
 
 ## 示例
 
