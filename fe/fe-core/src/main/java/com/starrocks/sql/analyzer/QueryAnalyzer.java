@@ -105,8 +105,11 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
-
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import java.util.ArrayDeque;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Deque;
@@ -128,8 +131,13 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_CACHED_BYTES_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TABLET_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.CACHE_STATS_TOTAL_BYTES_COLUMN_NAME;
 
 public class QueryAnalyzer {
+    private static final Logger LOG = LogManager.getLogger(QueryAnalyzer.class);
+
     private final ConnectContext session;
     private final MetadataMgr metadataMgr;
 
@@ -805,11 +813,26 @@ public class QueryAnalyzer {
                     columns.put(field, column);
                     fields.add(field);
                 }
-                
                 // Add virtual columns for sync MV queries as well
                 for (Column column : getVirtualColumns(table)) {
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
                     Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+            } else if (node.isCacheStatsQuery()) {
+                // ========== 新增：完全替换为 cache stats schema ==========
+                // 验证表类型
+                if (!table.isCloudNativeTableOrMaterializedView()) {
+                    throw new SemanticException("_CACHE_STATS_ hint is only supported for Lake Table");
+                }
+
+                StringWriter sw = new StringWriter();
+                new Throwable("").printStackTrace(new PrintWriter(sw));
+                String stackTrace = sw.toString();
+                LOG.info("{}", stackTrace);
+
+                // 使用自定义的 cache stats 列替换原表 schema
+                for (Column column : getCacheStatsColumns()) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
@@ -919,6 +942,13 @@ public class QueryAnalyzer {
                 OlapTable olapTable = (OlapTable) table;
                 columns.addAll(olapTable.getVirtualColumns());
             }
+        }
+
+        private List<Column> getCacheStatsColumns() {
+            List<Column> columns = new ArrayList<>();
+            columns.add(new Column(CACHE_STATS_TABLET_ID_COLUMN_NAME, IntegerType.BIGINT));
+            columns.add(new Column(CACHE_STATS_CACHED_BYTES_COLUMN_NAME, IntegerType.BIGINT));
+            columns.add(new Column(CACHE_STATS_TOTAL_BYTES_COLUMN_NAME, IntegerType.BIGINT));
             return columns;
         }
 
