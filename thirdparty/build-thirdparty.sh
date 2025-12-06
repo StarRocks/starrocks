@@ -569,7 +569,7 @@ build_xxhash() {
     check_if_source_exist $XXHASH_SOURCE
     mkdir -p $TP_INCLUDE_DIR
     # xxhash.h is in the root directory of xxHash source
-    cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/
+    mkdir -p $TP_INCLUDE_DIR/xxhash && cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/xxhash/
 }
 
 # rapidjson
