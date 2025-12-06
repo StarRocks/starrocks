@@ -1,0 +1,138 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package staros.starlog.proto;
+
+import "star_status.proto";
+import "starlog/common.proto";
+
+option java_package = "com.staros.starlog.proto";
+option java_multiple_files = true;
+option cc_generic_services = true;
+
+message ExtentInfo {
+    int64 id = 1;
+    DataType type = 2;
+}
+
+message CreateExtentRequest {
+    ExtentInfo extent_info = 1;
+}
+
+message CreateExtentResponse {
+    StarStatus status = 1;
+}
+
+message RemoveExtentRequest {
+    ExtentInfo extent_info = 1;
+}
+
+message RemoveExtentResponse {
+    StarStatus status = 1;
+}
+
+message SealExtentRequest {
+    ExtentInfo extent_info = 1;
+    int64 sealed_size = 2;
+}
+
+message SealExtentResponse {
+    StarStatus status = 1;
+}
+
+message InactivateExtentRequest {
+    ExtentInfo extent_info = 1;
+}
+
+message InactivateExtentResponse {
+    StarStatus status = 1;
+    int64 appended_size = 2;
+}
+
+message AppendRequest {
+    ExtentInfo extent_info = 1;
+    int64 committed_size = 2;
+    int64 begin_position = 3;
+    repeated bytes data = 4;
+}
+
+message AppendResponse {
+    StarStatus status = 1;
+    // data before expected position appended successfully
+    int64 expected_position = 2;
+    ExtentState state = 3;
+}
+
+message CommitRequest {
+    ExtentInfo extent_info = 1;
+    int64 committed_size = 2;
+}
+
+message CommitResponse {
+    StarStatus status = 1;
+}
+
+message ReadOptions {
+    bool check_for_commit = 1;
+    bool read_latest = 2;
+}
+
+message ReadRequest {
+    ExtentInfo extent_info = 1;
+    int64 begin_position= 2;
+    int64 read_size = 3;
+    ReadOptions options = 4;
+}
+
+message ReadResponse {
+    StarStatus status = 1;
+    int64 begin_position = 2;
+    repeated bytes data = 3;
+    ExtentState state = 4;
+}
+
+message PurgeRequest {
+
+}
+
+message PurgeResponse {
+
+}
+
+message GetEndRequest {
+   ExtentInfo extent_info = 1;
+}
+
+message GetEndResponse {
+    StarStatus status = 1;
+    int64 end_position = 2;
+}
+
+service ExtentServerService {
+    // extent
+    rpc create_extent(CreateExtentRequest) returns (CreateExtentResponse);
+    rpc remove_extent(RemoveExtentRequest) returns (RemoveExtentResponse);
+
+    rpc seal_extent(SealExtentRequest) returns (SealExtentResponse);
+    rpc inactivate_extent(InactivateExtentRequest) returns (InactivateExtentResponse);
+
+    // client
+    rpc append(AppendRequest) returns (AppendResponse);
+    rpc commit(CommitRequest) returns (CommitResponse);
+    rpc read(ReadRequest) returns (ReadResponse);
+    rpc purge(PurgeRequest) returns (PurgeResponse);
+    rpc get_end(GetEndRequest) returns (GetEndResponse);
+}
