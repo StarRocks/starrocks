@@ -1266,7 +1266,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                                                    RewriteContext rewriteContext,
                                                    ColumnRewriter columnRewriter,
                                                    Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp) {
-        final MVCompensation mvCompensation = materializationContext.getMvCompensation();
+        final MVCompensation mvCompensation = materializationContext.getMvCompensation(rewriteContext.getQueryExpression());
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
         final MaterializedView mv = materializationContext.getMv();
         final List<ColumnRefOperator>  originalOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
@@ -1313,11 +1313,12 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 rewriteContext.getMvPredicateSplit(),
                 true);
         // check mv context again if mv can be applied for rewrite.
-        if (materializationContext.isNoRewrite()) {
+        OptExpression queryOptExpression = rewriteContext.getQueryExpression();
+        if (materializationContext.isNoRewrite(queryOptExpression)) {
             logMVRewrite(mvRewriteContext, "MV cannot be applied for rewrite");
             return null;
         }
-        MVCompensation mvCompensation = materializationContext.getMvCompensation();
+        MVCompensation mvCompensation = materializationContext.getMvCompensation(queryOptExpression);
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",
                 compensationPredicates, isTransparentRewrite);
