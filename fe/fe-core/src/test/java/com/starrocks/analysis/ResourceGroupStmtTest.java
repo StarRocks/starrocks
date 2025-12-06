@@ -1977,4 +1977,36 @@ public class ResourceGroupStmtTest {
             dropResourceGroup("rg1_mem_pool");
             dropResourceGroup("rg2_mem_pool");
         }
+
+    @Test
+    public void testShowDefaultMemPoolForOldResourceGroup() throws Exception {
+        String rgName = "rg_old_no_mempool";
+        String createSql = "CREATE RESOURCE GROUP " + rgName + "\n" +
+                "TO (user='test_user')\n" +
+                "WITH (\n" +
+                "    'cpu_weight' = '1',\n" +
+                "    'mem_limit' = '10%'\n" +
+                ");";
+
+        starRocksAssert.executeResourceGroupDdlSql(createSql);
+
+        ResourceGroup rg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(rgName);
+        // Simulate an old resource group by setting memPool to null
+        rg.setMemPool(null);
+
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");
+        boolean found = false;
+        for (List<String> row : rows) {
+            if (row.get(0).equals(rgName)) {
+                // The 'mem_pool' column is the last one in VERBOSE_META_DATA
+                String memPoolValue = row.get(row.size() - 1);
+                Assertions.assertEquals(ResourceGroup.DEFAULT_MEM_POOL, memPoolValue);
+                found = true;
+                break;
+            }
+        }
+
+        Assertions.assertTrue(found);
+        dropResourceGroup(rgName);
+    }
 }
