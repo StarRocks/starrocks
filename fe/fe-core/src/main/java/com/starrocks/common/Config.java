@@ -2246,7 +2246,9 @@ public class Config extends ConfigBase {
     public static int statistic_analyze_task_pool_size = 3;
 
     /**
-     * statistic collect query timeout
+     * statistic collect query timeout (in seconds)
+     * This is the total timeout for the entire analyze job, not for individual SQL tasks.
+     * Each SQL task within the job will use the remaining time based on the job start time.
      */
     @ConfField(mutable = true)
     public static long statistic_collect_query_timeout = 3600; // 1h
