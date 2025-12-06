@@ -95,8 +95,6 @@ public:
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
     size_t container_memory_usage() const override;
     size_t reference_memory_usage() const override;
     size_t reference_memory_usage(size_t from, size_t size) const override;

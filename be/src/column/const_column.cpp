@@ -64,17 +64,6 @@ void ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
     throw std::runtime_error("ConstColumn does not support update_rows");
 }
 
-void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(_size > 0);
-    for (uint32_t i = from; i < to; ++i) {
-        _data->fnv_hash(&hash[i], 0, 1);
-    }
-}
-
-void ConstColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "Const column shouldn't call crc32 hash";
-}
-
 int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
     DCHECK(false) << "Const column shouldn't call xor_checksum";
     return 0;

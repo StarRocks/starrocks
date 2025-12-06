@@ -52,14 +52,6 @@ int JsonColumn::compare_at(size_t left_idx, size_t right_idx, const starrocks::C
     return x->compare(*y);
 }
 
-void JsonColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; i++) {
-        JsonValue* json = get_object(i);
-        int64_t h = json->hash();
-        hash[i] = HashUtil::fnv_hash(&h, sizeof(h), hash[i]);
-    }
-}
-
 void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
     JsonValue* value = get_object(idx);
     DCHECK(value != nullptr);
