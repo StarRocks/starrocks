@@ -389,7 +389,11 @@ public class TabletMetadataUpdateAgentTaskFactory {
 
         private UpdateTabletSchemaTask(long backendId, List<Long> tablets, TTabletSchema tabletSchema,
                                        boolean createSchemaFile) {
-            super(backendId, tablets.hashCode());
+            super(backendId, Objects.hash(
+                    tablets.stream().sorted().collect(Collectors.toList()),
+                    tabletSchema != null ? tabletSchema.hashCode() : 0,
+                    createSchemaFile
+            ));
             this.tablets = new ArrayList<>(tablets);
             // tabletSchema may be null when the table has multi materialized index
             // and the schema of some materialized indexes are not needed to be updated
