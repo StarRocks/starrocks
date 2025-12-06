@@ -191,10 +191,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public Database getDB(ConnectContext connectContext, String dbName) {
-        if (databases.asMap().containsKey(dbName)) {
-            return databases.getIfPresent(dbName);
+        Database db = databases.getIfPresent(dbName);
+        if (db != null) {
+            return db;
         }
-        Database db = delegate.getDB(connectContext, dbName);
+
+        db = delegate.getDB(connectContext, dbName);
         databases.put(dbName, db);
         return db;
     }
@@ -324,10 +326,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public synchronized void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         IcebergTableCacheKey key = new IcebergTableCacheKey(icebergTableName, ctx);
-        if (tables.getIfPresent(key) == null) {
+        Table cachedTable = tables.getIfPresent(key);
+        if (cachedTable == null) {
             partitionCache.invalidate(icebergTableName);
         } else {
-            BaseTable currentTable = (BaseTable) tables.getIfPresent(key);
+            BaseTable currentTable = (BaseTable) cachedTable;
             BaseTable updateTable = (BaseTable) delegate.getTable(ctx, dbName, tableName);
             if (updateTable == null) {
                 invalidateCache(icebergTableName);
@@ -370,7 +373,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         IcebergTableCacheKey keyWithoutSnap = new IcebergTableCacheKey(new IcebergTableName(dbName, tableName), ctx);
-        IcebergTableCacheKey updateKey = new IcebergTableCacheKey(updatedIcebergTableName, ctx);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
         // update tables before refresh partition cache
