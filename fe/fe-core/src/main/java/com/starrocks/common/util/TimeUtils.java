@@ -47,7 +47,6 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.text.ParsePosition;
-import java.text.SimpleDateFormat;
 import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.Instant;
@@ -57,7 +56,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.Date;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -161,19 +159,18 @@ public class TimeUtils {
         return time.atZone(getSystemTimeZone().toZoneId()).toInstant().getEpochSecond();
     }
 
-    public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
+    public static String longToTimeString(long timeStamp, DateTimeFormatter dateFormat) {
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;
         }
-        return dateFormat.format(new Date(timeStamp));
+        return dateFormat.format(Instant.ofEpochMilli(timeStamp));
     }
 
     public static String longToTimeString(long timeStamp) {
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;
         }
-        return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(getSystemTimeZone().toZoneId())
-                .format(Instant.ofEpochMilli(timeStamp));
+        return longToTimeString(timeStamp, DATETIME_TO_STRING_FORMAT);
     }
 
     public static LocalDate parseDate(String dateStr) throws AnalysisException {
