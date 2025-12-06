@@ -573,14 +573,7 @@ public class MaterializationContext {
     }
 
     public MVCompensation getMvCompensation(OptExpression queryExpression) {
-        if (queryToMVCompensationMap.size() == 1) {
-            return queryToMVCompensationMap.values().iterator().next();
-        }
-        QueryOptProfile queryOptProfile = MVCompensationBuilder.buildQueryOptProfile(mv, queryExpression);
-        MVCompensation mvCompensation = queryToMVCompensationMap.get(queryOptProfile);
-        Preconditions.checkArgument(mvCompensation != null,
-                "MV compensation should be initialized before used");
-        return mvCompensation;
+        return getOrInitMVCompensation(queryExpression);
     }
 
     /**
@@ -606,8 +599,7 @@ public class MaterializationContext {
         if (score == 0) {
             return false;
         }
-        QueryOptProfile queryOptProfile = MVCompensationBuilder.buildQueryOptProfile(mv, queryExpression);
-        MVCompensation mvCompensation = queryToMVCompensationMap.get(queryOptProfile);
+        MVCompensation mvCompensation = getOrInitMVCompensation(queryExpression);
         return isMVCompensateNoRewrite(mvCompensation);
     }
 
