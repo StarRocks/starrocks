@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -425,6 +426,19 @@ public class LogicalPlanPrinter {
         public OperatorStr visitPhysicalMysqlScan(OptExpression optExpression, Integer step) {
             PhysicalMysqlScanOperator scan = (PhysicalMysqlScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
+            sb.append("columns").append(scan.getUsedColumns());
+            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(")");
+            if (scan.getLimit() >= 0) {
+                sb.append(" Limit ").append(scan.getLimit());
+            }
+            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalCacheStatsScan(OptExpression optExpression, Integer step) {
+            PhysicalCacheStatsScanOperator scan = (PhysicalCacheStatsScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("CACHE STATS SCAN (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");

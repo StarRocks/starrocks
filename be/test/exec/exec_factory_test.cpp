@@ -177,6 +177,11 @@ TEST_F(ExecFactoryTest, test_create_tree_invalid_tuple_id) {
     ASSERT_NE(st.message().find("Tuple ids are not in descs"), std::string::npos);
 }
 
+TEST_F(ExecFactoryTest, test_lake_cache_stats_scan_node) {
+    TPlanNode tnode = make_base_plan_node(TPlanNodeType::LAKE_CACHE_STATS_SCAN_NODE);
+    assert_node_instance<ConnectorScanNode>(tnode);
+}
+
 TEST_F(ExecFactoryTest, test_create_tree_malformed_or_partial_tree) {
     {
         TPlan malformed_plan;
