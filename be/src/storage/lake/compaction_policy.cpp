@@ -116,7 +116,7 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
     // Calculate the number of SSTables and use it as a score
     uint32_t sst_num_score = sstable_score(metadata);
     // Return the maximum score between the segment number score and the SST number score
-    return std::max(segment_num_score, sst_num_score);
+    return sst_num_score;
 }
 
 double primary_compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata) {
@@ -484,9 +484,9 @@ CompactionPolicy::~CompactionPolicy() = default;
 
 StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
     // If there are no rowsets, it could be cloud native index compaction, default to CLOUD_NATIVE_INDEX_COMPACTION
-    if (rowsets.empty()) {
-        return CLOUD_NATIVE_INDEX_COMPACTION;
-    }
+    //if (rowsets.empty()) {
+    return CLOUD_NATIVE_INDEX_COMPACTION;
+    //}
 
     // TODO: support row source mask buffer based on starlet fs
     // The current row source mask buffer is based on posix tmp file,

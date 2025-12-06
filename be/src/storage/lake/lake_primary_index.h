@@ -24,6 +24,8 @@
 
 namespace starrocks {
 
+class ThreadPoolToken;
+
 namespace lake {
 
 class Tablet;
@@ -94,6 +96,8 @@ public:
     StatusOr<AsyncCompactCBPtr> ingest_sst_compact(LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                    TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                    int32_t fileset_start_idx);
+
+    Status flush_memtable(bool force = false);
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,

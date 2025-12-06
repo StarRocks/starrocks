@@ -228,7 +228,7 @@ private:
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
-                      PrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update);
+                      LakePrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update);
 
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const MutableColumnPtr& upsert, PrimaryIndex& index,

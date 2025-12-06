@@ -63,7 +63,7 @@ Status SegmentPKEncodeResult::_load() {
     if (!_lazy_load) {
         RETURN_IF_ERROR(encoded_pk_column(pk_column_chunk.get(), pk_column));
     }
-    if (pk_column_chunk->num_rows()) {
+    if (pk_column_chunk->num_rows() == 0) {
         return Status::OK();
     }
     _current_rows += pk_column_chunk->num_rows();

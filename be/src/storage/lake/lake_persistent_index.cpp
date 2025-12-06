@@ -365,7 +365,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
         return Status::InternalError("Block cache is null.");
     }
     if (!_memtable->empty()) {
-        RETURN_IF_ERROR(flush_memtable());
+        RETURN_IF_ERROR(flush_memtable(true));
     }
     TRACE_COUNTER_SCOPE_LATENCY_US("ingest_sst_latency_us");
     auto sstable = std::make_unique<PersistentIndexSstable>();
@@ -399,13 +399,15 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     return Status::OK();
 }
 
-Status LakePersistentIndex::flush_memtable() {
-    RETURN_IF_ERROR(minor_compact());
-    auto max_rss_rowid = _memtable->max_rss_rowid();
-    _memtable.reset();
-    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
-    // Reset rebuild file count, avoid useless flush.
-    _need_rebuild_file_cnt = 0;
+Status LakePersistentIndex::flush_memtable(bool force) {
+    if (force || is_memtable_full()) {
+        RETURN_IF_ERROR(minor_compact());
+        auto max_rss_rowid = _memtable->max_rss_rowid();
+        _memtable.reset();
+        _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
+        // Reset rebuild file count, avoid useless flush.
+        _need_rebuild_file_cnt = 0;
+    }
     return Status::OK();
 }
 
@@ -435,24 +437,44 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                   IOStat* stat) {
-    std::set<KeyIndex> not_founds;
+                                   IOStat* stat, ParallelUpsertCB* cb) {
+    std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
-    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
-    KeyIndexSet& key_indexes = not_founds;
-    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
-    if (is_memtable_full()) {
-        return flush_memtable();
+    RETURN_IF_ERROR(
+            _memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _version.major_number()));
+    if (cb->token == nullptr) {
+        RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, not_founds.get(), -1));
+        RETURN_IF_ERROR(flush_memtable());
+    } else {
+        auto st = cb->token->submit_func([this, n, keys, old_values, not_founds, cb]() {
+            auto st = get_from_sstables(n, keys, old_values, not_founds.get(), -1);
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to get from SSTables: " << st;
+                std::lock_guard<std::mutex> lg(*cb->mutex);
+                cb->status->update(st);
+            } else {
+                std::lock_guard<std::mutex> lg(*cb->mutex);
+                for (int i = 0; i < n; ++i) {
+                    auto old = old_values[i].get_value();
+                    if (old != NullIndexValue) {
+                        (*cb->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+                    }
+                }
+            }
+        });
+        if (!st.ok()) {
+            std::lock_guard<std::mutex> lg(*cb->mutex);
+            cb->status->update(st);
+        }
     }
+
     return Status::OK();
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_us");
     RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
-    if (is_memtable_full()) {
-        RETURN_IF_ERROR(flush_memtable());
-    }
+    RETURN_IF_ERROR(flush_memtable());
     // TODO: check whether keys exist in immutable_memtable and ssts
     return Status::OK();
 }
@@ -462,9 +484,7 @@ Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std:
                                          uint32_t rowset_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
     RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, rowset_id));
-    if (is_memtable_full()) {
-        RETURN_IF_ERROR(flush_memtable());
-    }
+    RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
 
@@ -474,9 +494,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
-    if (is_memtable_full()) {
-        return flush_memtable();
-    }
+    RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
 
@@ -495,9 +513,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
         }
     }
     RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _version.major_number()));
-    if (is_memtable_full()) {
-        return flush_memtable();
-    }
+    RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
 
@@ -505,9 +521,7 @@ Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValu
                                     const std::vector<uint32_t>& replace_indexes) {
     std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
     RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _version.major_number()));
-    if (is_memtable_full()) {
-        return flush_memtable();
-    }
+    RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
 
@@ -847,7 +861,7 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
     if (too_many_rebuild_files() && !_memtable->empty()) {
         // If we have too many files need to be rebuilt,
         // we need to do flush to reduce index rebuild cost later.
-        RETURN_IF_ERROR(flush_memtable());
+        RETURN_IF_ERROR(flush_memtable(true));
     }
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;

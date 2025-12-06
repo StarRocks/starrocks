@@ -33,6 +33,23 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
+class ThreadPoolToken;
+
+// Per thread upsert context
+struct ParallelUpsertParam {
+    std::vector<Slice> keys;
+    std::vector<uint64_t> values;
+    std::vector<uint64_t> old_values;
+    MutableColumnPtr pk_column;
+};
+
+struct ParallelUpsertCB {
+    ThreadPoolToken* token = nullptr;
+    std::mutex* mutex = nullptr;
+    std::unordered_map<uint32_t, vector<uint32_t>>* deletes = nullptr;
+    Status* status = nullptr;
+    std::vector<std::unique_ptr<ParallelUpsertParam>> params;
+};
 
 class TabletLoader {
 public:
@@ -729,7 +746,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, ParallelUpsertCB* cb = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array

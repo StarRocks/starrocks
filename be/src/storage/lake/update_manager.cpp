@@ -753,7 +753,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 }
 
 Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
-                                 PrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update) {
+                                 LakePrimaryIndex& index, DeletesMap* new_deletes, bool skip_pk_index_update) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
     std::unique_ptr<ThreadPoolToken> token;
     std::mutex mutex;
@@ -762,6 +762,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     if (config::enable_pk_index_parallel_get) {
         token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     }
+    ParallelUpsertCB cb{.token = token.get(), .mutex = &mutex, .deletes = new_deletes, .status = &status};
     for (; !upsert->done(); upsert->next()) {
         auto current = upsert->current();
         if (skip_pk_index_update) {
@@ -795,14 +796,31 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
                 RETURN_IF_ERROR(status);
             }
         } else {
-            MutableColumnPtr pk_column;
-            RETURN_IF_ERROR(upsert->encoded_pk_column(current.first.get(), pk_column));
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *pk_column, new_deletes));
+            if (token) {
+                cb.params.emplace_back(std::make_unique<ParallelUpsertParam>());
+                auto st = upsert->encoded_pk_column(current.first.get(), cb.params.back()->pk_column);
+                if (st.ok()) {
+                    st = index.upsert(rowset_id + upsert_idx, current.second, *cb.params.back()->pk_column, nullptr,
+                                      &cb);
+                    TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
+                }
+                if (!st.ok()) {
+                    std::lock_guard<std::mutex> l(mutex);
+                    status.update(st);
+                }
+            } else {
+                MutableColumnPtr pk_column;
+                RETURN_IF_ERROR(upsert->encoded_pk_column(current.first.get(), pk_column));
+                RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *pk_column, new_deletes));
+            }
         }
     }
     if (token) {
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
         token->wait();
+        if (!skip_pk_index_update) {
+            RETURN_IF_ERROR(index.flush_memtable());
+        }
     }
     RETURN_IF_ERROR(status);
     return upsert->status();

@@ -336,7 +336,8 @@ private:
             // Apply the compaction operation to the cloud native pk index.
             // This ensures that the pk index is updated with the compaction changes.
             _builder.remove_compacted_sst(op_compaction);
-            if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
+            if (op_compaction.input_sstables().empty() ||
+                (!op_compaction.has_output_sstable() && op_compaction.output_sstables().empty())) {
                 return Status::OK();
             }
             RETURN_IF_ERROR(prepare_primary_index());

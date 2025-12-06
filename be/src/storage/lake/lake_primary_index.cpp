@@ -339,4 +339,17 @@ StatusOr<AsyncCompactCBPtr> LakePrimaryIndex::ingest_sst_compact(
     }
 }
 
+Status LakePrimaryIndex::flush_memtable(bool force) {
+    if (!_enable_persistent_index) {
+        return Status::OK();
+    }
+
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->flush_memtable(force);
+    }
+
+    return Status::OK();
+}
+
 } // namespace starrocks::lake

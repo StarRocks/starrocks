@@ -25,6 +25,7 @@
 namespace starrocks {
 class TxnLogPB;
 class TxnLogPB_OpCompaction;
+class ThreadPoolToken;
 
 namespace sstable {
 class Iterator;
@@ -119,8 +120,8 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
-    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  IOStat* stat = nullptr) override;
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, IOStat* stat = nullptr,
+                  ParallelUpsertCB* cb = nullptr) override;
 
     // batch erase
     // |n|: size of key/value array
@@ -203,9 +204,9 @@ public:
     static size_t need_rebuild_file_cnt(const TabletMetadataPB& metadata,
                                         const PersistentIndexSstableMetaPB& sstable_meta);
 
-private:
-    Status flush_memtable();
+    Status flush_memtable(bool force = false);
 
+private:
     bool is_memtable_full() const;
 
     bool too_many_rebuild_files() const;

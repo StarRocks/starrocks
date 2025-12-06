@@ -526,6 +526,8 @@ private:
     State state() const { return _state; }
     ThreadPool::ExecutionMode mode() const { return _mode; }
 
+    std::mutex* get_token_lock() { return &_token_lock; }
+
     // Token's configured execution mode.
     const ThreadPool::ExecutionMode _mode;
 
@@ -545,6 +547,8 @@ private:
     // Number of worker threads currently executing tasks belonging to this
     // token.
     int _active_threads;
+
+    std::mutex _token_lock;
 
     ThreadPoolToken(const ThreadPoolToken&) = delete;
     const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
