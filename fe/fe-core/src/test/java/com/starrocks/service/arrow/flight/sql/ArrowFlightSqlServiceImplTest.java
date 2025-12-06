@@ -431,7 +431,7 @@ public class ArrowFlightSqlServiceImplTest {
     @Test
     public void testGetStreamStatement() {
         FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
-                .setStatementHandle(ByteString.copyFromUtf8("token123:queryId")).build();
+                .setStatementHandle(ByteString.copyFromUtf8("token123|queryId")).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
         when(mockContext.getResult("queryId")).thenReturn(mock(VectorSchemaRoot.class));
         service.getStreamStatement(ticket, mockCallContext, listener);
@@ -447,16 +447,13 @@ public class ArrowFlightSqlServiceImplTest {
         FlightStream mockBeStream = mock(FlightStream.class);
         VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
 
-        // Set the mock cache in your service (you'll need to expose this for testing)
         service.addToCacheForTesting("127.0.0.1:9400", mockBeClient);
 
-        // Configure mock behavior
         when(mockBeClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
         when(mockBeStream.getRoot()).thenReturn(mockRoot);
         when(mockBeStream.next()).thenReturn(true).thenReturn(false); // One batch then done
 
-        // Test
-        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8:19abc7b87307530-9965dc19f22a94a9:127.0.0.1:9400";
+        String proxyTicket = "19abc7b87307530-9965dc19f22a94a8|19abc7b87307530-9965dc19f22a94a9|127.0.0.1|9400";
         FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
                 .setStatementHandle(ByteString.copyFromUtf8(proxyTicket))
                 .build();
@@ -464,7 +461,6 @@ public class ArrowFlightSqlServiceImplTest {
 
         service.getStreamStatement(ticket, mockCallContext, listener);
 
-        // Verify
         verify(listener).start(mockRoot);
         verify(listener).putNext();
         verify(listener).completed();
@@ -474,7 +470,7 @@ public class ArrowFlightSqlServiceImplTest {
     @Test
     public void testGetStreamStatementInvalid() {
         FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
-                .setStatementHandle(ByteString.copyFromUtf8("token123:queryId:invalid_section")).build();
+                .setStatementHandle(ByteString.copyFromUtf8("token123|queryId|invalid_section")).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
         assertThrows(FlightRuntimeException.class, () ->
@@ -485,7 +481,7 @@ public class ArrowFlightSqlServiceImplTest {
     @Test
     public void testGetStreamPreparedStatement() {
         FlightSql.CommandPreparedStatementQuery command = FlightSql.CommandPreparedStatementQuery.newBuilder()
-                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123:queryId")).build();
+                .setPreparedStatementHandle(ByteString.copyFromUtf8("token123|queryId")).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
         when(mockContext.getResult("queryId")).thenReturn(mock(VectorSchemaRoot.class));
         service.getStreamPreparedStatement(command, mockCallContext, listener);

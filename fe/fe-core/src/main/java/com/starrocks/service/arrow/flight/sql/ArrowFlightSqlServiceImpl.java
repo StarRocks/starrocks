@@ -449,7 +449,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private void getStreamResult(String ticket, ServerStreamListener listener) {
-        String[] ticketParts = ticket.split(":");
+        String[] ticketParts = ticket.split("\\|");
 
         if (ticketParts.length == 2) {
             getStreamResultFromFE(ticketParts[0], ticketParts[1], listener); 
@@ -623,7 +623,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private static ByteString buildFETicket(ArrowFlightSqlConnectContext ctx) {
         // FETicket: <Token> : <QueryId>
-        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
+        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + "|" + DebugUtil.printId(ctx.getExecutionId()));
     }
 
     private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
@@ -633,9 +633,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private static ByteString buildFEProxyTicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId, ComputeNode worker) {
         // Proxy Ticket: <QueryId> : <FragmentInstanceId> : Worker Hostname : Port
-        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" 
-                        + hexStringFromUniqueId(rootFragmentInstanceId) + ":" 
-                        + worker.getHost() + ":" 
+        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + "|" 
+                        + hexStringFromUniqueId(rootFragmentInstanceId) + "|" 
+                        + worker.getHost() + "|" 
                         + worker.getArrowFlightPort());
     }
 
