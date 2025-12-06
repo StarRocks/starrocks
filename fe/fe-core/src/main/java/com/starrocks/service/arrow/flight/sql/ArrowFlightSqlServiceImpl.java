@@ -15,6 +15,9 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.protobuf.Any;
@@ -22,6 +25,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
@@ -41,6 +45,7 @@ import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
+import org.apache.arrow.flight.FlightClient;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
@@ -60,6 +65,7 @@ import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.util.AutoCloseables;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.WriteChannel;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
@@ -78,6 +84,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlServiceImpl.class);
@@ -85,6 +92,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private final ArrowFlightSqlSessionManager sessionManager;
     private final Location feEndpoint;
     private final SqlInfoBuilder sqlInfoBuilder;
+    private final Cache<String, FlightClient> beClientCache = CacheBuilder.newBuilder()
+            .maximumSize(128)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .removalListener((RemovalNotification<String, FlightClient> notification) -> {
+                FlightClient client = notification.getValue();
+                if (client != null) {
+                    try {
+                        client.close();
+                    } catch (Exception e) {
+                        LOG.warn("[ARROW] Error closing client", e);
+                    }
+                }
+            })
+            .build();
 
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.arrow_max_service_task_threads_num, "arrow-flight-executor", true);
@@ -113,6 +134,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public void close() throws Exception {
         AutoCloseables.close(rootAllocator);
+        beClientCache.invalidateAll();
     }
 
     @Override
@@ -427,10 +449,83 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private void getStreamResult(String ticket, ServerStreamListener listener) {
-        String[] ticketParts = ticket.split(":");
-        String token = ticketParts[0];
-        String queryId = ticketParts[1];
+        String[] ticketParts = ticket.split("\\|");
 
+        if (ticketParts.length == 2) {
+            getStreamResultFromFE(ticketParts[0], ticketParts[1], listener); 
+        } else if (ticketParts.length == 4) {
+            getStreamResultFromBE(ticketParts[0], ticketParts[1], ticketParts[2],
+                             Integer.parseInt(ticketParts[3]), listener);
+        } else {
+            throw CallStatus.INVALID_ARGUMENT.withDescription(
+                    String.format("Invalid ticket format: expected 2 or 4 parts, got [%d]", ticketParts.length))
+                    .toRuntimeException(); 
+        }
+    }
+
+    private void getStreamResultFromBE(String queryId, String fragmentInstanceId, 
+                                    String beHost, int bePort, ServerStreamListener listener) {
+        FlightStream beStream = null;
+        String beKey = beHost + ":" + bePort;
+
+        try {
+            FlightClient beClient = beClientCache.get(beKey, () -> {
+                Location beLocation = Location.forGrpcInsecure(beHost, bePort);
+                return FlightClient.builder().allocator(rootAllocator).location(beLocation).build();
+            });
+            // Reconstruct the original BE ticket (without BE host/port)
+            String beTicket = queryId + ":" + fragmentInstanceId;
+            FlightSql.TicketStatementQuery ticketStatement = FlightSql.TicketStatementQuery.newBuilder()
+                    .setStatementHandle(ByteString.copyFromUtf8(beTicket))
+                    .build();
+            Ticket ticket = new Ticket(Any.pack(ticketStatement).toByteArray());
+
+            // TODO add retry logic
+            beStream = beClient.getStream(ticket);
+            final FlightStream streamToCancel = beStream;
+
+            listener.setOnCancelHandler(() -> {
+                try {
+                    streamToCancel.cancel("Client cancelled request", null);
+                } catch (Exception e) {
+                    LOG.warn("[ARROW] Error cancelling BE stream", e);
+                }
+            });
+
+            VectorSchemaRoot root = beStream.getRoot();
+            // Start streaming to client
+            listener.start(root);
+            while (beStream.next()) {
+                listener.putNext();
+            }
+            listener.completed();
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Error proxying result from BE {}:{}", beHost, bePort, e);
+
+            beClientCache.invalidate(beKey);
+            if (beStream != null) {
+                try {
+                    beStream.cancel("Error during streaming", e);
+                } catch (Exception cancelStreamEx) {
+                    LOG.warn("[ARROW] Error cancelling stream", cancelStreamEx);
+                }
+            }
+
+            listener.error(CallStatus.INTERNAL
+                    .withDescription("Failed to proxy result from BE: " + e.getMessage())
+                    .toRuntimeException());
+        } finally {
+            try {
+                if (beStream != null) {
+                    beStream.close();
+                }
+            } catch (Exception e) {
+                LOG.warn("[ARROW] Error closing BE stream", e);
+            }
+        }
+    }
+
+    private void getStreamResultFromFE(String token, String queryId, ServerStreamListener listener) {
         ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(token);
         VectorSchemaRoot vectorSchemaRoot = ctx.getResult(queryId);
         if (vectorSchemaRoot == null) {
@@ -512,11 +607,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             Preconditions.checkNotNull(execPlan, "execPlan is null");
             Schema schema = buildSchema(execPlan);
 
-            // Build BE ticket.
-            final ByteString handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
+            Pair<Location, ByteString> parsedProxy = parseProxy(sv, defaultCoordinator, worker, rootFragmentInstanceId);
+            Location endpoint = parsedProxy.first;
+            ByteString handle = parsedProxy.second;
+
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
-            Location endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
             return buildFlightInfo(ticketStatement, descriptor, schema, endpoint);
         } catch (Exception e) {
             ctx.reset();
@@ -527,12 +623,20 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private static ByteString buildFETicket(ArrowFlightSqlConnectContext ctx) {
         // FETicket: <Token> : <QueryId>
-        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + ":" + DebugUtil.printId(ctx.getExecutionId()));
+        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + "|" + DebugUtil.printId(ctx.getExecutionId()));
     }
 
     private static ByteString buildBETicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId) {
         // BETicket: <QueryId> : <FragmentInstanceId>
         return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + ":" + hexStringFromUniqueId(rootFragmentInstanceId));
+    }
+
+    private static ByteString buildFEProxyTicket(TUniqueId queryId, TUniqueId rootFragmentInstanceId, ComputeNode worker) {
+        // Proxy Ticket: <QueryId> : <FragmentInstanceId> : Worker Hostname : Port
+        return ByteString.copyFromUtf8(hexStringFromUniqueId(queryId) + "|" 
+                        + hexStringFromUniqueId(rootFragmentInstanceId) + "|" 
+                        + worker.getHost() + "|" 
+                        + worker.getArrowFlightPort());
     }
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
@@ -582,5 +686,44 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         StringBuilder builder = new StringBuilder();
         builder.append(Long.toHexString(id.hi)).append("-").append(Long.toHexString(id.lo));
         return builder.toString();
+    }
+
+    private boolean validProxyFormat(String arrowFlightProxy) {
+        if (arrowFlightProxy.isEmpty()) {
+            return true;
+        }
+
+        String[] split = arrowFlightProxy.split(":");
+        return split.length == 2;
+    }
+
+    private Pair<Location, ByteString> parseProxy(SessionVariable sv, Coordinator defaultCoordinator,
+                                                  ComputeNode worker, TUniqueId rootFragmentInstanceId) {
+        ByteString handle;
+        Location endpoint;
+        if (sv.isArrowFlightProxyEnabled()) {
+            if (!validProxyFormat(sv.getArrowFlightProxy())) {
+                throw new RuntimeException(String.format("Invalid proxy format [arrow_flight_proxy=%s]",
+                        sv.getArrowFlightProxy()));
+            }
+
+            handle = buildFEProxyTicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId, worker);
+            if (sv.getArrowFlightProxy().isEmpty()) { // route to FE
+                endpoint = feEndpoint;
+            } else { // route to defined proxy
+                String[] split = sv.getArrowFlightProxy().split(":");
+                endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
+            }
+        } else { // route directly to BE
+            handle = buildBETicket(defaultCoordinator.getQueryId(), rootFragmentInstanceId);
+            endpoint = Location.forGrpcInsecure(worker.getHost(), worker.getArrowFlightPort());
+        }
+
+        return new Pair<>(endpoint, handle);
+    }
+
+    @VisibleForTesting
+    void addToCacheForTesting(String key, FlightClient client) {
+        this.beClientCache.put(key, client);
     }
 }
