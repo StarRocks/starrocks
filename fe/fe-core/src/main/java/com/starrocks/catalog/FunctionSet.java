@@ -272,6 +272,7 @@ public class FunctionSet {
     public static final String GET_JSON_OBJECT = "get_json_object";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
+    public static final String JSON_SET = "json_set";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
