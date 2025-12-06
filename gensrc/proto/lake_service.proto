@@ -359,6 +359,19 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
+message DropTabletCacheMeta {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+}
+
+message DropTabletCacheRequest {
+    repeated DropTabletCacheMeta tablets = 1;
+}
+
+message DropTabletCacheResponse {
+    optional StatusPB status = 1;
+}
+
 message FindSplitPointRequest {
     message TabletSplitInfo {
         optional int64 tablet_id = 1;
@@ -422,6 +435,7 @@ service LakeService {
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
+    rpc drop_tablet_cache(DropTabletCacheRequest) returns (DropTabletCacheResponse);
     rpc find_split_point(FindSplitPointRequest) returns (FindSplitPointResponse);
     rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
 }

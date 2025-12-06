@@ -3806,6 +3806,9 @@ public class Config extends ConfigBase {
     public static int lake_remove_table_thread_num = 4;
 
     @ConfField(mutable = true)
+    public static boolean lake_enable_drop_tablet_cache = true;
+
+    @ConfField(mutable = true)
     public static int merge_commit_gc_check_interval_ms = 60000;
 
     @ConfField(mutable = true)

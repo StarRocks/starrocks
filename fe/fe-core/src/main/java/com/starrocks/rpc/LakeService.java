@@ -32,6 +32,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -99,6 +101,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = TIMEOUT_DROP_TABLE)
     Future<DropTableResponse> dropTable(DropTableRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_tablet_cache", onceTalkTimeout = TIMEOUT_DROP_TABLE)
+    Future<DropTabletCacheResponse> dropTabletCache(DropTabletCacheRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);

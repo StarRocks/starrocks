@@ -1331,4 +1331,53 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location) {
     return datafile_gc(root_location, "", 0, false);
 }
 
+Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version) {
+    while (version > 0) {
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* No need to fill meta cache */,
+                                                   false /* No need to fill data cache */);
+        if (res.status().is_not_found()) {
+            break;
+        } else if (!res.ok()) {
+            return res.status();
+        }
+        auto metadata = std::move(res).value();
+        for (const auto& rowset : metadata->rowsets()) {
+            const auto& segment_cnt = rowset.segments_size();
+            bool has_segment_size = (segment_cnt == rowset.segment_size_size());
+            bool is_bundled_file = (segment_cnt == rowset.bundle_file_offsets_size());
+            for (size_t i = 0; i < segment_cnt; ++i) {
+                std::string segment_path = tablet_mgr->segment_location(tablet_id, rowset.segments().Get(i));
+                auto fs_or = FileSystem::CreateSharedFromString(segment_path);
+                if (!fs_or.ok()) {
+                    VLOG(3) << "fail to get file system for tablet " << tablet_id << ", error: " << fs_or.status();
+                    continue;
+                }
+                int64_t offset = is_bundled_file ? rowset.bundle_file_offsets().Get(i) : 0;
+                int64_t size = has_segment_size ? rowset.segment_size().Get(i) : -1;
+                auto result = (*fs_or)->drop_local_cache(segment_path, offset, size);
+                if (!result.ok()) {
+                    VLOG(3) << "fail to drop local cache for " << segment_path << ", error: " << result;
+                }
+            }
+        }
+
+        for (const auto& [_, file] : metadata->delvec_meta().version_to_file()) {
+            std::string delvec_path = tablet_mgr->delvec_location(tablet_id, file.name());
+            auto fs_or = FileSystem::CreateSharedFromString(delvec_path);
+            if (!fs_or.ok()) {
+                VLOG(3) << "fail to get file system for tablet " << tablet_id << ", error: " << fs_or.status();
+                continue;
+            }
+            auto result = (*fs_or)->drop_local_cache(delvec_path, 0 /* offset */, file.size());
+            if (!result.ok()) {
+                VLOG(3) << "fail to drop local cache for " << delvec_path << ", error: " << result;
+            }
+        }
+
+        VLOG(3) << "finish drop local cache for tablet " << tablet_id << ", version: " << version;
+        --version;
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::lake

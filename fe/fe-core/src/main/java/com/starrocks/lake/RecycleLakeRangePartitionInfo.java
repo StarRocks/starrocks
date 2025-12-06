@@ -40,7 +40,8 @@ public class RecycleLakeRangePartitionInfo extends RecycleRangePartitionInfo  {
         try {
             ComputeResource computeResource =
                     GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
-            if (LakeTableHelper.removePartitionDirectory(partition, computeResource)) {
+            if (LakeTableHelper.removePartitionDirectory(partition, computeResource,
+                    getDataCacheInfo().isEnabled())) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 LakeTableHelper.deleteShardGroupMeta(partition);
                 return true;
