@@ -75,11 +75,17 @@ public class TimeUtils {
     public static final ImmutableMap<String, String> TIME_ZONE_ALIAS_MAP = ImmutableMap.of(
             "CST", DEFAULT_TIME_ZONE, "PRC", DEFAULT_TIME_ZONE);
 
-    //Compatible: 2013-2-29
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("y-M-d").withZone(TIME_ZONE);
-    //Compatible: 2013-2-28 2:3:4
-    private static final DateTimeFormatter DATETIME_FORMAT =
+    //Used to convert a string to a date. Compatible: 2013-2-29
+    private static final DateTimeFormatter STRING_TO_DATE_FORMAT = DateTimeFormatter.ofPattern("y-M-d").withZone(TIME_ZONE);
+    //Used to convert a string to a datetime. Compatible: 2013-2-28 2:3:4
+    private static final DateTimeFormatter STRING_TO_DATETIME_FORMAT =
             DateTimeFormatter.ofPattern("y-M-d H:m:s").withZone(TIME_ZONE);
+
+    //Used to convert a date to a string.
+    private static final DateTimeFormatter DATE_TO_STRING_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(TIME_ZONE);
+    //Used to convert a datetime to a string.
+    private static final DateTimeFormatter DATETIME_TO_STRING_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(TIME_ZONE);
 
     private static final Pattern DATETIME_FORMAT_REG =
             Pattern.compile("^((\\d{2}(([02468][048])|([13579][26]))[\\-\\/\\s]?((((0?[13578])|(1[02]))[\\-\\/\\s]?"
@@ -118,7 +124,7 @@ public class TimeUtils {
     }
 
     public static String getCurrentFormatTime() {
-        return DATETIME_FORMAT.format(LocalDateTime.now());
+        return DATETIME_TO_STRING_FORMAT.format(LocalDateTime.now());
     }
 
     public static TimeZone getTimeZone() {
@@ -178,7 +184,7 @@ public class TimeUtils {
         }
         ParsePosition pos = new ParsePosition(0);
         try {
-            date = DATE_FORMAT.parse(dateStr, pos).query(LocalDate::from);
+            date = STRING_TO_DATE_FORMAT.parse(dateStr, pos).query(LocalDate::from);
         } catch (RuntimeException e) {
             throw new AnalysisException("Invalid date string: " + dateStr);
         }
@@ -195,7 +201,7 @@ public class TimeUtils {
             throw new AnalysisException("Invalid date string: " + dateTimeStr);
         }
         try {
-            dateTime = DATETIME_FORMAT.parse(dateTimeStr).query(LocalDateTime::from);
+            dateTime = STRING_TO_DATETIME_FORMAT.parse(dateTimeStr).query(LocalDateTime::from);
         } catch (RuntimeException e) {
             throw new AnalysisException("Invalid date string: " + dateTimeStr);
         }
@@ -205,7 +211,7 @@ public class TimeUtils {
     public static long timeStringToLong(String timeStr) {
         LocalDateTime dateTime;
         try {
-            dateTime = DATETIME_FORMAT.parse(timeStr).query(LocalDateTime::from);
+            dateTime = STRING_TO_DATETIME_FORMAT.parse(timeStr).query(LocalDateTime::from);
         } catch (RuntimeException e) {
             return -1;
         }
