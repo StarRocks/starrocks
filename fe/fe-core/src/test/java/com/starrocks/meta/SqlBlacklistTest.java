@@ -100,6 +100,15 @@ public class SqlBlacklistTest {
     }
 
     @Test
+    public void testDeleteSqlBlacklistIdIfNotExists() throws Exception {
+        long id1 = sqlBlackList.put(Pattern.compile("qwert"));
+        StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, new DelSqlBlackListStmt(List.of(id1, 2L)));
+        deleteStatementExecutor.execute();
+        Assertions.assertTrue(sqlBlackList
+                .getBlackLists().stream().noneMatch(x -> x.id == id1 ));
+    }
+
+    @Test
     public void testDeleteSqlBlacklist() throws Exception {
         long id1 = sqlBlackList.put(Pattern.compile("qwert"));
         long id2 = sqlBlackList.put(Pattern.compile("abcde"));
