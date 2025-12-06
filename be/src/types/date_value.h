@@ -49,6 +49,8 @@ public:
 
     int64_t to_unixtime() const;
 
+    int32_t to_days_since_unix_epoch() const;
+
     void from_date_literal(int64_t date_literal);
 
     bool from_date_literal_with_check(int64_t date_literal);
@@ -129,6 +131,10 @@ DateValue DateValue::from_days_since_unix_epoch(int days_since_unix_epoch) {
     DateValue dv;
     dv._julian = days_since_unix_epoch + date::UNIX_EPOCH_JULIAN;
     return dv;
+}
+
+inline int32_t DateValue::to_days_since_unix_epoch() const {
+    return _julian - date::UNIX_EPOCH_JULIAN;
 }
 
 template <TimeUnit UNIT>

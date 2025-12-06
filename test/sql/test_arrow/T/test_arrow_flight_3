@@ -1,39 +1,90 @@
--- name: test_arrow_flight_3
+-- name: test_arrow_flight_3 @arrow_flight_sql
 
-arrow: CREATE DATABASE arrow_flight_${uuid0};
-arrow: USE arrow_flight_${uuid0};
-arrow: CREATE TABLE arrow_flight_${uuid0}.__row_util_base ( k1 bigint NULL ) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ( "replication_num" = "1" );
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
-arrow: insert into arrow_flight_${uuid0}.__row_util_base select * from arrow_flight_${uuid0}.__row_util_base;
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base;
+insert into __row_util_base select * from __row_util_base;
+insert into __row_util_base select * from __row_util_base;
+insert into __row_util_base select * from __row_util_base;
 
-arrow: CREATE TABLE arrow_flight_${uuid0}.__row_util ( idx bigint NULL ) DISTRIBUTED BY HASH(`idx`) BUCKETS 64 PROPERTIES ( "replication_num" = "1" );
-arrow: insert into arrow_flight_${uuid0}.__row_util select row_number() over() as idx from arrow_flight_${uuid0}.__row_util_base;
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+CREATE TABLE t1 (
+    k1 bigint NULL,
+    c_boolean boolean NULL,
+    c_tinyint tinyint NULL,
+    c_smallint smallint NULL,
+    c_int int NULL,
+    c_bigint bigint NULL,
+    c_largeint largeint NULL,
+    c_float float NULL,
+    c_double double NULL,
+    c_decimalv2 DECIMAL NULL,
+    c_decimal32 DECIMAL(9, 1) NULL,
+    c_decimal64 DECIMAL(18, 1) NULL,
+    c_decimal128 DECIMAL(38, 1) NULL,
+    c_decimal256 DECIMAL(76, 1) NULL,
+    c_date date NULL,
+    c_datetime datetime NULL,
+    c_varchar string NULL,
+    c_char char(64) NULL,
+    c_json JSON NULL,
+    c_array_json ARRAY<JSON> NULL,
+    c_array_int ARRAY<INT> NULL,
+    c_array_largeint ARRAY<LARGEINT> NULL,
+    c_map MAP<INT, STRING> NULL,
+    c_struct STRUCT<k1 INT, k2 STRING> NULL
+) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ("replication_num" = "1");
+
+insert into t1 SELECT 
+    idx, idx % 2 = 0, cast(idx % 128 as tinyint), cast(idx % 32768 as smallint), cast(idx as int), cast(idx as bigint), cast(idx * 1000000000000 as largeint), 
+    cast(idx as float), cast(idx as double), 
+    cast(idx + 0.1 as DECIMAL), cast(idx + 0.1 as DECIMAL(9, 1)), cast(idx + 0.1 as DECIMAL(18, 1)), cast(idx + 0.1 as DECIMAL(38, 1)), cast(idx + 0.1 as DECIMAL(76, 1)), 
+    date_add('2020-01-01', interval idx day), date_add('2020-01-01 00:00:00', interval idx hour), 
+    cast(concat('varchar_', idx) as string), cast(concat('char_', idx) as char(64)), 
+    json_object('k1', idx, 'k2', concat('str_', idx)), [json_object('k1', idx, 'k2', concat('str_', idx))],
+    [idx, idx + 1, idx + 2], [idx, idx + 1, idx + 2], 
+    map{0: concat('str_', idx), 1: concat('str_', idx + 1)}, struct(idx, concat('str_', idx)) FROM __row_util;
+
+insert into t1(k1) select idx + 1600000 from __row_util where idx <= 10000;
+
+select * from t1 order by k1 limit 10;
+select * from t1 order by k1 DESC limit 10;
+select * from t1 where c_boolean is not null order by k1 DESC limit 10;
+
+select cast(c_varchar as VARBINARY) from t1 order by k1 limit 10;
+select hll_hash(k1) from t1 where k1 is not null order by k1 limit 10;
+select PERCENTILE_HASH(c_double) from t1 where c_double is not null order by k1 limit 10;
+select BITMAP_HASH(c_bigint) from t1 where c_bigint is not null order by k1 limit 10;
+
+select * from t1 where false;
+select * from t1 where k1 < 0;
+
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 order by k1 limit 10;
+
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 order by k1 DESC limit 10;
+
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 where false order by k1 limit 10;
+
+select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from t1 where k1 < 0 order by k1 limit 10;
 
 
-arrow: CREATE TABLE arrow_flight_${uuid0}.t1 ( k1 bigint NULL, c_boolean boolean NULL, c_tinyint tinyint NULL, c_smallint smallint NULL, c_int int NULL, c_bigint bigint NULL, c_largeint largeint NULL, c_float float NULL, c_double double NULL, c_decimalv2 DECIMAL NULL, c_decimal32 DECIMAL(9, 1) NULL, c_decimal64 DECIMAL(18, 1) NULL, c_decimal128 DECIMAL(38, 1) NULL, c_date date NULL, c_datetime datetime NULL, c_varchar string NULL, c_char char(64) NULL, c_json JSON NULL, c_array_int ARRAY<INT> NULL, c_map MAP<INT, STRING> NULL, c_struct STRUCT<k1 INT, k2 STRING> NULL ) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ( "replication_num" = "1" );
+select 1;
 
-arrow: insert into arrow_flight_${uuid0}.t1 SELECT idx, idx % 2 = 0, cast(idx % 128 as tinyint), cast(idx % 32768 as smallint), cast(idx as int), cast(idx as bigint), cast(idx * 1000000000000 as largeint), cast(idx as float), cast(idx as double), cast(idx + 0.1 as DECIMAL), cast(idx + 0.1 as DECIMAL(9, 1)), cast(idx + 0.1 as DECIMAL(18, 1)), cast(idx + 0.1 as DECIMAL(38, 1)), date_add('2020-01-01', interval idx day), date_add('2020-01-01 00:00:00', interval idx hour), cast(concat('varchar_', idx) as string), cast(concat('char_', idx) as char(64)), json_object('k1', idx, 'k2', concat('str_', idx)), [idx, idx + 1, idx + 2], map{0: concat('str_', idx), 1: concat('str_', idx + 1)}, struct(idx, concat('str_', idx)) FROM arrow_flight_${uuid0}.__row_util;
-
-arrow: insert into arrow_flight_${uuid0}.t1(k1) select idx + 1600000 from arrow_flight_${uuid0}.__row_util where idx <= 10000;
-
-arrow: select * from arrow_flight_${uuid0}.t1 order by k1 limit 10;
---arrow: select hll_hash(k1) from arrow_flight_${uuid0}.t1 where k1 is not null order by k1 limit 10;
-
-arrow: select * from arrow_flight_${uuid0}.t1 where false;
-arrow: select * from arrow_flight_${uuid0}.t1 where k1 < 0;
-
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 limit 10;
-
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 order by k1 DESC limit 10;
-
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where false order by k1 limit 10;
-
-arrow: select distinct k1, c_boolean, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimalv2, c_decimal32, c_decimal64, c_decimal128, c_date, c_datetime, c_varchar, c_char from arrow_flight_${uuid0}.t1 where k1 < 0 order by k1 limit 10;
-
-
-arrow: select 1;
-
-arrow: drop database arrow_flight_${uuid0} force;
+select map{null:1};
+select map{1:null};
