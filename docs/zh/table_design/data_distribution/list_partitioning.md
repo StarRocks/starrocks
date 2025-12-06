@@ -41,8 +41,8 @@ List 分区适用于存储具有少量枚举值列的数据、并且经常按列
 
 ### 语法
 
-```bnf
-PARTITION BY LIST (partition_columns)（
+```SQL
+PARTITION BY LIST (partition_columns) (
     PARTITION <partition_name> VALUES IN (value_list)
     [, ...]
 )
