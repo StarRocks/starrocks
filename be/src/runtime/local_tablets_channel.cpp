@@ -820,10 +820,11 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     return Status::OK();
 }
 
-void LocalTabletsChannel::cancel() {
+void LocalTabletsChannel::cancel(const std::string& reason) {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    std::string cancel_reason = reason.empty() ? "cancel" : reason;
     for (auto& it : _delta_writers) {
-        it.second->cancel(Status::Cancelled("cancel"));
+        it.second->cancel(Status::Cancelled(cancel_reason));
     }
 }
 
