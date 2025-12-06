@@ -386,7 +386,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 RelationId.of(queryStatement.getQueryRelation()).hashCode(),
                 node.getName().getValue().toLowerCase(),
                 getColumnNames(node.getColumnNames()),
-                queryStatement);
+                queryStatement,
+                false,
+                true);
     }
 
     public List<String> getColumnNames(Optional<List<Identifier>> columnNames) {
