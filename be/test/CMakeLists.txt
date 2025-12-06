@@ -440,12 +440,7 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
-<<<<<<< HEAD
-=======
         ./runtime/exec_sub_process_test.cpp
-        ./runtime/load_fail_point_test.cpp
-        ./runtime/query_statistics_test.cpp
->>>>>>> a4a1cdfe53 ([BugFix] Avoid using fork in sub processes (#66334))
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
