@@ -104,28 +104,30 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     /**
-     * restore `storageVolumeIdToVTabletGroupId` at startup time of FE leader
+     * refresh `storageVolumeIdToVTabletGroupId` at startup time of FE leader or after this FE transferred to leader.
      */
     public void restoreStorageVolumeToVTabletGroupMappings() {
-        // make sure to clean all expired keys who might have already been removed on other leader FE
-        // before this FE transferred to leader.
-        storageVolumeIdToVTabletGroupId.clear();
         try {
             List<FileStoreInfo> fileStoreInfos = GlobalStateMgr.getCurrentState().getStarOSAgent().listFileStore();
+            
+            Map<String, Long> newMappings = new HashMap<>();
             for (FileStoreInfo fsInfo : fileStoreInfos) {
                 String vTabletIdGroupId = fsInfo.getPropertiesMap().get(V_SHARD_GROUP_ID);
                 if (StringUtils.isEmpty(vTabletIdGroupId)) {
                     continue;
                 }
                 try {
-                    storageVolumeIdToVTabletGroupId.put(fsInfo.getFsName(), Long.parseLong(vTabletIdGroupId));
+                    newMappings.put(fsInfo.getFsName(), Long.parseLong(vTabletIdGroupId));
                 } catch (NumberFormatException e) {
                     LOG.warn("found invalid v_shard_group_id" +
                             " while restoring storage volume to virtual tablet group mapping: {}", vTabletIdGroupId);
                 }
             }
+            
+            storageVolumeIdToVTabletGroupId.clear();
+            storageVolumeIdToVTabletGroupId.putAll(newMappings);
         } catch (DdlException e) {
-            LOG.warn("failed to restore storage volume to tablet", e);
+            LOG.warn("failed to restore storage volume to tablet, keeping existing mappings", e);
         }
     }
 
