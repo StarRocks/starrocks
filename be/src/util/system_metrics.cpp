@@ -47,6 +47,7 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "cache/mem_cache/page_cache.h"
+#include "cache/mem_cache/pagecache_arena.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
@@ -289,6 +290,11 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
+    registry->register_metric("pagecache_arena_allocated_bytes", &_memory_metrics->pagecache_arena_allocated_bytes);
+    registry->register_metric("pagecache_arena_active_bytes", &_memory_metrics->pagecache_arena_active_bytes);
+    registry->register_metric("pagecache_arena_resident_bytes", &_memory_metrics->pagecache_arena_resident_bytes);
+    registry->register_metric("pagecache_arena_mapped_bytes", &_memory_metrics->pagecache_arena_mapped_bytes);
+    registry->register_metric("pagecache_arena_retained_bytes", &_memory_metrics->pagecache_arena_retained_bytes);
     registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
     registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
@@ -320,6 +326,19 @@ void SystemMetrics::_update_pagecache_mem_tracker() {
     auto* page_cache = StoragePageCache::instance();
     if (pagecache_mem_tracker && page_cache != nullptr && page_cache->is_initialized()) {
         pagecache_mem_tracker->set(page_cache->memory_usage());
+    }
+
+    // Update pagecache arena metrics
+    auto* arena = PageCacheArena::instance();
+    if (arena->is_initialized()) {
+        PageCacheArena::ArenaStats stats;
+        if (arena->get_stats(&stats)) {
+            _memory_metrics->pagecache_arena_allocated_bytes.set_value(stats.allocated);
+            _memory_metrics->pagecache_arena_active_bytes.set_value(stats.active);
+            _memory_metrics->pagecache_arena_resident_bytes.set_value(stats.resident);
+            _memory_metrics->pagecache_arena_mapped_bytes.set_value(stats.mapped);
+            _memory_metrics->pagecache_arena_retained_bytes.set_value(stats.retained);
+        }
     }
 }
 
