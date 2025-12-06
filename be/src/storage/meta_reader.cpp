@@ -36,7 +36,8 @@ namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
         META_FLAT_JSON_META, META_DICT_MERGE, META_MAX,         META_MIN,
-        META_COUNT_ROWS,     META_COUNT_COL,  META_COLUMN_SIZE, META_COLUMN_COMPRESSED_SIZE};
+        META_COUNT_ROWS,     META_COUNT_COL,  META_COLUMN_SIZE, META_COLUMN_COMPRESSED_SIZE,
+        META_INDEX_SIZE};
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
@@ -141,7 +142,8 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             desc.children.emplace_back(item_desc);
             MutableColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
-        } else if (field == META_COLUMN_SIZE || field == META_COLUMN_COMPRESSED_SIZE) {
+        } else if (field == META_COLUMN_SIZE || field == META_COLUMN_COMPRESSED_SIZE ||
+                   field.find(META_INDEX_SIZE) == 0) {
             TypeDescriptor desc;
             desc.type = TYPE_BIGINT;
             MutableColumnPtr column = ColumnHelper::create_column(desc, true);
@@ -246,6 +248,13 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_column_size(cid, column, type);
     } else if (name == META_COLUMN_COMPRESSED_SIZE) {
         return _collect_column_compressed_size(cid, column, type);
+    } else if (name.find(META_INDEX_SIZE) == 0) {
+        // Extract index type from name like "index_size_BITMAP", "index_size_ALL", etc.
+        std::string index_type = "ALL";
+        if (name.size() > META_INDEX_SIZE.size() + 1) {
+            index_type = name.substr(META_INDEX_SIZE.size() + 1);
+        }
+        return _collect_index_size(cid, column, type, index_type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
 }
@@ -522,6 +531,24 @@ int64_t SegmentMetaCollecter::_collect_column_compressed_size_recursive(ColumnRe
     }
 
     return total;
+}
+
+Status SegmentMetaCollecter::_collect_index_size(ColumnId cid, Column* column, LogicalType type,
+                                                 const std::string& index_type) {
+    ColumnReader* col_reader = const_cast<ColumnReader*>(_segment->column(cid));
+    RETURN_IF(col_reader == nullptr, Status::NotFound("column not found: " + std::to_string(cid)));
+
+    int64_t total_size = col_reader->get_index_size(index_type);
+
+    // Recursively collect index sizes for sub-readers (for complex types like ARRAY, MAP, STRUCT, JSON)
+    if (col_reader->sub_readers() != nullptr) {
+        for (const auto& sub_reader : *col_reader->sub_readers()) {
+            total_size += sub_reader->get_index_size(index_type);
+        }
+    }
+
+    column->append_datum(total_size);
+    return Status::OK();
 }
 
 } // namespace starrocks

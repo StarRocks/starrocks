@@ -93,7 +93,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.MIN)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.COUNT)
                     && !aggFuncName.equalsIgnoreCase(FunctionSet.COLUMN_SIZE)
-                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.COLUMN_COMPRESSED_SIZE)
+                    && !aggFuncName.equalsIgnoreCase(FunctionSet.INDEX_SIZE)) {
                 return false;
             }
         }
@@ -148,6 +149,18 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
             }
 
+            // For index_size function, append index type to meta column name
+            // index_size(col) -> index_size_ALL_col
+            // index_size(col, 'BITMAP') -> index_size_BITMAP_col
+            if (aggCall.getFnName().equals(FunctionSet.INDEX_SIZE)) {
+                String indexType = "ALL";
+                if (aggCall.getChildren().size() > 1 && aggCall.getChild(1) instanceof ConstantOperator) {
+                    ConstantOperator indexTypeOp = (ConstantOperator) aggCall.getChild(1);
+                    indexType = indexTypeOp.getVarchar().toUpperCase();
+                }
+                metaColumnName = aggCall.getFnName() + "_" + indexType + "_" + usedColumn.getName();
+            }
+
             Type columnType = aggCall.getType();
             // DictMerge meta aggregate function is special, need change the column type from
             // VARCHAR to ARRAY_VARCHAR
@@ -162,7 +175,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             Column copiedColumn = c.deepCopy();
             if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
-                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.INDEX_SIZE)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
                 copiedColumn.setType(IntegerType.BIGINT);
@@ -181,7 +195,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                                 List.of(metaColumn, aggCall.getChild(1)), aggFunction));
             } else if (aggCall.getFnName().equals(FunctionSet.COUNT)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
-                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
+                    || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)
+                    || aggCall.getFnName().equals(FunctionSet.INDEX_SIZE)) {
                 // rewrite count to sum
                 Function aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
                         Function.CompareMode.IS_IDENTICAL);
