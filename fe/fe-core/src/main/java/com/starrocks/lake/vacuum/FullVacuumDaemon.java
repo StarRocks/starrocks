@@ -74,6 +74,9 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (!Config.enable_lake_fullvacuum) {
+            return;
+        }
         if (FeConstants.runningUnitTest) {
             return;
         }
