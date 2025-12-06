@@ -286,7 +286,6 @@ public class Dictionary implements Writable {
                     throw new DdlException("unknown property for dictionary: " + key);
             }
         }
-        return;
     }
 
     public String buildQuery() {
@@ -319,10 +318,11 @@ public class Dictionary implements Writable {
         this.setLastSuccessVersion(0);
     }
 
-    public synchronized void setRefreshing() {
+    public synchronized void setRefreshing(long ts) {
         this.stateBeforeRefresh = this.state;
         this.state = DictionaryState.REFRESHING;
-        this.lastSuccessRefreshTime = System.currentTimeMillis();
+        this.lastSuccessRefreshTime = ts;
+        this.nextSchedulableTime.set(ts + refreshInterval);
         this.setErrorMsg("");
     }
 
@@ -331,10 +331,11 @@ public class Dictionary implements Writable {
         this.stateBeforeRefresh = null;
     }
 
-    public synchronized void setFinished() {
+    public synchronized void setFinished(long ts, long version) {
         this.state = DictionaryState.FINISHED;
-        this.lastSuccessFinishedTime = System.currentTimeMillis();
+        this.lastSuccessFinishedTime = ts;
         this.stateBeforeRefresh = null;
+        this.lastSuccessVersion = version;
     }
 
     public synchronized void setCancelled() {
