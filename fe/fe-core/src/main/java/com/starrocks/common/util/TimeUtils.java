@@ -118,7 +118,7 @@ public class TimeUtils {
     }
 
     public static String getCurrentFormatTime() {
-        return DATETIME_FORMAT.format(getSystemNow());
+        return DATETIME_FORMAT.format(LocalDateTime.now());
     }
 
     public static TimeZone getTimeZone() {
