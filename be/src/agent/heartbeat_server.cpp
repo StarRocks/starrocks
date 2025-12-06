@@ -83,18 +83,13 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                    << " BE/CN:" << config::enable_transparent_data_encryption;
     }
 
-<<<<<<< HEAD
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
-=======
-    StatusOr<CmpResult> res;
-    // reject master's heartbeat when exit
-    if (process_exit_in_progress() || is_process_crashing()) {
+
+    if (is_process_crashing()) {
         res = Status::Shutdown("BE is shutting down");
-    } else {
-        res = compare_master_info(master_info);
     }
->>>>>>> c24a7de0ab ([BugFix] Fix BE still reported as alive on SIGSEGV (#66212))
+
     res.status().to_thrift(&heartbeat_result.status);
     if (!res.ok()) {
         MasterInfoPtr ptr;
