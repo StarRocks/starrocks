@@ -75,6 +75,8 @@ set(EXPR_FILES
   is_null_predicate.cpp
   json_functions.cpp
   jsonpath.cpp
+  variant_functions.cpp
+  variant_path_parser.cpp
   like_predicate.cpp
   literal.cpp
   locate.cpp

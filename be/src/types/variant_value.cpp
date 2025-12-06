@@ -69,6 +69,14 @@ StatusOr<VariantValue> VariantValue::create(const Slice& slice) {
     return VariantValue(std::move(metadata), std::move(value));
 }
 
+// Create a VariantValue from a Parquet Variant.
+VariantValue VariantValue::of_variant(const Variant& variant) {
+    const std::string_view metadata = variant.metadata().get_raw();
+    const std::string_view value = variant.value();
+
+    return VariantValue(metadata, value);
+}
+
 Status VariantValue::validate_metadata(const std::string_view metadata) {
     // metadata at least 3 bytes: version, dictionarySize and at least one offset.
     if (metadata.size() < kMinMetadataSize) {
