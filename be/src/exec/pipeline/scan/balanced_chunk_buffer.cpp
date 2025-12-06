@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
-#include "fmt/format.h"
+#include "common/config.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
@@ -73,21 +73,29 @@ bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
     return ok;
 }
 
-bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+bool BalancedChunkBuffer::put(int buffer_index, int* actual_buffer, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
     // CRITICAL (by satanson)
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
-    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return true;
+    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) {
+        // Set actual_buffer to buffer_index for early return case
+        *actual_buffer = buffer_index;
+        return true;
+    }
     bool ret;
     size_t memory_usage = chunk->memory_usage();
     if (_strategy == BalanceStrategy::kDirect) {
+        *actual_buffer = buffer_index;
         ret = _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
-        // TODO: try to balance data according to number of rows
-        // But the hard part is, that may needs to maintain a min-heap to account the rows of each
-        // output operator, which would introduce some extra overhead
-        int target_index = _output_index.fetch_add(1);
-        target_index %= _output_operators;
+        // In the round-robin strategy, assign every N consecutive chunks to the same output operator,
+        // then switch to the next operator. N is determined by config::io_task_shared_scan_step_size.
+        // A smaller N increases scheduling overhead, while a larger N may cause load imbalance among operators.
+        // This strategy is used to balance the load among operators, and it is more efficient than the direct strategy.
+        int64_t current = _output_index.fetch_add(1);
+        int step_size = std::max(1, config::io_task_shared_scan_step_size);
+        int target_index = (current / step_size) % _output_operators;
+        *actual_buffer = target_index;
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
