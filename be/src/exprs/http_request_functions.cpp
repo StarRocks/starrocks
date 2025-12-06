@@ -342,6 +342,26 @@ static bool check_allowlist(const std::string& host, const std::vector<std::stri
 //   4 = PARANOID: Block all requests
 // Returns Status::OK() if allowed, error Status if blocked
 Status validate_host_security(const std::string& url, const HttpRequestFunctionState& state) {
+    // Protocol validation (before DNS resolution)
+    // Only http:// and https:// are supported (case-insensitive)
+    auto starts_with_icase = [](const std::string& str, const std::string& prefix) {
+        if (str.size() < prefix.size()) return false;
+        for (size_t i = 0; i < prefix.size(); ++i) {
+            if (std::tolower(static_cast<unsigned char>(str[i])) !=
+                std::tolower(static_cast<unsigned char>(prefix[i]))) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    bool has_http = starts_with_icase(url, "http://");
+    bool has_https = starts_with_icase(url, "https://");
+    if (!has_http && !has_https) {
+        return Status::InvalidArgument(
+                "Invalid protocol. Only http:// and https:// are supported");
+    }
+
     int level = state.security_level;
 
     // Level 1 (TRUSTED): Allow everything including private IPs
@@ -371,8 +391,9 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
     // Level 2 (PUBLIC) and Level 3 (RESTRICTED): Resolve DNS first
     auto resolved_result = resolve_hostname_all_ips(host);
     if (!resolved_result.ok()) {
-        return Status::InvalidArgument(
-                fmt::format("DNS resolution failed for '{}': {}", host, resolved_result.status().message()));
+        // Pass through the error message from resolve_hostname_all_ips directly
+        // (it already contains "DNS resolution failed for host: error")
+        return Status::InvalidArgument(resolved_result.status().message());
     }
     const auto& resolved_ips = resolved_result.value();
 
@@ -396,11 +417,16 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
 
     // Level 2 (PUBLIC) and Level 3 (RESTRICTED): Check private IP
     bool is_private = false;
+    bool is_link_local = false;
     std::string private_ip;
     for (const auto& ip : resolved_ips) {
         if (is_private_ip(ip)) {
             is_private = true;
             private_ip = ip;
+            // Check if it's specifically a link-local IP (cloud metadata service)
+            if (is_link_local_ip(ip)) {
+                is_link_local = true;
+            }
             break;
         }
     }
@@ -411,9 +437,19 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
             // Private IP allowed because it's in allowlist and setting is enabled
             return Status::OK();
         }
+        // Different error messages based on IP type
+        if (is_link_local) {
+            // CRITICAL: Link-local IPs (169.254.x.x) are commonly used for cloud metadata services
+            return Status::InvalidArgument(fmt::format(
+                    "SSRF Protection: Link-local IP '{}' blocked (cloud metadata service). "
+                    "WARNING: Allowing this IP can expose cloud credentials and sensitive metadata.",
+                    private_ip));
+        }
+        // Standard private IP warning
         return Status::InvalidArgument(fmt::format(
                 "SSRF Protection: Private IP '{}' blocked. "
-                "Set (\"http_request_allow_private_in_allowlist\" = \"true\") and add to allowlist.",
+                "To allow: Set (\"http_request_allow_private_in_allowlist\" = \"true\") AND add to allowlist. "
+                "WARNING: Allowing private IPs can expose internal services.",
                 private_ip));
     }
 

@@ -258,6 +258,36 @@ bool is_private_ip(const std::string& ip) {
     return true;
 }
 
+bool is_link_local_ip(const std::string& ip) {
+    // Try IPv4 first
+    struct in_addr addr4;
+    if (inet_pton(AF_INET, ip.c_str(), &addr4) == 1) {
+        uint32_t ip_num = ntohl(addr4.s_addr);
+        // 169.254.0.0/16 - Link-local (AWS/GCP/Azure metadata, etc.)
+        return (ip_num & 0xFFFF0000) == 0xA9FE0000;
+    }
+
+    // Try IPv6
+    struct in6_addr addr6;
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) == 1) {
+        // fe80::/10 - Link-local
+        if (addr6.s6_addr[0] == 0xFE && (addr6.s6_addr[1] & 0xC0) == 0x80) {
+            return true;
+        }
+        // ::ffff:169.254.x.x - IPv4-mapped link-local
+        static const unsigned char v4mapped_prefix[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
+        if (memcmp(addr6.s6_addr, v4mapped_prefix, 12) == 0) {
+            uint32_t v4_addr = (static_cast<uint32_t>(addr6.s6_addr[12]) << 24) |
+                               (static_cast<uint32_t>(addr6.s6_addr[13]) << 16) |
+                               (static_cast<uint32_t>(addr6.s6_addr[14]) << 8) |
+                               static_cast<uint32_t>(addr6.s6_addr[15]);
+            return (v4_addr & 0xFFFF0000) == 0xA9FE0000;
+        }
+    }
+
+    return false;
+}
+
 StatusOr<std::vector<std::string>> resolve_hostname_all_ips(const std::string& hostname) {
     std::vector<std::string> results;
 

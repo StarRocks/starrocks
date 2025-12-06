@@ -75,6 +75,11 @@ bool is_valid_ip(const std::string& ip);
 // Also returns true for invalid IP addresses (fail-safe behavior).
 bool is_private_ip(const std::string& ip);
 
+// Check if an IP address is in link-local range (169.254.0.0/16 for IPv4, fe80::/10 for IPv6)
+// These ranges are commonly used for cloud metadata services (AWS, GCP, Azure IMDS)
+// and require special security warnings.
+bool is_link_local_ip(const std::string& ip);
+
 // Resolve hostname to all IP addresses (both IPv4 and IPv6)
 // Returns a vector of resolved IP addresses as strings.
 // If the host is already a valid IP address, returns it directly.

@@ -466,6 +466,43 @@ PARALLEL_TEST_F(HttpRequestFunctionsTest, securityInvalidUrlTest) {
     ASSERT_FALSE(status3.ok());
 }
 
+// Test protocol validation - only http:// and https:// allowed
+PARALLEL_TEST_F(HttpRequestFunctionsTest, protocolValidationTest) {
+    HttpRequestFunctionState state;
+    state.security_level = 1;  // TRUSTED (allow everything except protocol check)
+
+    // Valid protocols should pass protocol check
+    ASSERT_TRUE(validate_host_security("http://example.com/api", state).ok());
+    ASSERT_TRUE(validate_host_security("https://example.com/api", state).ok());
+    ASSERT_TRUE(validate_host_security("HTTP://example.com/api", state).ok());  // case insensitive
+    ASSERT_TRUE(validate_host_security("HTTPS://example.com/api", state).ok());
+
+    // Invalid protocols should be blocked BEFORE DNS resolution
+    auto status1 = validate_host_security("ftp://example.com/file", state);
+    ASSERT_FALSE(status1.ok());
+    ASSERT_TRUE(status1.message().find("Invalid protocol") != std::string::npos);
+    ASSERT_TRUE(status1.message().find("http://") != std::string::npos);
+
+    auto status2 = validate_host_security("file:///etc/passwd", state);
+    ASSERT_FALSE(status2.ok());
+    ASSERT_TRUE(status2.message().find("Invalid protocol") != std::string::npos);
+
+    auto status3 = validate_host_security("gopher://example.com", state);
+    ASSERT_FALSE(status3.ok());
+    ASSERT_TRUE(status3.message().find("Invalid protocol") != std::string::npos);
+
+    auto status4 = validate_host_security("data:text/html,<script>alert(1)</script>", state);
+    ASSERT_FALSE(status4.ok());
+    ASSERT_TRUE(status4.message().find("Invalid protocol") != std::string::npos);
+
+    // Edge cases
+    auto status5 = validate_host_security("javascript:alert(1)", state);
+    ASSERT_FALSE(status5.ok());
+
+    auto status6 = validate_host_security("custom://host/path", state);
+    ASSERT_FALSE(status6.ok());
+}
+
 // Test invalid regex pattern handling (should be skipped without crashing)
 PARALLEL_TEST_F(HttpRequestFunctionsTest, invalidRegexPatternTest) {
     // Invalid regex patterns should be handled gracefully
