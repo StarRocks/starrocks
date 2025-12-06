@@ -2087,16 +2087,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
     }
 
-    public void logUpdateRolePrivilege(
-            Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified,
-            short pluginId,
-            short pluginVersion) {
-        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
-        logUpdateRolePrivilege(info);
-    }
-
-    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info) {
-        logJsonObject(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
+    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info, walApplier);
     }
 
     public void logDropRole(
