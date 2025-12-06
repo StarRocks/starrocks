@@ -397,7 +397,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Expr partitionExpr = ((ExpressionRangePartitionInfo) partitionInfo)
                 .getPartitionExprs(materializedView.getIdToColumn()).get(0);
         Assertions.assertTrue(partitionExpr instanceof FunctionCallExpr);
-        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFnName().getFunction());
+        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFunctionName());
         Assertions.assertEquals("k1", ((SlotRef) ((FunctionCallExpr) partitionExpr).getChild(1)).getColumnName());
     }
 

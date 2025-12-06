@@ -389,7 +389,7 @@ public class MaterializationContext {
                     return LOWEST_ORDERING;
                 }
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionExpr;
-                if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+                if (!functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                     return LOWEST_ORDERING;
                 }
                 StringLiteral timeUnit = (StringLiteral) mvPartitionExpr.getChild(0);

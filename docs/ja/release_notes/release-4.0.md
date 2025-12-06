@@ -10,6 +10,54 @@ StarRocks を v4.0 にアップグレードした後、v3.5.0 および v3.5.1 �
 
 :::
 
+## 4.0.2
+
+リリース日：2025年12月4日
+
+### 新機能
+
+- 新しいリソースグループ属性 `mem_pool` を追加しました。複数のリソースグループが同じメモリプールを共有し、そのプールに対して共同のメモリ上限を適用できます。本機能は後方互換性があります。`mem_pool` が指定されていない場合は `default_mem_pool` が使用されます。[#64112](https://github.com/StarRocks/starrocks/pull/64112)
+
+### 改善点
+
+- File Bundling 有効時の Vacuum におけるリモートストレージアクセスを削減しました。[#65793](https://github.com/StarRocks/starrocks/pull/65793)
+- File Bundling 機能が最新のタブレットメタデータをキャッシュするようになりました。[#65640](https://github.com/StarRocks/starrocks/pull/65640)
+- 長い文字列を扱うシナリオでの安全性と安定性を向上しました。[#65433](https://github.com/StarRocks/starrocks/pull/65433) [#65148](https://github.com/StarRocks/starrocks/pull/65148)
+- `SplitTopNAggregateRule` のロジックを最適化し、性能劣化を回避しました。[#65478](https://github.com/StarRocks/starrocks/pull/65478)
+- Iceberg/DeltaLake と同様のテーブル統計収集戦略を他の外部データソースに適用し、単一テーブルの場合に不要な統計収集を行わないよう改善しました。[#65430](https://github.com/StarRocks/starrocks/pull/65430)
+- Data Cache HTTP API `api/datacache/app_stat` に Page Cache 指標を追加しました。[#65341](https://github.com/StarRocks/starrocks/pull/65341)
+- ORC ファイルの分割をサポートし、大規模 ORC ファイルの並列スキャンが可能になりました。[#65188](https://github.com/StarRocks/starrocks/pull/65188)
+- 最適化エンジンに IF 述語の選択率推定を追加しました。[#64962](https://github.com/StarRocks/starrocks/pull/64962)
+- FE が `DATE` および `DATETIME` 型に対する `hour`、`minute`、`second` の定数評価をサポートしました。[#64953](https://github.com/StarRocks/starrocks/pull/64953)
+- 単純な集計を MetaScan に書き換える機能をデフォルトで有効化しました。[#64698](https://github.com/StarRocks/starrocks/pull/64698)
+- 共有データクラスタにおける複数レプリカ割り当ての処理を改善し、信頼性を強化しました。[#64245](https://github.com/StarRocks/starrocks/pull/64245)
+- 監査ログおよびメトリクスでキャッシュヒット率を公開しました。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
+- HyperLogLog またはサンプリングにより、ヒストグラムのバケットごとの重複除外数（NDV）推定を実施し、述語や JOIN に対してより正確な NDV を提供します。[#58516](https://github.com/StarRocks/starrocks/pull/58516)
+- SQL 標準セマンティクスに準拠した FULL OUTER JOIN USING をサポートしました。[#65122](https://github.com/StarRocks/starrocks/pull/65122)
+- オプティマイザのタイムアウト時にメモリ情報を出力して診断を支援します。[#65206](https://github.com/StarRocks/starrocks/pull/65206)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- DECIMAL56 の `mod` 演算に関する問題。[#65795](https://github.com/StarRocks/starrocks/pull/65795)
+- Iceberg のスキャンレンジ処理に関する問題。[#65658](https://github.com/StarRocks/starrocks/pull/65658)
+- 一時パーティションおよびランダム bucket における MetaScan 書き換え問題。[#65617](https://github.com/StarRocks/starrocks/pull/65617)
+- 透明なマテリアライズドビュー書き換え後に `JsonPathRewriteRule` が誤ったテーブルを参照する問題。[#65597](https://github.com/StarRocks/starrocks/pull/65597)
+- `partition_retention_condition` が生成列を参照している場合のマテリアライズドビューのリフレッシュ失敗。[#65575](https://github.com/StarRocks/starrocks/pull/65575)
+- Iceberg の min/max 値の型に関する問題。[#65551](https://github.com/StarRocks/starrocks/pull/65551)
+- `enable_evaluate_schema_scan_rule=true` の場合に異なるデータベースを跨いで `information_schema.tables` および `views` をクエリする際の問題。[#65533](https://github.com/StarRocks/starrocks/pull/65533)
+- JSON 配列比較における整数オーバーフロー。[#64981](https://github.com/StarRocks/starrocks/pull/64981)
+- MySQL Reader が SSL をサポートしていない問題。[#65291](https://github.com/StarRocks/starrocks/pull/65291)
+- SVE ビルド非互換性による ARM ビルド問題。[#65268](https://github.com/StarRocks/starrocks/pull/65268)
+- bucket-aware 実行に基づくクエリが bucketed Iceberg テーブルでハングする可能性がある問題。[#65261](https://github.com/StarRocks/starrocks/pull/65261)
+- OLAP テーブルスキャンでメモリ制限チェックが不足していたことによるエラー伝播およびメモリ安全性の問題。[#65131](https://github.com/StarRocks/starrocks/pull/65131)
+
+### 動作の変更
+
+- マテリアライズドビューが非アクティブ化されると、その依存マテリアライズドビューも再帰的に非アクティブ化されます。[#65317](https://github.com/StarRocks/starrocks/pull/65317)
+- SHOW CREATE の生成時に、コメントやフォーマットを含む元のマテリアライズドビュー定義 SQL を使用します。[#64318](https://github.com/StarRocks/starrocks/pull/64318)
+
 ## 4.0.1
 
 リリース日：2025年11月17日

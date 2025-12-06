@@ -53,7 +53,7 @@ public class SyntaxSugars {
      * - window functions
      */
     public static FunctionCallExpr parse(FunctionCallExpr call) {
-        return FUNCTION_PARSER.getOrDefault(call.getFnName().getFunction(), SyntaxSugars::defaultParse).apply(call);
+        return FUNCTION_PARSER.getOrDefault(call.getFunctionName(), SyntaxSugars::defaultParse).apply(call);
     }
 
     private static FunctionCallExpr defaultParse(FunctionCallExpr call) {

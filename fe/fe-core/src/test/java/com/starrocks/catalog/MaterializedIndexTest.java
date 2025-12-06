@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;

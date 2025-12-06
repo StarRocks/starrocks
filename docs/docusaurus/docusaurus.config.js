@@ -32,10 +32,10 @@ const config = {
 
   onBrokenAnchors: "ignore",
   onBrokenLinks: "ignore",
-  onBrokenMarkdownLinks: "throw",
+  markdown: { hooks: { onBrokenMarkdownLinks: 'throw' } },
 
   future: {
-    experimental_faster: true,
+    v4: true,
   },
 
   i18n: {

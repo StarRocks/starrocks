@@ -21,6 +21,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -82,9 +83,11 @@ public class PipeManager {
             // Add pipe
             long id = GlobalStateMgr.getCurrentState().getNextId();
             Pipe pipe = Pipe.fromStatement(id, stmt);
-            putPipe(pipe);
 
-            repo.addPipe(pipe);
+            PipeOpEntry opEntry = new PipeOpEntry();
+            opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_CREATE);
+            opEntry.setPipeJson(pipe.toJson());
+            GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry, wal -> putPipe(pipe));
         } finally {
             lock.writeLock().unlock();
         }
@@ -115,10 +118,12 @@ public class PipeManager {
     }
 
     private void dropPipeImpl(Pipe pipe) {
-        pipe.suspend();
+        pipe.suspend(false);
         pipe.destroy();
-        removePipe(pipe);
-        repo.deletePipe(pipe);
+        PipeOpEntry opEntry = new PipeOpEntry();
+        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_DROP);
+        opEntry.setPipeJson(pipe.toJson());
+        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry, wal -> removePipe(pipe));
     }
 
     public void dropPipesOfDb(String dbName, long dbId) {
@@ -129,14 +134,10 @@ public class PipeManager {
                     .filter(kv -> kv.getKey().first == dbId)
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList());
-            nameToId.keySet().removeIf(x -> x.first == dbId);
             for (PipeId id : removed) {
                 Pipe pipe = pipeMap.get(id);
                 if (pipe != null) {
-                    pipe.suspend();
-                    pipe.destroy();
-                    pipeMap.remove(id);
-                    repo.deletePipe(pipe);
+                    dropPipeImpl(pipe);
                 }
             }
             LOG.info("drop pipes in database " + dbName + ": " + removed);
@@ -159,7 +160,7 @@ public class PipeManager {
             if (alterClause instanceof AlterPipePauseResume) {
                 AlterPipePauseResume pauseResume = (AlterPipePauseResume) alterClause;
                 if (pauseResume.isSuspend()) {
-                    pipe.suspend();
+                    pipe.suspend(true);
                 } else if (pauseResume.isResume()) {
                     pipe.resume();
                 }
@@ -168,19 +169,12 @@ public class PipeManager {
                 pipe.retry(retry);
             } else if (alterClause instanceof AlterPipeSetProperty) {
                 AlterPipeSetProperty setProperty = (AlterPipeSetProperty) alterClause;
-                pipe.processProperties(setProperty.getProperties());
+                pipe.alterProperties(setProperty.getProperties());
                 LOG.info("alter pipe {} properties {}", pipe, setProperty.getProperties());
             }
-
-            // persistence
-            repo.alterPipe(pipe);
         } finally {
             lock.writeLock().unlock();
         }
-    }
-
-    protected void updatePipe(Pipe pipe) {
-        repo.alterPipe(pipe);
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
@@ -251,6 +245,15 @@ public class PipeManager {
                     .map(Map.Entry::getValue)
                     .collect(Collectors.toList());
             return GsonUtils.GSON.toJson(pipes);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public Pipe getPipeById(PipeId pipeId) {
+        try {
+            lock.readLock().lock();
+            return pipeMap.get(pipeId);
         } finally {
             lock.readLock().unlock();
         }

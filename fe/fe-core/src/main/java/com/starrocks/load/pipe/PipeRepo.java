@@ -14,12 +14,13 @@
 
 package com.starrocks.load.pipe;
 
+import com.starrocks.common.CloseableLock;
+import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,27 +37,6 @@ public class PipeRepo {
 
     public PipeRepo(PipeManager pipeManager) {
         this.pipeManager = pipeManager;
-    }
-
-    public void addPipe(Pipe pipe) {
-        PipeOpEntry opEntry = new PipeOpEntry();
-        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_CREATE);
-        opEntry.setPipeJson(pipe.toJson());
-        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
-    }
-
-    public void deletePipe(Pipe pipe) {
-        PipeOpEntry opEntry = new PipeOpEntry();
-        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_DROP);
-        opEntry.setPipeJson(pipe.toJson());
-        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
-    }
-
-    public void alterPipe(Pipe pipe) {
-        PipeOpEntry opEntry = new PipeOpEntry();
-        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_ALTER);
-        opEntry.setPipeJson(pipe.toJson());
-        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
@@ -86,5 +66,26 @@ public class PipeRepo {
         }
     }
 
+    public void replayAlterPipe(AlterPipeLog alterPipeLog) {
+        Pipe pipe = pipeManager.getPipeById(alterPipeLog.getPipeId());
+        if (pipe == null) {
+            LOG.warn("Cannot find pipe {} when replaying AlterPipeLog", alterPipeLog.getPipeId());
+            return;
+        }
+
+        try (CloseableLock l = pipe.takeWriteLock()) {
+            if (alterPipeLog.getState() != null) {
+                pipe.setState(alterPipeLog.getState());
+            }
+
+            if (alterPipeLog.getChangeProps() != null) {
+                pipe.processProperties(alterPipeLog.getChangeProps());
+            }
+
+            if (alterPipeLog.getLoadStatus() != null) {
+                pipe.setLoadStatus(alterPipeLog.getLoadStatus());
+            }
+        }
+    }
 }
 

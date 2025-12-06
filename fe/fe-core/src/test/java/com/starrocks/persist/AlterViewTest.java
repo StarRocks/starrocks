@@ -19,6 +19,7 @@ package com.starrocks.persist;
 
 import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.journal.JournalEntity;
@@ -30,7 +31,6 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.transaction.MockedLocalMetaStore;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;

@@ -43,6 +43,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -119,6 +120,10 @@ public class ResourceMgr implements Writable {
         try {
             String resourceName = stmt.getResourceName();
             String typeName = resource.getType().name().toLowerCase(Locale.ROOT);
+            if (nameToResource.get(resourceName) != null) {
+                throw new DdlException("Resource(" + resourceName + ") already exist");
+            }
+
             if (resource.needMappingCatalog()) {
                 try {
                     String catalogName = getResourceMappingCatalogName(resourceName, typeName);
@@ -131,12 +136,9 @@ public class ResourceMgr implements Writable {
                 }
             }
 
-            if (nameToResource.putIfAbsent(resourceName, resource) != null) {
-                throw new DdlException("Resource(" + resourceName + ") already exist");
-            }
-
             // log add
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logCreateResource(resource, wal -> nameToResource.put(resourceName, resource));
             LOG.info("create resource success. resource: {}", resource);
         } finally {
             this.writeUnLock();
@@ -150,23 +152,9 @@ public class ResourceMgr implements Writable {
      * <p>2. Clear cache in memory </p>
      */
     public void replayCreateResource(Resource resource) throws DdlException {
-        if (resource.needMappingCatalog()) {
-            String type = resource.getType().name().toLowerCase(Locale.ROOT);
-            String catalogName = getResourceMappingCatalogName(resource.getName(), type);
-
-            if (nameToResource.containsKey(resource.name)) {
-                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
-                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
-            }
-
-            Map<String, String> properties = Maps.newHashMap(resource.getProperties());
-            properties.put("type", type);
-            properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
-            GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(type, catalogName, "mapping catalog", properties);
-        }
-
         this.writeLock();
         try {
+            createMappingCatalogIfNeeded(resource);
             nameToResource.put(resource.getName(), resource);
         } finally {
             this.writeUnLock();
@@ -179,7 +167,7 @@ public class ResourceMgr implements Writable {
         this.writeLock();
         try {
             String name = stmt.getResourceName();
-            Resource resource = nameToResource.remove(name);
+            Resource resource = nameToResource.get(name);
             if (resource == null) {
                 throw new DdlException("Resource(" + name + ") does not exist");
             }
@@ -190,7 +178,8 @@ public class ResourceMgr implements Writable {
                 GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
             }
             // log drop
-            GlobalStateMgr.getCurrentState().getEditLog().logDropResource(new DropResourceOperationLog(name));
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logDropResource(new DropResourceOperationLog(name), wal -> nameToResource.remove(name));
             LOG.info("drop resource success. resource name: {}", name);
         } finally {
             this.writeUnLock();
@@ -198,11 +187,38 @@ public class ResourceMgr implements Writable {
     }
 
     public void replayDropResource(DropResourceOperationLog operationLog) {
-        Resource resource = nameToResource.remove(operationLog.getName());
-        if (resource.needMappingCatalog()) {
-            String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
-            DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
-            GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+        writeLock();
+        try {
+            Resource resource = nameToResource.remove(operationLog.getName());
+            if (resource != null && resource.needMappingCatalog()) {
+                String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+            }
+        } finally {
+            writeUnLock();
+        }
+    }
+
+    public void replayAlterResource(AlterResourceInfo alterResourceInfo) {
+        this.writeLock();
+        try {
+            Resource resource = nameToResource.get(alterResourceInfo.getName());
+            if (resource == null) {
+                LOG.warn("Failed to find resource {} when replaying alter resource log",
+                        alterResourceInfo.getName());
+                return;
+            }
+            resource.alterProperties(alterResourceInfo);
+            if (resource.needMappingCatalog()) {
+                try {
+                    createMappingCatalogIfNeeded(resource);
+                } catch (DdlException e) {
+                    LOG.error("Failed to create catalog for resource {}", resource.getName(), e);
+                }
+            }
+        } finally {
+            this.writeUnLock();
         }
     }
 
@@ -252,17 +268,9 @@ public class ResourceMgr implements Writable {
                 throw new DdlException("Resource(" + name + ") does not exist");
             }
 
-            // 1. alter the resource properties
-            // 2. clear the cache
-            // 3. update the edit log
-            if (resource instanceof HiveResource) {
-                ((HiveResource) resource).alterProperties(stmt.getProperties());
-            } else if (resource instanceof HudiResource) {
-                ((HudiResource) resource).alterProperties(stmt.getProperties());
-            } else if (resource instanceof IcebergResource) {
-                ((IcebergResource) resource).alterProperties(stmt.getProperties());
-            } else {
-                throw new DdlException("Alter resource statement only support external hive/hudi/iceberg now");
+            AlterResourceInfo alterResourceInfo = resource.checkAlterProperties(stmt.getProperties());
+            if (alterResourceInfo == null) {
+                return;
             }
 
             if (resource.needMappingCatalog()) {
@@ -271,7 +279,9 @@ public class ResourceMgr implements Writable {
                 DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
                 GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
 
-                Map<String, String> properties = Maps.newHashMap(stmt.getProperties());
+                // Merge original resource properties with new alter properties
+                Map<String, String> properties = Maps.newHashMap(resource.getProperties());
+                properties.putAll(stmt.getProperties());
                 properties.put("type", type);
                 String uriInProperties = stmt.getProperties().get(HIVE_METASTORE_URIS);
                 String uris = uriInProperties == null ? resource.getHiveMetastoreURIs() : uriInProperties;
@@ -279,9 +289,28 @@ public class ResourceMgr implements Writable {
                 GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(type, catalogName, "mapping catalog", properties);
             }
 
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterResource(
+                    alterResourceInfo, wal -> resource.alterProperties(alterResourceInfo));
+
         } finally {
             this.writeUnLock();
+        }
+    }
+
+    private void createMappingCatalogIfNeeded(Resource resource) throws DdlException {
+        if (resource.needMappingCatalog()) {
+            String type = resource.getType().name().toLowerCase(Locale.ROOT);
+            String catalogName = getResourceMappingCatalogName(resource.getName(), type);
+
+            if (nameToResource.containsKey(resource.getName())) {
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+            }
+
+            Map<String, String> properties = Maps.newHashMap(resource.getProperties());
+            properties.put("type", type);
+            properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
+            GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(type, catalogName, "mapping catalog", properties);
         }
     }
 

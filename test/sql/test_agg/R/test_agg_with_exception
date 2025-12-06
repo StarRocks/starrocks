@@ -1,0 +1,49 @@
+-- name: test_agg_with_exception @sequential
+CREATE TABLE `t0` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` varchar(20) NOT NULL COMMENT "",
+  `c2` varchar(200) NOT NULL COMMENT "",
+  `c3` int(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+set enable_group_by_compressed_key=false;
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+admin enable failpoint 'agg_hash_set_bad_alloc';
+-- result:
+-- !result
+[UC]select c0 from t0 group by c0;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+[UC]select c0 from t0 group by c0 limit 10;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+admin disable failpoint 'agg_hash_set_bad_alloc';
+-- result:
+-- !result
+admin enable failpoint 'aggregate_build_hash_map_bad_alloc';
+-- result:
+-- !result
+[UC]select count(*) from t0 group by c0;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+[UC]select count(*) from t0 group by c0 limit 10;
+-- result:
+E: (1064, 'Mem usage has exceed the limit of BE: BE:10004')
+-- !result
+admin disable failpoint 'aggregate_build_hash_map_bad_alloc';
+-- result:
+-- !result

@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 

@@ -71,7 +71,7 @@ public class OdbcScalarFunctionCall implements ParseNode {
             throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) function;
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
 
         // for information function
         if (ODBC_SCALAR_INFORMATION_FUNCTIONS.contains(fnName)) {

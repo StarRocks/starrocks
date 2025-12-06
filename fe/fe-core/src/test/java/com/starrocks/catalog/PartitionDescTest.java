@@ -24,7 +24,6 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
-import org.apache.commons.lang.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -58,7 +57,7 @@ public class PartitionDescTest {
 
     @Test
     public void testToSql() {
-        assertThrows(NotImplementedException.class, () -> this.partitionDesc.toSql());
+        assertThrows(UnsupportedOperationException.class, () -> this.partitionDesc.toSql());
     }
 
     @Test

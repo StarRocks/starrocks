@@ -23,10 +23,13 @@
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 #include "util/fixed_hash_map.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+DECLARE_FAIL_POINT(agg_hash_set_bad_alloc);
 
 const constexpr int32_t prefetch_threhold = 8192;
 // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
@@ -100,12 +103,17 @@ struct AggHashSet {
 
     ////// Common Methods ////////
     void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
-        return static_cast<Impl*>(this)->template build_set<true>(chunk_size, key_columns, pool, nullptr);
+        // auto cleanup hash set if any exception raised during build_set
+        CancelableDefer defer = [this]() { hash_set.clear(); };
+        static_cast<Impl*>(this)->template build_set<true>(chunk_size, key_columns, pool, nullptr);
+        defer.cancel();
     }
 
     void build_hash_set_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                        Filter* not_founds) {
-        return static_cast<Impl*>(this)->template build_set<false>(chunk_size, key_columns, pool, not_founds);
+        CancelableDefer defer = [this]() { hash_set.clear(); };
+        static_cast<Impl*>(this)->template build_set<false>(chunk_size, key_columns, pool, not_founds);
+        defer.cancel();
     }
 };
 
@@ -156,6 +164,9 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
             } else {
                 (*not_founds)[i] = !this->hash_set.contains(keys[i]);
             }
+            FAIL_POINT_TRIGGER_EXECUTE(agg_hash_set_bad_alloc, {
+                if (i > 0) throw std::bad_alloc();
+            });
         }
     }
 
