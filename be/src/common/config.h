@@ -826,7 +826,7 @@ CONF_Int32(vector_chunk_size, "4096");
 // Valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.
-CONF_Int32(late_materialization_ratio, "10");
+CONF_mInt32(late_materialization_ratio, "10");
 
 // Valid range: [0-1000].
 // `0` will disable late materialization select metric type.
@@ -1797,4 +1797,9 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+
+// if the first predicate column's selectivity bigger than this, trigger sample,
+// which means if the selectivity is very good already, we don't need to sample
+CONF_mDouble(tigger_sample_selectivity, "0.2");
+
 } // namespace starrocks::config
