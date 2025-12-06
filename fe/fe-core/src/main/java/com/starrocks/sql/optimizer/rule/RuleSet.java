@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.PaimonScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RawValuesImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.RedisScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionImplementationRule;
@@ -194,6 +195,7 @@ public class RuleSet {
             new OdpsScanImplementationRule(),
             new IcebergMetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
+            new RedisScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),

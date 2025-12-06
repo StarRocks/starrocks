@@ -1,0 +1,30 @@
+{
+  "tableName": "testjson",
+  "schemaName": "testdb",
+  "key": {
+    "dataFormat": "raw",
+    "fields": [
+      {
+        "name":"redis_key",
+        "type":"VARCHAR"
+      }
+    ]
+  },
+  "value": {
+    "dataFormat": "json",
+    "fields": [
+      {
+        "name":"id",
+        "type":"BIGINT"
+      },
+      {
+        "name":"name",
+        "type":"VARCHAR"
+      },
+      {
+        "name":"email",
+        "type":"VARCHAR"
+      }
+    ]
+  }
+}

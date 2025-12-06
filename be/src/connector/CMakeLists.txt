@@ -35,4 +35,5 @@ ADD_BE_LIB(Connector
         connector_sink_executor.cpp
         deletion_vector/deletion_vector.cpp
         deletion_vector/deletion_bitmap.cpp
+        redis_connector.cpp
 )

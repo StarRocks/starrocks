@@ -130,7 +130,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
         @SerializedName("ICEBERG_VIEW")
-        ICEBERG_VIEW;
+        ICEBERG_VIEW,
+        @SerializedName("REDIS")
+        REDIS;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
