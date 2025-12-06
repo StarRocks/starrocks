@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.common;
 
 import com.google.common.collect.Maps;
@@ -74,7 +73,7 @@ public class SyncPartitionBench {
     @Param({"0.0", "0.2", "0.5", "0.8", "1.0"})
     public float diffRatio;
 
-    private static final Date START_DATETIME = TimeUtils.getTimeAsDate("2000-01-01 00:00:00");
+    private static final Date START_DATETIME = new Date(TimeUtils.timeStringToLong("2000-01-01 00:00:00"));
     private static final SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private static final Column PARTITION_COLUMN = new Column("k1", DateType.DATETIME);
 
@@ -158,14 +157,14 @@ public class SyncPartitionBench {
      * SyncPartitionBench.diffRangeBench          0.5    10000  avgt    3  3559.056 ±  3291.629  ms/op
      * SyncPartitionBench.diffRangeBench          0.8    10000  avgt    3  8779.244 ± 44517.617  ms/op
      * SyncPartitionBench.diffRangeBench          1.0    10000  avgt    3  3225.946 ±  2554.938  ms/op
-     *
+     * <p>
      * After(Optimize):
      * Benchmark                          (diffRatio)  (times)  Mode  Cnt  Score    Error  Units
-     *  SyncPartitionBench.diffRangeBench          0.0    10000  avgt    3  0.539 ±  1.183  ms/op
-     *  SyncPartitionBench.diffRangeBench          0.2    10000  avgt    3  0.875 ±  1.059  ms/op
-     *  SyncPartitionBench.diffRangeBench          0.5    10000  avgt    3  1.007 ±  2.012  ms/op
-     *  SyncPartitionBench.diffRangeBench          0.8    10000  avgt    3  1.219 ±  2.082  ms/op
-     *  SyncPartitionBench.diffRangeBench          1.0    10000  avgt    3  6.453 ± 15.021  ms/op
+     * SyncPartitionBench.diffRangeBench          0.0    10000  avgt    3  0.539 ±  1.183  ms/op
+     * SyncPartitionBench.diffRangeBench          0.2    10000  avgt    3  0.875 ±  1.059  ms/op
+     * SyncPartitionBench.diffRangeBench          0.5    10000  avgt    3  1.007 ±  2.012  ms/op
+     * SyncPartitionBench.diffRangeBench          0.8    10000  avgt    3  1.219 ±  2.082  ms/op
+     * SyncPartitionBench.diffRangeBench          1.0    10000  avgt    3  6.453 ± 15.021  ms/op
      */
     @Benchmark
     public void diffRangeBench() {
@@ -199,10 +198,12 @@ public class SyncPartitionBench {
     public void generatePartitionRefMapBench() {
         generatePartitionRefMap(srcRangeMap, dstRangeMap);
     }
+
     @Benchmark
     public void generatePartitionRefMapBenchV2() {
         generatePartitionRefMapV2(sortedSrcRangeMap, sortedDstRangeMap);
     }
+
     @Benchmark
     public void generatePartitionRefMapBenchV4() {
         generatePartitionRefMapV4(srcRangeMap, dstRangeMap);

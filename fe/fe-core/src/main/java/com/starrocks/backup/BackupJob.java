@@ -92,7 +92,7 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -418,7 +418,7 @@ public class BackupJob extends AbstractJob {
             }
             if (!tbl.isSupportBackupRestore()) {
                 status = new Status(ErrCode.UNSUPPORTED,
-                                    "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
+                        "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
                 return;
             }
 
@@ -694,7 +694,7 @@ public class BackupJob extends AbstractJob {
 
     private void saveMetaInfo() {
         String createTimeStr = TimeUtils.longToTimeString(createTime,
-                new SimpleDateFormat(TIMESTAMP_FORMAT));
+                DateTimeFormatter.ofPattern(TIMESTAMP_FORMAT).withZone(TimeUtils.getSystemTimeZone().toZoneId()));
         if (testPrimaryKey) {
             localJobDirPath = Paths.get(BackupHandler.TEST_BACKUP_ROOT_DIR.toString(),
                     label + "__" + UUIDUtil.genUUID().toString()).normalize();
@@ -921,9 +921,6 @@ public class BackupJob extends AbstractJob {
         List<String> list = tableRefs.stream().map(n -> "[" + n.toString() + "]").collect(Collectors.toList());
         return Joiner.on(", ").join(list);
     }
-
-
-
 
     @Override
     public String toString() {
