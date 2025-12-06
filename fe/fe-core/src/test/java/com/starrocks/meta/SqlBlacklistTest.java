@@ -105,7 +105,7 @@ public class SqlBlacklistTest {
         StmtExecutor deleteStatementExecutor = new StmtExecutor(connectContext, new DelSqlBlackListStmt(List.of(id1, 2L)));
         deleteStatementExecutor.execute();
         Assertions.assertTrue(sqlBlackList
-                .getBlackLists().stream().noneMatch(x -> x.id == id1 ));
+                .getBlackLists().stream().noneMatch(x -> x.id == id1));
     }
 
     @Test
