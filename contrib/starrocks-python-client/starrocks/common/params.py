@@ -14,9 +14,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Final
 
-from starrocks.common.types import TableModel, TableType
+from starrocks.common.types import SystemRunMode, TableModel, TableType
+
+
+logger = logging.getLogger(__name__)
 
 
 DialectName: Final[str] = 'starrocks'
@@ -186,6 +190,50 @@ class TablePropertyForFuturePartitions:
 
 TablePropertyForFuturePartitions.ALL = {
     v for k, v in vars(TablePropertyForFuturePartitions).items()
+        if not k.startswith("__") and isinstance(v, str)
+}
+
+
+class InvalidTableProperty:
+    """
+    Some properties are invalid in shared-nothing or shared-data architecture.
+    So we need to ignore them for comparision.
+    """
+    @staticmethod
+    def get_invalid_properties(run_mode: str):
+        if run_mode == SystemRunMode.SHARED_DATA:
+            return InvalidTablePropertyForSharedData.ALL
+        else:
+            return InvalidTablePropertyForSharedNothing.ALL
+
+    @staticmethod
+    def purify_dict(property_dict: dict, run_mode: str, table_name: str):
+        for invalid_property in InvalidTableProperty.get_invalid_properties(run_mode):
+            if invalid_property in property_dict:
+                logger.warning(f"Property {invalid_property} is not valid for {run_mode} mode"
+                               f"{' table: ' + table_name if table_name else ''}. It will be ignored.")
+                property_dict.pop(invalid_property)
+        return property_dict
+
+
+class InvalidTablePropertyForSharedNothing(InvalidTableProperty):
+    pass
+
+
+InvalidTablePropertyForSharedNothing.ALL = {
+    v for k, v in vars(InvalidTablePropertyForSharedNothing).items()
+        if not k.startswith("__") and isinstance(v, str)
+}
+
+
+class InvalidTablePropertyForSharedData(InvalidTableProperty):
+    STORAGE_MEDIUM = "storage_medium"
+    STORAGE_COOLDOWN_TIME = "storage_cooldown_time"
+    REPLICATED_STORAGE = "replicated_storage"
+
+
+InvalidTablePropertyForSharedData.ALL = {
+    v for k, v in vars(InvalidTablePropertyForSharedData).items()
         if not k.startswith("__") and isinstance(v, str)
 }
 
