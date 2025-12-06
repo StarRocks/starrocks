@@ -350,6 +350,12 @@ When you read data by using Flink SQL, take note of the following points:
        }
    ```
 
+## FAQ
+
+#### I got an error "Failed to get next from be" while exporting data with Flink Connector. What should I do?
+
+You can set the BE configuration `scan_context_gc_interval_min` (Default: 5, Unit: Minutes) to a larger value to increase the time interval at which the Scan Context is cleaned.
+
 ## What's next
 
 After Flink successfully reads data from StarRocks, you can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) to monitor the read task. For example, you can view the `totalScannedRows` metric on the **Metrics** page of the WebUI to obtain the number of rows that are successfully read. You can also use Flink SQL to perform calculations such as joins on the data you have read.
