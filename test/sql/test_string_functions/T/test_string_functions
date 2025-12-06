@@ -336,3 +336,56 @@ create table t_format_bytes(bytes bigint)
 insert into t_format_bytes values (0), (123), (1024), (1048576), (1073741824), (-1), (null);
 select bytes, format_bytes(bytes) from t_format_bytes order by bytes;
 
+-- function: format
+-- Basic string formatting
+select format('%s%%', 123);
+select format('%.5f', pi());
+select format('%03d', 8);
+select format('%,.2f', 1234567.89);
+select format('%-7s,%7s', 'hello', 'world');
+select format('%2$s %3$s %1$s', 'a', 'b', 'c');
+
+-- More format examples
+select format('Hello %s!', 'World');
+select format('Number: %d, String: %s', 42, 'test');
+select format('Pi: %.2f', 3.14159);
+select format('Left: %-10s Right', 'left');
+select format('Right: %10s', 'right');
+
+-- Edge cases
+select format('%% escaped');
+select format('%s', null);
+select format(null, 'test');
+select format('%s %s', 'only_one_arg');
+select format('%3$s %2$s %1$s', 'first', 'second', 'third');
+
+-- Multiple arguments
+select format('%s %s %s', 'a', 'b', 'c');
+select format('%d %s %f', 123, 'test', 3.14);
+select format('%1$s %2$s %1$s', 'repeat', 'once');
+
+-- Precision formatting
+select format('%.0f', 3.14159);
+select format('%.2f', 3.14159);
+select format('%.5f', 3.14159);
+select format('%.10f', 3.14159);
+
+-- Integer formatting
+select format('%d', 123);
+select format('%5d', 123);
+select format('%05d', 123);
+select format('%-5d', 123);
+
+-- Test with table data
+create table t_format_test(fmt varchar(50), arg1 varchar(50), arg2 varchar(50), arg3 varchar(50))
+        DUPLICATE KEY(fmt)
+        DISTRIBUTED BY HASH(fmt)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+insert into t_format_test values 
+    ('%s %s', 'hello', 'world', null),
+    ('%d %s', '123', 'test', null),
+    ('%3$s %1$s', 'first', null, 'third'),
+    ('Pi: %.2f', '3.14159', null, null);
+select fmt, arg1, arg2, arg3, format(fmt, arg1, arg2, arg3) from t_format_test order by fmt;
+

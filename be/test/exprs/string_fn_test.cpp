@@ -4403,4 +4403,74 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
         ASSERT_EQ(result->get(1).get_int64(), 3);
     }
 }
+
+PARALLEL_TEST(VecStringFunctionsTest, formatFloatPrecisionTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Test case 1: format('%.5f', pi()) should return '3.14159'
+    {
+        BinaryColumn::Ptr format_col = BinaryColumn::create();
+        format_col->append("%.5f");
+
+        DoubleColumn::Ptr pi_col = DoubleColumn::create();
+        // Use pi value: 3.141592653589793
+        pi_col->append(3.141592653589793);
+
+        Columns columns = {format_col, pi_col};
+
+        auto result = StringFunctions::format(ctx.get(), columns).value();
+        ASSERT_EQ(result->size(), 1);
+        ASSERT_FALSE(result->is_null(0));
+
+        auto v = ColumnHelper::as_column<BinaryColumn>(result);
+        std::string result_str = v->get_data()[0].to_string();
+
+        // Should be '3.14159' not '3.141592653589793'
+        ASSERT_EQ(result_str, "3.14159");
+    }
+
+    // Test case 2: format('%.2f', 1.23456) should return '1.23'
+    {
+        BinaryColumn::Ptr format_col = BinaryColumn::create();
+        format_col->append("%.2f");
+
+        DoubleColumn::Ptr val_col = DoubleColumn::create();
+        val_col->append(1.23456);
+
+        Columns columns = {format_col, val_col};
+
+        auto result = StringFunctions::format(ctx.get(), columns).value();
+        ASSERT_EQ(result->size(), 1);
+        ASSERT_FALSE(result->is_null(0));
+
+        auto v = ColumnHelper::as_column<BinaryColumn>(result);
+        std::string result_str = v->get_data()[0].to_string();
+
+        ASSERT_EQ(result_str, "1.23");
+    }
+
+    // Test case 3: Multiple arguments with different types
+    {
+        BinaryColumn::Ptr format_col = BinaryColumn::create();
+        format_col->append("Value: %.3f, Integer: %d");
+
+        DoubleColumn::Ptr double_col = DoubleColumn::create();
+        double_col->append(2.3456789);
+
+        Int64Column::Ptr int_col = Int64Column::create();
+        int_col->append(42);
+
+        Columns columns = {format_col, double_col, int_col};
+
+        auto result = StringFunctions::format(ctx.get(), columns).value();
+        ASSERT_EQ(result->size(), 1);
+        ASSERT_FALSE(result->is_null(0));
+
+        auto v = ColumnHelper::as_column<BinaryColumn>(result);
+        std::string result_str = v->get_data()[0].to_string();
+
+        // Should be 'Value: 2.346, Integer: 42'
+        ASSERT_EQ(result_str, "Value: 2.346, Integer: 42");
+    }
+}
 } // namespace starrocks

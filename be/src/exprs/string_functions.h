@@ -631,6 +631,7 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(format_bytes);
+    DEFINE_VECTORIZED_FN(format);
 
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,

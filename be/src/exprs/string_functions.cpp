@@ -5037,6 +5037,254 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
+
+// format
+StatusOr<ColumnPtr> StringFunctions::format(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    if (columns.empty()) {
+        return ColumnBuilder<TYPE_VARCHAR>(1).build(false);
+    }
+
+    auto num_rows = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    ColumnViewer<TYPE_VARCHAR> format_viewer(columns[0]);
+
+    // Collect argument columns and their types
+    std::vector<ColumnViewer<TYPE_VARCHAR>> arg_viewers;
+    std::vector<LogicalType> arg_types;
+    for (size_t i = 1; i < columns.size(); ++i) {
+        arg_viewers.emplace_back(columns[i]);
+        const FunctionContext::TypeDesc* type_desc = context->get_arg_type(i);
+        arg_types.push_back(type_desc ? type_desc->type : TYPE_VARCHAR);
+    }
+
+    for (int row = 0; row < num_rows; ++row) {
+        if (format_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto format_str = format_viewer.value(row);
+        std::string result_str;
+        std::string format_pattern(format_str.data, format_str.size);
+
+        // Process format string and arguments
+        try {
+            size_t pos = 0;
+            size_t arg_index = 0;
+            std::ostringstream output;
+
+            while (pos < format_pattern.size()) {
+                if (format_pattern[pos] == '%' && pos + 1 < format_pattern.size()) {
+                    // Save the start position of the format specifier
+                    size_t spec_start = pos;
+                    pos++; // Skip %
+
+                    // Check for %% (literal %)
+                    if (format_pattern[pos] == '%') {
+                        output << '%';
+                        pos++;
+                        continue;
+                    }
+
+                    // Parse format specifier: %[flags][width][.precision][conversion]
+                    bool left_align = false;
+                    bool zero_pad = false;
+                    bool use_comma = false;
+                    int width = 0;
+                    int precision = -1;
+                    size_t spec_pos_arg = 0; // For positional arguments like %2$
+                    bool has_positional = false;
+
+                    // Parse flags
+                    while (pos < format_pattern.size()) {
+                        if (format_pattern[pos] == '-') {
+                            left_align = true;
+                            pos++;
+                        } else if (format_pattern[pos] == '0' && !left_align) {
+                            zero_pad = true;
+                            pos++;
+                        } else if (format_pattern[pos] == ',') {
+                            use_comma = true;
+                            pos++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Parse width or positional argument
+                    while (pos < format_pattern.size() && std::isdigit(format_pattern[pos])) {
+                        width = width * 10 + (format_pattern[pos] - '0');
+                        pos++;
+                    }
+
+                    // Check for positional argument like 2$
+                    if (pos < format_pattern.size() && format_pattern[pos] == '$') {
+                        spec_pos_arg = width - 1; // Convert to 0-based
+                        has_positional = true;
+                        width = 0; // Reset width
+                        pos++;     // Skip $
+
+                        // Parse width after positional argument
+                        while (pos < format_pattern.size() && std::isdigit(format_pattern[pos])) {
+                            width = width * 10 + (format_pattern[pos] - '0');
+                            pos++;
+                        }
+                    }
+
+                    // Parse precision
+                    if (pos < format_pattern.size() && format_pattern[pos] == '.') {
+                        pos++; // Skip .
+                        precision = 0;
+                        while (pos < format_pattern.size() && std::isdigit(format_pattern[pos])) {
+                            precision = precision * 10 + (format_pattern[pos] - '0');
+                            pos++;
+                        }
+                    }
+
+                    // Parse conversion specifier
+                    if (pos >= format_pattern.size()) {
+                        output << format_pattern.substr(spec_start);
+                        break;
+                    }
+
+                    char conversion = format_pattern[pos];
+                    pos++;
+
+                    // Determine which argument to use
+                    size_t current_arg_index = has_positional ? spec_pos_arg : arg_index;
+
+                    if (!has_positional && conversion != '%') {
+                        arg_index++;
+                    }
+
+                    // Format the argument
+                    if (current_arg_index < arg_viewers.size()) {
+                        std::string arg_str;
+                        if (arg_viewers[current_arg_index].is_null(row)) {
+                            // For null values, output empty string for now
+                            arg_str = "";
+                        } else {
+                            auto arg_val = arg_viewers[current_arg_index].value(row);
+                            arg_str = std::string(arg_val.data, arg_val.size);
+                        }
+
+                        std::string formatted;
+
+                        switch (conversion) {
+                        case 's': {
+                            formatted = arg_str;
+                            // Apply width and alignment
+                            if (width > 0 && arg_str.length() < width) {
+                                if (left_align) {
+                                    formatted = arg_str + std::string(width - arg_str.length(), ' ');
+                                } else {
+                                    formatted = std::string(width - arg_str.length(), ' ') + arg_str;
+                                }
+                            }
+                            break;
+                        }
+                        case 'd':
+                        case 'i': {
+                            try {
+                                long long val = std::stoll(arg_str);
+                                std::ostringstream oss;
+                                oss << val;
+                                formatted = oss.str();
+
+                                // Apply padding
+                                if (width > 0 && formatted.length() < width) {
+                                    if (left_align) {
+                                        formatted = formatted + std::string(width - formatted.length(), ' ');
+                                    } else if (zero_pad) {
+                                        formatted = std::string(width - formatted.length(), '0') + formatted;
+                                    } else {
+                                        formatted = std::string(width - formatted.length(), ' ') + formatted;
+                                    }
+                                }
+                            } catch (...) {
+                                formatted = arg_str;
+                            }
+                            break;
+                        }
+                        case 'f': {
+                            try {
+                                double val;
+                                bool got_value = false;
+
+                                // Try to get double value directly from the original column
+                                // to preserve precision for DOUBLE/FLOAT types
+                                const ColumnPtr& arg_col = columns[current_arg_index + 1];
+                                if (arg_col && !arg_col->is_null(row)) {
+                                    LogicalType col_type = arg_types[current_arg_index];
+
+                                    if (col_type == TYPE_DOUBLE) {
+                                        ColumnViewer<TYPE_DOUBLE> double_viewer(arg_col);
+                                        val = double_viewer.value(row);
+                                        got_value = true;
+                                    } else if (col_type == TYPE_FLOAT) {
+                                        ColumnViewer<TYPE_FLOAT> float_viewer(arg_col);
+                                        val = static_cast<double>(float_viewer.value(row));
+                                        got_value = true;
+                                    }
+                                }
+
+                                // Fallback to parsing from string if not a floating point type
+                                if (!got_value) {
+                                    val = std::stod(arg_str);
+                                }
+
+                                std::ostringstream oss;
+                                oss << std::fixed;
+
+                                if (precision >= 0) {
+                                    oss << std::setprecision(precision) << val;
+                                } else {
+                                    oss << std::setprecision(6) << val;
+                                }
+                                formatted = oss.str();
+
+                                // Apply width and alignment
+                                if (width > 0 && formatted.length() < width) {
+                                    if (left_align) {
+                                        formatted = formatted + std::string(width - formatted.length(), ' ');
+                                    } else {
+                                        formatted = std::string(width - formatted.length(), ' ') + formatted;
+                                    }
+                                }
+                            } catch (...) {
+                                formatted = arg_str;
+                            }
+                            break;
+                        }
+                        default:
+                            formatted = arg_str;
+                            break;
+                        }
+
+                        output << formatted;
+                    } else if (conversion != '%') {
+                        // Not enough arguments, output nothing
+                        output << "";
+                    }
+                } else {
+                    output << format_pattern[pos];
+                    pos++;
+                }
+            }
+
+            result_str = output.str();
+        } catch (...) {
+            result_str = format_str.to_string(); // Fallback to original format string
+        }
+
+        result.append(Slice(result_str.data(), result_str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
 
 #include "gen_cpp/opcode/StringFunctions.inc"
