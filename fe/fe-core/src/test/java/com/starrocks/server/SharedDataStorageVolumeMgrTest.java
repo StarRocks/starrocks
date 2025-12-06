@@ -1046,7 +1046,7 @@ public class SharedDataStorageVolumeMgrTest {
 
                 properties = new HashMap<>();
                 properties.put(StorageVolume.V_SHARD_ID, String.valueOf(existedShardId));
-                properties.put(StorageVolume.V_SHARD_GROUP_ID, String.valueOf("not valid format number"));
+                properties.put(StorageVolume.V_SHARD_GROUP_ID, "not valid format number");
                 FileStoreInfo fsInfo3 = FileStoreInfo.newBuilder().setFsKey(String.valueOf(id++))
                         .putAllProperties(properties).build();
                 return List.of(fsInfo1, fsInfo2, fsInfo3);
@@ -1058,7 +1058,8 @@ public class SharedDataStorageVolumeMgrTest {
 
         Assert.assertTrue(svm.hasStorageVolumeBindAsVirtualGroup(20001L));
 
-        // Test restore fail while listFileStore failed with DDL exception
+        // corner case: listFileStore failed with DDL exception
+        // storage mapping should keep unmodified
         new MockUp<StarOSAgent>() {
 
             @Mock
@@ -1068,7 +1069,7 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         svm.restoreStorageVolumeToVTabletGroupMappings();
-        Assert.assertFalse(svm.hasStorageVolumeBindAsVirtualGroup(20001L));
+        Assert.assertTrue(svm.hasStorageVolumeBindAsVirtualGroup(20001L));
     }
 
     @Test
