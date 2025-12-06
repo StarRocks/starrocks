@@ -111,6 +111,8 @@ message CompactRequest {
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
     optional bool skip_write_txnlog = 8;
+    optional int64 table_id = 9;
+    optional int64 partition_id = 10;
 }
 
 message AggregateCompactRequest {

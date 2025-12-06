@@ -254,6 +254,7 @@ set(STORAGE_FILES
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+    lake/tablet_write_log_manager.cpp
     sstable/sstable_predicate.cpp
     sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp

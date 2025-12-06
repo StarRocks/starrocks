@@ -68,13 +68,16 @@ struct CompactionTaskStats {
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
-                                   bool skip_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_)
+                                   bool skip_write_txnlog_, std::shared_ptr<CompactionTaskCallback> cb_,
+                                   int64_t table_id_ = 0, int64_t partition_id_ = 0)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
               force_base_compaction(force_base_compaction_),
               skip_write_txnlog(skip_write_txnlog_),
-              callback(std::move(cb_)) {}
+              callback(std::move(cb_)),
+              table_id(table_id_),
+              partition_id(partition_id_) {}
 
 #ifndef NDEBUG
     ~CompactionTaskContext() {
@@ -97,6 +100,8 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     std::shared_ptr<CompactionTaskCallback> callback;
     std::unique_ptr<CompactionTaskStats> stats = std::make_unique<CompactionTaskStats>();
     std::shared_ptr<TxnLogPB> txn_log;
+    const int64_t table_id;
+    const int64_t partition_id;
 };
 
 } // namespace starrocks::lake
