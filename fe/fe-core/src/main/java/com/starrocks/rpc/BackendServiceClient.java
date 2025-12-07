@@ -116,6 +116,10 @@ public class BackendServiceClient {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
         pRequest.setAttachmentProtocol(protocol);
         pRequest.setRequest(request);
+        pRequest.setAttachmentCompressionType(pRequest.getCompressionType());
+        if (pRequest.getUncompressedSize() > 0) {
+            pRequest.setUncompressedSize(pRequest.getUncompressedSize());
+        }
         return sendPlanFragmentAsync(address, pRequest);
     }
 
@@ -125,6 +129,10 @@ public class BackendServiceClient {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
         pRequest.setAttachmentProtocol(protocol);
         pRequest.setRequest(tRequest, protocol);
+        pRequest.setAttachmentCompressionType(pRequest.getCompressionType());
+        if (pRequest.getUncompressedSize() > 0) {
+            pRequest.setUncompressedSize(pRequest.getUncompressedSize());
+        }
         return sendPlanFragmentAsync(address, pRequest);
     }
 

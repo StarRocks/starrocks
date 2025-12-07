@@ -291,6 +291,7 @@ dependencies {
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     implementation("at.yawk.lz4:lz4-java")
+    implementation("com.github.luben:zstd-jni:1.5.5-5")
     // dependency sync end
 
     // extra dependencies pom.xml does not have

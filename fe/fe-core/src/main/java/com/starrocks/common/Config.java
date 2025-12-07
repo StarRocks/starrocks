@@ -950,6 +950,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_min_evictable_idle_time_ms = 120000;
 
+    @ConfField(mutable = true, comment = "Threshold in bytes for compressing thrift plan fragment requests. " +
+            "Requests smaller than this threshold will not be compressed. " +
+            "Set to 0 or negative to disable compression. Default is 64KB.")
+    public static int thrift_plan_fragment_compression_threshold_bytes = 65536;
+
+    @ConfField(mutable = true, comment = "Minimum compression ratio (uncompressed/compressed) required to use compression. " +
+            "If the compression ratio is below this threshold, the uncompressed data will be sent instead. " +
+            "Default is 1.1, meaning compressed data must be at least 10% smaller.")
+    public static double thrift_plan_fragment_compression_ratio_threshold = 1.1;
+
+    @ConfField(mutable = true, comment = "Compression algorithm for thrift plan fragment requests. " +
+            "Supported values: 'lz4' (faster, lower compression ratio) or 'zstd' (slower, better compression ratio). " +
+            "Default is 'lz4' for better performance.")
+    public static String thrift_plan_fragment_compression_algorithm = "lz4";
+
     @ConfField
     public static boolean brpc_short_connection = false;
 

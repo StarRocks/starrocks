@@ -108,6 +108,10 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 PExecShortCircuitRequest pRequest = new PExecShortCircuitRequest();
                 pRequest.setAttachmentProtocol(protocol);
                 pRequest.setRequest(tRequest, protocol);
+                pRequest.setAttachmentCompressionType(pRequest.getCompressionType());
+                if (pRequest.getUncompressedSize() > 0) {
+                    pRequest.setUncompressedSize(pRequest.getUncompressedSize());
+                }
                 watch.start();
                 Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
                 if (null == future) {
