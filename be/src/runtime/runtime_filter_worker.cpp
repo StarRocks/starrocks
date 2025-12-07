@@ -869,9 +869,13 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     }
     if (params.has_transmit_timeout_ms()) {
         ev.transmit_timeout_ms = params.transmit_timeout_ms();
+    } else {
+        ev.transmit_timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     }
     if (params.has_transmit_via_http_min_size()) {
         ev.transmit_via_http_min_size = params.transmit_via_http_min_size();
+    } else {
+        ev.transmit_via_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
     }
     ev.query_id.hi = params.query_id().hi();
     ev.query_id.lo = params.query_id().lo();
