@@ -367,7 +367,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
             transactionMgr.abortTransaction(db.getId(), txnId, "artificial failure");
             TGetTableSchemaRequest request = createLoadRequest(invalidSchemaId, db.getId(), table.getId(), txnId);
             TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
-            Assertions.assertEquals(TStatusCode.NOT_FOUND, response.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.TXN_NOT_EXISTS, response.getStatus().getStatus_code());
             Assertions.assertTrue(response.getStatus().getError_msgs().get(0).contains(
                     String.format("transaction %s has finished, status: %s", txnId, TransactionStatus.ABORTED)));
         }

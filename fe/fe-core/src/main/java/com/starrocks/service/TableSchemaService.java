@@ -33,9 +33,12 @@ import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableSchemaMeta;
 import com.starrocks.thrift.TTableSchemaRequestSource;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Map;
@@ -58,6 +61,8 @@ import java.util.Optional;
  * </p>
  */
 public class TableSchemaService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TableSchemaService.class);
 
     /**
      * Retrieves table schema information based on the provided request.
@@ -85,7 +90,7 @@ public class TableSchemaService {
                 if (coordinatorResult.isOk()) {
                     response.setStatus(new TStatus(TStatusCode.OK));
                     response.setSchema(coordinatorResult.getValue().toTabletSchema());
-                    return response;
+                    return logAndReturn(request, response);
                 }
             }
 
@@ -102,14 +107,14 @@ public class TableSchemaService {
                 status.addToError_msgs(String.format(
                         "table not found, may be dropped, db id: %s, table id: %s", dbId, tableId));
                 response.setStatus(status);
-                return response;
+                return logAndReturn(request, response);
             }
 
             if (!table.isNativeTableOrMaterializedView()) {
                 TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
                 status.addToError_msgs("schema service not supports table type: " + table.getType());
                 response.setStatus(status);
-                return response;
+                return logAndReturn(request, response);
             }
 
             Optional<SchemaInfo> schemaInfo = findSchemaInCatalog(dbId, (OlapTable) table, schemaId);
@@ -136,7 +141,7 @@ public class TableSchemaService {
                     status.setStatus_code(TStatusCode.TXN_NOT_EXISTS);
                     status.addToError_msgs(String.format("transaction %s not found, maybe have been cleaned", txnId));
                 } else if (txnState.getTransactionStatus().isFinalStatus()) {
-                    status.setStatus_code(TStatusCode.NOT_FOUND);
+                    status.setStatus_code(TStatusCode.TXN_NOT_EXISTS);
                     status.addToError_msgs(String.format("transaction %s has finished, status: %s, " +
                             "schema maybe have been cleaned", txnId, txnState.getTransactionStatus().toString()));
                 } else {
@@ -158,8 +163,9 @@ public class TableSchemaService {
                     "db id: %s, table id: %s, schema id: %s, request source: %s, error: %s",
                     dbId, tableId, schemaId, requestSource.name(), e.getMessage()));
             response.setStatus(status);
+            return logAndReturn(request, response, e);
         }
-        return response;
+        return logAndReturn(request, response);
     }
 
     /**
@@ -225,6 +231,10 @@ public class TableSchemaService {
     private static Status validateParameters(TGetTableSchemaRequest request) {
         try {
             Preconditions.checkArgument(request.isSetSchema_meta(), "schema meta not set");
+            TTableSchemaMeta schemaMeta = request.getSchema_meta();
+            Preconditions.checkArgument(schemaMeta.isSetSchema_id(), "schema id not set");
+            Preconditions.checkArgument(schemaMeta.isSetDb_id(), "db id not set");
+            Preconditions.checkArgument(schemaMeta.isSetTable_id(), "table id meta not set");
             Preconditions.checkArgument(request.isSetSource(), "request source not set");
             TTableSchemaRequestSource requestSource = request.getSource();
             switch (requestSource) {
@@ -235,6 +245,45 @@ public class TableSchemaService {
             return new Status(TStatusCode.INTERNAL_ERROR, e.getMessage());
         }
         return new Status();
+    }
+
+    private static TGetTableSchemaResponse logAndReturn(TGetTableSchemaRequest request,
+                                                        TGetTableSchemaResponse response) {
+        return logAndReturn(request, response, null);
+    }
+
+    private static TGetTableSchemaResponse logAndReturn(TGetTableSchemaRequest request,
+                                                        TGetTableSchemaResponse response,
+                                                        Exception exception) {
+        TStatus status = response.getStatus();
+        if (status != null && status.getStatus_code() == TStatusCode.OK && !LOG.isDebugEnabled()) {
+            // only log OK if debug enabled
+            return response;
+        }
+        TTableSchemaMeta schemaMeta = request.getSchema_meta();
+        StringBuilder sb = new StringBuilder();
+        sb.append("table schema retrieval");
+        sb.append(", db: ").append(schemaMeta.getDb_id());
+        sb.append(", table: ").append(schemaMeta.getTable_id());
+        sb.append(", schema: ").append(schemaMeta.getSchema_id());
+        sb.append(", tablet: ").append(request.getTablet_id());
+        if (request.getSource() == TTableSchemaRequestSource.SCAN) {
+            sb.append(", query: ").append(DebugUtil.printId(request.getQuery_id()));
+        } else if (request.getSource() == TTableSchemaRequestSource.LOAD) {
+            sb.append(", txn: ").append(request.getTxn_id());
+        }
+        if (status == null) {
+            sb.append(", status: null");
+        } else {
+            sb.append(", status: ").append(status.getStatus_code().name())
+                .append(", errors: ").append(status.getError_msgs());
+        }
+        if (status != null && status.getStatus_code() == TStatusCode.OK) {
+            LOG.debug(sb.toString());
+        } else {
+            LOG.error(sb.toString(), exception);
+        }
+        return response;
     }
 
     /**
