@@ -140,7 +140,6 @@ public class SqlBlackList {
                     return;
                 }
             }
-            LOG.info("Not found forbidden SQL index {} in blacklist", id);
         }
     }
 
