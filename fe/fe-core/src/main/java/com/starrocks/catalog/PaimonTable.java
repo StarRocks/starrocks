@@ -126,7 +126,7 @@ public class PaimonTable extends Table {
     @Override
     public String getUUID() {
         if (Strings.isNullOrEmpty(this.uuid)) {
-            this.uuid =  String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
+            this.uuid = String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
         }
         return this.uuid;
     }

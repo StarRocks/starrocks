@@ -90,6 +90,13 @@ public class PaimonTableTest {
                         .build();
         List<DataField> fields = rowType.getFields();
         List<Column> fullSchema = new ArrayList<>(fields.size());
+        for (DataField field : fields) {
+            String fieldName = field.name();
+            DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, true);
+            fullSchema.add(column);
+        }
         ArrayList<String> partitions = Lists.newArrayList("b", "c");
         new Expectations() {
             {
@@ -103,13 +110,19 @@ public class PaimonTableTest {
         String tableName = "testTable";
         PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema, paimonNativeTable);
 
-        TTableDescriptor tTableDescriptor = paimonTable.toThrift(null);
+        TTableDescriptor tTableDescriptor = paimonTable.toThrift(Lists.newArrayList());
         org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getDbName(), dbName);
         org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getTableName(), tableName);
     }
 
     @Test
     public void testEquals(@Mocked DataTable paimonNativeTable) {
+        new Expectations() {
+            {
+                paimonNativeTable.uuid();
+                result = "testDB.testTable.1733328000000";
+            }
+        };
         String dbName = "testDB";
         String tableName = "testTable";
         PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);

@@ -147,6 +147,12 @@ public class PaimonScanNodeTest {
             {
                 rawFile.format();
                 result = "orc";
+                rawFile.path();
+                result = "/path/to/bucket/data_file.orc";
+                rawFile.length();
+                result = 1024L;
+                rawFile.offset();
+                result = 0L;
             }
         };
         desc.setTable(table);

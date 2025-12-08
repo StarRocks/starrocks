@@ -46,9 +46,11 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
@@ -290,8 +292,13 @@ public class UtilsTest {
     }
 
     @Test
-    public void testPaimonUnknownColumnsStats() {
-        PaimonTable t = new PaimonTable();
+    public void testPaimonUnknownColumnsStats(@Mocked PaimonTable t) {
+        new Expectations() {
+            {
+                t.getPartitionColumns();
+                result = Lists.newArrayList();
+            }
+        };
         OptExpression opt =
                 new OptExpression(new LogicalPaimonScanOperator(t, Maps.newHashMap(), Maps.newHashMap(), -1, null));
         Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
