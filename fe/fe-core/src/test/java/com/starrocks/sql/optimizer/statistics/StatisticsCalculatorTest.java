@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
@@ -50,6 +51,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -71,6 +73,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class StatisticsCalculatorTest {
@@ -695,6 +698,87 @@ public class StatisticsCalculatorTest {
         builder.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 100, 0, 10, 50)));
         Statistics statistics = builder.build();
         Assertions.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
+    }
+
+    @Test
+    public void testComputeDeltaRowsOptimizedPath() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore()
+                .getDb("statistics_test").getTable("test_all_type");
+        
+        final int totalPartitionCount = 3500;
+        final int oldPartitionCount = 3000;
+        final LocalDateTime testTime = LocalDateTime.of(2024, 1, 10, 12, 0, 0);
+        final LocalDateTime lastWorkTimestamp = testTime.minusDays(1);
+        
+        final List<Partition> mockPartitionList = Lists.newArrayList();
+        Partition basePartition = table.getPartitions().iterator().next();
+        for (int i = 0; i < totalPartitionCount; i++) {
+            mockPartitionList.add(basePartition);
+        }
+        
+        final AtomicInteger getIdCallIndex = new AtomicInteger(0);
+        
+        new MockUp<OlapTable>() {
+            @Mock
+            public Collection<Partition> getPartitions() {
+                getIdCallIndex.set(0);
+                return mockPartitionList;
+            }
+        };
+        
+        new MockUp<Partition>() {
+            @Mock
+            public long getId(mockit.Invocation inv) {
+                int currentIndex = getIdCallIndex.getAndIncrement();
+                return 10000L + (currentIndex % totalPartitionCount);
+            }
+            
+            @Mock
+            public long getRowCount() {
+                return 1000L;
+            }
+        };
+        
+        new MockUp<TabletStatMgr>() {
+            @Mock
+            public LocalDateTime getLastWorkTimestamp() {
+                return lastWorkTimestamp;
+            }
+        };
+        
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public Map<Long, java.util.Optional<Long>> getTableStatistics(long tableId, 
+                    Collection<Partition> partitions) {
+                Map<Long, java.util.Optional<Long>> result = Maps.newHashMap();
+                for (Partition partition : partitions) {
+                    result.put(partition.getId(), java.util.Optional.of(950L));
+                }
+                return result;
+            }
+        };
+        
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getPartitionLastUpdateTime(Partition partition) {
+                long partitionId = partition.getId();
+                int index = (int) (partitionId - 10000L);
+                
+                if (index >= 0 && index < oldPartitionCount) {
+                    return testTime.minusDays(5);
+                } else if (index >= oldPartitionCount && index < totalPartitionCount) {
+                    return testTime.minusHours(12);
+                }
+                return testTime.minusDays(5);
+            }
+        };
+        
+        connectContext.getSessionVariable().setEnableCboTablePrune(true);
+        
+        long totalRowCount = 4_000_000L;
+        long deltaRows = StatisticsCalcUtils.computeDeltaRows(table, totalRowCount);
+        Assertions.assertEquals(142L, deltaRows);
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {
