@@ -75,6 +75,10 @@ subprojects {
         set("spark.version", "3.5.5")
         set("staros.version", "3.5-rc3")
         set("tomcat.version", "8.5.70")
+<<<<<<< HEAD
+=======
+        set("lz4-java.version", "1.10.1")
+>>>>>>> abd53cc526 ([BugFix] fix CVE-2025-66566, lz4-java upgrade to 1.10.1 (#66453))
         // var sync end
     }
 
@@ -236,6 +240,25 @@ subprojects {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
+    configurations.all {
+        resolutionStrategy.capabilitiesResolution {
+            withCapability("org.lz4:lz4-java") {
+                select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
+                because("Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
+            }
+        }
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.lz4:lz4-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-java with at.yawk.lz4:lz4-java")
+            substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
+        }
+    }
+
+>>>>>>> abd53cc526 ([BugFix] fix CVE-2025-66566, lz4-java upgrade to 1.10.1 (#66453))
     tasks.withType<JavaCompile> {
         options.encoding = "UTF-8"
     }
