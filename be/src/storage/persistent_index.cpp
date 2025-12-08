@@ -1167,7 +1167,6 @@ public:
 };
 
 DEFINE_FAIL_POINT(phmap_try_consume_mem_failed);
-DEFINE_FAIL_POINT(persistent_index_major_compaction_reload_fail);
 class SliceMutableIndex : public MutableIndex {
 public:
     using KeyType = std::string;
