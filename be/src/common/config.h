@@ -446,8 +446,14 @@ CONF_mInt32(pk_index_ingest_sst_compaction_threshold, "5");
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_get, "true");
+// The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
+CONF_mInt64(pk_index_parallel_get_min_rows, "16384");
 // Compaction threadpool max thread num for pk index get in shared-data mode.
 CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "0");
+// Memtable flush threadpool max thread num for pk index in shared-data mode.
+CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "4");
+// The maximum number of memtables for pk index in shared-data mode.
+CONF_mInt32(pk_index_memtable_max_count, "3");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiple, "10");
@@ -1777,8 +1783,6 @@ CONF_mInt64(load_spill_merge_max_thread, "16");
 CONF_mBool(enable_load_spill_parallel_merge, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
-// Row count threshold to trigger lazy load for PK column. Default is 500,000.
-CONF_mInt64(pk_column_lazy_load_row_cnt, "500000");
 // Batch size for column mode partial update when processing insert rows.
 // If set to 0 or negative, will be clamped to 1 to avoid infinite loop.
 // Default is 4096.

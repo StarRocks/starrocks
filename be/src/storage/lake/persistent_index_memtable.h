@@ -16,15 +16,19 @@
 
 #include "storage/persistent_index.h"
 #include "util/phmap/btree.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
 using KeyIndex = size_t;
 using KeyIndexSet = std::set<KeyIndex>;
+class TabletManager;
+class PersistentIndexSstable;
 
-class PersistentIndexMemtable {
+class PersistentIndexMemtable : public Runnable {
 public:
-    PersistentIndexMemtable(uint64_t max_rss_rowid = 0) : _max_rss_rowid(max_rss_rowid) {}
+    PersistentIndexMemtable(TabletManager* tablet_mgr = nullptr, int64_t tablet_id = 0, uint64_t max_rss_rowid = 0)
+            : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexSet* not_founds, size_t* num_found, int64_t version);
@@ -66,11 +70,19 @@ public:
 
     Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
 
+    Status minor_compact();
+
     void clear();
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
 
     bool empty() const { return _map.size() == 0; }
+
+    std::unique_ptr<PersistentIndexSstable> release_sstable();
+
+    void run() override;
+
+    Status flush_status() const;
 
 private:
     static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
@@ -79,7 +91,15 @@ private:
     // The size can be up to 230K. The performance of std::map may be poor.
     phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
     int64_t _keys_heap_size{0};
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id{0};
     uint64_t _max_rss_rowid{0};
+    // sstable generated after flush
+    std::unique_ptr<PersistentIndexSstable> _sstable;
+    // flush status
+    Status _flush_status = Status::OK();
+    // flush state mutex
+    mutable std::mutex _flush_mutex;
 };
 
 } // namespace starrocks::lake

@@ -220,6 +220,9 @@ private:
     Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
                              int64_t version) const;
 
+    Status get_from_inactive_memtables(size_t n, const Slice* keys, IndexValue* values, KeyIndexSet* key_indexes,
+                                       int64_t version) const;
+
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
@@ -241,7 +244,8 @@ private:
     void print_debug_info() const;
 
 private:
-    std::unique_ptr<PersistentIndexMemtable> _memtable;
+    std::shared_ptr<PersistentIndexMemtable> _memtable;
+    std::vector<std::shared_ptr<PersistentIndexMemtable>> _inactive_memtables;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     size_t _need_rebuild_file_cnt{0};

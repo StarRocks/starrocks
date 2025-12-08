@@ -54,7 +54,7 @@ Status SegmentPKEncodeResult::_load() {
             } else {
                 TRY_CATCH_BAD_ALLOC(pk_column_chunk->append(*chunk_container));
                 if (_lazy_load && (pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                                   pk_column_chunk->num_rows() >= config::pk_column_lazy_load_row_cnt)) {
+                                   pk_column_chunk->num_rows() >= config::pk_index_parallel_get_min_rows)) {
                     break;
                 }
             }

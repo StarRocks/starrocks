@@ -265,7 +265,7 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     }
     // create memtable with previous rebuild `max_rss_rowid`,
     // to make sure we can generate sst order by `max_rss_rowid`.
-    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
+    _memtable = std::make_unique<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
     return Status::OK();
 }
 
@@ -316,44 +316,10 @@ Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<Persisten
 
 Status LakePersistentIndex::minor_compact() {
     TRACE_COUNTER_SCOPE_LATENCY_US("minor_compact_latency_us");
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
-    if (block_cache == nullptr) {
-        return Status::InternalError("Block cache is null.");
-    }
-    auto filename = gen_sst_filename();
-    auto location = _tablet_mgr->sst_location(_tablet_id, filename);
-    WritableFileOptions wopts;
-    std::string encryption_meta;
-    if (config::enable_transparent_data_encryption) {
-        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-        wopts.encryption_info = pair.info;
-        encryption_meta.swap(pair.encryption_meta);
-    }
-    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
-    uint64_t filesize = 0;
-    PersistentIndexSstableRangePB range_pb;
-    RETURN_IF_ERROR(_memtable->flush(wf.get(), &filesize, &range_pb));
-    RETURN_IF_ERROR(wf->close());
-
-    auto sstable = std::make_unique<PersistentIndexSstable>();
-    RandomAccessFileOptions opts;
-    if (!encryption_meta.empty()) {
-        opts.encryption_info = wopts.encryption_info;
-    }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    PersistentIndexSstablePB sstable_pb;
-    sstable_pb.set_filename(filename);
-    sstable_pb.set_filesize(filesize);
-    sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
-    sstable_pb.set_encryption_meta(encryption_meta);
-    sstable_pb.mutable_range()->CopyFrom(range_pb);
-    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    RETURN_IF_ERROR(_memtable->minor_compact());
     // try to merge to a existing fileset
+    auto sstable = _memtable->release_sstable();
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-    LOG(INFO) << "add sst2 : " << sstable_pb.filename();
-    _total_write_bytes += filesize;
-    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
     return Status::OK();
 }
 
@@ -401,10 +367,36 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
 
 Status LakePersistentIndex::flush_memtable(bool force) {
     if (force || is_memtable_full()) {
-        RETURN_IF_ERROR(minor_compact());
+        TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
+        // 1. check whether previous flush task finish.
+        int finish_point = -1;
+        for (int i = 0; i < _inactive_memtables.size(); i++) {
+            RETURN_IF_ERROR(_inactive_memtables[i]->flush_status());
+            auto sstable = _inactive_memtables[i]->release_sstable();
+            if (sstable != nullptr) {
+                // try to merge to a existing fileset
+                RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+                finish_point = i;
+            } else {
+                break;
+            }
+        }
+        // 2. remove finished memtables
+        if (finish_point >= 0) {
+            _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + finish_point + 1);
+        }
+        // 3. move current memtable to inactive memtables
+        _inactive_memtables.push_back(_memtable);
+        // 4. flush current memtable
+        if (_inactive_memtables.size() >= config::pk_index_memtable_max_count) {
+            // If too many memtables, switch to sync flush.
+            RETURN_IF_ERROR(_memtable->minor_compact());
+        } else {
+            // submit this memtable to flush thread pool
+            RETURN_IF_ERROR(ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable));
+        }
         auto max_rss_rowid = _memtable->max_rss_rowid();
-        _memtable.reset();
-        _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
+        _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
         // Reset rebuild file count, avoid useless flush.
         _need_rebuild_file_cnt = 0;
     }
@@ -427,11 +419,28 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     return Status::OK();
 }
 
+Status LakePersistentIndex::get_from_inactive_memtables(size_t n, const Slice* keys, IndexValue* values,
+                                                        KeyIndexSet* key_indexes, int64_t version) const {
+    if (key_indexes->empty() || _inactive_memtables.empty()) {
+        return Status::OK();
+    }
+    for (auto iter = _inactive_memtables.rbegin(); iter != _inactive_memtables.rend(); ++iter) {
+        KeyIndexSet found_key_indexes;
+        RETURN_IF_ERROR((*iter)->get(keys, values, *key_indexes, &found_key_indexes, version));
+        set_difference(key_indexes, found_key_indexes);
+        if (key_indexes->empty()) {
+            break;
+        }
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     KeyIndexSet not_founds;
     // Assuming we always want the latest value now
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, -1));
     KeyIndexSet& key_indexes = not_founds;
+    RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, values, &key_indexes, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &key_indexes, -1));
     return Status::OK();
 }
@@ -443,16 +452,16 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     RETURN_IF_ERROR(
             _memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _version.major_number()));
     if (cb->token == nullptr) {
+        RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1));
         RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, not_founds.get(), -1));
         RETURN_IF_ERROR(flush_memtable());
     } else {
         auto st = cb->token->submit_func([this, n, keys, old_values, not_founds, cb]() {
-            auto st = get_from_sstables(n, keys, old_values, not_founds.get(), -1);
-            if (!st.ok()) {
-                LOG(WARNING) << "Failed to get from SSTables: " << st;
-                std::lock_guard<std::mutex> lg(*cb->mutex);
-                cb->status->update(st);
-            } else {
+            auto st = get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1);
+            if (st.ok()) {
+                st = get_from_sstables(n, keys, old_values, not_founds.get(), -1);
+            }
+            if (st.ok()) {
                 std::lock_guard<std::mutex> lg(*cb->mutex);
                 for (int i = 0; i < n; ++i) {
                     auto old = old_values[i].get_value();
@@ -460,6 +469,9 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
                         (*cb->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     }
                 }
+            } else {
+                std::lock_guard<std::mutex> lg(*cb->mutex);
+                cb->status->update(st);
             }
         });
         if (!st.ok()) {
@@ -493,6 +505,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
+    RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();

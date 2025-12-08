@@ -14,7 +14,10 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include "fs/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #include "util/string_util.h"
 #include "util/trace.h"
 
@@ -188,9 +191,72 @@ Status PersistentIndexMemtable::flush(WritableFile* wf, uint64_t* filesize, Pers
     return PersistentIndexSstable::build_sstable(_map, wf, filesize, range_pb);
 }
 
+Status PersistentIndexMemtable::minor_compact() {
+    if (_sstable != nullptr) {
+        // already compacted
+        return Status::OK();
+    }
+    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    if (block_cache == nullptr) {
+        return Status::InternalError("Block cache is null.");
+    }
+    auto filename = gen_sst_filename();
+    auto location = _tablet_mgr->sst_location(_tablet_id, filename);
+    WritableFileOptions wopts;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta.swap(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    RETURN_IF_ERROR(flush(wf.get(), &filesize, &range_pb));
+    RETURN_IF_ERROR(wf->close());
+
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!encryption_meta.empty()) {
+        opts.encryption_info = wopts.encryption_info;
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(filesize);
+    sstable_pb.set_max_rss_rowid(max_rss_rowid());
+    sstable_pb.set_encryption_meta(encryption_meta);
+    sstable_pb.mutable_range()->CopyFrom(range_pb);
+    TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::minor_compact:inject_predicate", &sstable_pb);
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    _sstable = std::move(sstable);
+    TRACE_COUNTER_INCREMENT("minor_compact_times", 1);
+    return Status::OK();
+}
+
 void PersistentIndexMemtable::clear() {
     _map.clear();
     _keys_heap_size = 0;
+}
+
+void PersistentIndexMemtable::run() {
+    auto st = minor_compact();
+    if (!st.ok()) {
+        LOG(ERROR) << "PersistentIndexMemtable minor_compact failed: " << st;
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_status = st;
+    }
+}
+
+std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    return std::move(_sstable);
+}
+
+Status PersistentIndexMemtable::flush_status() const {
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    return _flush_status;
 }
 
 } // namespace starrocks::lake
