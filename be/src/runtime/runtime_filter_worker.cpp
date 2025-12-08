@@ -186,6 +186,8 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
 
         // rf metadata
         PTransmitRuntimeFilterParams params;
+        params.set_transmit_timeout_ms(timeout_ms);
+        params.set_transmit_via_http_min_size(rpc_http_min_size);
         prepare_params(params, state, rf_desc);
 
         // print before setting data, otherwise it's too big.
@@ -229,7 +231,19 @@ void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBui
 
     if (!need_sender_grf) return;
 
+    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
+        timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
+    }
+
+    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
+    if (state->query_options().__isset.runtime_filter_rpc_http_min_size) {
+        rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
+    }
+
     PTransmitRuntimeFilterParams params;
+    params.set_transmit_timeout_ms(timeout_ms);
+    params.set_transmit_via_http_min_size(rpc_http_min_size);
     prepare_params(params, state, rf_desc);
 
     VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters for skew join's boradcast site. join filter_id = "
@@ -245,15 +259,6 @@ void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBui
             keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
     rf_data->resize(actual_size);
     *(params.mutable_columntype()) = type_desc.to_protobuf();
-    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
-    if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
-        timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
-    }
-
-    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
-    if (state->query_options().__isset.runtime_filter_rpc_http_min_size) {
-        rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
-    }
     state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
                                                                          timeout_ms, rpc_http_min_size,
                                                                          EventType::SEND_SKEW_JOIN_BROADCAST_RF);
@@ -615,6 +620,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         rpc_http_min_size = _query_options.runtime_filter_rpc_http_min_size;
     }
 
+    // we pass this options to the receiver, and receiver can use this option to forward rf to others.
+    request.set_transmit_timeout_ms(timeout_ms);
+    request.set_transmit_via_http_min_size(rpc_http_min_size);
+
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
 
@@ -730,7 +739,7 @@ public:
     std::vector<TNetworkAddress> transmit_addrs;
     std::vector<TRuntimeFilterDestination> destinations;
     int transmit_timeout_ms;
-    int64_t transmit_via_http_min_size = 64L * 1024 * 1024;
+    int64_t transmit_via_http_min_size;
 
     /// For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
     PTransmitRuntimeFilterParams transmit_rf_request;
@@ -860,6 +869,16 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     } else {
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_TOTAL_RF"});
         ev.type = RECEIVE_TOTAL_RF;
+    }
+    if (params.has_transmit_timeout_ms()) {
+        ev.transmit_timeout_ms = params.transmit_timeout_ms();
+    } else {
+        ev.transmit_timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    }
+    if (params.has_transmit_via_http_min_size()) {
+        ev.transmit_via_http_min_size = params.transmit_via_http_min_size();
+    } else {
+        ev.transmit_via_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
     }
     ev.query_id.hi = params.query_id().hi();
     ev.query_id.lo = params.query_id().lo();
