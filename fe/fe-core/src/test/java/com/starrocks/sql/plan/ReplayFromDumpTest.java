@@ -1018,7 +1018,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
-    
+
     @Test
     public void testForceReuseCTEWithHugeCTE() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
