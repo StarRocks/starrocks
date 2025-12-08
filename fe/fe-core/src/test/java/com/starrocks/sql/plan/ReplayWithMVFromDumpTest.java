@@ -20,16 +20,19 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.StarRocksTestExtension;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.disableMVRewriteConsiderDataLayout;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
 import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertNotContains;
 
+@ExtendWith(StarRocksTestExtension.class)
 @TestMethodOrder(MethodName.class)
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
