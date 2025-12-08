@@ -825,7 +825,6 @@ jobs:
           (steps.parsing-be-path-filter.outputs.src_filter != 'true' && steps.parsing-fe-path-filter.outputs.src_filter != 'true' && needs.test-checker.outputs.output1 == 'true')
         run: |
           echo "BUILD_NECE=true" >> $GITHUB_OUTPUT
-          exit -1
 
       - name: BRANCH INFO
         id: branch
@@ -1079,6 +1078,7 @@ jobs:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          exit 1
 
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -1341,8 +1341,6 @@ jobs:
       - restart-be-after-admit
       - fe-ut
       - be-ut
-      - fe-codestyle-check
-      - clang-tidy
     if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
