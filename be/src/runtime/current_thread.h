@@ -236,6 +236,9 @@ public:
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
+    void set_plan_node_id(int32_t plan_node_id) { _plan_node_id = plan_node_id; }
+    int32_t plan_node_id() const { return _plan_node_id; }
+
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
     const std::string& get_custom_coredump_msg() const { return _custom_coredump_msg; }
@@ -347,6 +350,11 @@ private:
     TUniqueId _fragment_instance_id;
     std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
+<<<<<<< HEAD
+=======
+    int32_t _lwp_id = 0;
+    int32_t _plan_node_id = -1;
+>>>>>>> 30b86cef42 ([Enhancement] dump plan node id in crash log (#66454))
     bool _check = true;
     bool _reserve_mod = false;
 };
@@ -459,6 +467,10 @@ private:
 #define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
     CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \
     auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_custom_coredump_msg({}); });
+
+#define SCOPED_SET_TRACE_PLAN_NODE_ID(plan_node_id)          \
+    CurrentThread::current().set_plan_node_id(plan_node_id); \
+    auto VARNAME_LINENUM(defer) = DeferOp([] { CurrentThread::current().set_plan_node_id(-1); });
 
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \
