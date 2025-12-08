@@ -22,7 +22,7 @@ namespace starrocks::sstable {
 namespace {
 class ConcatenatingIterator : public Iterator {
 public:
-    ConcatenatingIterator(Iterator** children, int n) : children_(new IteratorWrapper[n]), n_(n), current_index_(-1) {
+    ConcatenatingIterator(Iterator** children, int n) : children_(new IteratorWrapper[n]), n_(n) {
         for (int i = 0; i < n; i++) {
             children_[i].Set(children[i]);
         }
