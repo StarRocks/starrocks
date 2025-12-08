@@ -909,7 +909,11 @@ public class AnalyzeMgr implements Writable {
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 // For UPDATE operations, loadRows represents modified rows, not inserted rows
                 if (dmlType == DmlType.UPDATE) {
-                    updateUpdateModifiedRows(db.getId(), tableId, loadRows);
+                    BasicStatsMeta basicStatsMeta =
+                            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
+                    if (basicStatsMeta != null) {
+                        basicStatsMeta.increaseUpdateModifiedRows(loadRows);
+                    }
                 } else {
                     if (loadRows == 0) {
                         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1005,21 +1009,6 @@ public class AnalyzeMgr implements Writable {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
         } else {
             basicStatsMeta.increaseDeltaRows(loadedRows);
-        }
-    }
-
-    private void updateUpdateModifiedRows(long dbId, long tableId, long modifiedRows) {
-        BasicStatsMeta basicStatsMeta =
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
-        if (basicStatsMeta == null) {
-            // first update without analyze op, we need fill a meta with modified rows
-            BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
-                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
-                    StatsConstants.buildInitStatsProp(), 0);
-            meta.increaseUpdateModifiedRows(modifiedRows);
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
-        } else {
-            basicStatsMeta.increaseUpdateModifiedRows(modifiedRows);
         }
     }
 
