@@ -148,7 +148,7 @@ public class MvUtils {
         getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvToLevel);
         return mvToLevel.entrySet().stream()
                 .map(e -> MaterializedViewWrapper.create(e.getKey(), e.getValue()))
-                .collect(Collectors.toCollection(() -> Sets.newTreeSet()));
+                .collect(Collectors.toCollection(() -> Sets.newHashSet()));
     }
 
     public static void getRelatedMvs(ConnectContext connectContext,
