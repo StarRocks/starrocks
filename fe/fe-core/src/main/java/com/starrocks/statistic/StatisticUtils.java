@@ -307,7 +307,8 @@ public class StatisticUtils {
             if (relativeError > 1 - Config.statistic_partition_health__v2_threshold) {
                 return false;
             }
-            // updated > 5%
+            // Check if UPDATE operations have modified > 5% of rows
+            // This tracks UPDATE statements where row count doesn't change but data is modified
             long modifiedRows = stats.getUpdateModifiedRows();
             relativeError = 1.0 * modifiedRows / currentRowCount;
             return relativeError <= (1 - Config.statistic_partition_health__v2_threshold);
