@@ -85,7 +85,7 @@ public class BasicStatsMeta implements Writable {
     private long deltaRows;
 
     // Every time data is updated (UPDATE statement), it will be appended.
-    // Every time tablet stats is synchronized, it will be reset to 0.
+    // Every time the table is analyzed, it will be reset
     // This is used to track UPDATE operations where row count doesn't change but data is modified.
     @SerializedName("updateModifiedRows")
     private long updateModifiedRows;

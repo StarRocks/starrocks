@@ -602,6 +602,7 @@ public class StatisticExecutor {
                         basicStatsMeta.setProperties(statsJob.getProperties());
                         basicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
                         basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
+                        basicStatsMeta.resetUpdateModifiedRows();
                     }
 
                     for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {

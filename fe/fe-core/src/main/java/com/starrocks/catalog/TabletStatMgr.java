@@ -273,7 +273,6 @@ public class TabletStatMgr extends FrontendDaemon {
         if (meta != null) {
             meta.setTotalRows(totalRowCount);
             meta.resetDeltaRows();
-            meta.resetUpdateModifiedRows();
             meta.updateTabletStatsReportTime();
         }
     }
