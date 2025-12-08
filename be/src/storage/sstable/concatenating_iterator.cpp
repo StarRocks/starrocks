@@ -75,11 +75,7 @@ public:
         // If current iterator becomes invalid, move to next iterator
         if (!children_[current_index_].Valid()) {
             for (int i = current_index_ + 1; i < n_; i++) {
-                if (children_[i].Valid()) {
-                    current_index_ = i;
-                    return;
-                }
-                // Try to seek to first in case the iterator hasn't been initialized
+                // Always seek to first to ensure we don't use stale positions
                 children_[i].SeekToFirst();
                 if (children_[i].Valid()) {
                     current_index_ = i;
