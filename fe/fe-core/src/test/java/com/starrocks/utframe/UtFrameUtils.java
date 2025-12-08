@@ -276,7 +276,7 @@ public class UtFrameUtils {
 
         feConfMap.put("run_mode", runMode.getName());
         if (runMode == RunMode.SHARED_DATA) {
-            feConfMap.put("cloud_native_meta_port", String.valueOf(findValidPort()));
+            feConfMap.put("cloud_native_meta_port", "0"); // auto detect available port
             feConfMap.put("enable_load_volume_from_conf", "true");
             feConfMap.put("cloud_native_storage_type", "S3");
             feConfMap.put("aws_s3_path", "dummy_unittest_bucket/dummy_sub_path");
