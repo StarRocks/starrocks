@@ -298,10 +298,11 @@ public class StatisticsCollectionTrigger {
                     }
                 }
 
-                // TODO: support DELETE
                 if (dmlType == DmlType.UPDATE) {
                     // For UPDATE, collect on touched partitions regardless of version.
                     partitionIds.add(partitionId);
+                    tabletRows.forEach(
+                            (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
                 } else if (dmlType == DmlType.INSERT_INTO) {
                     // For INSERT, only consider the first load of a partition
                     if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
@@ -309,6 +310,9 @@ public class StatisticsCollectionTrigger {
                         tabletRows.forEach(
                                 (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
                     }
+                } else {
+                    // TODO: support DELETE
+                    LOG.debug("Statistics collection not triggered for DML type: {}", dmlType);
                 }
             }
         } finally {

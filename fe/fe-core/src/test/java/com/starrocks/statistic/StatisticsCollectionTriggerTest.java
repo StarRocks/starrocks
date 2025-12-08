@@ -181,7 +181,7 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         TransactionState transactionState = new TransactionState();
         TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
         commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
-                partition.getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 1, 1));
+                partition.getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 5, 1));
         transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
 
         setPartitionStatistics((OlapTable) table, "p1", 1000);
