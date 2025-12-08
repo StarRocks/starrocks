@@ -1943,4 +1943,119 @@ INSTANTIATE_TEST_SUITE_P(
 );
 // clang-format on
 
+struct JsonSetTestParam {
+    std::string json_input;
+    std::vector<std::pair<std::string, std::string>> path_value_pairs;
+    std::string expected_result;
+    std::string description;
+};
+
+class JsonSetTestFixture : public ::testing::TestWithParam<JsonSetTestParam> {};
+
+TEST_P(JsonSetTestFixture, json_set) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto param = GetParam();
+
+    auto json_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+    bool input_is_sql_null = (param.json_input == "SQL_NULL");
+
+    if (input_is_sql_null) {
+        json_column->append_nulls(1);
+    } else {
+        auto json = JsonValue::parse(param.json_input);
+        ASSERT_TRUE(json.ok()) << "Failed to parse input JSON: " << param.json_input;
+        json_column->append_datum(Datum(&json.value()));
+    }
+
+    Columns columns{json_column};
+
+    for (const auto& pair : param.path_value_pairs) {
+        auto path_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+        if (pair.first == "SQL_NULL") {
+            path_column->append_nulls(1);
+        } else {
+            std::string json_path_str = "\"" + pair.first + "\"";
+            auto path_json = JsonValue::parse(json_path_str);
+            ASSERT_TRUE(path_json.ok()) << "Failed to parse path JSON: " << json_path_str;
+            path_column->append_datum(Datum(&path_json.value()));
+        }
+        columns.emplace_back(path_column);
+
+        auto val_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+        if (pair.second == "SQL_NULL") {
+            val_column->append_nulls(1);
+        } else {
+            auto val_json = JsonValue::parse(pair.second);
+            ASSERT_TRUE(val_json.ok()) << "Failed to parse value JSON: " << pair.second;
+            val_column->append_datum(Datum(&val_json.value()));
+        }
+        columns.emplace_back(val_column);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto result_status = JsonFunctions::json_set(ctx.get(), columns);
+
+    if (param.expected_result == "SQL_ERROR") {
+        ASSERT_FALSE(result_status.ok());
+    } else {
+        ASSERT_TRUE(result_status.ok()) << result_status.status().to_string();
+        ColumnPtr result = result_status.value();
+        ASSERT_TRUE(!!result);
+
+        Datum datum = result->get(0);
+        if (param.expected_result == "SQL_NULL") {
+            ASSERT_TRUE(datum.is_null()) << "Expected NULL result but got: " << datum.get_json()->to_string().value();
+        } else {
+            ASSERT_FALSE(datum.is_null()) << "Expected " << param.expected_result << " but got NULL";
+            std::string actual_str = datum.get_json()->to_string().value();
+
+            auto expected_json = JsonValue::parse(param.expected_result);
+            auto actual_json = JsonValue::parse(actual_str);
+            ASSERT_TRUE(expected_json.ok());
+            ASSERT_TRUE(actual_json.ok());
+
+            ASSERT_EQ(expected_json->to_string().value(), actual_json->to_string().value())
+                    << "Description: " << param.description;
+        }
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        JsonSetTests, JsonSetTestFixture,
+        ::testing::Values(
+                // Expect STRING values ("2" instead of 2) because input "2" is parsed as string in this context
+                JsonSetTestParam{R"({"a": 1})", {{"$.a", "2"}}, R"({"a": "2"})", "Update existing key"},
+                JsonSetTestParam{R"({"a": 1})", {{"$.b", "2"}}, R"({"a": 1, "b": "2"})", "Insert new key"},
+                JsonSetTestParam{
+                        R"({"arr": [10, 20]})", {{"$.arr[1]", "99"}}, R"({"arr": [10, "99"]})", "Update array index"},
+                JsonSetTestParam{R"({"arr": [10, 20]})",
+                                 {{"$.arr[5]", "30"}},
+                                 R"({"arr": [10, 20, "30"]})",
+                                 "Append to array (index > size)"},
+                JsonSetTestParam{
+                        R"({"a": {"b": 1}})", {{"$.a.b", "2"}}, R"({"a": {"b": "2"}})", "Update nested object"},
+                JsonSetTestParam{
+                        R"({"a": 1})", {{"$.a[0]", "2"}}, R"({"a": 1})", "Array selector on scalar (should ignore)"},
+                JsonSetTestParam{
+                        R"({"a": 1})", {{"$.a", "2"}, {"$.b", "3"}}, R"({"a": "2", "b": "3"})", "Chained updates"},
+                JsonSetTestParam{"SQL_NULL", {{"$.a", "1"}}, "SQL_NULL", "Input is SQL NULL"},
+                JsonSetTestParam{R"({"a": 1})", {{"SQL_NULL", "1"}}, "SQL_NULL", "Path is SQL NULL"},
+                JsonSetTestParam{R"({"a": 1})", {{"$.a", "SQL_NULL"}}, "SQL_NULL", "Value is SQL NULL"},
+                JsonSetTestParam{"null",
+                                 {{"$.a", "1"}},
+                                 "null",
+                                 "Input is JSON null (should return JSON null or NULL based on logic)"},
+                JsonSetTestParam{R"({"a": 1})", {{"$", R"({"b": 2})"}}, R"({"b": 2})", "Replace root"},
+                JsonSetTestParam{R"({"a": 1})",
+                                 {{"$[0]", "1"}},
+                                 R"({"a": 1})",
+                                 "Root array selector on object (should ignore)"}));
+
 } // namespace starrocks
