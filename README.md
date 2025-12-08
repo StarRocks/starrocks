@@ -155,5 +155,6 @@ This project is used by the following companies. Learn more about their use case
 - [Verisoul](https://celerdata.com/blog/verisoul-enables-real-time-analytics-by-transitioning-off-bigquery)
 - [Vivo](https://medium.com/starrocks-engineering/vivos-journey-to-a-high-performance-lakehouse-with-starrocks-56a502a0fde8) 
 - [Xiaohongshu/RedNote](https://www.youtube.com/watch?v=2cvIZY4EDak&list=PL0eWwaesODdiJ0aXLzSTyNfkjjIFYpOTf)
+- [Yuno](https://celerdata.com/blog/from-hours-to-seconds-how-yuno-accelerated-customer-facing-analytics-by-switching-off-snowflake-and-athena)
 - [Zepto](https://blog.zeptonow.com/data-that-delivers-real-time-insights-for-brand-success-in-quick-commerce-b8b9e994d20b)
 
