@@ -180,6 +180,13 @@ public class StarMgrServer {
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
         starMgrServer.start(FrontendOptions.getLocalHostAddress(), com.staros.util.Config.STARMGR_RPC_PORT, grpcExecutor);
+        if (com.staros.util.Config.STARMGR_RPC_PORT == 0) {
+            // get the actual port
+            com.staros.util.Config.STARMGR_RPC_PORT = starMgrServer.getServerPort();
+            // update the configuration to reflect the real port
+            Config.cloud_native_meta_port = com.staros.util.Config.STARMGR_RPC_PORT;
+            LOG.info("star mgr rpc server bind port is set to {}.", com.staros.util.Config.STARMGR_RPC_PORT);
+        }
 
         StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         if (starOsAgent != null && !starOsAgent.init(starMgrServer)) {
