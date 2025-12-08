@@ -16,16 +16,10 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Type;
-=======
 import com.starrocks.common.Config;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.LiteralExpr;
->>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
