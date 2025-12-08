@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
