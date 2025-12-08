@@ -168,4 +168,51 @@ public class SetVarTest extends PlanTestBase {
         Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
         Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSetAllSessionVariablesBySql() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        SessionVariable sessionVariable = new SessionVariable();
+        ctx.setSessionVariable(sessionVariable);
+
+        for (Field field : SessionVariable.class.getDeclaredFields()) {
+            VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
+            if (attr == null) {
+                continue;
+            }
+            field.setAccessible(true);
+            Object value = field.get(sessionVariable);
+
+            String literal;
+            if (value == null) {
+                continue;
+            } else if (value instanceof String) {
+                literal = "'" + ((String) value).replace("'", "''") + "'";
+            } else {
+                literal = String.valueOf(value);
+            }
+
+            String sql = "set " + attr.name() + " = " + literal;
+            StatementBase stmt = SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+            new StmtExecutor(ctx, stmt).execute();
+
+            assertEquals(value, field.get(sessionVariable));
+        }
+    }
+
+    @Test
+    public void testMissingWarehouse() throws Exception {
+        // Simulate that after setting the warehouse, this warehouse is deleted.
+        starRocksAssert.getCtx().getSessionVariable().setWarehouseName("no_exist_warehouse");
+
+        String sql = "set warehouse = default_warehouse";
+        StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+        executor.execute();
+        assertEquals("default_warehouse", starRocksAssert.getCtx().getSessionVariable().getWarehouseName());
+    }
+
+>>>>>>> a7884a0f18 ([BugFix] Fix post-warehouse-deletion failures in load metadata and SQL execution (#66436))
 }
