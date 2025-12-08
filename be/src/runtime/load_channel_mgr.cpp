@@ -38,6 +38,7 @@
 #include <butil/endpoint.h>
 
 #include <memory>
+#include <utility>
 
 #include "common/closure_guard.h"
 #include "fs/key_cache.h"
@@ -124,13 +125,19 @@ LoadChannelMgr::~LoadChannelMgr() {
 
 void LoadChannelMgr::close() {
     _async_rpc_pool->shutdown();
-    std::lock_guard l(_lock);
-    for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
-        std::string close_reason = "load channel manager closed";
-        iter->second->cancel(close_reason);
-        _record_cancel_reason(iter->first, close_reason);
-        iter->second->abort();
-        iter = _load_channels.erase(iter);
+    std::string close_reason = "load channel manager closed";
+    std::vector<UniqueId> load_ids;
+    {
+        std::lock_guard l(_lock);
+        for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
+            iter->second->cancel(close_reason);
+            load_ids.emplace_back(iter->first);
+            iter->second->abort();
+            iter = _load_channels.erase(iter);
+        }
+    }
+    for (const auto& load_id : load_ids) {
+        _record_cancel_reason(load_id, close_reason);
     }
 }
 
@@ -369,14 +376,20 @@ Status LoadChannelMgr::_start_bg_worker() {
 }
 
 void LoadChannelMgr::_start_load_channels_clean() {
-    std::vector<std::shared_ptr<LoadChannel>> timeout_channels;
+    std::vector<std::pair<std::shared_ptr<LoadChannel>, std::string>> timeout_channels;
 
     time_t now = time(nullptr);
     {
         std::lock_guard l(_lock);
         for (auto it = _load_channels.begin(); it != _load_channels.end(); /**/) {
             if (difftime(now, it->second->last_updated_time()) >= it->second->timeout()) {
-                timeout_channels.emplace_back(std::move(it->second));
+                std::string timeout_reason = "load channel timeout";
+                CancelReasonInfo info;
+                info.reason = timeout_reason;
+                info.timestamp = now;
+                _cancel_reasons[it->first] = info;
+
+                timeout_channels.emplace_back(std::move(it->second), std::move(timeout_reason));
                 it = _load_channels.erase(it);
             } else {
                 ++it;
@@ -387,12 +400,10 @@ void LoadChannelMgr::_start_load_channels_clean() {
     // we must cancel these load channels before destroying them
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
-    for (auto& channel : timeout_channels) {
-        std::string timeout_reason = "load channel timeout";
-        channel->cancel(timeout_reason);
-        _record_cancel_reason(channel->load_id(), timeout_reason);
+    for (auto& [channel, reason] : timeout_channels) {
+        channel->cancel(reason);
     }
-    for (auto& channel : timeout_channels) {
+    for (auto& [channel, reason] : timeout_channels) {
         channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << print_id(channel->load_id())
                   << " timeout=" << channel->timeout();
