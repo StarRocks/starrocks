@@ -3145,7 +3145,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
-        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "tablet stats thread pool is null"));
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "publish version thread pool is null"));
     }
 
     // 3. successful repair of non-bundling tablet metadata

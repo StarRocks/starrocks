@@ -1530,9 +1530,9 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
         }
     }
 
-    auto thread_pool = get_tablet_stats_thread_pool(_env);
+    auto thread_pool = publish_version_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
-        Status::ServiceUnavailable("tablet stats thread pool is null").to_protobuf(response->mutable_status());
+        Status::ServiceUnavailable("publish version thread pool is null").to_protobuf(response->mutable_status());
         return;
     }
 
