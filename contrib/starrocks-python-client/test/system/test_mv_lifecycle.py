@@ -22,7 +22,7 @@ from starrocks.datatype import INTEGER, VARCHAR
 from starrocks.sql.schema import MaterializedView, View
 from test import test_utils
 from test.system.conftest import AlembicTestEnv
-from test.system.test_table_lifecycle import ScriptContentParser
+from test.system.test_table_lifecycle import ScriptContentParser, wait_for_alter_table_column_or_optimization
 
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,9 @@ def test_mixed_schema_lifecycle(alembic_env: AlembicTestEnv, sr_engine):
     """
     # 1. Initial state: one of each
     Base = declarative_base()
-    Table("t1", Base.metadata, Column("id", INTEGER), starrocks_properties={"replication_num": "1"})
+    Table("t1", Base.metadata,
+          Column("id", INTEGER),
+          starrocks_properties={"replication_num": "1"})
     View("v1", Base.metadata, definition="SELECT 1")
     View("v2", Base.metadata, definition="SELECT 2") # To be dropped
     MaterializedView("mv1", Base.metadata, definition="SELECT id FROM t1", starrocks_refresh="MANUAL",
@@ -138,7 +140,10 @@ def test_mixed_schema_lifecycle(alembic_env: AlembicTestEnv, sr_engine):
 
     # 2. Altered state: alter table, drop view, create new mv, keep one unchanged
     AlteredBase = declarative_base()
-    Table("t1", AlteredBase.metadata, Column("id", INTEGER), Column("name", VARCHAR(10)), starrocks_properties={"replication_num": "1"}) # Alter
+    Table("t1", AlteredBase.metadata,
+          Column("id", INTEGER),
+          Column("name", VARCHAR(10)),  # add one column
+          starrocks_properties={"replication_num": "1"}) # Alter
     View("v1", AlteredBase.metadata, definition="SELECT id FROM t1") # Alter View
     # v2 is dropped
     MaterializedView("mv1", AlteredBase.metadata, definition="SELECT id FROM t1", starrocks_refresh="MANUAL",
@@ -163,6 +168,7 @@ def test_mixed_schema_lifecycle(alembic_env: AlembicTestEnv, sr_engine):
     alembic_env.harness.upgrade("head")
 
     # 4. Verify DB state
+    wait_for_alter_table_column_or_optimization(sr_engine, "t1", "COLUMN")
     inspector = inspect(sr_engine)
     inspector.clear_cache()
     tables = inspector.get_table_names()
@@ -178,6 +184,7 @@ def test_mixed_schema_lifecycle(alembic_env: AlembicTestEnv, sr_engine):
     assert "mv2" in mv_names
 
     alembic_env.harness.downgrade("-1") # Back to initial state
+    wait_for_alter_table_column_or_optimization(sr_engine, "t1", "COLUMN")
     inspector.clear_cache()
     tables = inspector.get_table_names()
     assert tables is not None and "t1" in tables

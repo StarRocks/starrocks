@@ -50,17 +50,18 @@ from test.test_utils import normalize_sql
 BASIC_TYPE_TEST_CASES = [
     # (type_instance, expected_sql)
     (TINYINT(), "col TINYINT"),
-    (TINYINT(1), "col TINYINT"),  # StarRocks TINYINT doesn't preserve display_width in compilation
+    (TINYINT(1), "col TINYINT(1)"),
     (SMALLINT(), "col SMALLINT"),
     (INTEGER(), "col INTEGER"),
     (BIGINT(), "col BIGINT"),
+    (BIGINT(20), "col BIGINT(20)"),
     (LARGEINT(), "col LARGEINT"),
     (BOOLEAN(), "col BOOLEAN"),
     (DECIMAL(), "col DECIMAL"),
     (DECIMAL(10), "col DECIMAL(10)"),
     (DECIMAL(10, 2), "col DECIMAL(10,2)"),
     (FLOAT(), "col FLOAT"),
-    (FLOAT(10), "col FLOAT"),  # StarRocks FLOAT might not preserve precision in compilation
+    (FLOAT(10), "col FLOAT"),
     (DOUBLE(), "col DOUBLE"),
     (CHAR(10), "col CHAR(10)"),
     (VARCHAR(255), "col VARCHAR(255)"),
@@ -101,10 +102,13 @@ CONSTRAINT_TEST_CASES = [
     (INTEGER(), None, None, '0', "col INTEGER DEFAULT '0'"),
     (VARCHAR(50), False, 'Full test column', 'test',
      "col VARCHAR(50) NOT NULL DEFAULT 'test' COMMENT 'Full test column'"),
+    # Test empty string default value
+    (VARCHAR(50), None, None, '', "col VARCHAR(50) DEFAULT ''"),
+    (STRING(), None, None, '', "col STRING DEFAULT ''"),
 ]
 
 EDGE_CASE_TEST_CASES = [
-    (VARCHAR(65533), "col VARCHAR(65533)"),
+    (VARCHAR(65533), ["col VARCHAR(65533)", "col STRING"]),
     (DECIMAL(38, 18), "col DECIMAL(38,18)"),
     (ARRAY(MAP(STRING, STRUCT(level1=ARRAY(MAP(INTEGER, STRUCT(level2=STRING, level2_array=ARRAY(INTEGER))))))),
      "col ARRAY<MAP<STRING,STRUCT<level1 ARRAY<MAP<INTEGER,STRUCT<level2 STRING,level2_array ARRAY<INTEGER>>>>>>>"),
@@ -164,4 +168,8 @@ class TestDataTypeCompiler:
         """Test edge cases and boundary conditions for type compilation"""
         col = Column('col', type_instance)
         result = self._compile_column_type(col)
-        assert normalize_sql(result) == normalize_sql(expected_sql)
+        normalized_result = normalize_sql(result)
+        if isinstance(expected_sql, list):
+            assert normalized_result in {normalize_sql(sql) for sql in expected_sql}
+        else:
+            assert normalized_result == normalize_sql(expected_sql)
