@@ -152,7 +152,7 @@ public:
 private:
     IteratorWrapper* children_;
     int n_;
-    int current_index_;
+    int current_index_{-1};
 };
 } // namespace
 
