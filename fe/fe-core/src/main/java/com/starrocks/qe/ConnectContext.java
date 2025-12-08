@@ -1031,7 +1031,7 @@ public class ConnectContext {
         this.sessionVariable.setCatalog(currentCatalog);
     }
 
-    public long getCurrentWarehouseId() {
+    public Long getCurrentWarehouseIdAllowNull() {
         String warehouseName = this.sessionVariable.getWarehouseName();
         if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
             return WarehouseManager.DEFAULT_WAREHOUSE_ID;
@@ -1039,9 +1039,17 @@ public class ConnectContext {
 
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         if (warehouse == null) {
-            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+            return null;
         }
         return warehouse.getId();
+    }
+
+    public long getCurrentWarehouseId() {
+        Long warehouseId = getCurrentWarehouseIdAllowNull();
+        if (warehouseId == null) {
+            throw new SemanticException("Warehouse " + this.sessionVariable.getWarehouseName() + " not exist");
+        }
+        return warehouseId;
     }
 
     public String getCurrentWarehouseName() {
