@@ -1709,7 +1709,7 @@ public class OlapScanNode extends ScanNode {
          * This field stores the schema information that was used when generating the plan, enabling
          * backend nodes to retrieve the exact schema from the frontend during query execution. This is
          * particularly important for Fast Schema Evolution scenarios where schema changes are not
-         * immediately propagated schema metadata to backend nodes.  Currently, this mechanism is only
+         * immediately propagated schema metadata to backend nodes. Currently, this mechanism is only
          * used in shared-data mode.
          * </p>
          */
@@ -1724,13 +1724,13 @@ public class OlapScanNode extends ScanNode {
             long indexId = selectedIndexId == -1 ? olapTable.getBaseIndexId() : selectedIndexId;
             SchemaInfo schema = null;
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                com.starrocks.catalog.MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                 if (indexMeta == null) {
                     throw new RuntimeException(String.format(
                             "can't find index, table name: %s, table id: %s, index id: %s",
                             olapTable.getName(), olapTable.getId(), indexId));
                 }
-                schema = SchemaInfo.fromMaterializedIndex(olapTable, indexId, olapTable.getIndexMetaByIndexId(indexId));
+                schema = SchemaInfo.fromMaterializedIndex(olapTable, indexId, indexMeta);
             }
             return new SelectedIndex(indexId, schema);
         }

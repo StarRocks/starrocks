@@ -55,7 +55,7 @@ import java.util.Optional;
  * The service supports two request sources:
  * <ul>
  *   <li><b>SCAN</b>: Schema requests from query scan. The service first searches in the query coordinator's
- *       cached schema, then falls back to catalog and history schemas maintained by schema change jogs.</li>
+ *       cached schema, then falls back to catalog and history schemas maintained by schema change jobs.</li>
  *   <li><b>LOAD</b>: Schema requests from data loading. The service searches in catalog and history schemas.</li>
  * </ul>
  * </p>
