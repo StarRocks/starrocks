@@ -150,4 +150,132 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "  0:OlapScanNode");
         connectContext.getSessionVariable().setCboDisabledRules("");
     }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown1() throws Exception {
+        String sql = "WITH input AS (select t0.v1, t1.v5 from t0 join t1 on t0.v1=t1.v4) " +
+                "SELECT v1, v5  from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 1: v1\n" +
+                "  |  other join predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown2() throws Exception {
+        String sql = "WITH input AS (select t0.v1, t1.v5 from t0 left join t1 on t0.v1=t1.v4) " +
+                "SELECT v1, v5  from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 1: v1\n" +
+                "  |  other predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown3() throws Exception {
+        String sql = "WITH input AS (select t0.v1, t1.v5 from t0 full join t1 on t0.v1=t1.v4) " +
+                "SELECT v1, v5  from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 1: v1\n" +
+                "  |  other predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown4() throws Exception {
+        String sql = "WITH input AS (select t0.v1, t1.v5 from t0 cross join t1 on t0.v1>t1.v4) " +
+                "SELECT v1, v5  from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 > 4: v4, rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown5() throws Exception {
+        String sql = "WITH input AS (select * from t0 where t0.v1 in (select max(v4) from t1)) " +
+                "SELECT * from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: max\n" +
+                "  |  other predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown6() throws Exception {
+        String sql = "WITH input AS (select * from t0 where t0.v1 not in (select max(v4) from t1)) " +
+                "SELECT * from input WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: max\n" +
+                "  |  other predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown7() throws Exception {
+        starRocksAssert.withView("create view test_view1 as select * from t0 where t0.v1 " +
+                "not in (select max(v4) from t1);");
+        String sql = "SELECT * from test_view1 WHERE rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "|  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: max\n" +
+                "  |  other predicates: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown8() throws Exception {
+        String sql = "WITH input AS (select v1, count(v2), sum(v3) from t0 group by t0.v1) " +
+                "SELECT * from input WHERE v1 > 1 and rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2), sum(3: v3)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  having: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown9() throws Exception {
+        String sql = "select * from (select v1, v2, v3, grouping_id(v1, v3), grouping(v2) " +
+                "from t0 group by rollup(v1, v2, v3)) x where coalesce(v1, v2, v3) = 1 and rand() < 0.5;";
+        String planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "  4:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 1: v1, 2: v2, 3: v3, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING\n" +
+                "  |  having: rand() < 0.5");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown10() throws Exception {
+        String sql = "with input as (select * from test_all_type, unnest(split(t1a, ',')) as unnest_tbl(a)) " +
+                "select * from input where a > 1 and rand() < 0.5";
+        String planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "  3:SELECT\n" +
+                "  |  predicates: CAST(11: a AS DOUBLE) > 1.0, rand() < 0.5\n" +
+                "  |  \n" +
+                "  2:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [VARCHAR]");
+    }
+
+    @Test
+    public void testNonDeterministicFunctionPushDown11() throws Exception {
+        String sql = "WITH input AS (select v1, sum(v2) over (partition by v1) from t0) " +
+                "SELECT * from input WHERE v1 > 1 and rand() < 0.5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: rand() < 0.5\n" +
+                "  |  \n" +
+                "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(2: v2), ]\n" +
+                "  |  partition by: 1: v1");
+    }
 }
