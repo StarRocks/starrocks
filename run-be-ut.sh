@@ -176,11 +176,21 @@ echo "Build Backend UT"
 
 CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
-    rm ${CMAKE_BUILD_DIR} -rf
-    rm ${STARROCKS_HOME}/be/output/ -rf
+    if [ "${SKIP_CMAKE}" == "ON" ]; then
+        echo "[INFO] Skip clean step (SKIP_CMAKE=ON)"
+    else
+        echo "[INFO] clean step (SKIP_CMAKE=OFF)"
+        rm ${CMAKE_BUILD_DIR} -rf
+        rm ${STARROCKS_HOME}/be/output/ -rf
+    fi
 fi
 
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
+    if [ "${SKIP_CMAKE}" == "ON" ]; then
+        echo "Error: SKIP_CMAKE=ON but build directory does not exist: ${CMAKE_BUILD_DIR}"
+        echo "Please run a full build first without SKIP_CMAKE=ON"
+        exit 1
+    fi
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 
@@ -196,7 +206,9 @@ if [ "${USE_STAROS}" == "ON"  ]; then
 fi
 
 # Build Java Extensions
-if [ ${BUILD_JAVA_EXT} = "ON" ]; then
+if [ "${SKIP_CMAKE}" == "ON" ]; then
+    echo "[INFO] Skip building Java Extensions (SKIP_CMAKE=ON)"
+elif [ ${BUILD_JAVA_EXT} = "ON" ]; then
     echo "Build Java Extensions"
     cd ${STARROCKS_HOME}/java-extensions
     if [ ${CLEAN} -eq 1 ]; then
@@ -224,16 +236,15 @@ if [ "${SKIP_CMAKE}" != "ON" ]; then
                 -DSTARROCKS_JIT_ENABLE=ON \
                 -DWITH_RELATIVE_SRC_PATH=OFF \
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+    ${BUILD_SYSTEM} -j${PARALLEL}
 else
     echo "[INFO] Skip cmake step (SKIP_CMAKE=ON)"
 fi
 
-${BUILD_SYSTEM} -j${PARALLEL}
-
 cd ${STARROCKS_HOME}
 export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}/test
 TEST_BIN=starrocks_test
-if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
+if [ "${SKIP_CMAKE}" != "ON" ] && [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
     pushd ${STARROCKS_TEST_BINARY_DIR} >/dev/null 2>&1
     TEST_BIN_SYMBOL=starrocks_test.debuginfo
     echo -n "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
@@ -347,6 +358,7 @@ if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
   if [ ${DRY_RUN} -eq 0 ]; then
     if [ -x "${GTEST_PARALLEL}" ]; then
+        echo "[DEBUG] Actual command: ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_NAME} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}"
         ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
             --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
