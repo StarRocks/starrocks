@@ -2267,6 +2267,11 @@ static const char* skip_trailing_spaces(const char* begin, const char* end, cons
     if (UNLIKELY(begin == nullptr)) {
         return begin;
     }
+    // Nothing to trim when the slice is empty. Avoids walking backwards from
+    // end - 1, which would underflow when begin == end.
+    if (begin == end) {
+        return end;
+    }
     auto p = end;
 #if defined(__SSE2__)
     if constexpr (simd_optimization && trim_single && !trim_utf8) {
