@@ -87,7 +87,6 @@
                     <groupId>org.ini4j</groupId>
                     <artifactId>ini4j</artifactId>
                 </exclusion>
-                <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                 <exclusion>
                     <artifactId>lz4-pure-java</artifactId>
                     <groupId>org.lz4</groupId>
