@@ -1311,7 +1311,16 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
         {
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1", "partitions=0/1");
+            // refresh partition is rewritten by mv
+            PlanTestBase.assertContains(plan, "  5:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+            // non refresh partition is read from base table
+            PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                    "     TABLE: test_base_table1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/2");
         }
         connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
         starRocksAssert.dropTable("test_base_table1");

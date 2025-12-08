@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTransparentState;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -35,6 +34,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public final class OlapTableCompensation extends TableCompensation {
+    // olap table's partition ids need to compensate
     private final List<Long> compensations;
 
     public OlapTableCompensation(Table refBaseTable, List<Long> partitionIds) {
@@ -70,7 +70,12 @@ public final class OlapTableCompensation extends TableCompensation {
         }
         StringBuilder sb = new StringBuilder();
         sb.append("size=").append(compensations.size()).append(", ");
-        sb.append(MvUtils.shrinkToSize(compensations, Config.max_mv_task_run_meta_message_values_length));
+        String compensationPartitions = compensations.stream()
+                .limit(Config.max_mv_task_run_meta_message_values_length)
+                .map(id -> refBaseTable.getPartition(id))
+                .map(p -> p != null ? p.getName() : "null")
+                .collect(Collectors.joining(", "));
+        sb.append("[").append(compensationPartitions).append("]");
         return sb.toString();
     }
 
