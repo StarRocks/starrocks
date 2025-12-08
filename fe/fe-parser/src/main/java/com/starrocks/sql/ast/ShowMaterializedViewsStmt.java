@@ -18,8 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // Show rollup statement, used to show rollup information of one table.
 //
 // Syntax:
@@ -58,7 +56,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.db = normalizeName(db);
+        this.db = db;
     }
 
     public String getPattern() {
@@ -75,6 +73,6 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowMaterializedViewStatement(this, context);
+        return visitor.visitShowMaterializedViewStatement(this, context);
     }
 }
