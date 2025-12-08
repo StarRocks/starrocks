@@ -384,8 +384,9 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setCpuWeight(cpuWeight);
                 }
 
+                String memPool = wg.getMemPool();
                 if (wg.hasDefaultMemPool()) {
-                    alterResourceGroupLog.setMemPool(ResourceGroup.DEFAULT_MEM_POOL);
+                   memPool = ResourceGroup.DEFAULT_MEM_POOL;
                 }
 
                 if (exclusiveCpuCores != null) {
@@ -396,7 +397,7 @@ public class ResourceGroupMgr implements Writable {
                 if (maxCpuCores != null) {
                     alterResourceGroupLog.setMaxCpuCores(maxCpuCores);
                 }
-                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(wg.getMemPool())) {
+                if (changedProperties.getMemPool() != null && !changedProperties.getMemPool().equals(memPool)) {
                     throw new DdlException("Property `mem_pool` cannot be altered [" + wg.getMemPool() + "].");
                 }
                 if (!wg.hasDefaultMemPool() &&
