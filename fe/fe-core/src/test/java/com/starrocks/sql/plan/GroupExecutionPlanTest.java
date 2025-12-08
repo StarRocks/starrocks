@@ -178,6 +178,8 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("with a as (select distinct k1, k2, k3 from colocate1) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ " +
                     "l.k1,z.k2 from a l join [shuffle] a z on l.k1=z.k1 and l.k2=z.k2 where l.k3 > 100 and z.k3 < 100");
 
+            querys.add("with w as (select *, row_number() over (partition by k1,k2 order by k1,k2) from colocate1)\n" +
+                    "select * from w t1 join [colocate] w t2 on t1.k1=t2.k1 and t1.k2=t2.k2");
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
                 assertNotContains(plan, "colocate exec groups:");
