@@ -386,7 +386,7 @@ public class ResourceGroupMgr implements Writable {
 
                 String memPool = wg.getMemPool();
                 if (wg.hasDefaultMemPool()) {
-                   memPool = ResourceGroup.DEFAULT_MEM_POOL;
+                    memPool = ResourceGroup.DEFAULT_MEM_POOL;
                 }
 
                 if (exclusiveCpuCores != null) {
