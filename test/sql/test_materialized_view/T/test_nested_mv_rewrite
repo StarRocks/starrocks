@@ -250,63 +250,63 @@ REFRESH DEFERRED MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 f
 -- first refresh mv2
 [UC]REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
 select count(1) from (
-    select k1, v1, v2 from mv1 where k1 = 1
+    select k1 from mv1 where k1 = 1
     union all
-    select k1, v1, v2 from t1 where k1 = 2
+    select k1 from t1 where k1 = 2
     union all
-    select k1, v1, v2 from mv1 where k1 = 3
+    select k1 from mv1 where k1 = 3
     union all
-    select k1, v1, v2 from mv1 where k1 = 4
+    select k1 from mv1 where k1 = 4
 ) as t;
 
 function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
-SELECT k1, count(v1), sum(v2) from t1 group by k1;
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
 
 -- then refresh mv1
 [UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 select count(1) from (
-    select k1, v1, v2 from mv1 where k1 = 1
+    select k1 from mv1 where k1 = 1
     union all
-    select k1, v1, v2 from t1 where k1 = 2
+    select k1 from t1 where k1 = 2
     union all
-    select k1, v1, v2 from mv1 where k1 = 3
+    select k1 from mv1 where k1 = 3
     union all
-    select k1, v1, v2 from mv1 where k1 = 4
+    select k1 from mv1 where k1 = 4
 ) as t;
 
 function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
-SELECT k1, count(v1), sum(v2) from t1 group by k1;
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
 
 insert into t1 values (4,1,1);
 
 -- first refresh mv2
 [UC]REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
 select count(1) from (
-    select k1, v1, v2 from mv1 where k1 = 1
+    select k1 from mv1 where k1 = 1
     union all
-    select k1, v1, v2 from t1 where k1 = 2
+    select k1 from t1 where k1 = 2
     union all
-    select k1, v1, v2 from mv1 where k1 = 3
+    select k1 from mv1 where k1 = 3
     union all
-    select k1, v1, v2 from mv1 where k1 = 4
+    select k1 from mv1 where k1 = 4
 ) as t;
 
 function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
-SELECT k1, count(v1), sum(v2) from t1 group by k1;
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
 
 -- then refresh mv1
 [UC]REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 select count(1) from (
-    select k1, v1, v2 from mv1 where k1 = 1
+    select k1 from mv1 where k1 = 1
     union all
-    select k1, v1, v2 from t1 where k1 = 2
+    select k1 from t1 where k1 = 2
     union all
-    select k1, v1, v2 from mv1 where k1 = 3
+    select k1 from mv1 where k1 = 3
     union all
-    select k1, v1, v2 from mv1 where k1 = 4
+    select k1 from mv1 where k1 = 4
 ) as t;
 function: print_hit_materialized_views("SELECT k1, count(v1), sum(v2) from t1 group by k1;")
-SELECT k1, count(v1), sum(v2) from t1 group by k1;
+SELECT k1, count(v1), sum(v2) from t1 group by k1 order by 1;
 
 drop materialized view mv1;
 drop materialized view mv2;
