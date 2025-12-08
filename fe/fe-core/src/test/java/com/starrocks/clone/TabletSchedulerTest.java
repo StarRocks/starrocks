@@ -180,7 +180,7 @@ public class TabletSchedulerTest {
         recycleBin.recycleDatabase(badDb, new HashSet<>(), true);
         recycleBin.recycleTable(goodDB.getId(), badTable, true);
         RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
-                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
+                badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, null);
         recycleBin.recyclePartition(recyclePartitionInfo);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();

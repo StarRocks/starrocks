@@ -259,7 +259,6 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Index
@@ -370,7 +369,6 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Partition
@@ -710,7 +708,6 @@ public class OlapTableSinkTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);

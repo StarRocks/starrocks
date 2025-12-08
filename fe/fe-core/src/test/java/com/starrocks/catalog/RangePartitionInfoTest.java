@@ -383,8 +383,7 @@ public class RangePartitionInfoTest {
         RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
         PartitionKey partitionKey = PartitionKey.createInfinityPartitionKey(partitionColumns, true);
         Range<PartitionKey> range = Range.atLeast(partitionKey);
-        rangePartitionInfo.addPartition(123L, false, range, null, (short) 1,
-                false, null);
+        rangePartitionInfo.addPartition(123L, false, range, null, (short) 1, null);
         RangePartitionInfo copyInfo = (RangePartitionInfo) rangePartitionInfo.clone();
         rangePartitionInfo.dropPartition(123L);
         Assertions.assertTrue(copyInfo.getRange(123L) != null);

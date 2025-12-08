@@ -96,7 +96,6 @@ public class TabletStatMgrTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(PARTITION_ID, new DataProperty(TStorageMedium.HDD));
-        partitionInfo.setIsInMemory(PARTITION_ID, false);
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
 
         // Table

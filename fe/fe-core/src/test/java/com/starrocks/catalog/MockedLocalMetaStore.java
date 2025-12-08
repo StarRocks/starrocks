@@ -105,7 +105,6 @@ public class MockedLocalMetaStore extends LocalMetastore {
         long partitionId = idGenerator.getNextId();
         SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, DEFAULT_REPLICATION_NUM);
-        partitionInfo.setIsInMemory(partitionId, false);
 
         OlapTable olapTable = new OlapTable(
                 tableId,

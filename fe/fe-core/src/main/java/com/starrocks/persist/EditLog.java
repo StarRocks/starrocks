@@ -758,7 +758,6 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
-                case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
                 case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
@@ -1833,10 +1832,6 @@ public class EditLog {
 
     public void logModifyReplicationNum(ModifyTablePropertyOperationLog info) {
         logJsonObject(OperationType.OP_MODIFY_REPLICATION_NUM, info);
-    }
-
-    public void logModifyInMemory(ModifyTablePropertyOperationLog info) {
-        logJsonObject(OperationType.OP_MODIFY_IN_MEMORY, info);
     }
 
     public void logModifyConstraint(ModifyTablePropertyOperationLog info) {

@@ -28,7 +28,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private Short replicationNum;
     private DataProperty partitionDataProperty;
     private Long versionInfo;
-    private boolean isInMemory;
     private DataCacheInfo dataCacheInfo;
 
     public SinglePartitionDesc(boolean ifNotExists, String partName, Map<String, String> properties, NodePosition pos) {
@@ -39,7 +38,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.replicationNum = RunMode.defaultReplicationNum();
         this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
         this.versionInfo = null;
-        this.isInMemory = false;
         this.dataCacheInfo = null;
     }
 
@@ -74,11 +72,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public boolean isInMemory() {
-        return isInMemory;
-    }
-
-    @Override
     public DataCacheInfo getDataCacheInfo() {
         return dataCacheInfo;
     }
@@ -94,10 +87,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
 
     public void setVersionInfo(Long versionInfo) {
         this.versionInfo = versionInfo;
-    }
-
-    public void setInMemory(boolean inMemory) {
-        this.isInMemory = inMemory;
     }
 
     public void setDataCacheInfo(DataCacheInfo dataCacheInfo) {

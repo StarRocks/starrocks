@@ -746,9 +746,11 @@ public class PartitionDescAnalyzer {
         // analyze version info
         Long versionInfo = PropertyAnalyzer.analyzeVersionInfo(partitionAndTableProperties);
 
-        // analyze in memory
-        boolean isInMemory = PropertyAnalyzer
-                .analyzeBooleanProp(partitionAndTableProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        // consume deprecated in_memory property if present
+        PropertyAnalyzer.analyzeBooleanProp(partitionAndTableProperties,
+                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+
+        PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
 
         DataCacheInfo dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(partitionAndTableProperties);
 
@@ -756,7 +758,6 @@ public class PartitionDescAnalyzer {
         desc.setPartitionDataProperty(partitionDataProperty);
         desc.setReplicationNum(replicationNum);
         desc.setVersionInfo(versionInfo);
-        desc.setInMemory(isInMemory);
         desc.setDataCacheInfo(dataCacheInfo);
 
         if (desc.getProperties() != null) {

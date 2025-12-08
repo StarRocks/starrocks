@@ -106,7 +106,6 @@ public class AgentTaskTest {
     private AgentTask cloneTask;
     private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask1;
     private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask2;
-    private TabletMetadataUpdateAgentTask modifyInMemoryTask;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask1;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask2;
 
@@ -175,7 +174,6 @@ public class AgentTaskTest {
         modifyEnablePersistentIndexTask2 = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
                 backendId1, tabletSet, true);
         modifyEnablePersistentIndexTask2.setLatch(countDownLatch);
-        modifyInMemoryTask = TabletMetadataUpdateAgentTaskFactory.createIsInMemoryUpdateTask(backendId1, tabletToMeta);
 
         List<Pair<Long, Integer>> tabletToMeta2 = Lists.newArrayList();
         tabletToMeta2.add(new Pair<>(tabletId1, 7200));
@@ -250,24 +248,18 @@ public class AgentTaskTest {
         Assertions.assertEquals(modifyEnablePersistentIndexTask2.getSignature(), request8.getSignature());
         Assertions.assertNotNull(request8.getUpdate_tablet_meta_info_req());
 
-        // modify in_memory
-        TAgentTaskRequest request9 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, modifyInMemoryTask);
+        // modify primary index cache
+        TAgentTaskRequest request9 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
+                modifyPrimaryIndexCacheExpireSecTask1);
         Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request9.getTask_type());
-        Assertions.assertEquals(modifyInMemoryTask.getSignature(), request9.getSignature());
+        Assertions.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request9.getSignature());
         Assertions.assertNotNull(request9.getUpdate_tablet_meta_info_req());
 
-        // modify primary index cache
         TAgentTaskRequest request10 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
-                modifyPrimaryIndexCacheExpireSecTask1);
-        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
-        Assertions.assertEquals(modifyPrimaryIndexCacheExpireSecTask1.getSignature(), request10.getSignature());
-        Assertions.assertNotNull(request10.getUpdate_tablet_meta_info_req());
-
-        TAgentTaskRequest request11 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask,
                 modifyPrimaryIndexCacheExpireSecTask2);
-        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request11.getTask_type());
-        Assertions.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request11.getSignature());
-        Assertions.assertNotNull(request11.getUpdate_tablet_meta_info_req());
+        Assertions.assertEquals(TTaskType.UPDATE_TABLET_META_INFO, request10.getTask_type());
+        Assertions.assertEquals(modifyPrimaryIndexCacheExpireSecTask2.getSignature(), request10.getSignature());
+        Assertions.assertNotNull(request10.getUpdate_tablet_meta_info_req());
     }
 
     @Test

@@ -91,7 +91,6 @@ public class MultiListPartitionDescTest {
 
         Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assertions.assertEquals(1, partitionDesc.getReplicationNum());
-        Assertions.assertEquals(true, partitionDesc.isInMemory());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
         Assertions.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());

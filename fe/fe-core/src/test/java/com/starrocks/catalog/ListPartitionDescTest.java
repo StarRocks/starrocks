@@ -317,7 +317,6 @@ public class ListPartitionDescTest {
         Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(false, partitionInfo.isMultiColumnPartition());
     }
 
@@ -333,7 +332,6 @@ public class ListPartitionDescTest {
         Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(true, partitionInfo.isMultiColumnPartition());
     }
 

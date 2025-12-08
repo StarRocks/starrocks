@@ -67,10 +67,6 @@ public class PartitionDesc implements ParseNode {
         throw new UnsupportedOperationException();
     }
 
-    public boolean isInMemory() throws UnsupportedOperationException {
-        throw new UnsupportedOperationException();
-    }
-
     public DataCacheInfo getDataCacheInfo() throws UnsupportedOperationException {
         throw new UnsupportedOperationException();
     }

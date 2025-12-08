@@ -1529,8 +1529,7 @@ public class RestoreJob extends AbstractJob {
             Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
             DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
             localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
-                    remoteDataProperty, (short) restoreReplicationNum,
-                    remotePartitionInfo.getIsInMemory(remotePartId));
+                    remoteDataProperty, (short) restoreReplicationNum);
             localTbl.addPartition(restorePart);
             if (modify) {
                 // modify tablet inverted index
@@ -2372,4 +2371,3 @@ public class RestoreJob extends AbstractJob {
         return sb.toString();
     }
 }
-

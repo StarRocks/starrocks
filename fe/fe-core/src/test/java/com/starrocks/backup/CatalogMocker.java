@@ -273,7 +273,6 @@ public class CatalogMocker {
                         TEST_SINGLE_PARTITION_NAME, baseIndex, distributionInfo);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(TEST_SINGLE_PARTITION_ID, (short) 3);
-        partitionInfo.setIsInMemory(TEST_SINGLE_PARTITION_ID, false);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         partitionInfo.setDataProperty(TEST_SINGLE_PARTITION_ID, dataProperty);
         OlapTable olapTable = new OlapTable(TEST_TBL_ID, TEST_TBL_NAME, TEST_TBL_BASE_SCHEMA,
@@ -331,7 +330,7 @@ public class CatalogMocker {
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("10")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP1 = Range.closedOpen(rangeP1Lower, rangeP1Upper);
-        rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+        rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, null);
 
         DataProperty dataPropertyP2 = new DataProperty(TStorageMedium.HDD);
         PartitionKey rangeP2Lower =
@@ -341,7 +340,7 @@ public class CatalogMocker {
                 PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("20")),
                         Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
         Range<PartitionKey> rangeP2 = Range.closedOpen(rangeP2Lower, rangeP2Upper);
-        rangePartitionInfo.addPartition(TEST_PARTITION2_ID, false, rangeP2, dataPropertyP2, (short) 3, false);
+        rangePartitionInfo.addPartition(TEST_PARTITION2_ID, false, rangeP2, dataPropertyP2, (short) 3, null);
 
         OlapTable olapTable2 = new OlapTable(TEST_TBL2_ID, TEST_TBL2_NAME, TEST_TBL_BASE_SCHEMA,
                 KeysType.AGG_KEYS, rangePartitionInfo, distributionInfo2);
@@ -502,7 +501,7 @@ public class CatalogMocker {
             partition1.addSubPartition(physicalPartition3);
 
             rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
-            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, false);
+            rangePartitionInfo.addPartition(TEST_PARTITION1_ID, false, rangeP1, dataPropertyP1, (short) 3, null);
 
             baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);
             tabletMetaBaseTabletP1 = new TabletMeta(TEST_DB_ID, TEST_TBL4_ID, TEST_PARTITION1_ID,
@@ -551,7 +550,6 @@ public class CatalogMocker {
                     Lists.newArrayList(TEST_TBL_BASE_SCHEMA.get(0)));
             listPartitionInfo.setValues(TEST_PARTITION1_ID, Lists.newArrayList("10"));
             listPartitionInfo.setReplicationNum(TEST_PARTITION1_ID, (short) 3);
-            listPartitionInfo.setIsInMemory(TEST_PARTITION1_ID, false);
             listPartitionInfo.setDataProperty(TEST_PARTITION1_ID, dataPropertyP1);
 
             baseTabletP1 = new LocalTablet(TEST_BASE_TABLET_P1_ID);

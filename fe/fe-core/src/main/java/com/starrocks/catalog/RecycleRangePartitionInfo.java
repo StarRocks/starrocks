@@ -40,10 +40,9 @@ public class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements
     private byte[] serializedRange;
 
     public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
-                                     DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                     DataProperty dataProperty, short replicationNum,
                                      DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum,
-                isInMemory, dataCacheInfo);
+        super(dbId, tableId, partition, dataProperty, replicationNum, dataCacheInfo);
         this.range = range;
     }
 

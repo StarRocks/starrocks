@@ -124,7 +124,6 @@ public class LocalTabletsProcDirTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Index
