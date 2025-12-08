@@ -89,11 +89,37 @@
 #include "util/time.h"
 #include "util/time_guard.h"
 #include "util/uid_util.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/compression_utils.h"
 
 namespace starrocks {
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
+
+static Status decompress_attachment(const std::string& compression_type, int64_t uncompressed_size,
+                                    std::string* ser_request) {
+    if (uncompressed_size <= 0) {
+        return Status::OK();
+    }
+
+    CompressionTypePB type = CompressionUtils::to_compression_pb(compression_type);
+    if (type == CompressionTypePB::UNKNOWN_COMPRESSION) {
+        return Status::NotSupported(strings::Substitute("unsupported compression type: $0", compression_type));
+    }
+
+    const BlockCompressionCodec* codec = nullptr;
+    RETURN_IF_ERROR(get_block_compression_codec(type, &codec));
+
+    std::string decompressed;
+    decompressed.resize(uncompressed_size);
+    Slice input(ser_request->data(), ser_request->size());
+    Slice output(decompressed.data(), decompressed.size());
+    RETURN_IF_ERROR(codec->decompress(input, &output));
+
+    *ser_request = std::move(decompressed);
+    return Status::OK();
+}
 
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
@@ -339,6 +365,14 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     }
 
     auto ser_request = cntl->request_attachment().to_string();
+    if (request->has_attachment_compression_type() && request->has_uncompressed_size()) {
+        Status st = decompress_attachment(request->attachment_compression_type(),
+                                          request->uncompressed_size(), &ser_request);
+        if (!st.ok()) {
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
+    }
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
@@ -446,6 +480,10 @@ template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request,
                                                         PExecPlanFragmentResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
+    if (request->has_attachment_compression_type() && request->has_uncompressed_size()) {
+        RETURN_IF_ERROR(decompress_attachment(request->attachment_compression_type(),
+                                               request->uncompressed_size(), &ser_request));
+    }
     TExecPlanFragmentParams t_request;
     {
         const auto* buf = (const uint8_t*)ser_request.data();
@@ -1323,6 +1361,10 @@ template <typename T>
 Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                                         PExecShortCircuitResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
+    if (request->has_attachment_compression_type() && request->has_uncompressed_size()) {
+        RETURN_IF_ERROR(decompress_attachment(request->attachment_compression_type(),
+                                               request->uncompressed_size(), &ser_request));
+    }
     std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();

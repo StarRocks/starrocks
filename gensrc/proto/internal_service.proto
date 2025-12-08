@@ -368,6 +368,10 @@ message PLoadDiagnoseResult {
 message PExecPlanFragmentRequest {
     // describe attachment protocol: binary, compact, json
     optional string attachment_protocol = 1;
+    // describe attachment compression type: none, lz4
+    optional string attachment_compression_type = 2;
+    // original uncompressed size for decompression
+    optional int64 uncompressed_size = 3;
 };
 
 message PTabletReaderOpenRequest {
@@ -436,6 +440,10 @@ message PExecPlanFragmentResult {
 };
 
 message PExecBatchPlanFragmentsRequest {
+    // describe attachment compression type: none, lz4
+    optional string attachment_compression_type = 1;
+    // original uncompressed size for decompression
+    optional int64 uncompressed_size = 2;
 };
 
 message PExecBatchPlanFragmentsResult {
@@ -687,6 +695,10 @@ message PExecShortCircuitResult {
 message PExecShortCircuitRequest {
     // describe attachment protocol: binary, compact, json
     optional string attachment_protocol = 1;
+    // describe attachment compression type: none, lz4
+    optional string attachment_compression_type = 2;
+    // original uncompressed size for decompression
+    optional int64 uncompressed_size = 3;
 }
 
 enum PProcessDictionaryCacheRequestType {

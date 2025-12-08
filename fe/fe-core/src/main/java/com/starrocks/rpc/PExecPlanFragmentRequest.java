@@ -25,7 +25,21 @@ public class PExecPlanFragmentRequest extends AttachmentRequest {
     @Protobuf(order = 1, required = false)
     String attachmentProtocol;
 
+    @Protobuf(order = 2, required = false)
+    String attachmentCompressionType;
+
+    @Protobuf(order = 3, required = false)
+    Long uncompressedSize;
+
     public void setAttachmentProtocol(String attachmentProtocol) {
         this.attachmentProtocol = attachmentProtocol;
+    }
+
+    public void setAttachmentCompressionType(String attachmentCompressionType) {
+        this.attachmentCompressionType = attachmentCompressionType;
+    }
+
+    public void setUncompressedSize(Long uncompressedSize) {
+        this.uncompressedSize = uncompressedSize;
     }
 }
