@@ -30,6 +30,7 @@ jobs:
       PASS: ${{ steps.check.outputs.pass }}
       TEST_PR: ${{ steps.check_test_case.outputs.TEST_PR }}
       PRE_COMMIT: ${{ steps.check_blacklist.outputs.pre_commit }}
+      PRE_COMMIT_CONCLUSION: ${{ steps.check_blacklist.outputs.pre_commit_conclusion }}
       ONLY_BE_TEST: ${{ steps.check_blacklist.outputs.ONLY_BE_TEST }}
       ONLY_FE_TEST: ${{ steps.check_blacklist.outputs.ONLY_FE_TEST }}
     steps:
@@ -186,8 +187,9 @@ jobs:
 
       - name: Upload the Test Case Info
         uses: actions/upload-artifact@v4
+        if: steps.check_test_case_info.outcome == 'success'
         with:
-          name: test-pr-info
+          name: TEST_PR_INFO
           path: ./test-pr-info.txt  
           retention-days: 3
           overwrite: true
@@ -199,17 +201,14 @@ jobs:
     if: needs.basic-checker.outputs.PASS == 'true'
     env:
       PRE_COMMIT: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
-      ONLY_BE_TEST: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
     outputs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
       thirdparty_filter: ${{ steps.path-filter.outputs.thirdparty }}
+      only_test: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
+      pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
+      pre_commit_conclusion: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
-          
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:
@@ -242,21 +241,16 @@ jobs:
           retention-days: 3
           overwrite: true
 
-      - name: Upload the BE Commit Filter Info
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: be-path-filter
-          path: ./be-path-filter/
-          retention-days: 3
-          overwrite: true
-
   clang-format:
     runs-on: [self-hosted, light]
     needs: be-checker
     name: Clang-Format
     env:
       PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      pre_commit: ${{ needs.be-checker.outputs.pre_commit }}
+      pre_commit_conclusion: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
+      only_test: ${{ needs.be-checker.outputs.only_test }}
     if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
     steps:
       - name: clean
@@ -311,11 +305,17 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
+      PRE_COMMIT: ${{ needs.clang-format.outputs.PRE_COMMIT }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.clang-format.outputs.pre_commit_conclusion }}
+      ONLY_TEST: ${{ needs.clang-format.outputs.only_test }}
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
+
+      - name: Check if need to re-update thirdparty
+        if: always() && env.PRE_COMMIT_CONCLUSION == 'success'
 
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
@@ -346,7 +346,7 @@ jobs:
         with:
           name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
-          retention-days: 1
+          retention-days: 3
           overwrite: true
           if-no-files-found: ignore
 
@@ -372,7 +372,7 @@ jobs:
           ./scripts/check-thirdparty-result.sh
 
       - name: Download Thirdparty Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
@@ -489,6 +489,7 @@ jobs:
       java_filter: ${{ steps.path-filter.outputs.java }}
       extension_filter: ${{ steps.path-filter.outputs.extension }}
       pom_filter: ${{ steps.path-filter.outputs.pom }}
+      only_test: ${{ needs.basic-checker.outputs.ONLY_FE_TEST }}
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -862,6 +863,7 @@ jobs:
           pom_filter: ${{ steps.parsing-fe-path-filter.outputs.pom_filter }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout commit-pipeline && git pull
           if [[ "${{ steps.parsing-be-path-filter.outputs.thirdparty_filter }}" == 'true' ]]; then
             export image_cache_id=${IMAGE_CACHE_ID}
             export image_tag=$BRANCH-$PR_NUMBER
@@ -925,6 +927,7 @@ jobs:
         id: choose-mode
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          git checkout commit-pipeline && git pull
           cluster_type=$(./bin/choose-mode.sh)
           if [[ "${cluster_type}" == "cloud" ]]; then
             echo "cloud=true" >> "$GITHUB_OUTPUT"
