@@ -75,7 +75,7 @@ subprojects {
         set("spark.version", "3.5.5")
         set("staros.version", "4.0.0")
         set("tomcat.version", "8.5.70")
-        set("lz4-java.version", "1.8.1")
+        set("lz4-java.version", "1.10.1")
         // var sync end
     }
 
@@ -238,20 +238,19 @@ subprojects {
         }
     }
 
-    // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
     // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
     configurations.all {
         resolutionStrategy.capabilitiesResolution {
             withCapability("org.lz4:lz4-java") {
                 select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
-                because("CVE-2025-12183: Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
+                because("Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
             }
         }
         resolutionStrategy.dependencySubstitution {
             substitute(module("org.lz4:lz4-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
-                .because("CVE-2025-12183: Replace vulnerable org.lz4:lz4-java with at.yawk.lz4:lz4-java")
+                .because("Replace org.lz4:lz4-java with at.yawk.lz4:lz4-java")
             substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
-                .because("CVE-2025-12183: Replace vulnerable org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
+                .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
         }
     }
 

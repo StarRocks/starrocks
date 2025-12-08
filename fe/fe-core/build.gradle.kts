@@ -67,12 +67,10 @@ dependencies {
         exclude(group = "org.codehaus.jackson", module = "jackson-mapper-asl")
         exclude(group = "org.ini4j", module = "ini4j")
         exclude(group = "org.antlr", module = "antlr4")
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
         exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("com.aliyun.odps:odps-sdk-table-api") {
         exclude(group = "org.antlr", module = "antlr4")
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
         exclude(group = "org.lz4", module = "lz4-pure-java")
     }
     implementation("com.azure:azure-identity")
@@ -198,7 +196,6 @@ dependencies {
         exclude(group = "io.netty", module = "*")
         exclude(group = "org.glassfish", module = "javax.el")
         exclude(group = "org.apache.zookeeper", module = "zookeeper")
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
         exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.hudi:hudi-hadoop-mr") {
@@ -223,7 +220,6 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-layout-template-json")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl")
     implementation("org.apache.paimon:paimon-bundle") {
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
         exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.paimon:paimon-oss")
@@ -257,7 +253,6 @@ dependencies {
         exclude(group = "org.eclipse.jetty", module = "jetty-servlet")
         exclude(group = "org.eclipse.jetty", module = "jetty-client")
         exclude(group = "org.eclipse.jetty", module = "jetty-security")
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
         exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.spark:spark-launcher_2.12")
