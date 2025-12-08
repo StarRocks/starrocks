@@ -51,13 +51,9 @@ Flat JSON の核心原理は、ロード中に JSON データを検出し、JSON
 
 v4.0 以降では、Flat JSON はデフォルトでグローバルに有効化されています。v4.0 より前のバージョンでは、手動で有効にする必要があります。
 
-<<<<<<< HEAD
-### v3.4 より前のバージョンで有効にする
-=======
 v4.0 以降では、この機能はテーブルレベルで設定可能です。
 
 ### v4.0 より前のバージョンで有効にする
->>>>>>> 3d2acd118d ([Doc] update flatjson default version 4.0 (#66261))
 
 1. BE 設定を変更します：`enable_json_flat` はバージョン 4.0 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
 2. FE プルーニング機能を有効化します：

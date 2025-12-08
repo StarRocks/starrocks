@@ -51,13 +51,9 @@ Flat JSON的核心原理是在导入时检测JSON数据，并从JSON数据中提
 
 从 v4.0 版本起，Flat JSON 默认全局启用。对于 v4.0 之前的版本，必须手动启用此功能。
 
-<<<<<<< HEAD
-### 为 v3.4 前版本启用
-=======
 从 v4.0 版本起，此功能可在表级别进行配置。
 
 ### 为 v4.0 前版本启用
->>>>>>> 3d2acd118d ([Doc] update flatjson default version 4.0 (#66261))
 
 1. 修改 BE 配置：`enable_json_flat`，在 v4.0 版本之前默认为 `false`。修改方法参考 [配置 BE 参数](../administration/management/BE_configuration.md#configure-be-parameters)。
 2. 启用FE分区裁剪功能：
