@@ -844,4 +844,98 @@ public class MvRewriteHiveTest extends MVTestBase {
             });
         });
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRewriteWithHiveView1() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select * from hive0.tpch.customer_view;");
+        MaterializedView mv = getMv("test", "test_mv1");
+        refreshMaterializedView("test", "test_mv1");
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        Assertions.assertEquals(2, baseTableInfos.size());
+        List<BaseTableInfo> baseTableInfosWithoutView = mv.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTableInfosWithoutView.size());
+
+        String query1 = "select * from hive0.tpch.customer_view limit 1;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "test_mv1");
+        List<MvPlanContext> mvPlanContexts =
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
+        // mv's plan contexts should contain 2 entries:
+        // - one is for view with inlined
+        // - one is for view scan operator
+        Assertions.assertTrue(mvPlanContexts.size() == 2);
+    }
+
+    @Test
+    public void testRewriteWithHiveView2() throws Exception {
+        // view contains non spjg operators, only can be rewritten by view-rewrite
+        starRocksAssert.withView("CREATE VIEW `customer_view1` AS\n" +
+                "SELECT * FROM `hive0`.`tpch`.`customer` WHERE c_mktsegment = 'BUILDING' ORDER BY c_custkey limit 10;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select * from customer_view1;");
+        MaterializedView mv = getMv("test", "test_mv1");
+        refreshMaterializedView("test", "test_mv1");
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        Assertions.assertEquals(2, baseTableInfos.size());
+        List<BaseTableInfo> baseTableInfosWithoutView = mv.getBaseTableInfosWithoutView();
+        Assertions.assertEquals(1, baseTableInfosWithoutView.size());
+
+        String query1 = "select * from customer_view1 limit 1;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "test_mv1");
+        List<MvPlanContext> mvPlanContexts =
+                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
+        // mv's plan contexts should contain 2 entries:
+        // - one is for view with inlined
+        // - one is for view scan operator
+        Assertions.assertTrue(mvPlanContexts.size() == 2);
+    }
+
+    @Test
+    public void testHivePartialRefreshWithTheSameTables() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`\n"  +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+        // only partial
+        refreshMaterializedViewWithPartition("test", "test_mv1",
+                "1998-01-02", "1998-01-04");
+        String query1 = "SELECT COUNT(1) FROM (" +
+                " SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par` as a " +
+                "WHERE l_shipdate='1998-01-02'\n UNION ALL " +
+                "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par` as a " +
+                "WHERE l_shipdate='1998-01-05') t";
+        String plan = getFragmentPlan(query1);
+        // refresh part can be rewritten
+        PlanTestBase.assertContains(plan, "  2:OlapScanNode\n" +
+                "     TABLE: test_mv1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/2");
+        // non -refresh part cannot be rewritten
+        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+                        "     PARTITION PREDICATES: 45: l_shipdate = '1998-01-05'," +
+                " (45: l_shipdate IN ('1998-01-01', '1998-01-04', '1998-01-05')) OR (45: l_shipdate IS NULL)\n" +
+                        "     partitions=1/6");
+        dropMv("test", "test_mv1");
+    }
+
+
+>>>>>>> a23e2be635 ([BugFix] Fix mv compensation bugs when query contains multi times for the same table (#66369))
 }

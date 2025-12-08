@@ -1280,4 +1280,55 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMVPartitionRefreshRewrite2() throws Exception {
+        sql("CREATE TABLE test_base_table1(\n" +
+                "    `id`             bigint(20) NULL,\n" +
+                "    `pt`             date NULL,\n" +
+                "    `gmv`            bigint(20) NULL\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "  PARTITION BY RANGE(pt)(\n" +
+                "  START (\"2022-04-01\") END (\"2022-04-03\") EVERY (INTERVAL 1 day))\n" +
+                "  DISTRIBUTED BY HASH(id)\n" +
+                "  PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        sql("INSERT INTO test_base_table1 partition('p20220401') VALUES (987654321, '2022-04-01', 1);");
+        sql("CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "partition by (pt)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS\n" +
+                "SELECT pt, id, sum(gmv) FROM test_base_table1 group by pt,id;");
+
+        sql("refresh materialized view test_mv1 partition start('2022-04-01') end ('2022-04-02') with sync mode;");
+
+        // p20220402 is in test_base_table1 but not in test_mv1
+        sql("INSERT INTO test_base_table1 partition('p20220402') VALUES (987654321, '2022-04-02', 1);");
+
+        String query = "SELECT  * FROM \n" +
+                "(SELECT SUM(gmv) AS sumGmv FROM test_base_table1 WHERE pt = '2022-04-02') a " +
+                "CROSS JOIN " +
+                "(SELECT SUM(gmv) AS sumGmv FROM test_base_table1 WHERE pt = '2022-04-01') b;";
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
+        {
+            String plan = getFragmentPlan(query);
+            // refresh partition is rewritten by mv
+            PlanTestBase.assertContains(plan, "  5:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1");
+            // non refresh partition is read from base table
+            PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
+                    "     TABLE: test_base_table1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/2");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
+        starRocksAssert.dropTable("test_base_table1");
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+>>>>>>> a23e2be635 ([BugFix] Fix mv compensation bugs when query contains multi times for the same table (#66369))
 }
