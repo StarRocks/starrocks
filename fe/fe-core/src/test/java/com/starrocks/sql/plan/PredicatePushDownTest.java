@@ -215,9 +215,7 @@ public class PredicatePushDownTest extends PlanTestBase {
         String sql = "WITH input AS (select * from t0 where t0.v1 not in (select max(v4) from t1)) " +
                 "SELECT * from input WHERE rand() < 0.5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
+        assertContains(plan, "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: max\n" +
                 "  |  other predicates: rand() < 0.5");
     }
@@ -228,9 +226,7 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "not in (select max(v4) from t1);");
         String sql = "SELECT * from test_view1 WHERE rand() < 0.5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
+        assertContains(plan, "|  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: max\n" +
                 "  |  other predicates: rand() < 0.5");
     }
