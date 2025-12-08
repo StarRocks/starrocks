@@ -103,11 +103,30 @@ public class MaterializationContext {
      * 2. partitionIds: the selected partition ids from the query opt expression for this table
      * 3. partitionPredicates: the partition predicates from the query opt expression for
      */
-    public record TableOptProfile(Table table, Set<Long> partitionIds, Set<ScalarOperator> partitionPredicates) {
+    public static class TableOptProfile {
+        private final Table table;
+        private final Set<Long> partitionIds;
+        private final Set<ScalarOperator> partitionPredicates;
+
+        public TableOptProfile(Table table, Set<Long> partitionIds, Set<ScalarOperator> partitionPredicates) {
+            this.table = table;
+            this.partitionIds = partitionIds;
+            this.partitionPredicates = partitionPredicates;
+        }
+
+        public Table getTable() {
+            return table;
+        }
+
+        public Set<Long> getPartitionIds() {
+            return partitionIds;
+        }
+
         @Override
         public int hashCode() {
             return Objects.hash(table, partitionIds, partitionPredicates);
         }
+
         @Override
         public boolean equals(Object obj) {
             if (this == obj) {
@@ -128,11 +147,18 @@ public class MaterializationContext {
      * it contains:
      * 1. tableOptProfiles: the set of TableOptProfile for all tables in
      */
-    public record QueryOptProfile(Set<TableOptProfile> tableOptProfiles) {
+    public static class QueryOptProfile {
+        private final Set<TableOptProfile> tableOptProfiles;
+
+        public QueryOptProfile(Set<TableOptProfile> tableOptProfiles) {
+            this.tableOptProfiles = tableOptProfiles;
+        }
+
         @Override
         public int hashCode() {
             return Objects.hash(tableOptProfiles);
         }
+
         @Override
         public boolean equals(Object obj) {
             if (this == obj) {
