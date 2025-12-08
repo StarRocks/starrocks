@@ -342,6 +342,7 @@ public class PseudoBackend {
         currentBackend.set(PseudoBackend.this);
         while (!stopped) {
             try {
+                // Process maintenance tasks
                 Runnable task = null;
                 synchronized (maintenanceTasks) {
                     if (!maintenanceTasks.isEmpty()) {
@@ -354,9 +355,18 @@ public class PseudoBackend {
                 }
                 if (task != null) {
                     task.run();
-                } else {
-                    Thread.sleep(500);
                 }
+
+                // Process backend tasks with timeout to allow maintenance tasks to run
+                TAgentTaskRequest backendTask = taskQueue.poll();
+                if (backendTask != null) {
+                    handleTask(backendTask);
+                } else {
+                    Thread.sleep(100);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             } catch (Throwable e) {
                 LOG.error("Error in maintenance worker be:" + getId(), e);
             }
@@ -404,7 +414,9 @@ public class PseudoBackend {
         this.pBackendService = new PseudoPBackendService();
         this.pLakeService = new PseudoLakeService();
 
+        // Use a single worker thread to handle both maintenance tasks and backend tasks
         maintenanceWorkerThread = new Thread(() -> maintenanceWorker(), "be-" + getId());
+        maintenanceWorkerThread.setDaemon(true);
         maintenanceWorkerThread.start();
 
         addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTablets);
@@ -778,17 +790,8 @@ public class PseudoBackend {
 
         BeThriftClient() {
             super(null);
-            new Thread(() -> {
-                currentBackend.set(PseudoBackend.this);
-                while (true) {
-                    try {
-                        TAgentTaskRequest request = taskQueue.take();
-                        handleTask(request);
-                    } catch (InterruptedException e) {
-                        LOG.warn("error get task", e);
-                    }
-                }
-            }, "backend-worker-" + be.getId()).start();
+            // Backend tasks are now handled by the maintenance worker thread
+            // to reduce thread count in test environment
         }
 
         @Override
