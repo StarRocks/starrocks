@@ -1280,8 +1280,6 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testMVPartitionRefreshRewrite2() throws Exception {
@@ -1330,5 +1328,4 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
->>>>>>> a23e2be635 ([BugFix] Fix mv compensation bugs when query contains multi times for the same table (#66369))
 }

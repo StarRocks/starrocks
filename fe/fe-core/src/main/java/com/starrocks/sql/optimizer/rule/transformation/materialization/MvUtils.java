@@ -144,17 +144,11 @@ public class MvUtils {
         if (tablesToCheck.isEmpty()) {
             return Sets.newHashSet();
         }
-<<<<<<< HEAD
-        Set<MaterializedViewWrapper> mvs = Sets.newHashSet();
-        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
-        return mvs;
-=======
         Map<MaterializedView, Integer> mvToLevel = Maps.newHashMap();
         getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvToLevel);
         return mvToLevel.entrySet().stream()
                 .map(e -> MaterializedViewWrapper.create(e.getKey(), e.getValue()))
                 .collect(Collectors.toCollection(() -> Sets.newTreeSet()));
->>>>>>> a23e2be635 ([BugFix] Fix mv compensation bugs when query contains multi times for the same table (#66369))
     }
 
     public static void getRelatedMvs(ConnectContext connectContext,

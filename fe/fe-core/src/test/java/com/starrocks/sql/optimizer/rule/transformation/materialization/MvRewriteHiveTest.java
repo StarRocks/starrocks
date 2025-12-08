@@ -844,64 +844,7 @@ public class MvRewriteHiveTest extends MVTestBase {
             });
         });
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testRewriteWithHiveView1() throws Exception {
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ")\n" +
-                "AS select * from hive0.tpch.customer_view;");
-        MaterializedView mv = getMv("test", "test_mv1");
-        refreshMaterializedView("test", "test_mv1");
-        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-        Assertions.assertEquals(2, baseTableInfos.size());
-        List<BaseTableInfo> baseTableInfosWithoutView = mv.getBaseTableInfosWithoutView();
-        Assertions.assertEquals(1, baseTableInfosWithoutView.size());
-
-        String query1 = "select * from hive0.tpch.customer_view limit 1;";
-        String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "test_mv1");
-        List<MvPlanContext> mvPlanContexts =
-                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
-        // mv's plan contexts should contain 2 entries:
-        // - one is for view with inlined
-        // - one is for view scan operator
-        Assertions.assertTrue(mvPlanContexts.size() == 2);
-    }
-
-    @Test
-    public void testRewriteWithHiveView2() throws Exception {
-        // view contains non spjg operators, only can be rewritten by view-rewrite
-        starRocksAssert.withView("CREATE VIEW `customer_view1` AS\n" +
-                "SELECT * FROM `hive0`.`tpch`.`customer` WHERE c_mktsegment = 'BUILDING' ORDER BY c_custkey limit 10;");
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ")\n" +
-                "AS select * from customer_view1;");
-        MaterializedView mv = getMv("test", "test_mv1");
-        refreshMaterializedView("test", "test_mv1");
-        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-        Assertions.assertEquals(2, baseTableInfos.size());
-        List<BaseTableInfo> baseTableInfosWithoutView = mv.getBaseTableInfosWithoutView();
-        Assertions.assertEquals(1, baseTableInfosWithoutView.size());
-
-        String query1 = "select * from customer_view1 limit 1;";
-        String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "test_mv1");
-        List<MvPlanContext> mvPlanContexts =
-                CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv, 3000);
-        // mv's plan contexts should contain 2 entries:
-        // - one is for view with inlined
-        // - one is for view scan operator
-        Assertions.assertTrue(mvPlanContexts.size() == 2);
-    }
-
+    
     @Test
     public void testHivePartialRefreshWithTheSameTables() throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
@@ -935,7 +878,4 @@ public class MvRewriteHiveTest extends MVTestBase {
                         "     partitions=1/6");
         dropMv("test", "test_mv1");
     }
-
-
->>>>>>> a23e2be635 ([BugFix] Fix mv compensation bugs when query contains multi times for the same table (#66369))
 }
