@@ -168,11 +168,7 @@ public abstract class ScalarOperator implements Cloneable {
         }
         int numFlatChildren = 0;
         for (ScalarOperator child : getChildren()) {
-<<<<<<< HEAD
-            numFlatChildren += child.getNumFlatChildren() + 1;
-=======
             numFlatChildren += child.getNumFlatChildren(useCache);
->>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
         }
         numberFlatChildren = Optional.of(numFlatChildren);
         return numFlatChildren;
