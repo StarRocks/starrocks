@@ -89,7 +89,8 @@ public class TabletRepairHelper {
                         TimeUnit.MILLISECONDS);
 
                 if (response.status.statusCode != 0) {
-                    throw new StarRocksException(response.status.errorMsgs.get(0));
+                    List<String> errMsgs = response.status.errorMsgs;
+                    throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
                 }
 
                 for (TabletMetadatas tm : response.tabletMetadatas) {
@@ -100,7 +101,8 @@ public class TabletRepairHelper {
                         tabletVersionMetadatas.put(tabletId, versionMetadatas);
                     } else if (statusCode != 31) {
                         // status code 31 is not found
-                        throw new StarRocksException(tm.status.errorMsgs.get(0));
+                        List<String> errMsgs = tm.status.errorMsgs;
+                        throw new StarRocksException(errMsgs != null && !errMsgs.isEmpty() ? errMsgs.get(0) : "unknown error");
                     }
                 }
 
