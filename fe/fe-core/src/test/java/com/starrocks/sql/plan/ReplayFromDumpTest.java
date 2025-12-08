@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
@@ -1026,6 +1027,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
     public void testExpressionReuseTimeout() throws Exception {
+        Config.max_scalar_operator_flat_children = 300000;
         String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
         Tracers.register(connectContext);
         Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
@@ -1083,7 +1085,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
             Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                     TExplainLevel.NORMAL);
-            Assertions.assertTrue(replayPair.second.contains("1:EMPTYSET"), replayPair.second);
+            Assertions.assertTrue(replayPair.second.contains("EMPTYSET"), replayPair.second);
         } finally {
             FeConstants.enablePruneEmptyOutputScan = false;
         }

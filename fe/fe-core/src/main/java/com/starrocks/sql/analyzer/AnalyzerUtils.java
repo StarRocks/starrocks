@@ -1380,7 +1380,7 @@ public class AnalyzerUtils {
             throw new AnalysisException("automatic partition only support FunctionCallExpr");
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
             if (paramsExprs.size() != 2) {
@@ -1754,11 +1754,11 @@ public class AnalyzerUtils {
         }
 
         private boolean containsNonDeterministicFunction(FunctionCallExpr expr) {
-            FunctionName functionName = expr.getFnName();
+            String functionName = expr.getFunctionName();
             if (functionName == null) {
                 return false;
             }
-            return FunctionSet.allNonDeterministicFunctions.contains(functionName.getFunction());
+            return FunctionSet.allNonDeterministicFunctions.contains(functionName);
         }
 
         @Override
@@ -1770,7 +1770,7 @@ public class AnalyzerUtils {
                         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                         if (containsNonDeterministicFunction(functionCallExpr)) {
                             nonDeterministicFunctionOpt =
-                                    Optional.ofNullable(functionCallExpr.getFnName()).map(FunctionName::getFunction);
+                                    Optional.ofNullable(functionCallExpr.getFunctionName());
                             return null;
                         }
                     }
@@ -1782,7 +1782,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
             if (containsNonDeterministicFunction(expr)) {
-                nonDeterministicFunctionOpt = Optional.ofNullable(expr.getFnName()).map(FunctionName::getFunction);
+                nonDeterministicFunctionOpt = Optional.ofNullable(expr.getFunctionName());
                 return null;
             }
             for (Expr param : expr.getChildren()) {
@@ -1812,7 +1812,7 @@ public class AnalyzerUtils {
         if (prePartitionGranularity == null) {
             return;
         }
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
             Expr expr = functionCallExpr.getParams().exprs().get(0);
             String functionGranularity = ((StringLiteral) expr).getStringValue();
@@ -1840,7 +1840,7 @@ public class AnalyzerUtils {
      */
     public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs,
                                                            Set<String> supportedDateTruncFormats) {
-        String functionName = expr.getFnName().getFunction();
+        String functionName = expr.getFunctionName();
         NodePosition pos = expr.getPos();
         List<String> columnList = Lists.newArrayList();
         List<Expr> paramsExpr = expr.getParams().exprs();

@@ -143,7 +143,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
             return false;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) mvPartitionExpr;
-        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+        if (!functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             return false;
         }
 
@@ -536,7 +536,7 @@ public class AggregatedTimeSeriesRewriter extends MaterializedViewRewriter {
             return null;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+        if (!functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             return null;
         }
         if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {

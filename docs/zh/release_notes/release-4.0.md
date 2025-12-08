@@ -10,6 +10,54 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.2
+
+发布日期：2025 年 12 月 4 日
+
+### 新增功能
+
+- 新增资源组属性 `mem_pool`，允许多个资源组共享同一个内存池，并为该内存池设置联合内存限制。该功能向后兼容。如果未指定 `mem_pool`，将使用 `default_mem_pool`。[#64112](https://github.com/StarRocks/starrocks/pull/64112)
+
+### 功能优化
+
+- 在启用 File Bundling 后减少 Vacuum 过程中的远程存储访问量。[#65793](https://github.com/StarRocks/starrocks/pull/65793)
+- File Bundling 功能会缓存最新的 Tablet 元数据。[#65640](https://github.com/StarRocks/starrocks/pull/65640)
+- 提升长字符串场景下的安全性与稳定性。[#65433](https://github.com/StarRocks/starrocks/pull/65433) [#65148](https://github.com/StarRocks/starrocks/pull/65148)
+- 优化 `SplitTopNAggregateRule` 的逻辑，避免性能回退。[#65478](https://github.com/StarRocks/starrocks/pull/65478)
+- 将 Iceberg/DeltaLake 的表统计信息收集策略应用到其他外部数据源，以避免在单表场景下收集不必要的统计信息。[#65430](https://github.com/StarRocks/starrocks/pull/65430)
+- 在 Data Cache HTTP API `api/datacache/app_stat` 中新增 Page Cache 相关指标。[#65341](https://github.com/StarRocks/starrocks/pull/65341)
+- 支持 ORC 文件切分，从而并行扫描单个大型 ORC 文件。[#65188](https://github.com/StarRocks/starrocks/pull/65188)
+- 在优化器中增加 IF 谓词的选择率估算。[#64962](https://github.com/StarRocks/starrocks/pull/64962)
+- FE 支持对 `DATE` 和 `DATETIME` 类型的 `hour`、`minute`、`second` 进行常量折叠。[#64953](https://github.com/StarRocks/starrocks/pull/64953)
+- 默认启用将简单聚合重写为 MetaScan。[#64698](https://github.com/StarRocks/starrocks/pull/64698)
+- 提升存算分离集群中多副本分配处理的可靠性。[#64245](https://github.com/StarRocks/starrocks/pull/64245)
+- 在审计日志和指标中暴露缓存命中率。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
+- 使用 HyperLogLog 或采样方法估算直方图的分桶级别去重计数（NDV），从而为谓词和 JOIN 提供更准确的 NDV。[#58516](https://github.com/StarRocks/starrocks/pull/58516)
+- 支持 SQL 标准语义的 FULL OUTER JOIN USING。[#65122](https://github.com/StarRocks/starrocks/pull/65122)
+- 当优化器超时时输出内存信息以辅助诊断。[#65206](https://github.com/StarRocks/starrocks/pull/65206)
+
+### 问题修复
+
+以下问题已修复：
+
+- DECIMAL56 的 `mod` 运算相关问题。[#65795](https://github.com/StarRocks/starrocks/pull/65795)
+- Iceberg 扫描范围处理相关问题。[#65658](https://github.com/StarRocks/starrocks/pull/65658)
+- 临时分区与随机分桶下的 MetaScan 重写问题。[#65617](https://github.com/StarRocks/starrocks/pull/65617)
+- `JsonPathRewriteRule` 在透明物化视图改写后使用了错误的表。[#65597](https://github.com/StarRocks/starrocks/pull/65597)
+- 当 `partition_retention_condition` 引用了生成列时，物化视图刷新失败。[#65575](https://github.com/StarRocks/starrocks/pull/65575)
+- Iceberg min/max 值类型问题。[#65551](https://github.com/StarRocks/starrocks/pull/65551)
+- 当 `enable_evaluate_schema_scan_rule` 设置为 `true` 时跨库查询 `information_schema.tables` 与 `views` 的问题。[#65533](https://github.com/StarRocks/starrocks/pull/65533)
+- JSON 数组比较时的整数溢出问题。[#64981](https://github.com/StarRocks/starrocks/pull/64981)
+- MySQL Reader 不支持 SSL。[#65291](https://github.com/StarRocks/starrocks/pull/65291)
+- 由于 SVE 构建不兼容导致的 ARM 构建问题。[#65268](https://github.com/StarRocks/starrocks/pull/65268)
+- 基于 Bucket-aware 执行的查询在分桶 Iceberg 表上可能卡住。[#65261](https://github.com/StarRocks/starrocks/pull/65261)
+- OLAP 表扫描缺少内存限制检查导致的错误传播与内存安全问题。[#65131](https://github.com/StarRocks/starrocks/pull/65131)
+
+### 行为变更
+
+- 当物化视图被置为 Inactive（失效）时，系统会递归失效依赖其的其他物化视图。[#65317](https://github.com/StarRocks/starrocks/pull/65317)
+- 在生成 SHOW CREATE 输出时使用原始的物化视图查询 SQL（包含注释和格式）。[#64318](https://github.com/StarRocks/starrocks/pull/64318)
+
 ## 4.0.1
 
 发布日期：2025 年 11 月 17 日

@@ -559,7 +559,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)) {
                 ErrorReport.reportSemanticException("Unsupported change to %s partition function when merge partitions",
                         ErrorCode.ERR_COMMON_ERROR, functionName);
@@ -1404,8 +1404,19 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         .collect(Collectors.toList());
                 PartitionDescAnalyzer.analyze(partitionDesc, columnDefList, cloneProperties);
                 if (!existPartitionNameSet.contains(partitionDesc.getPartitionName())) {
-                    CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable, partitionDesc,
-                            addPartitionClause.isTempPartition());
+                    boolean isDuplicate = CatalogUtils.checkPartitionValuesExistForAddListPartition(olapTable,
+                            partitionDesc, addPartitionClause.isTempPartition());
+                    if (isDuplicate) {
+                        if (partitionDesc.isSystem()) {
+                            // For system-created partitions (automatic partition), skip if values already exist.
+                            // duplicate partition will be ignored in create partition phase
+                            continue;
+                        } else {
+                            // For user-created partitions, throw error
+                            throw new DdlException("Duplicate partition values exist for partition: " +
+                                    partitionDesc.getPartitionName());
+                        }
+                    }
                 }
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");

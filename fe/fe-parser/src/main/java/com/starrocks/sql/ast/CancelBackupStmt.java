@@ -16,18 +16,26 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import static com.starrocks.common.util.Util.normalizeName;
+public class CancelBackupStmt extends CancelStmt {
 
-public class ShowSmallFilesStmt extends ShowStmt {
     private String dbName;
+    private final boolean isRestore;
+    private final boolean isExternalCatalog;
 
-    public ShowSmallFilesStmt(String dbName) {
-        this(dbName, NodePosition.ZERO);
+    public CancelBackupStmt(String dbName, boolean isRestore) {
+        this(dbName, isRestore, false, NodePosition.ZERO);
     }
 
-    public ShowSmallFilesStmt(String dbName, NodePosition pos) {
+    public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog) {
+        this(dbName, isRestore, isExternalCatalog, NodePosition.ZERO);
+    }
+
+    public CancelBackupStmt(String dbName, boolean isRestore, boolean isExternalCatalog,
+                            NodePosition pos) {
         super(pos);
         this.dbName = dbName;
+        this.isRestore = isRestore;
+        this.isExternalCatalog = isExternalCatalog;
     }
 
     public String getDbName() {
@@ -35,11 +43,19 @@ public class ShowSmallFilesStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
+    }
+
+    public boolean isRestore() {
+        return isRestore;
+    }
+
+    public boolean isExternalCatalog() {
+        return isExternalCatalog;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowSmallFilesStatement(this, context);
+        return visitor.visitCancelBackupStatement(this, context);
     }
 }

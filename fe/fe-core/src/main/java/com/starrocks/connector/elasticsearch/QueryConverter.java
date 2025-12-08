@@ -191,7 +191,7 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
 
     @Override
     public QueryBuilders.QueryBuilder visitFunctionCall(FunctionCallExpr node, Void context) {
-        if ("esquery".equals(node.getFnName().getFunction())) {
+        if ("esquery".equals(node.getFunctionName())) {
             String stringValue = ((StringLiteral) node.getChild(1)).getStringValue();
             return new QueryBuilders.RawQueryBuilder(stringValue);
         } else {

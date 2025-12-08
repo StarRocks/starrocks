@@ -21,6 +21,7 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
@@ -78,6 +79,7 @@ import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
 import com.starrocks.thrift.TAnalyticWindowBoundaryType;
 import com.starrocks.thrift.TAnalyticWindowType;
+import com.starrocks.thrift.TAssertion;
 import com.starrocks.thrift.TBinaryLiteral;
 import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TCaseExpr;
@@ -179,6 +181,18 @@ public final class ExprToThrift {
             return TVarType.VERBOSE;
         }
         return TVarType.SESSION;
+    }
+
+    public static TAssertion assertionToThrift(AssertNumRowsElement.Assertion assertion) {
+        Preconditions.checkNotNull(assertion, "Assertion should not be null");
+        return switch (assertion) {
+            case EQ -> TAssertion.EQ;
+            case NE -> TAssertion.NE;
+            case LT -> TAssertion.LT;
+            case LE -> TAssertion.LE;
+            case GT -> TAssertion.GT;
+            case GE -> TAssertion.GE;
+        };
     }
 
     public static SetType setTypeFromThrift(TVarType thriftType) {

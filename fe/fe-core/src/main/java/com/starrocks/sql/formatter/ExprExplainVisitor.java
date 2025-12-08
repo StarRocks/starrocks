@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
@@ -90,6 +91,18 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     }
 
     // ========================================= Helper Methods =========================================
+    private static String getOrderByStringToSql(FunctionParams functionParams) {
+        List<OrderByElement> orderByElements = functionParams.getOrderByElements();
+        if (orderByElements == null || orderByElements.isEmpty()) {
+            return "";
+        }
+
+        String orderBySql = orderByElements.stream()
+                .map(ExprToSql::toSql)
+                .collect(Collectors.joining(" "));
+        return " ORDER BY " + orderBySql;
+    }
+
     private List<String> visitChildren(List<Expr> children) {
         if (children == null || children.isEmpty()) {
             return List.of();
@@ -316,7 +329,7 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
         sb.append(childrenSql);
 
         if (node.getFnParams().getOrderByElements() != null) {
-            sb.append(node.getFnParams().getOrderByStringToSql());
+            sb.append(getOrderByStringToSql(node.getFnParams()));
         }
         sb.append(")");
         return sb.toString();

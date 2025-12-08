@@ -37,6 +37,7 @@ dependencies {
     implementation("com.google.code.gson:gson")
     implementation("io.netty:netty-handler")
     implementation("org.roaringbitmap:RoaringBitmap")
+    implementation("at.yawk.lz4:lz4-java")
 
     // Provided scope dependencies - equivalent to compileOnly in Gradle
     compileOnly("commons-codec:commons-codec")

@@ -131,7 +131,9 @@ public class PluginMgr implements Writable {
     // install a plugin from user's command.
     // install should be successfully, or nothing should be left if failed to install.
     public PluginInfo installPlugin(InstallPluginStmt stmt) throws IOException, StarRocksException {
-        PluginLoader pluginLoader = new DynamicPluginLoader(Config.plugin_dir, stmt.getPluginPath(), stmt.getMd5sum());
+        Map<String, String> properties = stmt.getProperties();
+        String md5sum = properties == null ? null : properties.get(DynamicPluginLoader.MD5SUM_KEY);
+        PluginLoader pluginLoader = new DynamicPluginLoader(Config.plugin_dir, stmt.getPluginPath(), md5sum);
         pluginLoader.setStatus(PluginStatus.INSTALLING);
 
         try {

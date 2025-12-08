@@ -29,6 +29,7 @@ import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
@@ -232,9 +233,13 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowPartitionsStatement(ShowPartitionsStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
+        if (Strings.isNullOrEmpty(statement.getProcPath())) {
+            return builder.build();
+        }
+
         ProcResult result = null;
         try {
-            result = statement.getNode().fetchResult();
+            result = ProcService.getInstance().open(statement.getProcPath()).fetchResult();
         } catch (AnalysisException e) {
             return builder.build();
         }
@@ -818,8 +823,11 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     @Override
     public ShowResultSetMetaData visitShowProcStmt(ShowProcStmt statement, Void context) {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        if (Strings.isNullOrEmpty(statement.getPath())) {
+            return builder.build();
+        }
         try {
-            ProcResult result = statement.getNode().fetchResult();
+            ProcResult result = ProcService.getInstance().open(statement.getPath()).fetchResult();
             for (String col : result.getColumnNames()) {
                 builder.addColumn(new Column(col, TypeFactory.createVarchar(30)));
             }
@@ -882,8 +890,11 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                         .build();
             } else {
                 ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+                if (Strings.isNullOrEmpty(statement.getProcPath())) {
+                    return builder.build();
+                }
                 try {
-                    ProcResult result = statement.getNode().fetchResult();
+                    ProcResult result = ProcService.getInstance().open(statement.getProcPath()).fetchResult();
                     for (String col : result.getColumnNames()) {
                         builder.addColumn(new Column(col, TypeFactory.createVarchar(30)));
                     }

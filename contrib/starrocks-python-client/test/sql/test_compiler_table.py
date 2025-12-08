@@ -49,7 +49,6 @@ class TestCreateTableCompiler:
         sql = self._compile_table(tbl)
         expected = """
             CREATE TABLE engine_comment_tbl(k1 INTEGER)
-            ENGINE=OLAP
             DUPLICATE KEY(k1)
             COMMENT 'A simple table comment.'
             DISTRIBUTED BY HASH(k1)
@@ -351,7 +350,6 @@ class TestCreateTableCompiler:
                 city VARCHAR(50) DEFAULT 'Unknown',
                 revenue DOUBLE DEFAULT '0.0'
             )
-            ENGINE=OLAP
             AGGREGATE KEY(user_id, event_date)
             COMMENT 'A comprehensive table'
             PARTITION BY RANGE(event_date) (START ("2023-01-01") END ("2024-01-01") EVERY (INTERVAL 1 MONTH))

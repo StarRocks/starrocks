@@ -23,6 +23,7 @@ from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import NoSuchTableError
 from sqlalchemy.schema import Table
 
+from starrocks.common.types import SystemRunMode
 from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.engine.interfaces import ReflectedMVState
 from starrocks.sql.ddl import CreateMaterializedView
@@ -194,10 +195,15 @@ class TestReflectionMaterializedViewsIntegration:
                 assert mv_state is not None
                 properties: dict = mv_state.properties
                 logger.debug(f"properties: {properties}")
-                assert "storage_medium" in properties
-                assert "SSD" in properties.values()
-                assert "storage_cooldown_time" in properties
-                assert "2025-12-31 23:59:59" in properties.values()
+                if sr_engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                    # always be HDD for shared-data
+                    assert "storage_medium" not in properties or "HDD" in properties.values()
+                    assert "storage_cooldown_time" not in properties
+                else:
+                    assert "storage_medium" in properties
+                    assert "SSD" in properties.values()
+                    assert "storage_cooldown_time" in properties
+                    assert "2025-12-31 23:59:59" in properties.values()
 
                 logger.info("Reflected MV with properties: %s", mv_definition)
 
@@ -733,8 +739,11 @@ class TestReflectionMaterializedViewsIntegration:
                 # Assert Properties
                 properties = mv_state.properties
                 logger.debug(f"properties: {properties}")
-                assert "storage_medium" in properties
-                assert "SSD" in properties.values()
+                if sr_engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                    assert "storage_medium" not in properties or "HDD" in properties.values()
+                else:
+                    assert "storage_medium" in properties
+                    assert "SSD" in properties.values()
             finally:
                 connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
 
