@@ -1,0 +1,94 @@
+-- name: test_update_trigger_statistics
+DROP DATABASE IF EXISTS test_update_trigger_statistics;
+-- result:
+-- !result
+CREATE DATABASE test_update_trigger_statistics;
+-- result:
+-- !result
+USE test_update_trigger_statistics;
+-- result:
+-- !result
+CREATE TABLE test_update_stats (
+    k1 int,
+    k2 int,
+    k3 varchar(20)
+) 
+PRIMARY KEY (k1)
+PARTITION BY (k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+CREATE VIEW statistic_verify AS
+select column_name, partition_name, row_count, max, min 
+from _statistics_.column_statistics 
+where table_name = "test_update_trigger_statistics.test_update_stats" ;
+-- result:
+-- !result
+CREATE VIEW analyze_status_verify AS
+select `Table`, Columns, Type from information_schema.analyze_status
+where 
+    `Database` = 'test_update_trigger_statistics' 
+    and `Table` = "test_update_stats" 
+order by StartTime desc limit 1;
+-- result:
+-- !result
+delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
+-- result:
+-- !result
+insert into test_update_stats select 1, generate_series, 'data' from table(generate_series(1, 1000000));
+-- result:
+-- !result
+select * from statistic_verify order by column_name;
+-- result:
+k1	p1	1	1	1
+k2	p1	1	999424	999424
+k3	p1	1	data	data
+-- !result
+update test_update_stats set k3 = 'updated1' where k1 = 1 and k2 < 500;
+-- result:
+-- !result
+select * from statistic_verify order by column_name;
+-- result:
+k1	p1	1	1	1
+k2	p1	1	999424	999424
+k3	p1	1	data	data
+-- !result
+update test_update_stats set k3 = 'updated2' where k2 < 100000;
+-- result:
+-- !result
+select * from statistic_verify order by column_name;
+-- result:
+k1	p1	1	1	1
+k2	p1	1	999424	999424
+k3	p1	1	data	data
+-- !result
+select * from analyze_status_verify;
+-- result:
+test_update_stats	ALL	SAMPLE
+-- !result
+update test_update_stats set k3 = 'updated3' where k1 = 1;
+-- result:
+-- !result
+select * from statistic_verify order by column_name;
+-- result:
+k1	p1	1	1	1
+k2	p1	1	999424	999424
+k3	p1	1	updated3	updated3
+-- !result
+select * from analyze_status_verify;
+-- result:
+test_update_stats	ALL	FULL
+-- !result
+drop table test_update_stats;
+-- result:
+-- !result
+drop view  statistic_verify;
+-- result:
+-- !result
+drop view  analyze_status_verify;
+-- result:
+-- !result
+delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
+-- result:
+-- !result

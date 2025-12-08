@@ -1,0 +1,55 @@
+-- name: test_update_trigger_statistics
+
+DROP DATABASE IF EXISTS test_update_trigger_statistics;
+CREATE DATABASE test_update_trigger_statistics;
+USE test_update_trigger_statistics;
+
+-- Create a partitioned table
+CREATE TABLE test_update_stats (
+    k1 int,
+    k2 int,
+    k3 varchar(20)
+) 
+PRIMARY KEY (k1)
+PARTITION BY (k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ( "replication_num" = "1");
+
+CREATE VIEW statistic_verify AS
+select column_name, partition_name, row_count, max, min 
+from _statistics_.column_statistics 
+where table_name = "test_update_trigger_statistics.test_update_stats" ;
+
+CREATE VIEW analyze_status_verify AS
+select `Table`, Columns, Type from information_schema.analyze_status
+where 
+    `Database` = 'test_update_trigger_statistics' 
+    and `Table` = "test_update_stats" 
+order by StartTime desc limit 1;
+
+
+-- Clear any existing statistics
+delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
+
+-- First load
+insert into test_update_stats select 1, generate_series, 'data' from table(generate_series(1, 1000000));
+select * from statistic_verify order by column_name;
+
+-- UPDATE a few rows
+update test_update_stats set k3 = 'updated1' where k1 = 1 and k2 < 500;
+select * from statistic_verify order by column_name;
+
+-- UPDATE lots of rows
+update test_update_stats set k3 = 'updated2' where k2 < 100000;
+select * from statistic_verify order by column_name;
+select * from analyze_status_verify;
+
+-- UPDATE all rows
+update test_update_stats set k3 = 'updated3' where k1 = 1;
+select * from statistic_verify order by column_name;
+select * from analyze_status_verify;
+
+drop table test_update_stats;
+drop view  statistic_verify;
+drop view  analyze_status_verify;
+delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
