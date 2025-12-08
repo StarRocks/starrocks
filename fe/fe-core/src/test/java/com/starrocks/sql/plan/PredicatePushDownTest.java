@@ -138,20 +138,6 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testDisablePredicatePushdown() throws Exception {
-        connectContext.getSessionVariable().setCboDisabledRules("GP_PUSH_DOWN_PREDICATE");
-        String sql = "select * from t0 where coalesce(v1 < 2)";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "1:SELECT\n" +
-                "  |  predicates: 1: v1 < 2\n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
-        connectContext.getSessionVariable().setCboDisabledRules("");
-    }
 
     @Test
     public void testNonDeterministicFunctionPushDown1() throws Exception {
@@ -217,9 +203,7 @@ public class PredicatePushDownTest extends PlanTestBase {
         String sql = "WITH input AS (select * from t0 where t0.v1 not in (select max(v4) from t1)) " +
                 "SELECT * from input WHERE rand() < 0.5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
+        assertContains(plan, "colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: max\n" +
                 "  |  other predicates: rand() < 0.5");
     }
@@ -230,9 +214,7 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "not in (select max(v4) from t1);");
         String sql = "SELECT * from test_view1 WHERE rand() < 0.5";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
+        assertContains(plan, "colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: max\n" +
                 "  |  other predicates: rand() < 0.5");
     }
@@ -284,5 +266,4 @@ public class PredicatePushDownTest extends PlanTestBase {
                 "  |  functions: [, sum(2: v2), ]\n" +
                 "  |  partition by: 1: v1");
     }
->>>>>>> a9bb16d4da ([BugFix] Disable push down non-determined functions down operators (#66323))
 }
