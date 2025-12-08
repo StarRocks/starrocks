@@ -21,12 +21,59 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
-#include "simdjson.h"
 #include "util/json_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
+
+JsonValue::JsonValue(const VSlice& slice) {
+    assign(Slice(slice.start(), slice.byteSize()));
+}
+
+void JsonValue::assign(const vpack::Builder& b) {
+    binary_.assign((const char*)b.data(), (size_t)b.size());
+}
+
+Status fromVPackException(const vpack::Exception& e) {
+    return Status::JsonFormatError(Slice(e.what()));
+}
+
+JsonType fromVPackType(vpack::ValueType type) {
+    switch (type) {
+    case vpack::ValueType::Null:
+    case vpack::ValueType::None:
+        return JsonType::JSON_NULL;
+    case vpack::ValueType::Bool:
+        return JsonType::JSON_BOOL;
+    case vpack::ValueType::Array:
+        return JsonType::JSON_ARRAY;
+    case vpack::ValueType::Object:
+        return JsonType::JSON_OBJECT;
+    case vpack::ValueType::Double:
+    case vpack::ValueType::Int:
+    case vpack::ValueType::UInt:
+    case vpack::ValueType::SmallInt:
+        return JsonType::JSON_NUMBER;
+    case vpack::ValueType::String:
+        return JsonType::JSON_STRING;
+    default:
+        DCHECK(false);
+        return JsonType::JSON_NULL;
+    }
+}
+
+vpack::Slice noneJsonSlice() {
+    return vpack::Slice::noneSlice();
+}
+
+vpack::Slice nullJsonSlice() {
+    return vpack::Slice::nullSlice();
+}
+
+vpack::Slice emptyStringJsonSlice() {
+    return vpack::Slice::emptyStringSlice();
+}
 
 static bool is_json_start_char(char ch) {
     return ch == '{' || ch == '[' || ch == '"';

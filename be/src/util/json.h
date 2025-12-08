@@ -1,21 +1,27 @@
 #pragma once
 
+#include <cstdint>
+#include <exception>
 #include <functional>
 #include <ostream>
 #include <string>
 #include <type_traits>
 
 #include "common/compiler_util.h"
-#include "common/config.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
+#include "util/slice.h"
 #include "simdjson.h"
-#include "types/constexpr.h"
-#include "util/coding.h"
-#include "velocypack/vpack.h"
+
+namespace arangodb::velocypack {
+class Slice;
+class Builder;
+class Exception;
+enum class ValueType : uint8_t;
+} // namespace arangodb::velocypack
+
 
 namespace starrocks {
 
@@ -62,10 +68,10 @@ public:
     explicit JsonValue(const Slice& src) { assign(src); }
 
     // TODO(mofei) avoid copy data from slice ?
-    explicit JsonValue(const VSlice& slice) { assign(Slice(slice.start(), slice.byteSize())); }
+    explicit JsonValue(const VSlice& slice);
 
     void assign(const Slice& src) { binary_.assign(src.get_data(), src.get_size()); }
-    void assign(const vpack::Builder& b) { binary_.assign((const char*)b.data(), (size_t)b.size()); }
+    void assign(const vpack::Builder& b);
 
     ////////////////// builder  //////////////////////
 
@@ -149,52 +155,18 @@ private:
     std::string binary_;
 };
 
-inline Status fromVPackException(const vpack::Exception& e) {
-    return Status::JsonFormatError(Slice(e.what()));
-}
-
-inline JsonType fromVPackType(vpack::ValueType type) {
-    switch (type) {
-    case vpack::ValueType::Null:
-    case vpack::ValueType::None:
-        return JsonType::JSON_NULL;
-    case vpack::ValueType::Bool:
-        return JsonType::JSON_BOOL;
-    case vpack::ValueType::Array:
-        return JsonType::JSON_ARRAY;
-    case vpack::ValueType::Object:
-        return JsonType::JSON_OBJECT;
-    case vpack::ValueType::Double:
-    case vpack::ValueType::Int:
-    case vpack::ValueType::UInt:
-    case vpack::ValueType::SmallInt:
-        return JsonType::JSON_NUMBER;
-    case vpack::ValueType::String:
-        return JsonType::JSON_STRING;
-    default:
-        DCHECK(false);
-        return JsonType::JSON_NULL;
-    }
-}
-
-inline vpack::Slice noneJsonSlice() {
-    return vpack::Slice::noneSlice();
-}
-
-inline vpack::Slice nullJsonSlice() {
-    return vpack::Slice::nullSlice();
-}
-
-inline vpack::Slice emptyStringJsonSlice() {
-    return vpack::Slice::emptyStringSlice();
-}
+Status fromVPackException(const vpack::Exception& e);
+JsonType fromVPackType(vpack::ValueType type);
+vpack::Slice noneJsonSlice();
+vpack::Slice nullJsonSlice();
+vpack::Slice emptyStringJsonSlice();
 
 template <class Ret, class Fn>
 inline StatusOr<Ret> JsonValue::callVPack(Fn fn) {
     try {
         return fn();
-    } catch (const vpack::Exception& e) {
-        return fromVPackException(e);
+    } catch (const std::exception& e) {
+        return Status::JsonFormatError(Slice(e.what()));
     }
 }
 
@@ -202,8 +174,8 @@ template <class Ret, class Fn>
 inline StatusOr<Ret> JsonValue::callVPack(Fn fn) const {
     try {
         return fn();
-    } catch (const vpack::Exception& e) {
-        return fromVPackException(e);
+    } catch (const std::exception& e) {
+        return Status::JsonFormatError(Slice(e.what()));
     }
 }
 
