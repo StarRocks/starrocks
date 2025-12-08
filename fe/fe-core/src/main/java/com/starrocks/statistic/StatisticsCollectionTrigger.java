@@ -110,9 +110,10 @@ public class StatisticsCollectionTrigger {
                                           Database db,
                                           Table table,
                                           boolean sync,
-                                          boolean useLock) {
+                                                                 boolean useLock,
+                                                                 DmlType dmlType) {
         StatisticsCollectionTrigger trigger = new StatisticsCollectionTrigger();
-        trigger.dmlType = DmlType.INSERT_INTO;
+        trigger.dmlType = dmlType == null ? DmlType.INSERT_INTO : dmlType;
         trigger.db = db;
         trigger.table = table;
         trigger.sync = sync;
@@ -288,17 +289,26 @@ public class StatisticsCollectionTrigger {
                 PartitionCommitInfo partitionCommitInfo = entry.getValue();
                 Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
 
-                if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
-                    PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
-                    if (table.isNativeTableOrMaterializedView()) {
-                        OlapTable olapTable = (OlapTable) table;
-                        if (olapTable.isTempPartition(partitionId)) {
-                            continue;
-                        }
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                if (table.isNativeTableOrMaterializedView()) {
+                    OlapTable olapTable = (OlapTable) table;
+                    if (olapTable.isTempPartition(partitionId)) {
+                        continue;
                     }
+                }
+
+                // TODO: support DELETE
+                if (dmlType == DmlType.UPDATE) {
+                    // For UPDATE, collect on touched partitions regardless of version.
                     partitionIds.add(partitionId);
-                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                } else if (dmlType == DmlType.INSERT_INTO) {
+                    // For INSERT, only consider the first load of a partition
+                    if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                        partitionIds.add(partitionId);
+                        tabletRows.forEach(
+                                (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                    }
                 }
             }
         } finally {

@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.InMemoryStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -79,14 +80,16 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1, 5);
             transactionState.setTxnCommitAttachment(attachment);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true);
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                            DmlType.INSERT_INTO);
             Assertions.assertEquals(null, trigger.getAnalyzeType());
         }
         {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1000, 5);
             transactionState.setTxnCommitAttachment(attachment);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true);
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                            DmlType.INSERT_INTO);
             Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
         }
 
@@ -94,7 +97,8 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(1000000, 5);
             transactionState.setTxnCommitAttachment(attachment);
             StatisticsCollectionTrigger trigger =
-                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true);
+                    StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                            DmlType.INSERT_INTO);
             Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
         }
     }
@@ -156,5 +160,46 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
                     StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
             Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
         }
+    }
+
+    @Test
+    public void triggerOnUpdate() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_update";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        starRocksAssert.withTable("create table t_update (" +
+                "c1 int not null," +
+                "c2 int not null" +
+                ") " +
+                "partition by (c1)\n" +
+                "properties('replication_num'='1')");
+        starRocksAssert.ddl("alter table t_update add partition p1 values in ('1')");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = db.getTable(tableName);
+        Partition partition = table.getPartition("p1");
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                partition.getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 1, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+
+        setPartitionStatistics((OlapTable) table, "p1", 1000);
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(5));
+        StatisticsCollectionTrigger trigger =
+                StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                        DmlType.UPDATE);
+        Assertions.assertNull(trigger.getAnalyzeType());
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(500));
+        trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                DmlType.UPDATE);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(500000));
+        trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(transactionState, db, table, true, true,
+                DmlType.UPDATE);
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, trigger.getAnalyzeType());
     }
 }

@@ -55,7 +55,7 @@ public class LoadJobStatsListener implements LoadJobListener {
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
                                               DmlType dmlType) {
         if (dmlType != DmlType.INSERT_OVERWRITE && needTrigger()) {
-            StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
+            StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true, dmlType);
         }
     }
 
@@ -110,7 +110,8 @@ public class LoadJobStatsListener implements LoadJobListener {
                     .collect(Collectors.toList());
             for (Table table : tables) {
                 // stream load and broker load do not need lock
-                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, false);
+                StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, sync, false,
+                        DmlType.INSERT_INTO);
             }
         } catch (Exception t) {
             LOG.warn("refresh mv after publish version failed:", DebugUtil.getStackTrace(t));
