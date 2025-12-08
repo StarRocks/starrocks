@@ -446,7 +446,7 @@ public class UtFrameUtils {
                     continue;
                 }
 
-                System.out.println("find valid port " + port + new Date());
+                System.out.println("find valid port " + port + " at " + new Date());
                 return port;
             } catch (Exception e) {
                 e.printStackTrace();
