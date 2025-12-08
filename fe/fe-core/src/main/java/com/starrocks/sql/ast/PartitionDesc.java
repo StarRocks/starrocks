@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
 
@@ -65,10 +64,6 @@ public class PartitionDesc implements ParseNode {
     }
 
     public Long getVersionInfo() throws UnsupportedOperationException {
-        throw new UnsupportedOperationException();
-    }
-
-    public TTabletType getTabletType() throws UnsupportedOperationException {
         throw new UnsupportedOperationException();
     }
 

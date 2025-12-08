@@ -78,7 +78,6 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
         partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         refreshScheme.setMoment(MaterializedView.RefreshMoment.DEFERRED);
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();

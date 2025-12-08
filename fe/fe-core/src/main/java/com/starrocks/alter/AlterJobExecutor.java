@@ -941,10 +941,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             if (hasInMemory && (newInMemory != oldInMemory)) {
                 partitionInfo.setIsInMemory(partition.getId(), newInMemory);
             }
-            // 4. tablet type
-            if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
-                partitionInfo.setTabletType(partition.getId(), tTabletType);
-            }
+
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
                     newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
             modifyPartitionInfos.add(info);

@@ -22,7 +22,6 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
@@ -92,7 +91,6 @@ public class MultiListPartitionDescTest {
 
         Assertions.assertEquals(partitionName, partitionDesc.getPartitionName());
         Assertions.assertEquals(1, partitionDesc.getReplicationNum());
-        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionDesc.getTabletType());
         Assertions.assertEquals(true, partitionDesc.isInMemory());
 
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();

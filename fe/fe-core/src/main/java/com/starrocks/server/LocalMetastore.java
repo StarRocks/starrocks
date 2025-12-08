@@ -250,7 +250,6 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -1002,7 +1001,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Set<Long> tabletIdSet = Sets.newHashSet();
 
             copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
-            copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
             copiedTable.getPartitionInfo().setDataCacheInfo(partitionId, partitionDesc.getDataCacheInfo());
@@ -3187,7 +3185,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         partitionInfo.setDataProperty(partitionId, dataProperty);
         partitionInfo.setReplicationNum(partitionId, olapTable.getDefaultReplicationNum());
         partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         StorageInfo storageInfo = olapTable.getTableProperty().getStorageInfo();
         partitionInfo.setDataCacheInfo(partitionId,
                 storageInfo == null ? null : storageInfo.getDataCacheInfo());
@@ -4603,7 +4600,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 String newPartitionName = entry.getKey();
 
                 PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
-                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(oldPartitionId));
                 partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(oldPartitionId));
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
@@ -5166,7 +5162,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 continue;
             }
             PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
-            partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
             partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
             partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
             partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));

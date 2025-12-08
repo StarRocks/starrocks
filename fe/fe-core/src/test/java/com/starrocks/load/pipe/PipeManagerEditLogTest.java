@@ -37,7 +37,6 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
@@ -93,7 +92,6 @@ public class PipeManagerEditLogTest {
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 1);
         partitionInfo.setIsInMemory(testPartitionId, false);
-        partitionInfo.setTabletType(testPartitionId, TTabletType.TABLET_TYPE_DISK);
 
         // Create distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(colInt));

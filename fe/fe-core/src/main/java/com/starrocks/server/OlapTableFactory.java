@@ -625,7 +625,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 partitionInfo.setDataProperty(partitionId, dataProperty);
                 partitionInfo.setReplicationNum(partitionId, replicationNum);
                 partitionInfo.setIsInMemory(partitionId, isInMemory);
-                partitionInfo.setTabletType(partitionId, tabletType);
                 StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
                 DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
                 partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);

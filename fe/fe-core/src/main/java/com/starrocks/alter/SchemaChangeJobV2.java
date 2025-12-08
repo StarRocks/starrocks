@@ -107,6 +107,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -415,7 +416,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     .setLatch(countDownLatch)
                                     .setEnablePersistentIndex(tbl.enablePersistentIndex())
                                     .setPrimaryIndexCacheExpireSec(tbl.primaryIndexCacheExpireSec())
-                                    .setTabletType(tbl.getPartitionInfo().getTabletType(partition.getParentId()))
+                                    .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                     .setCompressionType(tbl.getCompressionType())
                                     .setCompressionLevel(tbl.getCompressionLevel())
                                     .setBaseTabletId(baseTabletId)

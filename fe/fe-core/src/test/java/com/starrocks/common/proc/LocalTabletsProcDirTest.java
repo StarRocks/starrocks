@@ -41,7 +41,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -126,7 +125,6 @@ public class LocalTabletsProcDirTest {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
         partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Index

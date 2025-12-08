@@ -118,6 +118,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
@@ -1232,7 +1233,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .setStorageMedium(TStorageMedium.HDD)
                                             .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                                             .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                                            .setTabletType(olapTable.getPartitionInfo().getTabletType(partitionId))
+                                            .setTabletType(TTabletType.TABLET_TYPE_DISK)
                                             .setCompressionType(olapTable.getCompressionType())
                                             .setCompressionLevel(olapTable.getCompressionLevel())
                                             .setRecoverySource(RecoverySource.REPORT)

@@ -50,7 +50,6 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
@@ -179,7 +178,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
         partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
 
         MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
@@ -207,7 +205,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         rangePartitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         rangePartitionInfo.setReplicationNum(1, (short) 3);
         rangePartitionInfo.setIsInMemory(1, false);
-        rangePartitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv_name_2", columns, KeysType.AGG_KEYS,
                 rangePartitionInfo, distributionInfo, refreshScheme);
@@ -236,7 +233,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
         partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
 
         MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
@@ -262,7 +258,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
         partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
 
         MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,

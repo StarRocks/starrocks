@@ -40,7 +40,6 @@ import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -76,11 +75,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
     @SerializedName(value = "idToInMemory")
     protected Map<Long, Boolean> idToInMemory;
 
-    // partition id -> tablet type
-    // Note: currently it's only used for testing, it may change/add more meta field later,
-    // so we defer adding meta serialization until memory engine feature is more complete.
-    protected Map<Long, TTabletType> idToTabletType;
-
     // for lake table
     // storage cache, ttl and enable_async_write_back
     @SerializedName(value = "idToStorageCacheInfo")
@@ -91,7 +85,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
         this.idToInMemory = new HashMap<>();
-        this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
     }
 
@@ -100,7 +93,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
         this.idToInMemory = new HashMap<>();
-        this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
     }
 
@@ -176,20 +168,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
 
     public void setIsInMemory(long partitionId, boolean isInMemory) {
         idToInMemory.put(partitionId, isInMemory);
-    }
-
-    public TTabletType getTabletType(long partitionId) {
-        if (idToTabletType == null || !idToTabletType.containsKey(partitionId)) {
-            return TTabletType.TABLET_TYPE_DISK;
-        }
-        return idToTabletType.get(partitionId);
-    }
-
-    public void setTabletType(long partitionId, TTabletType tabletType) {
-        if (idToTabletType == null) {
-            idToTabletType = new HashMap<>();
-        }
-        idToTabletType.put(partitionId, tabletType);
     }
 
     public DataCacheInfo getDataCacheInfo(long partitionId) {
@@ -313,7 +291,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
             p.idToReplicationNum = new HashMap<>(this.idToReplicationNum);
             p.isMultiColumnPartition = this.isMultiColumnPartition;
             p.idToInMemory = new HashMap<>(this.idToInMemory);
-            p.idToTabletType = new HashMap<>(this.idToTabletType);
             p.idToStorageCacheInfo = new HashMap<>(this.idToStorageCacheInfo);
             return p;
         } catch (CloneNotSupportedException e) {
@@ -325,13 +302,11 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
         Map<Long, DataProperty> oldIdToDataProperty = this.idToDataProperty;
         Map<Long, Short> oldIdToReplicationNum = this.idToReplicationNum;
         Map<Long, Boolean> oldIdToInMemory = this.idToInMemory;
-        Map<Long, TTabletType> oldIdToTabletType = this.idToTabletType;
         Map<Long, DataCacheInfo> oldIdToStorageCacheInfo = this.idToStorageCacheInfo;
 
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
         this.idToInMemory = new HashMap<>();
-        this.idToTabletType = new HashMap<>();
         this.idToStorageCacheInfo = new HashMap<>();
 
         for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
@@ -349,10 +324,6 @@ public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProce
             Boolean inMemory = oldIdToInMemory.get(oldId);
             if (inMemory != null) {
                 this.idToInMemory.put(newId, inMemory);
-            }
-            TTabletType tabletType = oldIdToTabletType.get(oldId);
-            if (tabletType != null) {
-                this.idToTabletType.put(newId, tabletType);
             }
             DataCacheInfo dataCacheInfo = oldIdToStorageCacheInfo.get(oldId);
             if (dataCacheInfo != null) {

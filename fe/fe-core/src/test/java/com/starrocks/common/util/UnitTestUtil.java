@@ -59,7 +59,6 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
@@ -154,7 +153,6 @@ public class UnitTestUtil {
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
         partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         if (tableType == Table.TableType.MATERIALIZED_VIEW) {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             MaterializedView mv = new MaterializedView(tableId, dbId, MATERIALIZED_VIEW_NAME, columns,
@@ -231,7 +229,6 @@ public class UnitTestUtil {
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
         partitionInfo.setIsInMemory(partitionId, false);
-        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
 
         if (tableType == Table.TableType.MATERIALIZED_VIEW) {
             MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();

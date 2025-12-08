@@ -79,7 +79,6 @@ public class AnalyzeMgrEditLogTest {
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 1);
         partitionInfo.setIsInMemory(testPartitionId, false);
-        partitionInfo.setTabletType(testPartitionId, TTabletType.TABLET_TYPE_DISK);
 
         // Create distribution info
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(col1));

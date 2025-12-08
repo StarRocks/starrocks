@@ -38,7 +38,6 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -98,7 +97,6 @@ public class TabletStatMgrTest {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(PARTITION_ID, new DataProperty(TStorageMedium.HDD));
         partitionInfo.setIsInMemory(PARTITION_ID, false);
-        partitionInfo.setTabletType(PARTITION_ID, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
 
         // Table

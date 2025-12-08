@@ -18,7 +18,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
 
@@ -28,7 +27,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     private Map<String, String> properties;
     private Short replicationNum;
     private DataProperty partitionDataProperty;
-    private TTabletType tabletType;
     private Long versionInfo;
     private boolean isInMemory;
     private DataCacheInfo dataCacheInfo;
@@ -40,7 +38,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.properties = properties;
         this.replicationNum = RunMode.defaultReplicationNum();
         this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
-        this.tabletType = TTabletType.TABLET_TYPE_DISK;
         this.versionInfo = null;
         this.isInMemory = false;
         this.dataCacheInfo = null;
@@ -77,11 +74,6 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public TTabletType getTabletType() {
-        return tabletType;
-    }
-
-    @Override
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -108,13 +100,7 @@ public abstract class SinglePartitionDesc extends PartitionDesc {
         this.isInMemory = inMemory;
     }
 
-    public void setTabletType(TTabletType tabletType) {
-        this.tabletType = tabletType;
-    }
-
     public void setDataCacheInfo(DataCacheInfo dataCacheInfo) {
         this.dataCacheInfo = dataCacheInfo;
     }
-
-
 }
