@@ -81,7 +81,7 @@ sudo apt update
 ```
 
 ```bash
-sudo apt install gcc g++ maven openjdk-11-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison binutils-dev libiberty-dev build-essential ninja-build curl
+sudo apt install gcc g++ maven openjdk-11-jdk python3 python-is-python3 unzip cmake bzip2 ccache byacc ccache flex automake libtool bison libiberty-dev build-essential ninja-build curl
 ```
 
 `JAVA_HOME` 環境のセットアップ
