@@ -216,6 +216,7 @@ set(STORAGE_FILES
     lake/lake_primary_key_recover.cpp
     lake/load_spill_block_manager.cpp
     lake/spill_mem_table_sink.cpp
+    lake/tablet_writer.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp

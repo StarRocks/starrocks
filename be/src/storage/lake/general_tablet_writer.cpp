@@ -149,18 +149,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             segment->set_path(segment_path);
             segment->set_encryption_meta(_seg_writer->encryption_meta());
         }
-        const auto& seg_global_dict_columns_valid_info = _seg_writer->global_dict_columns_valid_info();
-        for (const auto& it : seg_global_dict_columns_valid_info) {
-            if (!it.second) {
-                _global_dict_columns_valid_info[it.first] = false;
-            } else {
-                if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
-                    iter == _global_dict_columns_valid_info.end()) {
-                    _global_dict_columns_valid_info[it.first] = true;
-                }
-            }
-        }
-
+        check_global_dict(_seg_writer.get());
         _seg_writer.reset();
     }
     return Status::OK();
