@@ -404,7 +404,7 @@ public class CatalogRecycleBinTest {
     public void testEnsureEraseLater(@Mocked GlobalStateMgr globalStateMgr) {
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
-                "ClusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
+                "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -488,7 +488,7 @@ public class CatalogRecycleBinTest {
         };
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
-                "ClusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
+                "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -555,7 +555,7 @@ public class CatalogRecycleBinTest {
         };
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
-                "ClusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
+                    "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -601,7 +601,7 @@ public class CatalogRecycleBinTest {
         };
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
-                "ClusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
+                "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -692,7 +692,7 @@ public class CatalogRecycleBinTest {
         };
         ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
-                "ClusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
+                "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
         new Expectations() {
             {
                 globalStateMgr.getCurrentState().getClusterSnapshotMgr();
