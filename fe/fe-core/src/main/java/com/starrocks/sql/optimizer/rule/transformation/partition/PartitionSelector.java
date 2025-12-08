@@ -24,6 +24,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -54,17 +55,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
-import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.LiteralExprFactory;
-import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
->>>>>>> 4b52361f8f ([Enhancement] enhance filterPartitionsByTTL so that it properly handles cases where the partition value is null (#65923))
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
@@ -531,16 +521,12 @@ public class PartitionSelector {
             ColumnRefOperator colRef = entry.getKey();
             LiteralExpr literalExpr;
             try {
-<<<<<<< HEAD
-                LiteralExpr literalExpr = LiteralExpr.create(values.get(entry.getValue()), colRef.getType());
-=======
                 if (values.get(entry.getValue()) != null &&
                         values.get(entry.getValue()).equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
                     literalExpr = NullLiteral.create(colRef.getType());
                 } else {
-                    literalExpr = LiteralExprFactory.create(values.get(entry.getValue()), colRef.getType());
+                    literalExpr = LiteralExpr.create(values.get(entry.getValue()), colRef.getType());
                 }
->>>>>>> 4b52361f8f ([Enhancement] enhance filterPartitionsByTTL so that it properly handles cases where the partition value is null (#65923))
                 ConstantOperator replace = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                 replaceMap.put(colRef, replace);
             } catch (Exception e) {
