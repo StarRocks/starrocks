@@ -1,0 +1,52 @@
+-- name: test_iceberg_partition_evolution_1
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+drop table if exists test_users_bucketed;
+CREATE TABLE test_users_bucketed (
+  user_id BIGINT,
+  country STRING,
+  score   DOUBLE
+)
+PARTITION BY bucket(user_id, 16);
+
+INSERT INTO test_users_bucketed VALUES
+ (1, 'US',  1.0),
+ (2, 'US',  2.0),
+ (3, 'CN',  3.0),
+ (4, 'CN',  4.0),
+ (5, 'JP',  5.0);
+ 
+ALTER TABLE test_users_bucketed drop partition column bucket(user_id, 16);
+ALTER TABLE test_users_bucketed add partition column bucket(user_id, 32);
+
+INSERT INTO test_users_bucketed VALUES
+ (6,  'US',  6.0),
+ (7,  'CN',  7.0),
+ (16, 'US', 16.0),
+ (32, 'CN', 32.0);
+
+SELECT COUNT(*) AS cnt, SUM(score) AS sum_score FROM test_users_bucketed; 
+
+SELECT country, COUNT(*) AS c, SUM(score) AS s FROM test_users_bucketed GROUP BY country ORDER BY country;
+
+-- check partition pruning
+SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4,5,6,7,16,32);
+
+-- partitions=7/8
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4,5,6,7,16,32);", "partitions=7/8")
+
+SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4);
+
+-- partitions=3/8
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(score) FROM test_users_bucketed WHERE user_id IN (1,2,3,4);", "partitions=3/8")
+
+
+drop table test_users_bucketed force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};

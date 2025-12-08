@@ -1,0 +1,52 @@
+-- name: test_iceberg_partition_evolution_2
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+drop table if exists test_events;
+CREATE TABLE test_events (
+  event_id BIGINT,
+  user_id  BIGINT,
+  ts       DATETIME,
+  country  STRING
+) PARTITION BY day(ts), country;
+
+INSERT INTO test_events VALUES
+ (1, 1, '2024-01-01 10:00:00', 'US'),
+ (2, 2, '2024-01-01 11:00:00', 'US'),
+ (3, 3, '2024-01-02 09:00:00', 'CN');
+
+ALTER TABLE test_events DROP PARTITION COLUMN day(ts);
+ALTER TABLE test_events ADD PARTITION COLUMN month(ts);
+
+INSERT INTO test_events VALUES
+ (4, 4, '2024-02-01 10:00:00', 'US'),
+ (5, 5, '2024-02-15 12:00:00', 'CN');
+
+ALTER TABLE test_events DROP PARTITION COLUMN month(ts);
+
+INSERT INTO test_events VALUES
+ (6, 6, '2024-03-01 08:00:00', 'US'),
+ (7, 7, '2024-03-02 09:00:00', 'CN');
+
+SELECT * FROM test_events order by event_id;
+
+SELECT country, COUNT(*) AS c FROM test_events GROUP BY country ORDER BY country;
+
+SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
+
+-- partititons=6/6
+function: assert_explain_verbose_contains("SELECT COUNT(*) AS cnt FROM test_events WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=6/6")
+
+SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;
+
+-- partitions=2/6
+function: assert_explain_verbose_contains("SELECT country, COUNT(*) AS c FROM test_events WHERE country = 'US'  AND ts >= '2024-02-01 00:00:00'  AND ts <  '2024-04-01 00:00:00' GROUP BY country;", "partitions=2/6")
+
+drop table test_events force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};
