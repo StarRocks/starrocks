@@ -15,13 +15,9 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <random>
-
-#include "butil/time.h"
-#include "exprs/mock_vectorized_expr.h"
+#include "exprs/mock_vectorized_expr.h" // NOLINT
 #include "exprs/string_functions.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -261,4 +257,55 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
     }
     ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
+
+struct TrimCase {
+    std::string input;
+    std::string remove;
+    std::string expected;
+};
+
+static const std::string kOghamSpace = std::string(
+        "\xE1\x9A"
+        "\x80"); // U+1680
+static const std::string kHairSpace = std::string(
+        "\xE2\x80"
+        "\x89"); // U+2009
+
+class StringFunctionTrimParamTest : public ::testing::TestWithParam<TrimCase> {};
+
+TEST_P(StringFunctionTrimParamTest, TrimUtf8Whitespace) {
+    const auto& c = GetParam();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto str_col = BinaryColumn::create();
+    str_col->append(c.input);
+
+    auto remove_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(c.remove, 1);
+    Columns columns{std::move(str_col), std::move(remove_col)};
+    ctx->set_constant_columns(columns);
+
+    ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    auto maybe_result = StringFunctions::trim(ctx.get(), columns);
+    ASSERT_OK(maybe_result.status());
+    auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(maybe_result.value());
+
+    ASSERT_EQ(1, result->size());
+    ASSERT_EQ(c.expected, result->get_slice(0).to_string());
+
+    ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+}
+
+INSTANTIATE_TEST_SUITE_P(UnicodeWhitespace, StringFunctionTrimParamTest,
+                         ::testing::Values(
+                                 // Single ASCII space trimmed by ASCII+U+1680 (original reported case)
+                                 TrimCase{" ", " " + kOghamSpace, ""},
+                                 // Only U+1680 gets trimmed
+                                 TrimCase{kOghamSpace, " " + kOghamSpace, ""},
+                                 // Mixed leading/trailing UTF-8 whitespace should be removed
+                                 TrimCase{kOghamSpace + "abc" + kHairSpace, " " + kOghamSpace + kHairSpace, "abc"},
+                                 // Internal characters should stay intact
+                                 TrimCase{kOghamSpace + "ab" + kHairSpace + "c" + kHairSpace,
+                                          " " + kOghamSpace + kHairSpace, "ab" + kHairSpace + "c"},
+                                 // No matching trim characters leaves string unchanged
+                                 TrimCase{"abc", " " + kOghamSpace + kHairSpace, "abc"}));
 } // namespace starrocks
