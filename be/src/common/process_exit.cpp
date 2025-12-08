@@ -29,6 +29,11 @@ std::atomic<bool> k_starrocks_exit;
 // but also waiting for all threads to exit gracefully.
 std::atomic<bool> k_starrocks_quick_exit;
 
+// NOTE: when BE is crashing (e.g., due to fatal signal), this flag will be set to true.
+// In this case, BE will return not alive status to FE's heartbeat request.
+// This flag prevents infinite loops when errors occur in jemalloc data structures.
+std::atomic<bool> k_starrocks_be_crashing = false;
+
 bool set_process_exit() {
     bool expected = false;
     return k_starrocks_exit.compare_exchange_strong(expected, true);
@@ -45,6 +50,14 @@ bool process_exit_in_progress() {
 
 bool process_quick_exit_in_progress() {
     return k_starrocks_quick_exit.load(std::memory_order_relaxed);
+}
+
+void set_process_is_crashing() {
+    k_starrocks_be_crashing.store(true, std::memory_order_relaxed);
+}
+
+bool is_process_crashing() {
+    return k_starrocks_be_crashing.load(std::memory_order_relaxed);
 }
 
 } // namespace starrocks

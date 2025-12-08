@@ -42,4 +42,8 @@ bool process_exit_in_progress();
 //  - false: process is not in quick exit
 bool process_quick_exit_in_progress();
 
+void set_process_is_crashing();
+
+bool is_process_crashing();
+
 } // namespace starrocks

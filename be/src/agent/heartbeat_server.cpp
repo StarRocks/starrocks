@@ -85,6 +85,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
+
+    if (is_process_crashing()) {
+        res = Status::InternalError("BE is shutting down");
+    }
+
     res.status().to_thrift(&heartbeat_result.status);
     if (!res.ok()) {
         MasterInfoPtr ptr;
