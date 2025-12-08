@@ -37,7 +37,7 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
+import com.starrocks.lake.snapshot.ClusterSnapshotJobScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -70,7 +70,7 @@ public class DropPartitionTest {
         String createDbStmtStr = "create database test;";
         createDb(createDbStmtStr);
         Deencapsulation.setField(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr(),
-                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
+                                 "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
     }
 
     private static void waitPartitionClearFinished(long id, long time) {

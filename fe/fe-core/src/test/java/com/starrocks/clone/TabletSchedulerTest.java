@@ -43,7 +43,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
+import com.starrocks.lake.snapshot.ClusterSnapshotJobScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack;
 import com.starrocks.persist.EditLog;
@@ -115,7 +115,7 @@ public class TabletSchedulerTest {
         variableMgr = new VariableMgr();
         clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         Deencapsulation.setField(clusterSnapshotMgr,
-                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
+                                 "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
 
         new Expectations() {
             {

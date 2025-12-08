@@ -41,7 +41,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
+import com.starrocks.lake.snapshot.ClusterSnapshotJobScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -83,7 +83,7 @@ public class TempPartitionTest extends StarRocksTestBase {
         Config.alter_scheduler_interval_millisecond = 100;
         starRocksAssert = new StarRocksAssert(ctx);
         Deencapsulation.setField(GlobalStateMgr.getCurrentState().getClusterSnapshotMgr(),
-                                 "clusterSnapshotCheckpointScheduler", new ClusterSnapshotCheckpointScheduler(null, null));
+                                 "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
 
         // temporarily disable partition duration to prevent CatalogRecycleBin waiting too long time
         // and blocking ut progress

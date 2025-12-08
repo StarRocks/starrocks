@@ -56,7 +56,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     @SerializedName(value = "automatedSnapshotJobs")
     protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
 
-    protected ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
+    protected ClusterSnapshotJobScheduler clusterSnapshotJobScheduler;
 
     public ClusterSnapshotMgr() {
     }
@@ -128,8 +128,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public boolean canScheduleNextJob(long lastAutomatedJobStartTimeMs) {
-        return isAutomatedSnapshotOn() && (System.currentTimeMillis() - lastAutomatedJobStartTimeMs >=
-                                           Config.automated_cluster_snapshot_interval_seconds * 1000L);
+        return isAutomatedSnapshotOn() && (System.currentTimeMillis()
+                - lastAutomatedJobStartTimeMs >= Config.automated_cluster_snapshot_interval_seconds * 1000L);
     }
 
     public ClusterSnapshotJob getNextCluterSnapshotJob() {
@@ -155,7 +155,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return null;
         }
 
-        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(job.getStorageVolumeName());
+        return GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                .getStorageVolumeByName(job.getStorageVolumeName());
     }
 
     public ClusterSnapshotJob getClusterSnapshotJobByName(String snapshotName) {
@@ -349,7 +350,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     // keep this interface and do not remove it
     public boolean isMaterializedIndexInClusterSnapshotInfo(
-                   long dbId, long tableId, long partId, long physicalPartId, long indexId) {
+            long dbId, long tableId, long partId, long physicalPartId, long indexId) {
         return false;
     }
 
@@ -360,16 +361,16 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     // keep this interface and do not remove it
     public boolean isShardGroupIdInClusterSnapshotInfo(
-                   long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
+            long dbId, long tableId, long partId, long physicalPartId, long shardGroupId) {
         return false;
     }
 
     public void start() {
-        if (RunMode.isSharedDataMode() && clusterSnapshotCheckpointScheduler == null) {
-            clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(
+        if (RunMode.isSharedDataMode() && clusterSnapshotJobScheduler == null) {
+            clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(
                     GlobalStateMgr.getCurrentState().getCheckpointController(),
                     StarMgrServer.getCurrentState().getCheckpointController());
-            clusterSnapshotCheckpointScheduler.start();
+            clusterSnapshotJobScheduler.start();
         }
     }
 

@@ -245,7 +245,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     @Override
     public long getSafeDeletionTimeMs() {
         long runningManualClusterSnapshotCreatedTimsMs = Long.MAX_VALUE;
-        ClusterSnapshotJob job = clusterSnapshotCheckpointScheduler.runningJob;
+        ClusterSnapshotJob job = clusterSnapshotJobScheduler.runningJob;
         if (job != null && job instanceof ManualClusterSnapshotJob) {
             runningManualClusterSnapshotCreatedTimsMs = job.getCreatedTimeMs();
         }
