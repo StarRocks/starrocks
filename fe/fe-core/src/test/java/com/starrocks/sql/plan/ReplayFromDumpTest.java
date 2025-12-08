@@ -1019,27 +1019,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
     }
-<<<<<<< HEAD
-    
-=======
 
-    @Test
-    public void testExpressionReuseTimeout() throws Exception {
-        Config.max_scalar_operator_flat_children = 300000;
-        String dumpString = getDumpInfoFromFile("query_dump/expr_reuse_timeout");
-        Tracers.register(connectContext);
-        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
-                TExplainLevel.NORMAL);
-        String ss = Tracers.printScopeTimer();
-        int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();
-        int end = ss.indexOf("]", start);
-        long count = Long.parseLong(ss.substring(start, end));
-        Assertions.assertTrue(count < 1000, ss);
-    }
-
->>>>>>> 25000ba8b0 ([BugFix] Fix the exponential growth in the number of expressions caused by the casewhen function. (#66324))
     @Test
     public void testForceReuseCTEWithHugeCTE() throws Exception {
         String dumpString = getDumpInfoFromFile("query_dump/big_cte_with_force_reuse");
