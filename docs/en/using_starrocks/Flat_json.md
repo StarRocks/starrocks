@@ -30,7 +30,7 @@ Due to the special nature of the JSON type, its performance in queries is not as
 - Redundant data: Queries need to read the entire JSON data, which includes many redundant fields.
 
 StarRocks introduces the Flat JSON feature to improve JSON data query efficiency and reduce the complexity of using JSON.
-- This feature is available from version 3.3.0, disabled by default, and needs to be enabled manually.
+- This feature is available from version 3.3.0. It is disabled by default before v4.0 and needs to be enabled manually. From v4.0 onwards, it is enabled by default.
 
 ## What is Flat JSON
 
@@ -49,11 +49,12 @@ When loading the above JSON data, fields `a` and `b` are present in most JSON da
 
 ## Enable Flat JSON
 
-Flat JSON is enabled globally by default from v3.4 onwards. For versions earlier than v3.4, you must manually enable it.
+Flat JSON is enabled globally by default from v4.0 onwards. For versions earlier than v4.0, you must manually enable it.
+From v4.0, this feature can be configured on the table level.
 
-### Enable for versions earlier than v3.4
+### Enable for versions earlier than v4.0
 
-1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v3.4. For modification methods, refer to
+1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v4.0. For modification methods, refer to
 [Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters).
 2. Enable FE pruning feature:
 
