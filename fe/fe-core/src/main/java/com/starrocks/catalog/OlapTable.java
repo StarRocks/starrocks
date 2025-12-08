@@ -2901,6 +2901,10 @@ public class OlapTable extends Table {
         tryToAssignIndexId();
         updateBaseCompactionForbiddenTimeRanges(false);
 
+        if (tableProperty != null) {
+            tableProperty.buildConstraint();
+        }
+
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         globalConstraintManager.registerConstraint(this);
