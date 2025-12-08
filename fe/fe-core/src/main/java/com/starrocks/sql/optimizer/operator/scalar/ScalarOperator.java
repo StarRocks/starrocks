@@ -20,6 +20,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
