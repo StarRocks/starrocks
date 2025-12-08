@@ -50,14 +50,9 @@ When loading the above JSON data, fields `a` and `b` are present in most JSON da
 ## Enable Flat JSON
 
 Flat JSON is enabled globally by default from v4.0 onwards. For versions earlier than v4.0, you must manually enable it.
-
-<<<<<<< HEAD
-### Enable for versions earlier than v3.4
-=======
 From v4.0, this feature can be configured on the table level.
 
 ### Enable for versions earlier than v4.0
->>>>>>> 3d2acd118d ([Doc] update flatjson default version 4.0 (#66261))
 
 1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v4.0. For modification methods, refer to
 [Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters).
