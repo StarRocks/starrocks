@@ -304,6 +304,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
         auto task = [this, state, reader, i, query_ctx, driver_id](auto& yield_ctx) {
             if (auto acquired = query_ctx.lock()) {
                 SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+                SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
                 auto defer = CancelableDefer([&]() {
                     _latch.count_down();
                     yield_ctx.set_finished();
