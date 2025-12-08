@@ -1,6 +1,16 @@
-// Copyright (c) 2011 The LevelDB Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license.
-// (https://developers.google.com/open-source/licenses/bsd)
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "storage/sstable/concatenating_iterator.h"
 
@@ -20,7 +30,9 @@ public:
 
     ~ConcatenatingIterator() override { delete[] children_; }
 
-    bool Valid() const override { return current_index_ >= 0 && current_index_ < n_ && children_[current_index_].Valid(); }
+    bool Valid() const override {
+        return current_index_ >= 0 && current_index_ < n_ && children_[current_index_].Valid();
+    }
 
     void SeekToFirst() override {
         for (int i = 0; i < n_; i++) {
