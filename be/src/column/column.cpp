@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "column/column_hash/column_hash.h"
 #include "common/statusor.h"
 
 namespace starrocks {
@@ -118,6 +119,34 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
         swap_column(*new_column.get());
     }
     return need_empty;
+}
+
+void Column::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    fnv_hash_column(*this, seed, from, to);
+}
+
+void Column::fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+    fnv_hash_column_with_selection(*this, seed, selection, from, to);
+}
+
+void Column::fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+    fnv_hash_column_selective(*this, seed, sel, sel_size);
+}
+
+void Column::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    crc32_hash_column(*this, seed, from, to);
+}
+
+void Column::crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+    crc32_hash_column_with_selection(*this, seed, selection, from, to);
+}
+
+void Column::crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+    crc32_hash_column_selective(*this, seed, sel, sel_size);
+}
+
+void Column::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
+    murmur_hash3_x86_32_column(*this, hash, from, to);
 }
 
 } // namespace starrocks
