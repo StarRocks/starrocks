@@ -1742,11 +1742,6 @@ StatusOr<ColumnPtr> JsonFunctions::json_set(FunctionContext* context, const Colu
             continue;
         }
 
-        if (json_viewer.value(row)->to_vslice().isNull()) {
-            result.append_null();
-            continue;
-        }
-
         JsonValue current_doc = *json_viewer.value(row);
         bool null_arg = false;
 

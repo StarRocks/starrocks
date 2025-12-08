@@ -2030,29 +2030,54 @@ TEST_P(JsonSetTestFixture, json_set) {
 INSTANTIATE_TEST_SUITE_P(
         JsonSetTests, JsonSetTestFixture,
         ::testing::Values(
-                // Expect STRING values ("2" instead of 2) because input "2" is parsed as string in this context
                 JsonSetTestParam{R"({"a": 1})", {{"$.a", "2"}}, R"({"a": "2"})", "Update existing key"},
                 JsonSetTestParam{R"({"a": 1})", {{"$.b", "2"}}, R"({"a": 1, "b": "2"})", "Insert new key"},
+
                 JsonSetTestParam{
                         R"({"arr": [10, 20]})", {{"$.arr[1]", "99"}}, R"({"arr": [10, "99"]})", "Update array index"},
                 JsonSetTestParam{R"({"arr": [10, 20]})",
                                  {{"$.arr[5]", "30"}},
                                  R"({"arr": [10, 20, "30"]})",
                                  "Append to array (index > size)"},
+                JsonSetTestParam{R"({"arr": []})", {{"$.arr[0]", "1"}}, R"({"arr": ["1"]})", "Append to empty array"},
+
                 JsonSetTestParam{
                         R"({"a": {"b": 1}})", {{"$.a.b", "2"}}, R"({"a": {"b": "2"}})", "Update nested object"},
+                JsonSetTestParam{R"({"a": [{"b": 1}, {"b": 2}]})",
+                                 {{"$.a[1].b", "3"}},
+                                 R"({"a": [{"b": 1}, {"b": "3"}]})",
+                                 "Update object inside array (Recursion test)"},
+                JsonSetTestParam{R"({"a": [1, [2, 3]]})",
+                                 {{"$.a[1][0]", "4"}},
+                                 R"({"a": [1, ["4", 3]]})",
+                                 "Update nested array"},
+
                 JsonSetTestParam{
                         R"({"a": 1})", {{"$.a[0]", "2"}}, R"({"a": 1})", "Array selector on scalar (should ignore)"},
+                JsonSetTestParam{R"([1, 2])", {{"$.a", "2"}}, R"([1, 2])", "Key selector on array (should ignore)"},
+
+                JsonSetTestParam{
+                        R"({"a": 1})", {{"$.b.c", "2"}}, R"({"a": 1})", "Insert nested missing path (should ignore)"},
+
+                JsonSetTestParam{R"({"a": 1, "b": {}})",
+                                 {{"$.b.c", "2"}},
+                                 R"({"a": 1, "b": {"c": "2"}})",
+                                 "Insert nested key into existing parent"},
+
                 JsonSetTestParam{
                         R"({"a": 1})", {{"$.a", "2"}, {"$.b", "3"}}, R"({"a": "2", "b": "3"})", "Chained updates"},
+
                 JsonSetTestParam{"SQL_NULL", {{"$.a", "1"}}, "SQL_NULL", "Input is SQL NULL"},
                 JsonSetTestParam{R"({"a": 1})", {{"SQL_NULL", "1"}}, "SQL_NULL", "Path is SQL NULL"},
                 JsonSetTestParam{R"({"a": 1})", {{"$.a", "SQL_NULL"}}, "SQL_NULL", "Value is SQL NULL"},
-                JsonSetTestParam{"null",
-                                 {{"$.a", "1"}},
-                                 "null",
-                                 "Input is JSON null (should return JSON null or NULL based on logic)"},
+                JsonSetTestParam{"null", {{"$.a", "1"}}, "null", "Input is JSON null"},
+
                 JsonSetTestParam{R"({"a": 1})", {{"$", R"({"b": 2})"}}, R"({"b": 2})", "Replace root"},
+                JsonSetTestParam{R"([1, 2])", {{"$[0]", "3"}}, R"(["3", 2])", "Update root array index"},
+                JsonSetTestParam{R"([1, 2])", {{"$[5]", "3"}}, R"([1, 2, "3"])", "Append to root array"},
+
+                JsonSetTestParam{
+                        R"({"a": [1]})", {{"$.a[0]", "2"}}, R"({"a": ["2"]})", "Exact index match in object array"},
                 JsonSetTestParam{R"({"a": 1})",
                                  {{"$[0]", "1"}},
                                  R"({"a": 1})",
