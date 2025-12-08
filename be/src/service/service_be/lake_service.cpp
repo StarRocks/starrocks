@@ -1485,11 +1485,13 @@ void LakeServiceImpl::get_tablet_metadatas(::google::protobuf::RpcController* co
     }
     if (!messages.empty()) {
         LOG(WARNING) << "Get tablet metadatas failed for " << failed_count << " tablets, the first " << messages.size()
-                     << " tablets: " << JoinStrings(messages, "; ");
+                     << " tablets: [" << JoinStrings(messages, "; ") << "]";
     }
 }
 
 // Repair bundling or non-bundling tablet metadata for all tablets in one physical partition.
+// Receieve a list of tablet metadatas sent from FE, and update the metadatas through the tablet manager
+// based on whether file bundling is enabled.
 // This function supports concurrent processing of tablet metadata repair tasks.
 void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* controller,
                                              const ::starrocks::RepairTabletMetadataRequest* request,
@@ -1623,7 +1625,8 @@ void LakeServiceImpl::repair_tablet_metadata(::google::protobuf::RpcController* 
     if (!messages.empty()) {
         std::string file_bundling_msg = enable_file_bundling ? "bundling" : "non-bundling";
         LOG(WARNING) << "Repair " << file_bundling_msg << " tablet metadata failed for " << failed_count
-                     << " tablets, the first " << messages.size() << " tablets: " << JoinStrings(messages, "; ");
+                     << " tablets, the first " << messages.size() << " tablets: [" << JoinStrings(messages, "; ")
+                     << "]";
     }
 }
 
