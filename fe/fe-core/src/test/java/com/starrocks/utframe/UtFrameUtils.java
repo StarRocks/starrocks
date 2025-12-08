@@ -43,6 +43,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import com.staros.starlet.StarletAgentFactory;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
@@ -66,6 +67,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
@@ -1559,5 +1561,22 @@ public class UtFrameUtils {
         Assertions.assertNotNull(optExpression);
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(optExpression);
         return scanOperators;
+    }
+
+    public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
+        schemaChangeHandler.setStop();
+        schemaChangeHandler.interrupt();
+        long endTime = System.currentTimeMillis() + timeoutMs;
+        while (schemaChangeHandler.isRunning()) {
+            if (System.currentTimeMillis() > endTime) {
+                throw new TimeoutException(String.format("failed to stop SchemaChangeHandler after %s ms", timeoutMs));
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                throw new Exception("stopping SchemaChangeHandler is interrupted");
+            }
+        }
     }
 }

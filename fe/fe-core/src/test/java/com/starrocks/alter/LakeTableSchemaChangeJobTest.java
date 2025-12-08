@@ -68,16 +68,7 @@ public class LakeTableSchemaChangeJobTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
-        // Schema change job is executed manually, so stop the schema change daemon to avoid interfering with the test.
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
-        schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
-        long startTime = System.currentTimeMillis();
-        while (schemaChangeHandler.isRunning()) {
-            Thread.sleep(100);
-            Assertions.assertTrue(System.currentTimeMillis() - startTime < 60000,
-                    "Schema change handler is not stopped in 60 seconds");
-        }
+        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {

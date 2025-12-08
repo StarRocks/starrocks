@@ -128,7 +128,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected abstract TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
                                                                 MaterializedIndex index, long nodeId, Set<Long> tablets);
 
-    protected abstract void updateCatalog(Database db, LakeTable table);
+    protected abstract void updateCatalog(Database db, LakeTable table, boolean isReplay);
 
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
@@ -211,7 +211,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
-            updateCatalog(db, table);
+            updateCatalog(db, table, false);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -526,7 +526,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
                 updateVisibleVersion(table);
-                updateCatalog(db, table);
+                updateCatalog(db, table, true);
                 table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
                 table.setState(OlapTable.OlapTableState.NORMAL);
