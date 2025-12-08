@@ -105,6 +105,10 @@ void BalancedChunkBuffer::set_finished(int buffer_index) {
 
 void BalancedChunkBuffer::update_limiter(Chunk* chunk) {
     static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
+    if (chunk == nullptr || chunk->num_rows() == 0) {
+        return;
+    }
+
     // Update local counters.
     LimiterContext& ctx = _limiter_context;
     ctx.local_sum_row_bytes += chunk->memory_usage();
