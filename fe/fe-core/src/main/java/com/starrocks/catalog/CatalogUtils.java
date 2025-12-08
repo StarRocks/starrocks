@@ -279,8 +279,12 @@ public class CatalogUtils {
         }
     }
 
-    public static void checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
-                                                                    boolean isTemp)
+    /**
+     * Check if partition values already exist in the table for list partition.
+     * @return true if partition values already exist (duplicate), false otherwise
+     */
+    public static boolean checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc,
+                                                                       boolean isTemp)
             throws DdlException {
         try {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
@@ -319,18 +323,19 @@ public class CatalogUtils {
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
                     if (existingValues.contains(item)) {
-                        throw new DdlException("Duplicate partition value " + item.getStringValue());
+                        return true;
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
                 int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
-                checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
+                return isItemValuesExist(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+        return false;
     }
 
     /**
@@ -359,10 +364,14 @@ public class CatalogUtils {
         return partitionName.substring(0, underscoreIndex + 1);
     }
 
-    private static void checkItemValuesValid(int partitionColSize, Set<Long> partitionIds,
+    /**
+     * Check if multi-item partition values already exist.
+     * @return true if values already exist (duplicate), false otherwise
+     */
+    private static boolean isItemValuesExist(int partitionColSize, Set<Long> partitionIds,
                                              Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues,
                                              MultiItemListPartitionDesc multiItemListPartitionDesc)
-            throws AnalysisException, DdlException {
+            throws AnalysisException {
         List<Map<LiteralExpr, Set<Long>>> valueToIdIndexList = new ArrayList<>();
         for (int i = 0; i < partitionColSize; ++i) {
             valueToIdIndexList.add(new HashMap<>());
@@ -416,11 +425,11 @@ public class CatalogUtils {
                 }
             }
             if (!isValid) {
-                List<String> multiValues = values.stream().map(LiteralExpr::getStringValue)
-                        .collect(Collectors.toList());
-                throw new DdlException("Duplicate values " + "(" + String.join(",", multiValues) + ") ");
+                // Values already exist (duplicate)
+                return true;
             }
         }
+        return false;
     }
 
     public static int divisibleBucketNum(int backendNum) {
