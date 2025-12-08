@@ -314,9 +314,6 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Check if need to re-update thirdparty
-        if: always() && env.PRE_COMMIT_CONCLUSION == 'success'
-
       - name: Download BE Path Filter Artifact
         uses: dawidd6/action-download-artifact@v6
         with:
