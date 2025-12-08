@@ -301,10 +301,16 @@ public class StatisticUtils {
             return true;
         }
         if (Config.statistic_partition_healthy_v2) {
-            long currentRowCount = partition.getRowCount();
-            double relativeError = 1.0 * Math.abs(statsRowCount - currentRowCount) /
-                    (double) (currentRowCount > 0 ? currentRowCount : 1);
-            return relativeError <= 1 - Config.statistic_partition_health__v2_threshold;
+            double currentRowCount = partition.getRowCount() > 0 ? partition.getRowCount() : 1;
+            double relativeError = Math.abs(statsRowCount - currentRowCount) / currentRowCount;
+            // changes > 5%
+            if (relativeError > 1 - Config.statistic_partition_health__v2_threshold) {
+                return false;
+            }
+            // updated > 5%
+            long modifiedRows = stats.getUpdateModifiedRows();
+            relativeError = 1.0 * modifiedRows / currentRowCount;
+            return relativeError <= (1 - Config.statistic_partition_health__v2_threshold);
         } else {
             return stats.isUpdatedAfterLoad(getPartitionLastUpdateTime(partition));
         }

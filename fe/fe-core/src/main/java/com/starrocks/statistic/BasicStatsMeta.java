@@ -84,6 +84,12 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("deltaRows")
     private long deltaRows;
 
+    // Every time data is updated (UPDATE statement), it will be appended.
+    // Every time tablet stats is synchronized, it will be reset to 0.
+    // This is used to track UPDATE operations where row count doesn't change but data is modified.
+    @SerializedName("updateModifiedRows")
+    private long updateModifiedRows;
+
     // TODO: use ColumnId
     @SerializedName("columnStats")
     private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
@@ -164,7 +170,9 @@ public class BasicStatsMeta implements Writable {
         if (tableUpdateTime.isBefore(tabletStatsReportTime) && metrics.unhealthyPartitionCount == 0) {
             return 1;
         } else if (metrics.unhealthyPartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
-            updateRatio = (metrics.updatePartitionRowCountForCalc * 1.0) / metrics.tableRowCount;
+            // Consider both INSERT/DELETE row changes and UPDATE modified rows
+            long totalChangedRows = metrics.updatePartitionRowCountForCalc + metrics.updateModifiedRowCount;
+            updateRatio = (totalChangedRows * 1.0) / metrics.tableRowCount;
         } else {
             double rowUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.tableRowCount;
             double partitionUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.totalPartitionCount;
@@ -203,7 +211,8 @@ public class BasicStatsMeta implements Writable {
                 Math.max(tableRowCount + deltaRows, totalRows) - cachedTableRowCount);
 
         return new TableHealthyMetrics(tableRowCount, cachedTableRowCount, totalPartitionCount, unhealthyPartitionCount,
-                unhealthyPartitionRowCount, unhealthyPartitionDataSize, updatePartitionRowCount, deltaRows);
+                unhealthyPartitionRowCount, unhealthyPartitionDataSize, updatePartitionRowCount, deltaRows,
+                updateModifiedRows);
     }
 
     public long getTotalRows() {
@@ -302,6 +311,18 @@ public class BasicStatsMeta implements Writable {
         this.deltaRows = 0;
     }
 
+    public long getUpdateModifiedRows() {
+        return updateModifiedRows;
+    }
+
+    public void increaseUpdateModifiedRows(Long modifiedRows) {
+        this.updateModifiedRows += modifiedRows;
+    }
+
+    public void resetUpdateModifiedRows() {
+        this.updateModifiedRows = 0;
+    }
+
     public BasicStatsMeta clone() {
         String json = GsonUtils.GSON.toJson(this);
         return GsonUtils.GSON.fromJson(json, BasicStatsMeta.class);
@@ -316,11 +337,13 @@ public class BasicStatsMeta implements Writable {
         public long unhealthyPartitionDataSize;
         public long updatePartitionRowCountForCalc;
         public long deltaRowCount;
+        public long updateModifiedRowCount;
 
         public TableHealthyMetrics(long tableRowCount, long tableRowCountInStatistics,
                                    long totalPartitionCount, long unhealthyPartitionCount,
                                    long unhealthyPartitionRowCount, long unhealthyPartitionDataSize,
-                                   long updatePartitionRowCountForCalc, long deltaRowCount) {
+                                   long updatePartitionRowCountForCalc, long deltaRowCount,
+                                   long updateModifiedRowCount) {
             this.tableRowCount = tableRowCount;
             this.tableRowCountInStatistics = tableRowCountInStatistics;
             this.totalPartitionCount = totalPartitionCount;
@@ -329,6 +352,7 @@ public class BasicStatsMeta implements Writable {
             this.unhealthyPartitionDataSize = unhealthyPartitionDataSize;
             this.updatePartitionRowCountForCalc = updatePartitionRowCountForCalc;
             this.deltaRowCount = deltaRowCount;
+            this.updateModifiedRowCount = updateModifiedRowCount;
 
         }
 
@@ -343,6 +367,7 @@ public class BasicStatsMeta implements Writable {
                     .add("unhealthyPartitionDataSize=" + new ByteSizeValue(unhealthyPartitionDataSize).getKb() + "KB")
                     .add("updatePartitionRowCountForCalc=" + updatePartitionRowCountForCalc)
                     .add("deltaRowCount=" + deltaRowCount)
+                    .add("updateModifiedRowCount=" + updateModifiedRowCount)
                     .toString();
         }
     }
