@@ -42,11 +42,13 @@ public class LoadJobStatsListener implements LoadJobListener {
 
     @Override
     public void onStreamLoadTransactionFinish(TransactionState transactionState) {
+        updateLoadedRows(transactionState, DmlType.INSERT_INTO);
         onTransactionFinish(transactionState, false);
     }
 
     @Override
     public void onLoadJobTransactionFinish(TransactionState transactionState) {
+        updateLoadedRows(transactionState, DmlType.INSERT_INTO);
         // For compatibility reasons, broker load still uses async collect.
         onTransactionFinish(transactionState, false);
     }
@@ -54,6 +56,7 @@ public class LoadJobStatsListener implements LoadJobListener {
     @Override
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
                                               DmlType dmlType) {
+        updateLoadedRows(transactionState, dmlType);
         if (dmlType != DmlType.INSERT_OVERWRITE && needTrigger()) {
             StatisticUtils.triggerCollectionOnFirstLoad(transactionState, db, table, true, true);
         }
@@ -63,6 +66,14 @@ public class LoadJobStatsListener implements LoadJobListener {
     public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
         if (needTrigger()) {
             StatisticUtils.triggerCollectionOnInsertOverwrite(stats, db, table, true, true);
+        }
+    }
+
+    private void updateLoadedRows(TransactionState transactionState, DmlType dmlType) {
+        try {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState, dmlType);
+        } catch (Throwable t) {
+            LOG.warn("update load rows failed for txn: {}", transactionState, t);
         }
     }
 
