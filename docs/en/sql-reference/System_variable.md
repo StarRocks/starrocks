@@ -959,6 +959,49 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: false
 * **Introduced in**: v3.1.9, v3.2.5, v3.3.0
 
+### interpolate_passthrough
+
+* **Description**: For certain operators, whether to add local-exchange-passthrough (currently supported operators include streaming aggregates, etc.). Adding local-exchange can mitigate the impact of data skew on computation.However, it will slightly increase memory usage. 
+* **Default**: true
+* **Introduced in**: v3.2
+
+### enable_per_bucket_optimize
+
+* **Description**: Enable bucketed computation. When enabled, stage-one aggregation can be computed in bucketed order. This reduces memory usage.
+* **Default**: true
+* **Introduced in**: v3.0
+
+### enable_group_execution
+
+* **Description**: Colocate group execution is an execution pattern that leverages physical data partitioning, where a fixed number of threads sequentially process their respective data ranges to enhance locality and throughput. It can reduce memory usage.
+* **Default**: true
+* **Introduced in**: v3.3
+
+### group_execution_max_groups
+
+* **Description**: Maximum number of groups allowed for Group Execution.
+Used to limit the granularity of splitting, preventing excessive scheduling overhead caused by an excessive number of groups.
+* **Default**: 128
+* **Introduced in**: v3.3
+
+### group_execution_min_scan_rows
+
+* **Description**: group execution Minimum number of rows processed per group.
+* **Default**: 5000000
+* **Introduced in**: v3.3
+
+### enable_parallel_merge
+
+* **Description**: Whether to enable parallel merge for sorting. When enabled, the merge phase of sorting will utilize multiple threads for merge operations.
+* **Default**: true
+* **Introduced in**: v3.3
+
+### parallel_merge_late_materialization_mode
+
+* **Description**: parallel merge late materialization mode. Available options: AUTO/ALWAYS/NEVER
+* **Default**: AUTO
+* **Introduced in**: v3.3
+
 ### enable_wait_dependent_event
 
 * **Description**: Whether Pipeline waits for a dependent operator to finish execution before continuing within the same fragment. For example, in a left join query, when this feature is enabled, the probe-side operator waits for the build-side operator to finish before it starts executing. Enabling this feature can reduce memory usage, but may increase the query latency. However, for queries reused in CTE, enabling this feature may increase memory usage.

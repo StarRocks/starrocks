@@ -686,6 +686,48 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.1.9，v3.2.5，v3.3.0
 
+### interpolate_passthrough
+
+* 描述：对于某些算子是否查询 local-exchang-passthrough (当前支持算子包括 streaming aggregates等。添加local-exchange-passthrough 会降低数据倾斜的影响，但是会稍微增加部分内存使用。
+* 默认值：true
+* 引入版本：v3.2
+
+### interpolate_passthrough
+
+* 描述：是否开启分桶计算。开启后对于一阶段聚合可以按照分桶顺序计算。降低内存使用。
+* 默认值：true
+* 引入版本：v3.0
+
+### enable_group_execution
+
+* 描述：Colocate group execution 是一种利用物理数据分区的执行模式，其中固定数量的线程依次处理各自的数据范围，以增强局部性和吞吐量。该模式可降低内存使用量。
+* 默认值：true
+* 引入版本：v3.3
+
+### group_execution_max_groups
+
+* 描述：group execution 允许的最大组数。用于限制拆分粒度，防止因组数过多导致过度的调度开销。
+* 默认值：128
+* 引入版本：v3.3
+
+### group_execution_min_scan_rows
+
+* 描述：分组执行每组处理的最小行数
+* 默认值：5000000
+* 引入版本：v3.3
+
+### enable_parallel_merge
+
+* 描述：是否启用排序的并行合并。启用后，排序的合并阶段将使用多个线程进行合并操作。
+* 默认值：true
+* 引入版本：v3.3
+
+### parallel_merge_late_materialization_mode
+
+* 描述：并行合并延迟物化模式。可用选项：AUTO/ALWAYS/NEVER
+* 默认值：AUTO
+* 引入版本：v3.3
+
 ### enable_wait_dependent_event
 
 * 描述: 在同一 Fragment 内，Pipeline 是否等待依赖的 Operator 完成执行后再继续执行。例如，在 Left Join 查询中，当启用此功能时，Probe Side Operator 会在 Build Side Operator 完成执行后再开始执行。启用此功能可减少内存使用，但可能增加查询延迟。然而，对于在CTE中重用的查询，启用此功能可能增加内存使用。
