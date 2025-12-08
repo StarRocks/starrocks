@@ -350,11 +350,7 @@ private:
     TUniqueId _fragment_instance_id;
     std::string _custom_coredump_msg{};
     int32_t _driver_id = 0;
-<<<<<<< HEAD
-=======
-    int32_t _lwp_id = 0;
     int32_t _plan_node_id = -1;
->>>>>>> 30b86cef42 ([Enhancement] dump plan node id in crash log (#66454))
     bool _check = true;
     bool _reserve_mod = false;
 };
