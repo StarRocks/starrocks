@@ -374,7 +374,7 @@ public class MvPartitionCompensator {
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-        MVCompensation mvCompensation = mvContext.getMvCompensation();
+        MVCompensation mvCompensation = mvContext.getMvCompensation(queryExpression);
         if (mvCompensation.getState().isNoRewrite()) {
             return null;
         }

@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartiti
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
 import org.apache.commons.collections4.SetUtils;
 
 import java.util.Collections;
@@ -47,6 +48,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -93,11 +95,90 @@ public class MaterializationContext {
 
     //// Caches for the mv rewrite lifecycle
 
+
+    /**
+     * TableOptProfile is used to describe a table's compensation profile for the input query opt expression,
+     * it contains:
+     * 1. table: the table object
+     * 2. partitionIds: the selected partition ids from the query opt expression for this table
+     * 3. partitionPredicates: the partition predicates from the query opt expression for
+     */
+    public static class TableOptProfile {
+        private final Table table;
+        private final Set<Long> partitionIds;
+        private final Set<ScalarOperator> partitionPredicates;
+
+        public TableOptProfile(Table table, Set<Long> partitionIds, Set<ScalarOperator> partitionPredicates) {
+            this.table = table;
+            this.partitionIds = partitionIds;
+            this.partitionPredicates = partitionPredicates;
+        }
+
+        public Table getTable() {
+            return table;
+        }
+
+        public Set<Long> getPartitionIds() {
+            return partitionIds;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(table, partitionIds, partitionPredicates);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            TableOptProfile other = (TableOptProfile) obj;
+            return Objects.equals(table, other.table)
+                    && Objects.equals(partitionIds, other.partitionIds)
+                    && Objects.equals(partitionPredicates, other.partitionPredicates);
+        }
+    }
+
+    /**
+     * QueryOptProfile is used to describe a query's compensation profile for the input mv,
+     * it contains:
+     * 1. tableOptProfiles: the set of TableOptProfile for all tables in
+     */
+    public static class QueryOptProfile {
+        private final Set<TableOptProfile> tableOptProfiles;
+
+        public QueryOptProfile(Set<TableOptProfile> tableOptProfiles) {
+            this.tableOptProfiles = tableOptProfiles;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(tableOptProfiles);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            QueryOptProfile other = (QueryOptProfile) obj;
+            return Objects.equals(tableOptProfiles, other.tableOptProfiles);
+        }
+    }
     // Cache whether to need to compensate partition predicates or not, and it's not changed
     // during one query, so it's safe to cache it and be used for each optimizer rule.
     // But it is different for each materialized view, compensate partition predicate from the plan's
     // `selectedPartitionIds`, and check `isNeedCompensatePartitionPredicate` to get more information.
-    private MVCompensation mvCompensation = null;
+    // NOTE:
+    // The same tables with different partition predicates and selected partition ids can lead to different
+    // MV compensation results, so we cache the compensation results for each query optimization profile.
+    private Map<QueryOptProfile, MVCompensation> queryToMVCompensationMap = Maps.newHashMap();
 
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<LogicalScanOperator, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
@@ -481,27 +562,40 @@ public class MaterializationContext {
      * </p>
      */
     public MVCompensation getOrInitMVCompensation(OptExpression queryExpression) {
-        if (mvCompensation == null) {
+        QueryOptProfile queryOptProfile = MVCompensationBuilder.buildQueryOptProfile(mv, queryExpression);
+        MVCompensation cachedCompensation = queryToMVCompensationMap.get(queryOptProfile);
+        if (cachedCompensation == null) {
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
-            this.mvCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
-            logMVRewrite(mv.getName(), "MV compensation: {}", mvCompensation);
+            MVCompensation mvCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
+            logMVRewrite(mv.getName(), "Construct a new MV compensation: {}", mvCompensation);
+            queryToMVCompensationMap.put(queryOptProfile, mvCompensation);
+            return mvCompensation;
+        } else {
+            logMVRewrite(mv.getName(), "Find a MV compensation: {}", cachedCompensation);
+            return cachedCompensation;
         }
-        return this.mvCompensation;
-    }
-
-    public MVCompensation getMvCompensation() {
-        Preconditions.checkArgument(mvCompensation != null,
-                "MV compensation should be initialized before used");
-        return mvCompensation;
     }
 
     /**
+     * NOTE: This method should be called after mv's compensate has been initialized.
+     */
+    public MVCompensation getMvCompensation(OptExpression queryExpression) {
+        return getOrInitMVCompensation(queryExpression);
+    }
+
+    /**
+     * NOTE: This method should be called after mv's compensate has been initialized.
      * Check the mv context can be used for rewrite:
      * - if mv compensation's state is no rewrite, return false
      * - if mv compensation's state is unkwown & check mode is checked, return false
      * - otherwise return true.
      */
-    public boolean isNoRewrite() {
+    public boolean isNoRewrite(OptExpression queryExpression) {
+        MVCompensation mvCompensation = getOrInitMVCompensation(queryExpression);
+        return isMVCompensateNoRewrite(mvCompensation);
+    }
+
+    private boolean isMVCompensateNoRewrite(MVCompensation mvCompensation) {
         Preconditions.checkArgument(mvCompensation != null,
                 "MV compensation should be initialized before used");
         if (mvCompensation.getState().isNoRewrite()) {
