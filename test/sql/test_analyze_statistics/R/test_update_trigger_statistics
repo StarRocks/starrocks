@@ -9,13 +9,11 @@ USE test_update_trigger_statistics;
 -- result:
 -- !result
 CREATE TABLE test_update_stats (
-    k1 int,
     k2 int,
     k3 varchar(20)
 ) 
-PRIMARY KEY (k1)
-PARTITION BY (k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 1
+PRIMARY KEY (k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
 PROPERTIES ( "replication_num" = "1");
 -- result:
 -- !result
@@ -36,49 +34,40 @@ order by StartTime desc limit 1;
 delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
 -- result:
 -- !result
-insert into test_update_stats select 1, generate_series, 'data' from table(generate_series(1, 1000000));
+insert into test_update_stats select generate_series, 'data' from table(generate_series(1, 1000000));
 -- result:
 -- !result
 select * from statistic_verify order by column_name;
 -- result:
-k1	p1	1	1	1
-k2	p1	1	999424	999424
-k3	p1	1	data	data
+k2	test_update_stats	1000000	1000000	1
+k3	test_update_stats	1000000	data	data
 -- !result
-update test_update_stats set k3 = 'updated1' where k1 = 1 and k2 < 500;
+update test_update_stats set k3 = '1updated' where k2 < 500;
 -- result:
 -- !result
 select * from statistic_verify order by column_name;
 -- result:
-k1	p1	1	1	1
-k2	p1	1	999424	999424
-k3	p1	1	data	data
+k2	test_update_stats	1000000	1000000	1
+k3	test_update_stats	1000000	data	1updated
 -- !result
-update test_update_stats set k3 = 'updated2' where k2 < 100000;
+update test_update_stats set k3 = '2updated2' where k2 < 10000;
 -- result:
 -- !result
 select * from statistic_verify order by column_name;
 -- result:
-k1	p1	1	1	1
-k2	p1	1	999424	999424
-k3	p1	1	data	data
--- !result
-select * from analyze_status_verify;
--- result:
-test_update_stats	ALL	SAMPLE
--- !result
-update test_update_stats set k3 = 'updated3' where k1 = 1;
--- result:
--- !result
-select * from statistic_verify order by column_name;
--- result:
-k1	p1	1	1	1
-k2	p1	1	999424	999424
-k3	p1	1	updated3	updated3
+k2	test_update_stats	1000000	1000000	1
+k3	test_update_stats	1000000	data	2updated2
 -- !result
 select * from analyze_status_verify;
 -- result:
 test_update_stats	ALL	FULL
+-- !result
+update test_update_stats set k3 = '3updated3' where k2 < 1000000000;
+-- result:
+-- !result
+select * from analyze_status_verify;
+-- result:
+test_update_stats	ALL	SAMPLE
 -- !result
 drop table test_update_stats;
 -- result:

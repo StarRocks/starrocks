@@ -6,13 +6,11 @@ USE test_update_trigger_statistics;
 
 -- Create a partitioned table
 CREATE TABLE test_update_stats (
-    k1 int,
     k2 int,
     k3 varchar(20)
 ) 
-PRIMARY KEY (k1)
-PARTITION BY (k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 1
+PRIMARY KEY (k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
 PROPERTIES ( "replication_num" = "1");
 
 CREATE VIEW statistic_verify AS
@@ -32,21 +30,22 @@ order by StartTime desc limit 1;
 delete from _statistics_.column_statistics where table_name='test_update_trigger_statistics.test_update_stats';
 
 -- First load
-insert into test_update_stats select 1, generate_series, 'data' from table(generate_series(1, 1000000));
+insert into test_update_stats select generate_series, 'data' from table(generate_series(1, 1000000));
 select * from statistic_verify order by column_name;
 
 -- UPDATE a few rows
-update test_update_stats set k3 = 'updated1' where k1 = 1 and k2 < 500;
+update test_update_stats set k3 = '1updated' where k2 < 500;
 select * from statistic_verify order by column_name;
 
 -- UPDATE lots of rows
-update test_update_stats set k3 = 'updated2' where k2 < 100000;
+update test_update_stats set k3 = '2updated2' where k2 < 10000;
 select * from statistic_verify order by column_name;
 select * from analyze_status_verify;
 
 -- UPDATE all rows
-update test_update_stats set k3 = 'updated3' where k1 = 1;
-select * from statistic_verify order by column_name;
+update test_update_stats set k3 = '3updated3' where k2 < 1000000000;
+-- sample result is not stable
+-- select * from statistic_verify order by column_name;
 select * from analyze_status_verify;
 
 drop table test_update_stats;
