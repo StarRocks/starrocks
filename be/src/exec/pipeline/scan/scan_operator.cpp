@@ -450,6 +450,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+            SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
