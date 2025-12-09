@@ -14,11 +14,10 @@
 
 #include "column/json_column.h"
 
-#include <sstream>
-#include <type_traits>
+#include <velocypack/Slice.h>
 
-#include "column/bytes.h"
-#include "column/column_helper.h"
+#include <sstream>
+
 #include "column/column_view/column_view.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -26,7 +25,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
