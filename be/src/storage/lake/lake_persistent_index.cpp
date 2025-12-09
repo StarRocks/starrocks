@@ -163,6 +163,7 @@ Status KeyValueMerger::flush() {
         if (_output_builders.empty() ||
             (_enable_multiple_output_files &&
              _output_builders.back().table_builder->FileSize() >= config::pk_index_target_file_size)) {
+            // Create a new sst file when current file is empty or exceed target size.
             RETURN_IF_ERROR(create_table_builder());
         }
         RETURN_IF_ERROR(

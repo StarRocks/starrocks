@@ -896,6 +896,7 @@ void ExecEnv::destroy() {
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
+    _parallel_compact_mgr.reset();
     _pk_index_get_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();
     _metrics = nullptr;

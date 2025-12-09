@@ -62,7 +62,7 @@ public:
 
     struct KeyValueMergerOutput {
         std::string filename;
-        uint64_t filesize;
+        uint64_t filesize = 0;
         std::string encryption_meta;
         std::string start_key;
         std::string end_key;
