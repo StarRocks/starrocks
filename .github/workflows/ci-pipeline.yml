@@ -213,7 +213,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
           
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -250,7 +251,9 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: path-filter-commit
         with:
-          base: HEAD~1
+          list-files: shell
+          base: ${{ github.event.pull_request.head.sha }}~1
+          ref: ${{ github.event.pull_request.head.sha }}
           filters: |
             be:
               - 'be/!(test)**'
@@ -792,6 +795,7 @@ jobs:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          exit 1
 
       - name: check sync
         id: check-sync
