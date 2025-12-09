@@ -337,7 +337,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
                                               std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
-        
+
         // Check if this is a virtual column
         if (slot->col_name() == "_tablet_id_") {
             // Virtual column, skip tablet schema lookup
@@ -345,7 +345,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             _query_slots.push_back(slot);
             continue;
         }
-        
+
         int32_t index;
         if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
             index = _tablet_schema->num_columns();
@@ -369,7 +369,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
     std::sort(scanner_columns.begin(), scanner_columns.end());
-    
+
     // If scanner_columns is empty (only virtual columns selected), we need to read at least
     // one column to determine the number of rows. Use the first key column for this purpose.
     if (scanner_columns.empty()) {
@@ -381,7 +381,8 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
             // If no key columns, use the first column
             scanner_columns.push_back(0);
         } else {
-            return Status::InternalError("failed to build storage scanner, no materialized slot and no columns in table!");
+            return Status::InternalError(
+                    "failed to build storage scanner, no materialized slot and no columns in table!");
         }
     }
 
@@ -612,7 +613,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), std::move(rowsets), &_tablet_schema);
     _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
-    
+
     // Check if virtual columns are requested
     bool has_virtual_columns = false;
     for (auto slot : *_slots) {
@@ -621,7 +622,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
             break;
         }
     }
-    
+
     if (reader_columns.size() == scanner_columns.size() && !has_virtual_columns) {
         _prj_iter = _reader;
     } else {
@@ -719,7 +720,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
                 chunk->set_slot_id_to_index(slot->id(), column_index);
             }
         }
-        
+
         // Then, handle virtual columns
         // Virtual columns are not in the chunk's schema, so we append them directly using slot_id
         for (auto slot : _query_slots) {
@@ -733,7 +734,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
                     int64_t tablet_id = _scan_range->tablet_id;
                     std::fill(data.begin(), data.end(), tablet_id);
                 }
-                
+
                 // Append the virtual column to the chunk using slot_id
                 // This doesn't require the column to be in the schema
                 chunk->append_column(tablet_id_column, slot->id());
