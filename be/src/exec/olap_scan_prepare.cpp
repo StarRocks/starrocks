@@ -1214,7 +1214,12 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
                                                               ColumnPredicatePtrs& col_preds_owner) {
     auto process_filter_conditions = [&]<typename ConditionType>(const std::vector<ConditionType>& filters) {
         for (const auto& filter : filters) {
-            ASSIGN_OR_RETURN(auto raw_p, parser->parse_thrift_cond(filter));
+            auto raw_p_or = parser->parse_thrift_cond(filter);
+            // Skip virtual columns that cannot be pushed down
+            if (!raw_p_or.ok() && raw_p_or.status().is_not_supported()) {
+                continue;
+            }
+            ASSIGN_OR_RETURN(auto raw_p, raw_p_or);
             std::unique_ptr<ColumnPredicate> p(raw_p);
             p->set_index_filter_only(filter.is_index_filter_only);
             col_preds_owner.emplace_back(std::move(p));
@@ -1228,7 +1233,12 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     }
 
     for (auto& f : is_null_vector) {
-        ASSIGN_OR_RETURN(auto raw_p, parser->parse_thrift_cond(f));
+        auto raw_p_or = parser->parse_thrift_cond(f);
+        // Skip virtual columns that cannot be pushed down
+        if (!raw_p_or.ok() && raw_p_or.status().is_not_supported()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto raw_p, raw_p_or);
         std::unique_ptr<ColumnPredicate> p(raw_p);
         col_preds_owner.emplace_back(std::move(p));
     }
@@ -1237,7 +1247,12 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
     for (auto& [slot_index, expr_ctxs] : slot_index_to_expr_ctxs) {
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
-            ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, _opts.runtime_state, ctx));
+            auto tmp_or = parser->parse_expr_ctx(*slot_desc, _opts.runtime_state, ctx);
+            // Skip virtual columns that cannot be pushed down
+            if (!tmp_or.ok() && tmp_or.status().is_not_supported()) {
+                continue;
+            }
+            ASSIGN_OR_RETURN(auto tmp, tmp_or);
             std::unique_ptr<ColumnPredicate> p(std::move(tmp));
             if (p == nullptr) {
                 std::stringstream ss;
@@ -1262,6 +1277,10 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             }
             auto slot_desc = _opts.tuple_desc->get_slot_by_id(slot_id);
             if (slot_desc == nullptr) {
+                continue;
+            }
+            // Skip virtual columns that cannot be pushed down
+            if (slot_desc->col_name() == "_tablet_id_") {
                 continue;
             }
             if (desc->is_stream_build_filter()) {

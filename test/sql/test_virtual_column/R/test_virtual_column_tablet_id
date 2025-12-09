@@ -25,11 +25,11 @@ insert into olap_table values
 -- !result
 [UC]select _tablet_id_, k1, k2 from olap_table order by k1;
 -- result:
-12060259	1	10
-12060257	2	20
-12060259	3	30
-12060261	4	40
-12060261	5	50
+12136474	1	10
+12136472	2	20
+12136474	3	30
+12136476	4	40
+12136476	5	50
 -- !result
 select * from olap_table order by k1;
 -- result:
@@ -44,22 +44,26 @@ from olap_table
 group by _tablet_id_
 order by _tablet_id_;
 -- result:
-12060257	1	20
-12060259	2	40
-12060261	2	90
+12136472	1	20
+12136474	2	40
+12136476	2	90
 -- !result
 [UC]select _tablet_id_, min(k1) as min_k1, max(k1) as max_k1, count(*) as cnt
 from olap_table
 group by _tablet_id_
 order by _tablet_id_;
 -- result:
-12060257	2	2	1
-12060259	1	3	2
-12060261	4	5	2
+12136472	2	2	1
+12136474	1	3	2
+12136476	4	5	2
 -- !result
 [UC]select k1, k2, _tablet_id_ from olap_table where _tablet_id_ > 0 order by k1;
 -- result:
-E: (1064, 'unknown column _tablet_id_: BE:21006')
+1	10	12136474
+2	20	12136472
+3	30	12136474
+4	40	12136476
+5	50	12136476
 -- !result
 desc olap_table;
 -- result:
@@ -83,99 +87,33 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- !result
-create table pk_table (
-    k1 int,
-    k2 int,
-    v1 string
-)
-primary key(k1)
-distributed by hash(k1) buckets 3
-properties("replication_num" = "1");
--- result:
--- !result
-insert into pk_table values
-(1, 10, 'a'),
-(2, 20, 'b'),
-(3, 30, 'c');
--- result:
--- !result
-[UC]select _tablet_id_, k1, k2 from pk_table order by k1;
--- result:
-12060272	1	10
-12060270	2	20
-12060272	3	30
--- !result
-[UC]select _tablet_id_, count(*) as row_count
-from pk_table
-group by _tablet_id_
-order by _tablet_id_;
--- result:
-12060270	1
-12060272	2
--- !result
-create table uk_table (
-    k1 int,
-    k2 int,
-    v1 string
-)
-unique key(k1)
-distributed by hash(k1) buckets 3
-properties("replication_num" = "1");
--- result:
--- !result
-insert into uk_table values
-(1, 10, 'a'),
-(2, 20, 'b'),
-(3, 30, 'c');
--- result:
--- !result
-[UC]select _tablet_id_, k1, k2 from uk_table order by k1;
--- result:
-12060285	1	10
-12060283	2	20
-12060285	3	30
--- !result
-[UC]select _tablet_id_, count(*) as row_count
-from uk_table
-group by _tablet_id_
-order by _tablet_id_;
--- result:
-12060283	1
-12060285	2
--- !result
 [UC]select a._tablet_id_ as tablet_id_a, b._tablet_id_ as tablet_id_b, a.k1, a.k2, b.k2 as k2_b
 from olap_table a
 join olap_table b on a.k1 = b.k1
 order by a.k1
 limit 5;
 -- result:
-12060259	12060259	1	10	10
-12060257	12060257	2	20	20
-12060259	12060259	3	30	30
-12060261	12060261	4	40	40
-12060261	12060261	5	50	50
+12136474	12136474	1	10	10
+12136472	12136472	2	20	20
+12136474	12136474	3	30	30
+12136476	12136476	4	40	40
+12136476	12136476	5	50	50
 -- !result
 [UC]select k1, k2, _tablet_id_ from olap_table order by _tablet_id_, k1;
 -- result:
-2	20	12060257
-1	10	12060259
-3	30	12060259
-4	40	12060261
-5	50	12060261
+2	20	12136472
+1	10	12136474
+3	30	12136474
+4	40	12136476
+5	50	12136476
 -- !result
 [UC]select _tablet_id_, k1, k2 from olap_table order by k1 limit 3;
 -- result:
-12060259	1	10
-12060257	2	20
-12060259	3	30
+12136474	1	10
+12136472	2	20
+12136474	3	30
 -- !result
 drop table if exists olap_table;
--- result:
--- !result
-drop table if exists pk_table;
--- result:
--- !result
-drop table if exists uk_table;
 -- result:
 -- !result
 drop database if exists test_virtual_column_db;

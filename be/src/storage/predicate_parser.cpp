@@ -27,6 +27,15 @@
 
 namespace starrocks {
 
+namespace {
+// Check if a column name represents a virtual column.
+// Virtual columns are read-only metadata columns that are not persisted.
+// Currently supported: _tablet_id_
+inline bool is_virtual_column(const std::string& column_name) {
+    return column_name == "_tablet_id_";
+}
+} // namespace
+
 ColumnPredicate* PredicateParser::create_column_predicate(const TCondition& condition, TypeInfoPtr& type_info,
                                                           ColumnId index) {
     ColumnPredicate* pred = nullptr;
@@ -125,6 +134,10 @@ bool OlapPredicateParser::can_pushdown(const ConstPredicateNodePtr& pred_tree) c
 
 template <typename ConditionType>
 StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const ConditionType& condition) const {
+    // Virtual columns cannot be pushed down as predicates
+    if (is_virtual_column(condition.column_name)) {
+        return Status::NotSupported("virtual column " + condition.column_name + " cannot be pushed down");
+    }
     const size_t index = _schema->field_index(condition.column_name);
     RETURN_IF(index >= _schema->num_columns(), Status::Unknown("unknown column " + condition.column_name));
     const TabletColumn& col = _schema->column(index);
@@ -152,6 +165,10 @@ StatusOr<ColumnPredicate*> OlapPredicateParser::parse_thrift_cond(const GeneralC
 
 StatusOr<ColumnPredicate*> OlapPredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
                                                                ExprContext* expr_ctx) const {
+    // Virtual columns cannot be pushed down as predicates
+    if (is_virtual_column(slot_desc.col_name())) {
+        return Status::NotSupported("virtual column " + slot_desc.col_name() + " cannot be pushed down");
+    }
     const size_t column_id = _schema->field_index(slot_desc.col_name());
     RETURN_IF(column_id >= _schema->num_columns(), nullptr);
     const TabletColumn& col = _schema->column(column_id);
