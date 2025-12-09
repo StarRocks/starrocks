@@ -127,8 +127,13 @@ public class ResourceGroup {
                     new Column("classifiers", ScalarType.createVarchar(1024)),
                     (rg, classifier) -> classifier.toString()),
             new ColumnMeta(
+<<<<<<< HEAD
                     new Column(MEM_POOL, ScalarType.createVarchar(200)),
                     (rg, classifier) -> rg.getMemPool(), false)
+=======
+                    new Column(MEM_POOL, TypeFactory.createVarchar(200)),
+                    (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false)
+>>>>>>> addddaf7b4 ([BugFix] Fix SHOW VERBOSE RESOURCE GROUP ALL displays NULL for existing resource groups (#65982))
     );
 
     public static final ShowResultSetMetaData META_DATA;
@@ -405,6 +410,9 @@ public class ResourceGroup {
 
     public String getMemPool() {
         return memPool;
+    }
+    public boolean hasDefaultMemPool() {
+        return memPool == null || memPool.equals(DEFAULT_MEM_POOL);
     }
 
     public void setMemPool(String memPool) {
