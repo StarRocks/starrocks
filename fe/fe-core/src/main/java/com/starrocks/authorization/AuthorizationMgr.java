@@ -654,6 +654,7 @@ public class AuthorizationMgr {
                 grantRoleToRole(collection, roleId, parentRoleNames,
                         rolePrivCollectionModified, originalRolePrivCollection);
             } finally {
+                // restore original role privilege collections, so that in-memory state is not changed
                 roleIdToPrivilegeCollection.putAll(originalRolePrivCollection);
             }
 
@@ -672,10 +673,7 @@ public class AuthorizationMgr {
                 for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : rolePrivCollectionModified.entrySet()) {
                     long rId = entry.getKey();
                     RolePrivilegeCollectionV2 rpc = entry.getValue();
-                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(rId)) {
-                        RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(rId);
-                        rpc.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                    }
+                    replacePrivilegeEntryForImmutableBuiltInRole(rId, rpc);
                     roleIdToPrivilegeCollection.put(rId, rpc);
                 }
             });
@@ -848,10 +846,7 @@ public class AuthorizationMgr {
                 for (Map.Entry<Long, RolePrivilegeCollectionV2> entry : rolePrivCollectionModified.entrySet()) {
                     long rId = entry.getKey();
                     RolePrivilegeCollectionV2 rpc = entry.getValue();
-                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(rId)) {
-                        RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(rId);
-                        rpc.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                    }
+                    replacePrivilegeEntryForImmutableBuiltInRole(rId, rpc);
                     roleIdToPrivilegeCollection.put(rId, rpc);
                 }
             });
@@ -1448,11 +1443,7 @@ public class AuthorizationMgr {
                 long roleId = entry.getKey();
                 invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollectionV2 privilegeCollection = entry.getValue();
-
-                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                    RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(roleId);
-                    privilegeCollection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                }
+                replacePrivilegeEntryForImmutableBuiltInRole(roleId, privilegeCollection);
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
 
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
@@ -1462,6 +1453,13 @@ public class AuthorizationMgr {
             }
         } finally {
             roleWriteUnlock();
+        }
+    }
+
+    private void replacePrivilegeEntryForImmutableBuiltInRole(long roleId, RolePrivilegeCollectionV2 rpc) {
+        if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+            RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+            rpc.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
         }
     }
 
@@ -1919,11 +1917,7 @@ public class AuthorizationMgr {
                     // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                     // The reason why need to replay from the image here
                     // is because the associated information of the role-id is stored in the image.
-                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                        RolePrivilegeCollectionV2 builtInRolePrivilegeCollection =
-                                ret.roleIdToPrivilegeCollection.get(roleId);
-                        collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                    }
+                    replacePrivilegeEntryForImmutableBuiltInRole(roleId, collection);
                     ret.roleIdToPrivilegeCollection.put(roleId, collection);
                 });
 
