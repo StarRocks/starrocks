@@ -14,9 +14,13 @@
 
 #include "connector/lake_connector.h"
 
+#include <algorithm>
+#include <sstream>
+#include <unordered_set>
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "column/fixed_length_column.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
@@ -144,9 +148,77 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
+        // First, set slot_id_to_index for regular columns
         for (auto slot : _query_slots) {
-            size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
-            chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
+            if (slot->col_name() != "_tablet_id_") {
+                size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
+                chunk_ptr->set_slot_id_to_index(slot->id(), column_index);
+            }
+        }
+
+        // Then, handle virtual columns
+        // Virtual columns are not in the chunk's schema, so we append them directly using slot_id
+        for (auto slot : _query_slots) {
+            if (slot->col_name() == "_tablet_id_") {
+                // Create a BIGINT column filled with tablet_id for all rows
+                size_t num_rows = chunk_ptr->num_rows();
+                auto tablet_id_column = Int64Column::create();
+                if (num_rows > 0) {
+                    tablet_id_column->resize(num_rows);
+                    auto& data = tablet_id_column->get_data();
+                    int64_t tablet_id = _scan_range.tablet_id;
+                    std::fill(data.begin(), data.end(), tablet_id);
+                }
+
+                // Append the virtual column to the chunk using slot_id
+                // This doesn't require the column to be in the schema
+                chunk_ptr->append_column(tablet_id_column, slot->id());
+                chunk_ptr->set_slot_id_to_index(slot->id(), chunk_ptr->num_columns() - 1);
+            }
+        }
+
+        // Remove columns that don't have slot_ids (e.g., helper columns added to read row count
+        // when only virtual columns are selected). This ensures _columns.size() == _slot_id_to_index.size()
+        // which is required for clone_empty_with_slot().
+        if (chunk_ptr->schema() != nullptr && chunk_ptr->num_columns() > chunk_ptr->get_slot_id_to_index_map().size()) {
+            std::vector<size_t> columns_to_remove;
+            const auto& slot_id_to_index = chunk_ptr->get_slot_id_to_index_map();
+            std::unordered_set<size_t> slot_index_set;
+            for (const auto& [slot_id, index] : slot_id_to_index) {
+                slot_index_set.insert(index);
+            }
+
+            // Find columns without slot_ids
+            for (size_t i = 0; i < chunk_ptr->num_columns(); i++) {
+                if (slot_index_set.find(i) == slot_index_set.end()) {
+                    columns_to_remove.push_back(i);
+                }
+            }
+
+            // Remove columns in reverse order to avoid index shifting
+            if (!columns_to_remove.empty()) {
+                std::sort(columns_to_remove.begin(), columns_to_remove.end());
+
+                // Update slot_id_to_index: for each slot_id, count how many removed columns
+                // have indices less than its index, then subtract that count
+                for (const auto& [slot_id, old_index] : slot_id_to_index) {
+                    size_t decrement = 0;
+                    for (size_t removed_idx : columns_to_remove) {
+                        if (removed_idx < old_index) {
+                            decrement++;
+                        } else {
+                            break; // columns_to_remove is sorted, so we can break early
+                        }
+                    }
+                    if (decrement > 0) {
+                        chunk_ptr->set_slot_id_to_index(slot_id, old_index - decrement);
+                    }
+                }
+
+                // Sort in descending order for removal (remove from end to avoid index shifting)
+                std::sort(columns_to_remove.begin(), columns_to_remove.end(), std::greater<size_t>());
+                chunk_ptr->remove_columns_by_index(columns_to_remove);
+            }
         }
 
         if (!_non_pushdown_pred_tree.empty()) {
@@ -222,6 +294,15 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
                                             std::vector<uint32_t>& reader_columns) {
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
+
+        // Check if this is a virtual column
+        if (slot->col_name() == "_tablet_id_") {
+            // Virtual column, skip tablet schema lookup
+            // It will be populated in get_next()
+            _query_slots.push_back(slot);
+            continue;
+        }
+
         int32_t index = _tablet_schema->field_index(slot->col_name());
         if (index < 0) {
             std::stringstream ss;
@@ -237,8 +318,21 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
     // Put key columns before non-key columns, as the `MergeIterator` and `AggregateIterator`
     // required.
     std::sort(scanner_columns.begin(), scanner_columns.end());
+
+    // If scanner_columns is empty (only virtual columns selected), we need to read at least
+    // one column to determine the number of rows. Use the first key column for this purpose.
     if (scanner_columns.empty()) {
-        return Status::InternalError("failed to build storage scanner, no materialized slot!");
+        if (_tablet_schema->num_key_columns() > 0) {
+            // Add the first key column to scanner_columns to read row count
+            // This column won't be in _query_slots, so it won't appear in output
+            scanner_columns.push_back(0);
+        } else if (_tablet_schema->num_columns() > 0) {
+            // If no key columns, use the first column
+            scanner_columns.push_back(0);
+        } else {
+            return Status::InternalError(
+                    "failed to build storage scanner, no materialized slot and no columns in table!");
+        }
     }
 
     // Return columns
