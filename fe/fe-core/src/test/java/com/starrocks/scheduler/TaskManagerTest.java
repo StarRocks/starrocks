@@ -53,9 +53,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -513,8 +511,7 @@ public class TaskManagerTest {
     }
 
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
-        Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
-        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+        return TimeUtils.parseDateTime(str);
     }
 
     @Test
