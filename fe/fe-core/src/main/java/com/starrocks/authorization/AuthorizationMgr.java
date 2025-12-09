@@ -457,6 +457,7 @@ public class AuthorizationMgr {
         try {
             lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
+            // COW
             RolePrivilegeCollectionV2 clonedCollection =
                     getRolePrivilegeCollectionUnlocked(roleId, true).clone();
             clonedCollection.grant(objectType, privilegeTypes, objects, isGrant);
@@ -501,6 +502,7 @@ public class AuthorizationMgr {
         userWriteLock();
         try {
             UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            // COW
             UserPrivilegeCollectionV2 clonedCollection = getUserPrivilegeCollectionUnlocked(userIdentity).clone();
             clonedCollection.revoke(objectType, privilegeTypes, objects);
             GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPrivilege(
@@ -521,6 +523,7 @@ public class AuthorizationMgr {
         try {
             lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
+            // COW
             RolePrivilegeCollectionV2 clonedCollection =
                     getRolePrivilegeCollectionUnlocked(roleId, true).clone();
             clonedCollection.revoke(objectType, privilegeTypes, objects);
@@ -815,9 +818,11 @@ public class AuthorizationMgr {
         try {
             lockForRoleUpdate();
             long roleId = getRoleIdByNameNoLock(roleName);
+            // COW
             RolePrivilegeCollectionV2 clonedCollection =
                     getRolePrivilegeCollectionUnlocked(roleId, true).clone();
             Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModified = new HashMap<>();
+            rolePrivCollectionModified.put(roleId, clonedCollection);
             List<String> parentIds = new ArrayList<>();
             for (String parentRoleName : parentRoleNameList) {
                 long parentRoleId = getRoleIdByNameNoLock(parentRoleName);
@@ -827,6 +832,7 @@ public class AuthorizationMgr {
                             "Every user and role has role PUBLIC implicitly granted.");
                 }
 
+                // COW
                 RolePrivilegeCollectionV2 clonedParentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true).clone();
                 clonedParentCollection.removeSubRole(roleId);
@@ -837,7 +843,6 @@ public class AuthorizationMgr {
                 rolePrivCollectionModified.put(parentRoleId, clonedParentCollection);
                 parentIds.add(String.valueOf(parentRoleId));
             }
-            rolePrivCollectionModified.put(roleId, clonedCollection);
 
             // write journal to update privilege collections of both role & parent role
             RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
@@ -1602,6 +1607,7 @@ public class AuthorizationMgr {
     public void setUserDefaultRole(Set<Long> roleName, UserIdentity user) throws PrivilegeException {
         userWriteLock();
         try {
+            // COW
             UserPrivilegeCollectionV2 clonedCollection = getUserPrivilegeCollectionUnlocked(user).clone();
             clonedCollection.setDefaultRoleIds(roleName);
 
