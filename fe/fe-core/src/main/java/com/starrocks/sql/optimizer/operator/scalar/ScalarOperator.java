@@ -167,7 +167,7 @@ public abstract class ScalarOperator implements Cloneable {
         if (useCache && numberFlatChildren.isPresent()) {
             return numberFlatChildren.get();
         }
-        int numFlatChildren = 0;
+        int numFlatChildren = 1;
         for (ScalarOperator child : getChildren()) {
             numFlatChildren += child.getNumFlatChildren(useCache);
         }
