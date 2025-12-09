@@ -1351,7 +1351,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 "GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;\n");
         UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
         String sql = "SELECT\n" +
-                " \n" +
                 "  DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
                 "  CAST(COUNT(request_id) AS DOUBLE)\n" +
                 "FROM\n" +

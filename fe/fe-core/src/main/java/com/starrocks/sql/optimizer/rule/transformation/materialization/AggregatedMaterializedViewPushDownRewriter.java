@@ -139,7 +139,7 @@ public final class AggregatedMaterializedViewPushDownRewriter extends Materializ
         if (!missedCols.isEmpty()) {
             logMVRewrite(mvRewriteContext, "Aggregate join pushdown rewrite failed {}, missed cols: {}",
                     extraInfo, missedCols);
-           return false;
+            return false;
         }
         return true;
     }
