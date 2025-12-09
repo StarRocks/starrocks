@@ -2237,7 +2237,7 @@ struct AdaptiveTrimFunction {
         const auto num_rows = src->size();
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        dst_bytes.reserve(dst_bytes.size());
+        dst_bytes.reserve(src->get_bytes().size());
 
         size_t i = 0;
         const auto sample_num = std::min(num_rows, 100ul);
