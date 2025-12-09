@@ -574,12 +574,14 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.ddl("alter table t3_pri add partition p20240104 values less than('2024-01-04') ");
         starRocksAssert.ddl("alter table t3_pri add partition p20240105 values less than('2024-01-05') ");
 
-        starRocksAssert.query("select min(c1) from t3_pri").explainContains("TOP-N", "order by: <slot 1> 1: c1");
-        starRocksAssert.query("select max(c1) from t3_pri").explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+        starRocksAssert.query("select min(c1) from t3_pri")
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1", "AGGREGATE");
+        starRocksAssert.query("select max(c1) from t3_pri")
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC", "AGGREGATE");
         starRocksAssert.query("select min(c1)+1 from t3_pri")
-                .explainContains("TOP-N", "order by: <slot 1> 1: c1");
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1", "AGGREGATE");
         starRocksAssert.query("select max(c1)+1 from t3_pri")
-                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC", "AGGREGATE");
 
         // NOT SUPPORTED
         starRocksAssert.query("select max(c1-1)+1 from t3_pri").explainContains("OlapScanNode");
