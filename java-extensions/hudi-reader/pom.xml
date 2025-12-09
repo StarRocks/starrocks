@@ -92,7 +92,6 @@
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>jackson-databind</artifactId>
                 </exclusion>
-                <!-- https://nvd.nist.gov/vuln/detail/CVE-2025-12183 -->
                 <exclusion>
                     <artifactId>lz4-java</artifactId>
                     <groupId>org.lz4</groupId>
