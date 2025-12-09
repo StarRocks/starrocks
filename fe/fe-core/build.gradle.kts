@@ -70,19 +70,9 @@ dependencies {
     implementation("com.aliyun.odps:odps-sdk-core") {
         exclude(group = "org.codehaus.jackson", module = "jackson-mapper-asl")
         exclude(group = "org.ini4j", module = "ini4j")
-<<<<<<< HEAD
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
         exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("com.aliyun.odps:odps-sdk-table-api") {
-        // https://nvd.nist.gov/vuln/detail/CVE-2025-12183
-=======
-        exclude(group = "org.antlr", module = "antlr4")
-        exclude(group = "org.lz4", module = "lz4-java")
-    }
-    implementation("com.aliyun.odps:odps-sdk-table-api") {
-        exclude(group = "org.antlr", module = "antlr4")
->>>>>>> abd53cc526 ([BugFix] fix CVE-2025-66566, lz4-java upgrade to 1.10.1 (#66453))
         exclude(group = "org.lz4", module = "lz4-pure-java")
     }
     implementation("com.azure:azure-identity")
