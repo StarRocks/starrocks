@@ -23,7 +23,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -34,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.sql.optimizer.operator.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -55,8 +55,11 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        return aggOp.checkGroupByCountDistinctWithSkewHint() || (aggOp.checkGroupByCountDistinct() &&
-                context.getSessionVariable().isEnableDistinctColumnBucketization());
+        final var isCountDistinctAndHasSkewHint = aggOp.checkGroupByCountDistinctWithSkewHint();
+        final var isCountDistinct = aggOp.checkGroupByCountDistinct();
+        final var isDistinctColumnBucketizationEnabled = context.getSessionVariable().isEnableDistinctColumnBucketization();
+
+        return isCountDistinctAndHasSkewHint || (isCountDistinct && isDistinctColumnBucketizationEnabled);
     }
 
     private static final GroupByCountDistinctDataSkewEliminateRule INSTANCE =

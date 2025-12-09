@@ -34,7 +34,9 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.skew.DataSkew;
+import com.starrocks.sql.optimizer.operator.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -73,6 +75,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
 
 public class CostModel {
@@ -281,15 +284,22 @@ public class CostModel {
                     0);
         }
 
+        private boolean isGroupBySkewed(List< ColumnRefOperator > groupByList, Statistics statistics) {
+            return groupByList.stream().anyMatch(groupBy -> {
+                final var groupByStats = statistics.getColumnStatistic(groupBy);
+                return DataSkew.isColumnSkewed(statistics, groupByStats);
+            });
+        }
+
         // Compute penalty factor for GroupByCountDistinctDataSkewEliminateRule
         // Reward good cases(give a penaltyFactor=0.5) while punish bad cases(give a penaltyFactor=1.5)
-        // Good cases as follows:
-        // 1. distinct cardinality of group-by column is less than 100
-        // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
-        // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
+        // We try to find good cases by looking at the
+        //  1) null fractions of the group by columns and
+        //  2) histogram of the group by columns.
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
                                                                     Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
+
             if (skewInfo.getStage() != 1) {
                 return skewInfo.getPenaltyFactor();
             }
@@ -298,35 +308,11 @@ public class CostModel {
                 return 1.5;
             }
 
-            ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
-            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
-                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
-
-            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
-                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
-                return 1.5;
-            }
-            double groupByColDistinctValues = 1.0;
-            for (ColumnStatistic groupStat : groupByStats) {
-                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
-            }
-            groupByColDistinctValues =
-                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
-
-            final double groupByColDistinctHighWaterMark = 10000;
-            final double groupByColDistinctLowWaterMark = 100;
-            final double distColDistinctValuesCountWaterMark = 10000000;
-            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
-            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
-
-            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
-                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
-                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
-                                    avgDistValuesPerGroup > 100))) {
+            if (isGroupBySkewed(node.getGroupBys(), inputStatistics)) {
                 return 0.5;
-            } else {
-                return 1.5;
             }
+
+            return 1.5;
         }
 
         @Override
