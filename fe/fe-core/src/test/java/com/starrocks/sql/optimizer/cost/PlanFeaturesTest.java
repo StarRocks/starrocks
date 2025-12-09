@@ -38,27 +38,27 @@ class PlanFeaturesTest extends PlanTestBase {
     @CsvSource(delimiter = '|', value = {
             "select count(*) from t0 where v1 < 100 limit 100 " +
                     "| tables=[0,0,10003] " +
-                    "| 41,1,0,8,0,2,0,3;42,1,0,8,2,2,4,0,0,1,1;46,1,0,9,0,2,0,0,0,1,1",
+                    "| 42,1,0,8,0,2,0,3;43,1,0,8,2,2,4,0,0,1,1;47,1,0,9,0,2,0,0,0,1,1",
             "select max(v1) from t0 where v1 < 100 limit 100" +
                     "|tables=[0,0,10003] " +
-                    "| 41,1,0,8,0,2,0,3;42,1,0,8,2,2,4,0,0,1,1;46,1,0,8,0,2,0,0,0,1,1",
+                    "| 42,1,0,8,0,2,0,3;43,1,0,8,2,2,4,0,0,1,1;47,1,0,8,0,2,0,0,0,1,1",
             "select v1, count(*) from t0 group by v1 " +
                     "| tables=[0,0,10003] " +
-                    "| 42,1,0,16,2,2,0,0,1,1,1;46,1,0,8,0,2,0,0,0,0,0",
+                    "| 43,1,0,16,2,2,0,0,1,1,1;47,1,0,8,0,2,0,0,0,0,0",
             "select count(*) from t0 a join t0 b on a.v1 = b.v2" +
                     "| tables=[0,0,10003] " +
-                    "| 41,2,0,16,2,4,0,4;42,2,0,16,2,2,0,0,0,2,2;46,2,0,16,0,4,0,0,0,2,0",
+                    "| 42,2,0,16,2,4,0,4;43,2,0,16,2,2,0,0,0,2,2;47,2,0,16,0,4,0,0,0,2,0",
 
             // mysql external table
             "select * from ods_order where org_order_no" +
                     "| tables=[0,0,test.ods_order]" +
-                    "| 41,0,0,0,0,0,0,0,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45,0,0,0,0,0",
+                    "| 42,0,0,0,0,0,0,0;43,0,0,0,0,0,0,0,0,0,0;44,0,0,0,0,0,0,0,0,0;46,0,0,0,0,0",
             "select * from (select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c') t1 where t1.k2 = 'c'" +
                     "| tables=[0,db1.tbl1,test.ods_order] " +
-                    "| 41,1,9,8,11,11,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45",
+                    "| 42,1,9,8,11,11,0,1;43,0,0,0,0,0,0,0,0,0,0;44,0,0,0,0,0,0,0,0,0;46",
             "select * from ods_order join mysql_table where k1  = 'a' and order_dt = 'c'" +
                     "| tables=[0,db1.tbl1,test.ods_order] " +
-                    "| 41,1,9,8,11,11,0,1,42,0,0,0,0,0,0,0,0,0,0,43,0,0,0,0,0,0,0,0,0,45",
+                    "| 42,1,9,8,11,11,0,1;43,0,0,0,0,0,0,0,0,0,0;44,0,0,0,0,0,0,0,0,0;46",
 
     })
     public void testBasic(String query, String expectedTables, String expected) throws Exception {
@@ -94,7 +94,7 @@ class PlanFeaturesTest extends PlanTestBase {
         Assertions.assertEquals(3, numTables);
         Assertions.assertEquals(3, numEnvs);
         Assertions.assertEquals(1, numVars);
-        Assertions.assertEquals(377, numOperators);
+        Assertions.assertEquals(378, numOperators);
     }
 
     @Test
