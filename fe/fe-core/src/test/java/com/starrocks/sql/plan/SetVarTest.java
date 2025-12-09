@@ -170,4 +170,17 @@ public class SetVarTest extends PlanTestBase {
         assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
         assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
     }
+
+    @Test
+    public void testMissingWarehouse() throws Exception {
+        // Simulate that after setting the warehouse, this warehouse is deleted.
+        starRocksAssert.getCtx().getSessionVariable().setWarehouseName("no_exist_warehouse");
+
+        String sql = "set warehouse = default_warehouse";
+        StatementBase stmt = SqlParser.parse(sql, starRocksAssert.getCtx().getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+        executor.execute();
+        assertEquals("default_warehouse", starRocksAssert.getCtx().getSessionVariable().getWarehouseName());
+    }
+
 }

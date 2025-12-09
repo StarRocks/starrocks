@@ -898,8 +898,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             // warehouse
             if (RunMode.isSharedDataMode()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                jobInfo.add(warehouse.getName());
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                if (warehouse != null) {
+                    jobInfo.add(warehouse.getName());
+                } else {
+                    jobInfo.add(String.format("Warehouse id: %d not exist.", warehouseId));
+                }
             } else {
                 jobInfo.add("");
             }
@@ -1062,8 +1066,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_scan_bytes(loadingStatus.getLoadStatistic().sourceScanBytes());
             // warehouse
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                info.setWarehouse(warehouse.getName());
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                if (warehouse != null) {
+                    info.setWarehouse(warehouse.getName());
+                } else {
+                    info.setWarehouse(String.format("Warehouse id: %d not exist.", warehouseId));
+                }
             } else {
                 info.setWarehouse("");
             }
@@ -1259,8 +1267,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.state.equals(other.state)
                 && this.jobType.equals(other.jobType);
     }
-
-
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
         state = info.getState();
