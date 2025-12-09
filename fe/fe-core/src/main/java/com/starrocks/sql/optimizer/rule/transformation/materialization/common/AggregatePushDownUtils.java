@@ -63,13 +63,13 @@ public class AggregatePushDownUtils {
      * @param queryOptExpression: push down query plan
      * @return: rewritten query plan if rewrite success, otherwise return null
      */
-    public static OptExpression doRewritePushDownAgg(MvRewriteContext mvRewriteContext,
+    public static OptExpression doRewritePushDownAgg(MvRewriteContext origMVRewriteContext,
                                                      AggregatePushDownContext ctx,
                                                      OptExpression queryOptExpression,
                                                      Rule rule) {
-        final MaterializationContext materializationContext = mvRewriteContext.getMaterializationContext();
+        final MaterializationContext materializationContext = origMVRewriteContext.getMaterializationContext();
         final ColumnRefFactory queryColumnRefFactory = materializationContext.getQueryRefFactory();
-        final ReplaceColumnRefRewriter queryColumnRefRewriter = mvRewriteContext.getQueryColumnRefRewriter();
+        final ReplaceColumnRefRewriter queryColumnRefRewriter = origMVRewriteContext.getQueryColumnRefRewriter();
         final OptimizerContext optimizerContext = materializationContext.getOptimizerContext();
 
         // refresh query tables since query tables have been changed after push down
@@ -78,19 +78,20 @@ public class AggregatePushDownUtils {
         final PredicateSplit queryPredicateSplit = getQuerySplitPredicate(optimizerContext,
                 materializationContext, queryOptExpression, queryColumnRefFactory, queryColumnRefRewriter, rule);
         if (queryPredicateSplit == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite push down agg failed: get query split predicate failed");
+            logMVRewrite(origMVRewriteContext, "Rewrite push down agg failed: get query split predicate failed");
             return null;
         }
-        logMVRewrite(mvRewriteContext, "Push down agg query split predicate: {}", queryPredicateSplit);
+        logMVRewrite(origMVRewriteContext, "Push down agg query split predicate: {}", queryPredicateSplit);
+
         // recreate MvRewriteContext for push down agg rewrite
         MvRewriteContext newMvRewriteContext = new MvRewriteContext(materializationContext,
                 queryTables, queryOptExpression, queryColumnRefRewriter, queryPredicateSplit, Lists.newArrayList(), rule);
         // set aggregate push down context to be used in the final stage
-        mvRewriteContext.setAggregatePushDownContext(ctx);
+        newMvRewriteContext.setAggregatePushDownContext(ctx);
         AggregatedMaterializedViewRewriter rewriter = new AggregatedMaterializedViewRewriter(newMvRewriteContext);
-        OptExpression result = rewriter.doRewrite(mvRewriteContext);
+        OptExpression result = rewriter.doRewrite(newMvRewriteContext);
         if (result == null) {
-            logMVRewrite(mvRewriteContext, "doRewrite phase failed in AggregatedMaterializedViewRewriter");
+            logMVRewrite(newMvRewriteContext, "doRewrite phase failed in AggregatedMaterializedViewRewriter");
             return null;
         }
         deriveLogicalProperty(result);
@@ -262,14 +263,14 @@ public class AggregatePushDownUtils {
                         "aggColRef:{}, aggCall:{}", origAggColRef, aggCall);
                 return null;
             }
-            List<ScalarOperator> newArgs = aggCall.getChildren();
-            newArgs.set(0, newArg0);
             String rollupFuncName = getRollupFunctionName(aggCall, false);
             // eg: count(distinct) + rollup
             if (rollupFuncName == null) {
                 logMVRewrite(mvRewriteContext, "Get rollup function name is null, aggCall:{}", aggCall);
                 return null;
             }
+            List<ScalarOperator> newArgs = aggCall.getChildren();
+            newArgs.set(0, newArg0);
             Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
             Function newFunc = ExprUtils.getBuiltinFunction(rollupFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
