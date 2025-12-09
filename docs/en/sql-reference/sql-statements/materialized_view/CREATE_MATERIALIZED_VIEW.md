@@ -522,7 +522,7 @@ FROM
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 ```
 
-The refreshMode field has been added to the EXTRA_MESSAGE column in information_schema.task_runs to indicate the refresh mode of the TaskRun. For more details, you can find more details in [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
+The `refreshMode` field has been added to the `EXTRA_MESSAGE` column in `information_schema.task_runs` to indicate the refresh mode of the `TaskRun`. For more details, see [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
 
 ```SQL
 mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
