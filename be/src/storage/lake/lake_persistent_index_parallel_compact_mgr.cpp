@@ -341,7 +341,7 @@ Status LakePersistentIndexParallelCompactMgr::compact(
 
 bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string& start1, const std::string& end1,
                                                                const std::string& start2, const std::string& end2) {
-    // Two ranges [start1, end1) and [start2, end2) are non-overlap if:
+    // Two ranges [start1, end1] and [start2, end2] (both inclusive) are non-overlapping if:
     bool cond1 = comparator->Compare(Slice(end1), Slice(start2)) < 0;
     bool cond2 = comparator->Compare(Slice(end2), Slice(start1)) < 0;
 
