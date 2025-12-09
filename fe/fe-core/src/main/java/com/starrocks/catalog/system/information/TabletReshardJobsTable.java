@@ -24,11 +24,11 @@ import com.starrocks.type.TypeFactory;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
-public class DynamicTabletJobsTable {
-    public static final String NAME = "dynamic_tablet_jobs";
+public class TabletReshardJobsTable {
+    public static final String NAME = "tablet_reshard_jobs";
 
     public static SystemTable create() {
-        return new SystemTable(SystemId.DYNAMIC_TABLET_JOBS_ID,
+        return new SystemTable(SystemId.TABLET_RESHARD_JOBS_ID,
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
@@ -45,6 +45,6 @@ public class DynamicTabletJobsTable {
                         .column("CREATED_TIME", DateType.DATETIME)
                         .column("FINISHED_TIME", DateType.DATETIME)
                         .column("ERROR_MESSAGE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .build(), TSchemaTableType.SCH_DYNAMIC_TABLET_JOBS);
+                        .build(), TSchemaTableType.SCH_TABLET_RESHARD_JOBS);
     }
 }

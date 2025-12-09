@@ -322,7 +322,7 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message DynamicTabletsInfoPB {
+message ReshardingTabletsInfoPB {
     repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
     repeated MergingTabletInfoPB merging_tablet_infos = 2;
     repeated IdenticalTabletInfoPB identical_tablet_infos = 3;

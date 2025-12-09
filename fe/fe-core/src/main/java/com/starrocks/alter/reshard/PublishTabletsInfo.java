@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
-import com.starrocks.proto.DynamicTabletsInfoPB;
 import com.starrocks.proto.IdenticalTabletInfoPB;
 import com.starrocks.proto.MergingTabletInfoPB;
+import com.starrocks.proto.ReshardingTabletsInfoPB;
 import com.starrocks.proto.SplittingTabletInfoPB;
 
 import java.util.ArrayList;
@@ -27,12 +27,12 @@ import java.util.List;
  */
 public class PublishTabletsInfo {
     private final List<Long> tabletIds = new ArrayList<>();
-    private final DynamicTabletsInfoPB dynamicTablets = new DynamicTabletsInfoPB();
+    private final ReshardingTabletsInfoPB reshardingTablets = new ReshardingTabletsInfoPB();
 
     public PublishTabletsInfo() {
-        dynamicTablets.splittingTabletInfos = new ArrayList<>();
-        dynamicTablets.mergingTabletInfos = new ArrayList<>();
-        dynamicTablets.identicalTabletInfos = new ArrayList<>();
+        reshardingTablets.splittingTabletInfos = new ArrayList<>();
+        reshardingTablets.mergingTabletInfos = new ArrayList<>();
+        reshardingTablets.identicalTabletInfos = new ArrayList<>();
     }
 
     public List<Long> getTabletIds() {
@@ -43,31 +43,31 @@ public class PublishTabletsInfo {
         tabletIds.add(tabletId);
     }
 
-    public boolean isDynamicTabletsEmpty() {
-        return dynamicTablets.splittingTabletInfos.isEmpty()
-                && dynamicTablets.mergingTabletInfos.isEmpty()
-                && dynamicTablets.identicalTabletInfos.isEmpty();
+    public boolean isReshardingTabletsEmpty() {
+        return reshardingTablets.splittingTabletInfos.isEmpty()
+                && reshardingTablets.mergingTabletInfos.isEmpty()
+                && reshardingTablets.identicalTabletInfos.isEmpty();
     }
 
-    public DynamicTabletsInfoPB getDynamicTablets() {
-        if (isDynamicTabletsEmpty()) {
+    public ReshardingTabletsInfoPB getReshardingTablets() {
+        if (isReshardingTabletsEmpty()) {
             return null;
         }
-        return dynamicTablets;
+        return reshardingTablets;
     }
 
-    public void addDynamicTablet(DynamicTablet dynamicTablet) {
-        SplittingTablet splittingTablet = dynamicTablet.getSplittingTablet();
+    public void addReshardingTablet(ReshardingTablet reshardingTablet) {
+        SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
         if (splittingTablet != null) {
             addSplittingTablet(splittingTablet);
         }
 
-        MergingTablet mergingTablet = dynamicTablet.getMergingTablet();
+        MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
         if (mergingTablet != null) {
             addMergingTablet(mergingTablet);
         }
 
-        IdenticalTablet identicalTablet = dynamicTablet.getIdenticalTablet();
+        IdenticalTablet identicalTablet = reshardingTablet.getIdenticalTablet();
         if (identicalTablet != null) {
             addIdenticalTablet(identicalTablet);
         }
@@ -75,13 +75,13 @@ public class PublishTabletsInfo {
 
     public List<Long> getOldTabletIds() {
         List<Long> oldTabletIds = new ArrayList<>(tabletIds);
-        for (SplittingTabletInfoPB splittingTabletInfoPB : dynamicTablets.splittingTabletInfos) {
+        for (SplittingTabletInfoPB splittingTabletInfoPB : reshardingTablets.splittingTabletInfos) {
             oldTabletIds.add(splittingTabletInfoPB.getOldTabletId());
         }
-        for (MergingTabletInfoPB mergingTabletInfoPB : dynamicTablets.mergingTabletInfos) {
+        for (MergingTabletInfoPB mergingTabletInfoPB : reshardingTablets.mergingTabletInfos) {
             oldTabletIds.addAll(mergingTabletInfoPB.getOldTabletIds());
         }
-        for (IdenticalTabletInfoPB identicalTabletInfoPB : dynamicTablets.identicalTabletInfos) {
+        for (IdenticalTabletInfoPB identicalTabletInfoPB : reshardingTablets.identicalTabletInfos) {
             oldTabletIds.add(identicalTabletInfoPB.getOldTabletId());
         }
         return oldTabletIds;
@@ -91,20 +91,20 @@ public class PublishTabletsInfo {
         SplittingTabletInfoPB splittingTabletInfoPB = new SplittingTabletInfoPB();
         splittingTabletInfoPB.oldTabletId = splittingTablet.getOldTabletId();
         splittingTabletInfoPB.newTabletIds = splittingTablet.getNewTabletIds();
-        dynamicTablets.splittingTabletInfos.add(splittingTabletInfoPB);
+        reshardingTablets.splittingTabletInfos.add(splittingTabletInfoPB);
     }
 
     private void addMergingTablet(MergingTablet mergingTablet) {
         MergingTabletInfoPB mergingTabletInfoPB = new MergingTabletInfoPB();
         mergingTabletInfoPB.oldTabletIds = mergingTablet.getOldTabletIds();
         mergingTabletInfoPB.newTabletId = mergingTablet.getNewTabletId();
-        dynamicTablets.mergingTabletInfos.add(mergingTabletInfoPB);
+        reshardingTablets.mergingTabletInfos.add(mergingTabletInfoPB);
     }
 
     private void addIdenticalTablet(IdenticalTablet identicalTablet) {
         IdenticalTabletInfoPB identicalTabletInfoPB = new IdenticalTabletInfoPB();
         identicalTabletInfoPB.oldTabletId = identicalTablet.getOldTabletId();
         identicalTabletInfoPB.newTabletId = identicalTablet.getNewTabletId();
-        dynamicTablets.identicalTabletInfos.add(identicalTabletInfoPB);
+        reshardingTablets.identicalTabletInfos.add(identicalTabletInfoPB);
     }
 }

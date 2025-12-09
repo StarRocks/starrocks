@@ -16,9 +16,9 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
-import com.starrocks.alter.dynamictablet.DynamicTablet;
-import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
-import com.starrocks.alter.dynamictablet.PublishTabletsInfo;
+import com.starrocks.alter.reshard.PublishTabletsInfo;
+import com.starrocks.alter.reshard.ReshardingTablet;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -47,11 +47,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -160,7 +158,7 @@ public class Utils {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
             }
             request.distributionColumns = distributionColumns;
-            request.dynamicTabletsInfo = publishTabletInfo.getDynamicTablets();
+            request.reshardingTabletsInfo = publishTabletInfo.getReshardingTablets();
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
@@ -224,19 +222,19 @@ public class Utils {
                                                                      List<Long> rebuildPindexTabletIds,
                                                                      long baseVersion, long newVersion)
             throws NoAliveBackendException {
-        DynamicTabletJobMgr dynamicTabletJobMgr = GlobalStateMgr.getCurrentState().getDynamicTabletJobMgr();
-        Set<Long> mergingTabletIds = new HashSet<>();
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
         Map<ComputeNode, PublishTabletsInfo> nodeToPublishTabletsInfo = new HashMap<>();
         for (Tablet tablet : tablets) {
-            DynamicTablet dynamicTablet = dynamicTabletJobMgr.getDynamicTablet(tablet.getId(), newVersion);
-            if (dynamicTablet == null) {
+            ReshardingTablet reshardingTablet = tabletReshardJobMgr.getReshardingTablet(tablet.getId(), newVersion);
+            if (reshardingTablet == null) {
                 ComputeNode computeNode = getComputeNode(tablet.getId(), computeResource, warehouseManager);
                 nodeToPublishTabletsInfo.computeIfAbsent(computeNode, k -> new PublishTabletsInfo())
                         .addTabletId(tablet.getId());
             } else {
-                ComputeNode computeNode = getComputeNode(dynamicTablet.getFirstOldTabletId(), computeResource, warehouseManager);
+                ComputeNode computeNode = getComputeNode(reshardingTablet.getFirstOldTabletId(),
+                        computeResource, warehouseManager);
                 nodeToPublishTabletsInfo.computeIfAbsent(computeNode, k -> new PublishTabletsInfo())
-                        .addDynamicTablet(dynamicTablet);
+                        .addReshardingTablet(reshardingTablet);
             }
 
             if (baseVersion == ((LakeTablet) tablet).rebuildPindexVersion() && baseVersion != 0) {
@@ -310,7 +308,7 @@ public class Utils {
             }
 
             singleReq.setDistributionColumns(distributionColumns);
-            singleReq.setDynamicTabletsInfo(publishTabletInfo.getDynamicTablets());
+            singleReq.setReshardingTabletsInfo(publishTabletInfo.getReshardingTablets());
     
             ComputeNodePB computeNodePB = new ComputeNodePB();
             computeNodePB.setHost(entry.getKey().getHost());

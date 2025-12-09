@@ -12,21 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 /*
- * DynamicTablet saves the old and new tablets info during tablet splitting or merging
- * DynamicTablet is the base class of SplittingTablet, MergingTablet and IdenticalTablet.
+ * This exception will be thrown when tablet reshard job execution error
  */
-public interface DynamicTablet {
+public class TabletReshardJobException extends RuntimeException {
 
-    SplittingTablet getSplittingTablet();
+    public TabletReshardJobException(String message) {
+        super(message);
+    }
 
-    MergingTablet getMergingTablet();
-
-    IdenticalTablet getIdenticalTablet();
-
-    long getFirstOldTabletId();
-
-    long getParallelTablets();
+    public TabletReshardJobException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

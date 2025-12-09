@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
@@ -22,7 +22,7 @@ import java.util.List;
 /*
  * SplittingTablet saves the old tablet id and the new tablets during a tablet splitting
  */
-public class SplittingTablet implements DynamicTablet {
+public class SplittingTablet implements ReshardingTablet {
 
     @SerializedName(value = "oldTabletId")
     protected final long oldTabletId;
@@ -32,7 +32,7 @@ public class SplittingTablet implements DynamicTablet {
 
     public SplittingTablet(long oldTabletId, List<Long> newTabletIds) {
         // New tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(DynamicTabletUtils.isPowerOfTwo(newTabletIds.size()),
+        Preconditions.checkState(TabletReshardUtils.isPowerOfTwo(newTabletIds.size()),
                 "New tablet size must be a power of 2, actual: " + newTabletIds.size());
 
         this.oldTabletId = oldTabletId;

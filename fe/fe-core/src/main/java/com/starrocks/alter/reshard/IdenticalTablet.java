@@ -12,35 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.alter.dynamictablet;
+package com.starrocks.alter.reshard;
 
-import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 
-import java.util.List;
-
 /*
- * MergingTablet saves the old tablet ids and the new tablet during tablets merging
+ * IdenticalTablet saves the old tablet id and the new tablet for a tablet that is not split or merged
  */
-public class MergingTablet implements DynamicTablet {
+public class IdenticalTablet implements ReshardingTablet {
 
-    @SerializedName(value = "oldTabletIds")
-    protected final List<Long> oldTabletIds;
+    @SerializedName(value = "oldTabletId")
+    protected final long oldTabletId;
 
     @SerializedName(value = "newTabletId")
     protected final long newTabletId;
 
-    public MergingTablet(List<Long> oldTabletIds, long newTabletId) {
-        // Old tablet size is usaully 2, but we allow a power of 2
-        Preconditions.checkState(DynamicTabletUtils.isPowerOfTwo(oldTabletIds.size()),
-                "Old tablet size must be a power of 2, actual: " + oldTabletIds.size());
-
-        this.oldTabletIds = oldTabletIds;
+    public IdenticalTablet(long oldTabletId, long newTabletId) {
+        this.oldTabletId = oldTabletId;
         this.newTabletId = newTabletId;
     }
 
-    public List<Long> getOldTabletIds() {
-        return oldTabletIds;
+    public long getOldTabletId() {
+        return oldTabletId;
     }
 
     public long getNewTabletId() {
@@ -54,21 +47,21 @@ public class MergingTablet implements DynamicTablet {
 
     @Override
     public MergingTablet getMergingTablet() {
-        return this;
-    }
-
-    @Override
-    public IdenticalTablet getIdenticalTablet() {
         return null;
     }
 
     @Override
+    public IdenticalTablet getIdenticalTablet() {
+        return this;
+    }
+
+    @Override
     public long getFirstOldTabletId() {
-        return oldTabletIds.get(0);
+        return oldTabletId;
     }
 
     @Override
     public long getParallelTablets() {
-        return oldTabletIds.size();
+        return 0;
     }
 }

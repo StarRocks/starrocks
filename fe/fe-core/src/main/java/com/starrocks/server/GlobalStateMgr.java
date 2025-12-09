@@ -43,7 +43,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.alter.dynamictablet.DynamicTabletJobMgr;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
@@ -573,7 +573,7 @@ public class GlobalStateMgr {
 
     private JwkMgr jwkMgr;
 
-    private final DynamicTabletJobMgr dynamicTabletJobMgr;
+    private final TabletReshardJobMgr tabletReshardJobMgr;
 
     private final LicenseMgr licenseMgr;
 
@@ -907,7 +907,7 @@ public class GlobalStateMgr {
 
         this.jwkMgr = new JwkMgr();
 
-        this.dynamicTabletJobMgr = new DynamicTabletJobMgr();
+        this.tabletReshardJobMgr = new TabletReshardJobMgr();
 
         this.licenseMgr = new LicenseMgr(nodeMgr);
     }
@@ -1236,8 +1236,8 @@ public class GlobalStateMgr {
         return clusterSnapshotMgr;
     }
 
-    public DynamicTabletJobMgr getDynamicTabletJobMgr() {
-        return dynamicTabletJobMgr;
+    public TabletReshardJobMgr getTabletReshardJobMgr() {
+        return tabletReshardJobMgr;
     }
 
     // Use tryLock to avoid potential deadlock
@@ -1608,7 +1608,7 @@ public class GlobalStateMgr {
         tabletCollector.start();
 
         if (RunMode.isSharedDataMode()) {
-            dynamicTabletJobMgr.start();
+            tabletReshardJobMgr.start();
         }
 
         licenseMgr.start();
@@ -1758,7 +1758,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
-                .put(SRMetaBlockID.DYNAMIC_TABLET_JOB_MGR, dynamicTabletJobMgr::load)
+                .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .put(SRMetaBlockIDEPack.LICENSE_MGR, licenseMgr::load)
                 .build();
 
@@ -1992,7 +1992,7 @@ public class GlobalStateMgr {
                 clusterSnapshotMgr.save(imageWriter);
                 recommendationsTaskMgr.save(imageWriter);
                 historicalNodeMgr.save(imageWriter);
-                dynamicTabletJobMgr.save(imageWriter);
+                tabletReshardJobMgr.save(imageWriter);
                 licenseMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
