@@ -210,6 +210,11 @@ jobs:
       pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       pre_commit_conclusion: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:
@@ -245,7 +250,7 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: path-filter-commit
         with:
-          initial-fetch-depth: 1
+          base: HEAD~1
           filters: |
             be:
               - 'be/!(test)**'
