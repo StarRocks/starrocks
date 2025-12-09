@@ -818,7 +818,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db != null) {
             // No database lock needed here because:
             // 1. Database.getTable() accesses ConcurrentHashMap which is thread-safe for reads
-            // 2. Table.getBaseSchema() returns CopyOnWriteArrayList which provides consistent snapshots
+            // 2. Table.getBaseSchema() accesses fullSchema which is a CopyOnWriteArrayList that provides consistent snapshots
             // 3. If table is dropped concurrently, getTable() returns null and we return empty result (correct behavior)
             // 4. This reduces lock contention for frequent information_schema queries
             Table table = metadataMgr.getTable(context, catalogName, params.db, params.table_name);
@@ -854,8 +854,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
             if (db != null) {
-                // getTableNamesViewWithLock() already acquires the necessary lock internally
-                // No additional database lock needed for table metadata reads (see comment in describeTable)
+                // getTableNamesViewWithLock() acquires database read lock internally to get table names
+                // No additional database lock needed for subsequent table metadata reads because:
+                // 1. Database.getTable() accesses ConcurrentHashMap which is thread-safe for reads
+                // 2. Table.getBaseSchema() accesses fullSchema which is a CopyOnWriteArrayList that provides consistent snapshots
+                // 3. If table is dropped concurrently, getTable() returns null and we skip it (correct behavior)
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                     if (table == null) {
