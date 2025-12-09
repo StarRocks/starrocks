@@ -17,13 +17,10 @@
 
 package com.starrocks.common.util;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.VariableExpr;
-=======
 import com.starrocks.catalog.FunctionSet;
->>>>>>> 1241e67d27 ([Enhancement] Add CURRENT_WAREHOUSE() information function (#66401))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;

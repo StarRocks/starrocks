@@ -1519,7 +1519,7 @@ public class ExpressionAnalyzer {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
             } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE)) {
-                node.setType(VarcharType.VARCHAR);
+                node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentWarehouseName());
             } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
                 node.setType(Type.VARCHAR);
