@@ -87,9 +87,8 @@ Chunk::Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data
 }
 
 void Chunk::reset() {
-    auto columns = mutable_columns();
-    for (auto& c : columns) {
-        c->reset_column();
+    for (auto& c : _columns) {
+        c->as_mutable_raw_ptr()->reset_column();
     }
     _delete_state = DEL_NOT_SATISFIED;
     if (_extra_data != nullptr) {
@@ -107,17 +106,15 @@ void Chunk::swap_chunk(Chunk& other) {
 }
 
 void Chunk::set_num_rows(size_t count) {
-    auto columns = mutable_columns();
-    for (auto& c : columns) {
-        c->resize(count);
+    for (auto& c : _columns) {
+        c->as_mutable_raw_ptr()->resize(count);
     }
 }
 
 void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     DCHECK(_columns.size() == src.num_columns());
-    auto columns = mutable_columns();
     for (int i = 0; i < _columns.size(); i++) {
-        columns[i]->update_rows(*src.columns()[i], indexes);
+        _columns[i]->as_mutable_raw_ptr()->update_rows(*src.columns()[i], indexes);
     }
 }
 
@@ -183,9 +180,8 @@ void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
 }
 
 void Chunk::append_default() {
-    auto columns = mutable_columns();
-    for (auto& column : columns) {
-        column->append_default();
+    for (auto& column : _columns) {
+        column->as_mutable_raw_ptr()->append_default();
     }
 }
 
@@ -292,18 +288,16 @@ ChunkUniquePtr Chunk::clone_unique() const {
 
 void Chunk::append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     DCHECK_EQ(_columns.size(), src.columns().size());
-    auto columns = mutable_columns();
     for (size_t i = 0; i < _columns.size(); ++i) {
-        columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        _columns[i]->as_mutable_raw_ptr()->append_selective(*src.columns()[i].get(), indexes, from, size);
     }
 }
 
 void Chunk::rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     size_t num_columns = _columns.size();
     DCHECK_EQ(num_columns, src.columns().size());
-    auto columns = mutable_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        columns[i]->append_selective(*src.columns()[i].get(), indexes, from, size);
+        _columns[i]->as_mutable_raw_ptr()->append_selective(*src.columns()[i].get(), indexes, from, size);
         src.columns()[i].reset();
     }
 }
@@ -312,17 +306,15 @@ size_t Chunk::filter(const Buffer<uint8_t>& selection, bool force) {
     if (!force && SIMD::count_zero(selection) == 0) {
         return num_rows();
     }
-    auto columns = mutable_columns();
-    for (auto& column : columns) {
-        column->filter(selection);
+    for (auto& column : _columns) {
+        column->as_mutable_raw_ptr()->filter(selection);
     }
     return num_rows();
 }
 
 size_t Chunk::filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to) {
-    auto columns = mutable_columns();
-    for (auto& column : columns) {
-        column->filter_range(selection, from, to);
+    for (auto& column : _columns) {
+        column->as_mutable_raw_ptr()->filter_range(selection, from, to);
     }
     return num_rows();
 }
@@ -454,9 +446,8 @@ void Chunk::merge(Chunk&& src) {
 void Chunk::append(const Chunk& src, size_t offset, size_t count) {
     DCHECK_EQ(num_columns(), src.num_columns());
     const size_t n = src.num_columns();
-    auto columns = mutable_columns();
     for (size_t i = 0; i < n; i++) {
-        columns[i]->append(*src.get_column_by_index(i), offset, count);
+        _columns[i]->as_mutable_raw_ptr()->append(*src.get_column_by_index(i), offset, count);
     }
 }
 
@@ -464,19 +455,16 @@ void Chunk::append_safe(const Chunk& src, size_t offset, size_t count) {
     DCHECK_EQ(num_columns(), src.num_columns());
     const size_t n = src.num_columns();
     size_t cur_rows = num_rows();
-    auto columns = mutable_columns();
     for (size_t i = 0; i < n; i++) {
-        auto& column = columns[i];
-        if (column->size() == cur_rows) {
-            column->append(*src.get_column_by_index(i), offset, count);
+        if (_columns[i]->size() == cur_rows) {
+            _columns[i]->as_mutable_raw_ptr()->append(*src.get_column_by_index(i), offset, count);
         }
     }
 }
 
 void Chunk::reserve(size_t cap) {
-    auto columns = mutable_columns();
-    for (auto& c : columns) {
-        c->reserve(cap);
+    for (auto& column : _columns) {
+        column->as_mutable_raw_ptr()->reserve(cap);
     }
 }
 
@@ -491,9 +479,8 @@ bool Chunk::has_const_column() const {
 
 void Chunk::unpack_and_duplicate_const_columns() {
     size_t num_rows = this->num_rows();
-    auto columns = mutable_columns();
-    for (size_t i = 0; i < columns.size(); i++) {
-        auto& column = columns[i];
+    for (size_t i = 0; i < _columns.size(); i++) {
+        auto column = _columns[i];
         if (column->is_constant()) {
             auto unpack_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, std::move(column));
             update_column_by_index(std::move(unpack_column), i);

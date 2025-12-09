@@ -515,7 +515,7 @@ static std::pair<std::vector<uint32_t>, std::vector<uint32_t>> get_read_update_c
 
 Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& tablet_schema,
                                                       const std::vector<uint32_t>& column_ids, const int64_t row_cnt,
-                                                      MutableColumns* columns) {
+                                                      vector<ColumnPtr>* columns) {
     for (auto i = 0; i < column_ids.size(); ++i) {
         const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
 
@@ -534,9 +534,9 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
             RETURN_IF_ERROR(
-                    default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]].get()));
+                    default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]]->as_mutable_raw_ptr()));
         } else {
-            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->append_default(row_cnt));
+            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->as_mutable_raw_ptr()->append_default(row_cnt));
         }
     }
     return Status::OK();
@@ -628,9 +628,8 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
                         *partial_chunk_ptr->get_column_by_id(column_id), _partial_update_states[upt_id].insert_rowids);
             }
             // fill default columns
-            auto mutable_cols = chunk_ptr->mutable_columns();
             RETURN_IF_ERROR(_fill_default_columns(tablet_schema, read_update_column_ids.first, chunk_ptr->num_rows(),
-                                                  &mutable_cols));
+                                                  &chunk_ptr->columns()));
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
             uint64_t footer_position = 0;

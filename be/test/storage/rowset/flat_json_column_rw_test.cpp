@@ -188,7 +188,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalJson) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    EXPECT_EQ(0, read_json->get_flat_fields_ptrs().size());
+    EXPECT_EQ(0, read_json->get_flat_fields().size());
     EXPECT_EQ("{\"a\": 1, \"b\": 21}", read_json->debug_item(0));
     EXPECT_EQ("{\"a\": 4, \"b\": 24}", read_json->debug_item(3));
 }
@@ -223,7 +223,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalJsonWithPath) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    EXPECT_EQ(2, read_json->get_flat_fields_ptrs().size());
+    EXPECT_EQ(2, read_json->get_flat_fields().size());
     EXPECT_EQ("{a: 1, b: 21}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
@@ -258,7 +258,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithPath) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(2, read_json->get_flat_fields_ptrs().size());
+    ASSERT_EQ(2, read_json->get_flat_fields().size());
     EXPECT_EQ("{a: 1, b: 21}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 
@@ -289,7 +289,7 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithoutPath) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_FALSE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(0, read_json->get_flat_fields_ptrs().size());
+    ASSERT_EQ(0, read_json->get_flat_fields().size());
     EXPECT_EQ("{\"a\": 1, \"b\": 21}", read_json->debug_item(0));
     EXPECT_EQ("{\"a\": 4, \"b\": 24}", read_json->debug_item(3));
 }
@@ -368,7 +368,7 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(2, read_json->get_flat_fields_ptrs().size());
+    ASSERT_EQ(2, read_json->get_flat_fields().size());
     EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
@@ -404,7 +404,7 @@ TEST_F(FlatJsonColumnRWTest, testEmptyFlatObject) {
     auto* read_json = down_cast<JsonColumn*>(read_col.get());
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
-    ASSERT_EQ(2, read_json->get_flat_fields_ptrs().size());
+    ASSERT_EQ(2, read_json->get_flat_fields().size());
     EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }

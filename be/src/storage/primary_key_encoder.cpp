@@ -629,8 +629,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
         Slice s = bkeys.get_slice(offset + i);
         bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
         for (int j = 0; j < ncol; j++) {
-            auto* column_ptr = dest->get_column_raw_ptr_by_index(j);
-            Column& column = *column_ptr;
+            auto& column = *(dest->get_column_raw_ptr_by_index(j));
             if (skip_decode) {
                 column.append_default();
                 continue;

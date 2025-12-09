@@ -108,7 +108,7 @@ Status FlatJsonColumnCompactor::_merge_columns(MutableColumns& json_datas) {
                                                       json_col->has_remain());
                 pre_col = json_col;
             }
-            auto j = merger->merge(json_col->get_flat_fields_ptrs());
+            auto j = merger->merge(json_col->get_flat_fields());
 
             if (col->is_nullable()) {
                 auto n_ptr = NullableColumn::create(j, null_col)->as_mutable_raw_ptr();
@@ -154,7 +154,7 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
                 pre_col = json_col;
             }
             VLOG(2) << "FlatJsonColumnCompactor flatten_columns hyper-transformer: " << json_col->debug_flat_paths();
-            RETURN_IF_ERROR(transformer.trans(json_col->get_flat_fields_ptrs()));
+            RETURN_IF_ERROR(transformer.trans(json_col->get_flat_fields()));
             _flat_columns = transformer.mutable_result();
         }
 
@@ -221,7 +221,7 @@ Status JsonColumnCompactor::append(const Column& column) {
     }
 
     JsonMerger merger(json_col->flat_column_paths(), json_col->flat_column_types(), json_col->has_remain());
-    auto p = merger.merge(json_col->get_flat_fields_ptrs());
+    auto p = merger.merge(json_col->get_flat_fields());
 
     if (column.is_nullable()) {
         auto n = NullableColumn::create(p, nulls);

@@ -175,7 +175,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     }
 
     auto chunk = _chunk_builder();
-    auto columns = chunk->mutable_columns();
+    auto& columns = chunk->columns();
 
     auto& serialize_buffer = ctx.serialize_buffer;
     serialize_buffer.resize(attachment_size);
@@ -195,7 +195,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     SCOPED_TIMER(_parent->metrics().deserialize_timer);
     for (size_t i = 0; i < columns.size(); i++) {
         ASSIGN_OR_RETURN(read_cursor,
-                         serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]));
+                         serde::ColumnArraySerde::deserialize(read_cursor, columns[i]->as_mutable_raw_ptr(), false, encode_levels[i]));
     }
 
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()

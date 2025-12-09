@@ -309,6 +309,7 @@ public:
     void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
     bool has_extra_data() const { return this->_extra_data != nullptr; }
 
+    // Deprecated, use raw pointers instead
     MutableColumns mutable_columns() const {
         size_t num_columns = _columns.size();
         MutableColumns mutable_columns(num_columns);

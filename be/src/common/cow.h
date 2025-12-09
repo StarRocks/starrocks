@@ -231,8 +231,8 @@ protected:
         const T& operator*() const { return *value; }
         T& operator*() { return *get(); }
 
-        operator const ImmutPtr<T> &() const { return value; }
-        operator ImmutPtr<T> &() { return value; }
+        operator const ImmutPtr<T>&() const { return value; }
+        operator ImmutPtr<T>&() { return value; }
 
         operator bool() const { return value.get() != nullptr; }
         bool operator!() const { return value.get() == nullptr; }
