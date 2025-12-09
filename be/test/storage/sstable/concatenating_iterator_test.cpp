@@ -120,6 +120,10 @@ TEST_F(ConcatenatingIteratorTest, SingleIterator) {
 
     Iterator* children[1] = {new VectorIterator(data)};
     std::unique_ptr<Iterator> iter(NewConcatenatingIterator(children, 1));
+    iter->SeekToFirst();
+    EXPECT_EQ(iter->max_rss_rowid(), 0);
+    EXPECT_EQ(iter->shared_rssid(), 0);
+    EXPECT_EQ(iter->shared_version(), 0);
 
     auto keys = CollectKeys(iter.get());
     ASSERT_EQ(3, keys.size());
