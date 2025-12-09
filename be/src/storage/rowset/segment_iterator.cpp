@@ -1262,6 +1262,12 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
         ColumnPtr col = chunk->get_column_by_id(column_id);
 
         const auto& predicates = _context->_column_predicate_map.at(column_id);
+        if (predicates.empty()) {
+            // Column may have been added for runtime filters or read-only; no local predicates to evaluate.
+            // Treat it as non-filtering with selectivity 1.0 so sampling keeps the predicate order size aligned.
+            _context->_predicate_selectivity_map.emplace(1.0, column_id);
+            continue;
+        }
         DCHECK(predicates.size() > 0);
 
         // First predicate uses _selection (merged), subsequent use current_selection
