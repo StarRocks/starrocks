@@ -292,6 +292,9 @@ private:
                                                           const std::vector<const ColumnPredicate*>& and_predicates,
                                                           Columns& current_cols, bool apply_runtime_filter = true);
 
+    Status _evaluate_col_runtime_filters(ColumnId column_id, Column* col, uint8_t* selection, uint16_t from,
+                                         uint16_t to);
+
     uint16_t _filter_chunk_by_selection(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
 
     uint16_t _filter_columns_by_selection(Columns& columns, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
@@ -1262,21 +1265,33 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
         ColumnPtr col = chunk->get_column_by_id(column_id);
 
         const auto& predicates = _context->_column_predicate_map.at(column_id);
-        if (predicates.empty()) {
-            // Column may have been added for runtime filters or read-only; no local predicates to evaluate.
-            // Treat it as non-filtering with selectivity 1.0 so sampling keeps the predicate order size aligned.
+        bool has_compound_predicates = !predicates.empty();
+        bool has_runtime_filters =
+                _opts.enable_join_runtime_filter_pushdown && _column_to_runtime_filters_map.contains(column_id);
+
+        if (!has_compound_predicates && !has_runtime_filters) {
+            // Column may have been added for read-only; no predicates or runtime filters to evaluate.
             _context->_predicate_selectivity_map.emplace(1.0, column_id);
             continue;
         }
-        DCHECK(predicates.size() > 0);
 
         // First predicate uses _selection (merged), subsequent use current_selection
         auto& selection = use_merged_selection ? _selection : current_selection;
 
-        // Use compound_and_predicates_evaluate to evaluate predicates
-        // Similar to RuntimeFilter::evaluate
-        RETURN_IF_ERROR(compound_and_predicates_evaluate(predicates, col.get(), selection.data(), _selected_idx.data(),
-                                                         0, chunk_size));
+        if (has_compound_predicates) {
+            // Use compound_and_predicates_evaluate to evaluate predicates
+            // Similar to RuntimeFilter::evaluate
+            RETURN_IF_ERROR(compound_and_predicates_evaluate(predicates, col.get(), selection.data(),
+                                                             _selected_idx.data(), 0, chunk_size));
+        } else {
+            DCHECK(has_runtime_filters);
+            // No predicates but runtime filters exist, start with all rows selected.
+            std::fill(selection.data(), selection.data() + chunk_size, 1);
+        }
+
+        if (has_runtime_filters) {
+            RETURN_IF_ERROR(_evaluate_col_runtime_filters(column_id, col.get(), selection.data(), 0, chunk_size));
+        }
 
         // Count rows that passed predicates
         size_t true_count = SIMD::count_nonzero(selection.data(), chunk_size);
@@ -2217,6 +2232,33 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     return Status::OK();
 }
 
+Status SegmentIterator::_evaluate_col_runtime_filters(ColumnId column_id, Column* col, uint8_t* selection,
+                                                      uint16_t from, uint16_t to) {
+    if (!_opts.enable_join_runtime_filter_pushdown) {
+        return Status::OK();
+    }
+
+    auto iter = _column_to_runtime_filters_map.find(column_id);
+    if (iter == _column_to_runtime_filters_map.end()) {
+        return Status::OK();
+    }
+
+    SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
+    size_t input_count = SIMD::count_nonzero(&selection[from], to - from);
+
+    Chunk chunk;
+    // `column` is owned by storage layer, we don't have ownership
+    ColumnPtr bits = col->as_mutable_ptr();
+    chunk.append_column(bits, column_id, true);
+
+    RETURN_IF_ERROR(iter->second.evaluate(&chunk, selection, from, to));
+
+    size_t output_count = SIMD::count_nonzero(&selection[from], to - from);
+    _opts.stats->rf_cond_input_rows += input_count;
+    _opts.stats->rf_cond_output_rows += output_count;
+    return Status::OK();
+}
+
 StatusOr<uint16_t> SegmentIterator::_filter_by_compound_and_predicates(
         Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to, ColumnId column_id,
         const std::vector<const ColumnPredicate*>& and_predicates, Columns& current_cols, bool apply_runtime_filter) {
@@ -2251,23 +2293,7 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_compound_and_predicates(
 
     // Evaluate runtime filters for this column
     if (has_runtime_filters) {
-        SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
-        size_t input_count = SIMD::count_nonzero(&_selection[from], to - from);
-
-        // RuntimeFilterPredicates::evaluate will AND with existing selection
-        auto iter = _column_to_runtime_filters_map.find(column_id);
-
-        Chunk chunk;
-        // `column` is owned by storage layer
-        // we don't have ownership
-        ColumnPtr bits = col->as_mutable_ptr();
-        chunk.append_column(bits, column_id, true);
-
-        RETURN_IF_ERROR(iter->second.evaluate(&chunk, _selection.data(), from, to));
-
-        size_t output_count = SIMD::count_nonzero(&_selection[from], to - from);
-        _opts.stats->rf_cond_input_rows += input_count;
-        _opts.stats->rf_cond_output_rows += output_count;
+        RETURN_IF_ERROR(_evaluate_col_runtime_filters(column_id, col, _selection.data(), from, to));
     }
 
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
