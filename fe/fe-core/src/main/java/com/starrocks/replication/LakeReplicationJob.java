@@ -119,7 +119,12 @@ public class LakeReplicationJob extends ReplicationJob {
 
     @Override
     public long getReplicationReplicaCount() {
-        return 1;
+        long count = 0;
+        for (PartitionInfo partitionInfo : getPartitionInfos().values()) {
+            for (IndexInfo indexInfo : partitionInfo.getIndexInfos().values()) {
+                count += indexInfo.getTabletInfos().size();
+            }
+        }
+        return count;
     }
-
 }
