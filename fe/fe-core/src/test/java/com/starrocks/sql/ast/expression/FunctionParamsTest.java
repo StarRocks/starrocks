@@ -17,6 +17,7 @@ package com.starrocks.sql.ast.expression;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.FunctionAnalyzer;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -184,7 +185,7 @@ public class FunctionParamsTest {
         );
 
         FunctionParams params = new FunctionParams(false, exprs);
-        params.reorderNamedArgAndAppendDefaults(mockFn);
+        FunctionAnalyzer.reorderNamedArgAndAppendDefaults(params, mockFn);
 
         // Verify reordered to match function definition: url, method, timeout_ms
         Assertions.assertEquals(3, params.exprs().size(),
@@ -229,7 +230,7 @@ public class FunctionParamsTest {
         );
 
         FunctionParams params = new FunctionParams(false, exprs);
-        params.reorderNamedArgAndAppendDefaults(mockFn);
+        FunctionAnalyzer.reorderNamedArgAndAppendDefaults(params, mockFn);
 
         // Verify reordered to a, b, c
         Assertions.assertEquals("a", params.getExprsNames().get(0));
@@ -257,7 +258,7 @@ public class FunctionParamsTest {
         );
 
         FunctionParams params = new FunctionParams(false, exprs);
-        params.reorderNamedArgAndAppendDefaults(mockFn);
+        FunctionAnalyzer.reorderNamedArgAndAppendDefaults(params, mockFn);
 
         // Should have all 4 parameters
         Assertions.assertEquals(4, params.exprs().size(),
@@ -294,7 +295,7 @@ public class FunctionParamsTest {
         ));
 
         FunctionParams params = new FunctionParams(false, exprs);
-        params.appendDefaultsForPositionalArgs(mockFn);
+        FunctionAnalyzer.appendDefaultsForPositionalArgs(params, mockFn);
 
         // Should append default for step
         Assertions.assertEquals(3, params.exprs().size(),
@@ -319,7 +320,7 @@ public class FunctionParamsTest {
         List<Expr> exprs = new ArrayList<>(Arrays.asList(new IntLiteral(1)));
 
         FunctionParams params = new FunctionParams(false, exprs);
-        params.appendDefaultsForPositionalArgs(mockFn);
+        FunctionAnalyzer.appendDefaultsForPositionalArgs(params, mockFn);
 
         // Should append all defaults
         Assertions.assertEquals(4, params.exprs().size(),
@@ -348,7 +349,7 @@ public class FunctionParamsTest {
         ));
 
         FunctionParams params = new FunctionParams(false, exprs);
-        params.appendDefaultsForPositionalArgs(mockFn);
+        FunctionAnalyzer.appendDefaultsForPositionalArgs(params, mockFn);
 
         // Should not append anything
         Assertions.assertEquals(2, params.exprs().size(),

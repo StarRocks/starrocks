@@ -18,7 +18,9 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
@@ -81,6 +83,17 @@ public class NamedArgumentValidatorTest {
         return fn;
     }
 
+    /**
+     * Creates a mock FunctionCallExpr with given argument expressions
+     *
+     * @param argExprs List of argument expressions (can include NullLiteral)
+     * @return Mock FunctionCallExpr for testing
+     */
+    private FunctionCallExpr createMockFunctionCallExpr(List<Expr> argExprs) {
+        FunctionCallExpr node = new FunctionCallExpr(new FunctionName("test_function"), argExprs);
+        return node;
+    }
+
     // ========== Test Category 1: Valid Cases ==========
 
     @Test
@@ -97,7 +110,7 @@ public class NamedArgumentValidatorTest {
 
         // Should not throw
         Assertions.assertDoesNotThrow(() -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
     }
 
@@ -115,7 +128,7 @@ public class NamedArgumentValidatorTest {
 
         // Should not throw - order doesn't matter for named args
         Assertions.assertDoesNotThrow(() -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
     }
 
@@ -133,7 +146,7 @@ public class NamedArgumentValidatorTest {
 
         // Should not throw - optional params can be omitted
         Assertions.assertDoesNotThrow(() -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
     }
 
@@ -151,7 +164,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("param_a", "param_a");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("duplicate parameter"),
@@ -172,7 +185,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("param_a", "param_b", "param_a");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("duplicate"),
@@ -193,7 +206,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("param_a", "unknown_param");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(
@@ -216,7 +229,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("PARAM_A", "param_b");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         // Should provide suggestion for case-insensitive match
@@ -238,7 +251,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("TIMEOUT_MS", "retry_count");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("Did you mean 'timeout_ms'"),
@@ -260,7 +273,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("method", "timeout");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("required parameter"),
@@ -282,7 +295,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("param_c");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("required parameter"),
@@ -301,7 +314,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = new ArrayList<>();
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("required parameter"),
@@ -324,7 +337,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("param_a");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("no_named_args_function", fn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("no_named_args_function", fn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("does not support named parameters"),
@@ -336,7 +349,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("param_a");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("null_function", null, paramNames);
+            FunctionAnalyzer.validateNamedArguments("null_function", null, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("does not support named parameters"),
@@ -356,7 +369,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("single_param");
 
         Assertions.assertDoesNotThrow(() -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
     }
 
@@ -373,7 +386,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = new ArrayList<>();
 
         Assertions.assertDoesNotThrow(() -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
     }
 
@@ -392,7 +405,7 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("url", "method", "timeout_ms");
 
         Assertions.assertDoesNotThrow(() -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
     }
 
@@ -411,10 +424,127 @@ public class NamedArgumentValidatorTest {
         List<String> paramNames = Arrays.asList("method", "timeout_ms");
 
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
-            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames);
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, null);
         });
 
         Assertions.assertTrue(ex.getMessage().contains("url"),
                 "Expected 'url' in error message: " + ex.getMessage());
+    }
+
+    // ========== Test Category 7: NULL Value Validation ==========
+
+    @Test
+    public void testRequiredParameterCannotBeNull() {
+        // Function: url (required), method (default='GET')
+        String[] names = {"url", "method"};
+        Type[] types = {VarcharType.VARCHAR, VarcharType.VARCHAR};
+        Expr[] defaults = {null, new StringLiteral("GET")};
+
+        ScalarFunction mockFn = createMockFunction(names, types, defaults);
+
+        // Provide NULL for required parameter 'url'
+        List<String> paramNames = Arrays.asList("url", "method");
+        FunctionCallExpr mockNode = createMockFunctionCallExpr(
+                Arrays.asList(new NullLiteral(), new StringLiteral("POST"))
+        );
+
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, mockNode);
+        });
+
+        Assertions.assertTrue(ex.getMessage().contains("cannot be NULL"),
+                "Expected 'cannot be NULL' in error message: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("url"),
+                "Expected 'url' in error message: " + ex.getMessage());
+    }
+
+    @Test
+    public void testOptionalParameterCanBeNull() {
+        // Function: url (required), method (default='GET')
+        String[] names = {"url", "method"};
+        Type[] types = {VarcharType.VARCHAR, VarcharType.VARCHAR};
+        Expr[] defaults = {null, new StringLiteral("GET")};
+
+        ScalarFunction mockFn = createMockFunction(names, types, defaults);
+
+        // Provide NULL for optional parameter 'method' - should be allowed
+        List<String> paramNames = Arrays.asList("url", "method");
+        FunctionCallExpr mockNode = createMockFunctionCallExpr(
+                Arrays.asList(new StringLiteral("https://example.com"), new NullLiteral())
+        );
+
+        // Should not throw
+        Assertions.assertDoesNotThrow(() -> {
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, mockNode);
+        });
+    }
+
+    @Test
+    public void testMultipleRequiredParametersNullCheck() {
+        // Function: url (required), method (required), body (default='')
+        String[] names = {"url", "method", "body"};
+        Type[] types = {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR};
+        Expr[] defaults = {null, null, new StringLiteral("")};
+
+        ScalarFunction mockFn = createMockFunction(names, types, defaults);
+
+        // NULL for second required parameter
+        List<String> paramNames = Arrays.asList("url", "method", "body");
+        FunctionCallExpr mockNode = createMockFunctionCallExpr(
+                Arrays.asList(new StringLiteral("https://example.com"), new NullLiteral(), new StringLiteral("data"))
+        );
+
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, mockNode);
+        });
+
+        Assertions.assertTrue(ex.getMessage().contains("method"),
+                "Expected 'method' in error message: " + ex.getMessage());
+    }
+
+    @Test
+    public void testFirstRequiredParameterNull() {
+        // Function: url (required), method (default='GET'), body (default='')
+        String[] names = {"url", "method", "body"};
+        Type[] types = {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR};
+        Expr[] defaults = {null, new StringLiteral("GET"), new StringLiteral("")};
+
+        ScalarFunction mockFn = createMockFunction(names, types, defaults);
+
+        // NULL for first required parameter
+        List<String> paramNames = Arrays.asList("url", "method");
+        FunctionCallExpr mockNode = createMockFunctionCallExpr(
+                Arrays.asList(new NullLiteral(), new StringLiteral("POST"))
+        );
+
+        SemanticException ex = Assertions.assertThrows(SemanticException.class, () -> {
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, mockNode);
+        });
+
+        Assertions.assertTrue(ex.getMessage().contains("url"),
+                "Expected 'url' in error message: " + ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("cannot be NULL"),
+                "Expected 'cannot be NULL' in error message: " + ex.getMessage());
+    }
+
+    @Test
+    public void testAllOptionalParametersNull() {
+        // Function: url (required), method (default='GET'), body (default='')
+        String[] names = {"url", "method", "body"};
+        Type[] types = {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR};
+        Expr[] defaults = {null, new StringLiteral("GET"), new StringLiteral("")};
+
+        ScalarFunction mockFn = createMockFunction(names, types, defaults);
+
+        // Required parameter provided, optional parameters NULL - should be allowed
+        List<String> paramNames = Arrays.asList("url", "method", "body");
+        FunctionCallExpr mockNode = createMockFunctionCallExpr(
+                Arrays.asList(new StringLiteral("https://example.com"), new NullLiteral(), new NullLiteral())
+        );
+
+        // Should not throw
+        Assertions.assertDoesNotThrow(() -> {
+            FunctionAnalyzer.validateNamedArguments("test_function", mockFn, paramNames, mockNode);
+        });
     }
 }
