@@ -2562,6 +2562,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     /**
+     * @param mvId mv's mvid
+     * @return a checked mv by input mvid.
+     */
+    public MaterializedView getMaterializedView(MvId mvId) {
+        long dbId = mvId.getDbId();
+        long tableId = mvId.getId();
+        Table table = getTable(dbId, tableId);
+        if (table == null || !(table instanceof MaterializedView)) {
+            return null;
+        }
+        return (MaterializedView) table;
+    }
+
+    /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *
      * @param dbName  - the string represents the database name
