@@ -40,6 +40,15 @@ public:
      */
     static StatusOr<VariantValue> create(const Slice& slice);
 
+    /**
+     * Static factory method to create a VariantValue from metadata and value Slices.
+     * In this method, the metadata will be validated.
+     * @param metadata The metadata Slice.
+     * @param value The value Slice.
+     * @return The created VariantValue or an error status.
+     */
+    static StatusOr<VariantValue> create(const Slice& metadata, const Slice& value);
+
     static VariantValue of_variant(const Variant& variant);
 
     VariantValue(const VariantValue& rhs) = default;

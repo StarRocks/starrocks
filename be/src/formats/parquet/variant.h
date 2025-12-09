@@ -90,10 +90,10 @@ public:
     uint8_t offset_size() const;
     // indicating the number of strings in the dictionary
     uint32_t dict_size() const;
-    // return the index for the key in the dictionary, or -1 if not found
-    uint32_t get_index(std::string_view key) const;
+    // return the index for the key in the dictionary
+    std::vector<uint32_t> get_index(std::string_view key) const;
     // return the field name for the index
-    StatusOr<std::string_view> get_key(uint32_t index) const;
+    StatusOr<std::string> get_key(uint32_t index) const;
 
     // return the metadata raw string view
     std::string_view get_raw() const { return _metadata; }
@@ -109,8 +109,6 @@ private:
     static constexpr uint8_t kOffsetMask = 0b11000000;
     static constexpr uint8_t kOffsetSizeBitShift = 6;
     static constexpr uint8_t kOffsetSizeMask = 0b11;
-
-    uint32_t linear_search(uint32_t dict_sz, std::string_view key) const;
 
     std::string_view _metadata;
     uint32_t _dict_size{0};

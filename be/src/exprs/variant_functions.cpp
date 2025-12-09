@@ -20,7 +20,6 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "runtime/runtime_state.h"
-#include "util/variant_converter.h"
 #include "variant_path_parser.h"
 
 namespace starrocks {
@@ -92,7 +91,6 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     auto json_path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     ColumnBuilder<ResultType> result(num_rows);
-
     VariantPath stored_path;
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_viewer.is_null(row) || json_path_viewer.is_null(row)) {
@@ -108,48 +106,25 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
         }
 
         const VariantValue* variant_value = variant_viewer.value(row);
-        if (!variant_value) {
+        if (variant_value == nullptr) {
             result.append_null();
             continue;
         }
 
-        const std::string& value = variant_value->get_value();
-        if (value.empty()) {
+        auto field = VariantPath::seek(variant_value, variant_segments_status.value());
+        if (!field.ok()) {
+            // If seek fails (e.g., path not found), append null
             result.append_null();
             continue;
         }
 
-        try {
-            Variant variant(variant_value->get_metadata(), value);
-            StatusOr<Variant> variant_field = VariantPath::seek(&variant, variant_segments_status.value());
-            if (!variant_field.ok()) {
-                LOG(WARNING) << "Failed to seek variant path: " << path_slice.to_string()
-                             << "in the variant value: " << variant_value->to_string();
-                result.append_null();
-                continue;
-            }
-
-            RuntimeState* state = context->state();
-            cctz::time_zone zone;
-            if (state == nullptr) {
-                zone = cctz::local_time_zone();
-            } else {
-                zone = context->state()->timezone_obj();
-            }
-
-            if constexpr (ResultType == TYPE_VARIANT) {
-                VariantValue sub_variant_value = VariantValue::of_variant(variant_field.value());
-                result.append(std::move(sub_variant_value));
-            } else {
-                Status status = cast_variant_value_to<ResultType, true>(variant_field.value(), zone, result);
-                if (!status.ok()) {
-                    result.append_null();
-                }
-            }
-        } catch (const std::exception& e) {
-            LOG(WARNING) << "Error processing variant query: " << variant_value->to_string() << " with path "
-                         << path_slice.to_string() << ": " << e.what();
-            result.append_null();
+        if constexpr (ResultType == TYPE_VARIANT) {
+            result.append(std::move(field.value()));
+        } else {
+            // TODO: support cast conversions in the following PR
+            return Status::NotSupported(
+                    fmt::format("VariantFunctions::variant_query does not support result type {} yet",
+                                logical_type_to_string(ResultType))););
         }
     }
 

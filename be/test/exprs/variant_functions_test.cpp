@@ -52,17 +52,17 @@ public:
     TExprNode expr_node;
 };
 
-std::string starrocks_home = getenv("STARROCKS_HOME");
-static std::string test_exec_dir = starrocks_home + "/be/test/exec";
-static std::string variant_test_data_dir = starrocks_home + "/be/test/formats/parquet/test_data/variant";
-
 // Helper function to read variant test data from parquet test files
 static std::pair<std::string, std::string> load_variant_test_data(const std::string& metadata_file,
                                                                   const std::string& value_file) {
     FileSystem* fs = FileSystem::Default();
 
-    auto metadata_path = variant_test_data_dir + "/" + metadata_file;
-    auto value_path = variant_test_data_dir + "/" + value_file;
+    std::string starrocks_home = getenv("STARROCKS_HOME");
+    static std::string test_exec_dir = starrocks_home + "/be/test/exec";
+    static std::string variant_test_data_dir = starrocks_home + "/be/test/formats/parquet/test_data/variant/";
+
+    auto metadata_path = variant_test_data_dir + metadata_file;
+    auto value_path = variant_test_data_dir + value_file;
 
     auto metadata_file_obj = *fs->new_random_access_file(metadata_path);
     auto value_file_obj = *fs->new_random_access_file(value_path);
@@ -306,13 +306,13 @@ TEST_F(VariantFunctionsTest, variant_query_multiple_rows) {
     ASSERT_TRUE(!!result);
     ASSERT_EQ(3, result->size());
 
-    std::vector<std::string> expected_results = {"42", "true", "Less than 64 bytes (❤️ with utf8)"};
+    std::vector<std::string> expected_results = {"42", "true", "\"Less than 64 bytes (❤️ with utf8)\""};
     for (size_t i = 0; i < 3; ++i) {
         auto variant_result = result->get(i).get_variant();
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json();
         ASSERT_TRUE(json_result.ok());
-        std::string variant_str = json_result.value();
+        const std::string variant_str = json_result.value();
         ASSERT_EQ(expected_results[i], variant_str);
     }
 }
@@ -344,8 +344,8 @@ TEST_F(VariantFunctionsTest, variant_query_const_columns) {
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json();
         ASSERT_TRUE(json_result.ok());
-        std::string variant_str = json_result.value();
-        ASSERT_EQ("Less than 64 bytes (❤️ with utf8)", variant_str);
+        const std::string variant_str = json_result.value();
+        ASSERT_EQ("\"Less than 64 bytes (❤️ with utf8)\"", variant_str);
     }
 }
 
