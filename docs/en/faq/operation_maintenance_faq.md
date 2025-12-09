@@ -368,7 +368,7 @@ Check load balancers (ProxySQL, F5), idle connection accumulation, and reduce `w
 
 Metadata resides in FE. With only one FE, it's unrecoverable. With multiple FEs, you can re-add the failed node and metadata will be replicated.
 
-## How to solve the oading error "INTERNAL_ERROR, FE leader shows NullPointerException"?
+## How to solve the loading error "INTERNAL_ERROR, FE leader shows NullPointerException"?
 
 Add JVM option `-XX:-OmitStackTraceInFastThrow` and restart FE to get full stack trace.
 

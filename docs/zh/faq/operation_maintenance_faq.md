@@ -124,9 +124,9 @@ SET GLOBAL wait_timeout = 3600;
 
 - 要迁移单个表，您可以：
   - 创建一个 StarRocks external table，然后使用 INSERT INTO SELECT 从中导入数据。
-  - 使用基于 Spark-connector 的程序从源 BE 读取数据，并使用封装的 STREAM LOAD 将数据加载到目标 BE。
+  - 使用基于 Spark-connector 的程序从源 BE 读取数据，并使用封装的 STREAM LOAD 将数据导入到目标 BE。
 - 要迁移多个表，您可以使用备份和恢复。首先，将数据从源集群备份到远端存储。然后，从远端存储恢复数据到目标集群。
-- 如果您的集群使用 HDFS 作为远端存储，您可以先使用 `distcp` 迁移数据文件，然后使用 Broker Load 将数据加载到目标集群。
+- 如果您的集群使用 HDFS 作为远端存储，您可以先使用 `distcp` 迁移数据文件，然后使用 Broker Load 将数据导入到目标集群。
 
 ## 如何解决错误 "failed to create task: disk ... exceed limit usage"？
 
@@ -293,7 +293,7 @@ SHOW PROC '/statistic/<db_id>'
 
 然后，使用 `SHOW TABLET tablet_id` 分析 UnhealthyTablets。
 
-如果结果显示两个副本的数据一致，但一个副本的数据不一致——这意味着三个副本中有两个成功完成了写入——这被视为成功写入。然后您可以检查 UnhealthyTablets 中的 tablets 是否已修复。如果它们已修复，则表示存在问题。如果状态正在变化，您可以调整相应表的加载频率。
+如果结果显示两个副本的数据一致，但一个副本的数据不一致——这意味着三个副本中有两个成功完成了写入——这被视为成功写入。然后您可以检查 UnhealthyTablets 中的 tablets 是否已修复。如果它们已修复，则表示存在问题。如果状态正在变化，您可以调整相应表的导入频率。
 
 ## 错误："SyntaxErrorException: Reach limit of connections"。如何排查？
 
@@ -366,7 +366,7 @@ ALTER TABLE db.tbl MODIFY PARTITION (*) SET("replication_num"="3");
 
 元数据驻留在 FE 中。只有一个 FE 时，是不可恢复的。多个 FE 时，可以重新添加故障节点，元数据将被复制。
 
-## 如何解决加载错误 "INTERNAL_ERROR, FE leader shows NullPointerException"？
+## 如何解决导入错误 "INTERNAL_ERROR, FE leader shows NullPointerException"？
 
 添加 JVM 选项 `-XX:-OmitStackTraceInFastThrow` 并重启 FE 以获取完整的堆栈跟踪。
 
