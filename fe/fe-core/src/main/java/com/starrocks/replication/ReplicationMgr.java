@@ -66,9 +66,14 @@ public class ReplicationMgr extends FrontendDaemon {
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
         LOG.info("Adding replication job, request: {}", request.toString());
-        ReplicationJob job = (request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA)) ?
+        ReplicationJob job = isLakeReplicationJob(request) ?
                 new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
+    }
+
+    private boolean isLakeReplicationJob(TTableReplicationRequest request) {
+        return request != null && request.src_cluster_run_mode != null
+                && request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA);
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {

@@ -732,6 +732,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 updateStorageVolumeVTabletMapping(storageVolumeName, vTabletId, shardGroupId);
                 return vTabletId;
             } catch (Exception e) {
+                // StarMgrMetaSyncer would clean the orphaned shards & shard groups
                 LOG.error("Failed to create shard for storage volume {} ", storageVolumeName, e);
                 throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName, e);
             }
