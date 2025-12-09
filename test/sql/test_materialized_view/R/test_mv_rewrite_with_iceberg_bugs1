@@ -46,7 +46,7 @@ SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_icebe
 -- !result
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 -- result:
-019ab3b1-0f26-7cf1-b83c-2773dc158c96
+019b0304-0978-7d67-9b5f-8491e22faac4
 -- !result
 SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;
 -- result:
