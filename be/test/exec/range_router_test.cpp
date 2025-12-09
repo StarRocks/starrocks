@@ -51,6 +51,13 @@ protected:
         return tv;
     }
 
+    TVariant make_datetime_variant(const std::string& v) {
+        TVariant tv;
+        tv.__set_type(TYPE_DATETIME_DESC.to_thrift());
+        tv.__set_string_value(v);
+        return tv;
+    }
+
     TVariant make_string_variant(const std::string& v) {
         TVariant tv;
         tv.__set_type(TYPE_VARCHAR_DESC.to_thrift());
@@ -713,6 +720,49 @@ TEST_F(RangeRouterTest, HllVariantInitNotSupported) {
     // The exact error code is implementation-defined, but we at least
     // expect a NotSupported error rather than a crash.
     ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+}
+
+// ----------------------------------------------------------------------
+// Datetime TVariant with ISO-8601 + nanos format
+// ----------------------------------------------------------------------
+
+// Simulate FE sending a DATETIME boundary encoded as Instant.toString(),
+// e.g. "2024-01-01T00:00:00.123456789Z". RangeRouter should still be able
+// to initialize successfully via the generic datetime parser.
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, DateTimeIsoWithNanosInitOk) {
+    std::vector<TTabletRange> ranges;
+
+    // Boundary in ISO-8601 format with 9 fractional digits and 'Z' suffix.
+    const std::string boundary = "2024-01-01T00:00:00.123456789Z";
+
+    // R0: (-inf, boundary]
+    TTabletRange r0;
+    {
+        TVariant v_up = make_datetime_variant(boundary);
+        TTuple upper;
+        upper.__set_values(std::vector<TVariant>{v_up});
+        r0.__set_upper_bound(upper);
+        r0.__set_upper_bound_included(true);
+    }
+
+    // R1: (boundary, +inf)
+    TTabletRange r1;
+    {
+        TVariant v_low = make_datetime_variant(boundary);
+        TTuple lower;
+        lower.__set_values(std::vector<TVariant>{v_low});
+        r1.__set_lower_bound(lower);
+        r1.__set_lower_bound_included(false);
+    }
+
+    ranges.push_back(r0);
+    ranges.push_back(r1);
+
+    RangeRouter router;
+    // If the FE-style ISO-8601 datetime with nanos cannot be parsed, init()
+    // would return an error here. We only care that initialization succeeds.
+    ASSERT_TRUE(router.init(ranges, 1).ok());
 }
 
 } // namespace starrocks
