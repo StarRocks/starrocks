@@ -124,7 +124,7 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             // TODO: support cast conversions in the following PR
             return Status::NotSupported(
                     fmt::format("VariantFunctions::variant_query does not support result type {} yet",
-                                logical_type_to_string(ResultType))););
+                                logical_type_to_string(ResultType)));
         }
     }
 

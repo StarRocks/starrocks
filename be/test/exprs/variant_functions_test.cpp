@@ -145,22 +145,22 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple("primitive_int16.metadata", "primitive_int16.value", "$", "1234"),
                 std::make_tuple("primitive_int32.metadata", "primitive_int32.value", "$", "123456"),
                 std::make_tuple("primitive_int64.metadata", "primitive_int64.value", "$", "1234567890123456789"),
-                std::make_tuple("primitive_float.metadata", "primitive_float.value", "$", "1234567936.000000"),
-                std::make_tuple("primitive_double.metadata", "primitive_double.value", "$", "1234567890.123400"),
+                std::make_tuple("primitive_float.metadata", "primitive_float.value", "$", "1.23456794e+09"),
+                std::make_tuple("primitive_double.metadata", "primitive_double.value", "$", "1234567890.1234"),
                 std::make_tuple("primitive_decimal4.metadata", "primitive_decimal4.value", "$", "12.34"),
-                std::make_tuple("primitive_decimal8.metadata", "primitive_decimal8.value", "$", "12345678.90"),
-                std::make_tuple("primitive_decimal16.metadata", "primitive_decimal16.value", "$", "12345678912345678.90"),
-                std::make_tuple("short_string.metadata", "short_string.value", "$", "Less than 64 bytes (❤️ with utf8)"),
-                std::make_tuple("primitive_string.metadata", "primitive_string.value", "$", "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!"),
+                std::make_tuple("primitive_decimal8.metadata", "primitive_decimal8.value", "$", "12345678.9"),
+                std::make_tuple("primitive_decimal16.metadata", "primitive_decimal16.value", "$", "12345678912345678.9"),
+                std::make_tuple("short_string.metadata", "short_string.value", "$", "\"Less than 64 bytes (❤️ with utf8)\""),
+                std::make_tuple("primitive_string.metadata", "primitive_string.value", "$", "\"This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!\""),
                 std::make_tuple("primitive_timestamp.metadata", "primitive_timestamp.value", "$", "\"2025-04-16 12:34:56.78-04:00\""),
                 std::make_tuple("primitive_timestampntz.metadata", "primitive_timestampntz.value", "$", "\"2025-04-16 12:34:56.780000\""),
                 std::make_tuple("primitive_date.metadata", "primitive_date.value", "$", "\"2025-04-16\""),
 
                 // Object and array tests
                 std::make_tuple("object_primitive.metadata", "object_primitive.value", "$.int_field", "1"),
-                std::make_tuple("object_nested.metadata", "object_nested.value", "$.observation.location", "In the Volcano"),
+                std::make_tuple("object_nested.metadata", "object_nested.value", "$.observation.location", "\"In the Volcano\""),
                 std::make_tuple("array_primitive.metadata", "array_primitive.value", "$[0]", "2"),
-                std::make_tuple("array_nested.metadata", "array_nested.value", "$[0].thing.names[0]", "Contrarian"),
+                std::make_tuple("array_nested.metadata", "array_nested.value", "$[0].thing.names[0]", "\"Contrarian\""),
 
                 // Non-existent path tests
                 std::make_tuple("primitive_int8.metadata", "primitive_int8.value", "$.nonexistent", "NULL"),
@@ -272,7 +272,7 @@ TEST_F(VariantFunctionsTest, variant_query_complex_types) {
     ASSERT_TRUE(!!variant_result);
     auto json_result = variant_result->to_json();
     ASSERT_TRUE(json_result.ok());
-    std::string variant_str = json_result.value();
+    const std::string& variant_str = json_result.value();
     ASSERT_EQ("1", variant_str);
 }
 
@@ -312,7 +312,7 @@ TEST_F(VariantFunctionsTest, variant_query_multiple_rows) {
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json();
         ASSERT_TRUE(json_result.ok());
-        const std::string variant_str = json_result.value();
+        const std::string& variant_str = json_result.value();
         ASSERT_EQ(expected_results[i], variant_str);
     }
 }
@@ -344,7 +344,7 @@ TEST_F(VariantFunctionsTest, variant_query_const_columns) {
         ASSERT_TRUE(!!variant_result);
         auto json_result = variant_result->to_json();
         ASSERT_TRUE(json_result.ok());
-        const std::string variant_str = json_result.value();
+        const std::string& variant_str = json_result.value();
         ASSERT_EQ("\"Less than 64 bytes (❤️ with utf8)\"", variant_str);
     }
 }
