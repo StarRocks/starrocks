@@ -594,12 +594,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_single_sstable_o
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
 
     std::vector<PersistentIndexSstablePB> output;
-    auto cb = std::make_unique<AsyncCompactCB>(
-            mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
-            [&](const std::vector<PersistentIndexSstablePB>& sstables) {
-                output = sstables;
-                return Status::OK();
-            });
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   output = sstables;
+                                                   return Status::OK();
+                                               });
     task->set_cb(cb.get());
     ASSERT_OK(cb->thread_pool_token()->submit(task));
 
@@ -625,12 +624,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_sstable
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
-    auto cb = std::make_unique<AsyncCompactCB>(
-            mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
-            [&](const std::vector<PersistentIndexSstablePB>& sstables) {
-                output = sstables;
-                return Status::OK();
-            });
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   output = sstables;
+                                                   return Status::OK();
+                                               });
     task->set_cb(cb.get());
     ASSERT_OK(cb->thread_pool_token()->submit(task));
 
@@ -660,12 +658,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_overlapping
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
-    auto cb = std::make_unique<AsyncCompactCB>(
-            mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
-            [&](const std::vector<PersistentIndexSstablePB>& sstables) {
-                output = sstables;
-                return Status::OK();
-            });
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   output = sstables;
+                                                   return Status::OK();
+                                               });
     task->set_cb(cb.get());
     ASSERT_OK(cb->thread_pool_token()->submit(task));
     ASSERT_OK(cb->wait_for());
@@ -689,12 +686,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_merge_base_
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, true, fileset_id, seek_range);
-    auto cb = std::make_unique<AsyncCompactCB>(
-            mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
-            [&](const std::vector<PersistentIndexSstablePB>& sstables) {
-                output = sstables;
-                return Status::OK();
-            });
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   output = sstables;
+                                                   return Status::OK();
+                                               });
     task->set_cb(cb.get());
     ASSERT_OK(cb->thread_pool_token()->submit(task));
     ASSERT_OK(cb->wait_for());
@@ -720,12 +716,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_fileset
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
-    auto cb = std::make_unique<AsyncCompactCB>(
-            mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
-            [&](const std::vector<PersistentIndexSstablePB>& sstables) {
-                output = sstables;
-                return Status::OK();
-            });
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   output = sstables;
+                                                   return Status::OK();
+                                               });
     task->set_cb(cb.get());
     ASSERT_OK(cb->thread_pool_token()->submit(task));
     ASSERT_OK(cb->wait_for());
@@ -749,12 +744,11 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_zero_size_s
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
-    auto cb = std::make_unique<AsyncCompactCB>(
-            mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
-            [&](const std::vector<PersistentIndexSstablePB>& sstables) {
-                output = sstables;
-                return Status::OK();
-            });
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   output = sstables;
+                                                   return Status::OK();
+                                               });
     task->set_cb(cb.get());
     ASSERT_OK(cb->thread_pool_token()->submit(task));
     ASSERT_OK(cb->wait_for());
